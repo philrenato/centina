@@ -1,0 +1,4365 @@
+{
+ "schema": "unreason3d/rendre-materials@1",
+ "source": {
+  "origin": "Extracted from the author's own renderer, which is not public.",
+  "note": "This pack is data, not geometry. Nothing in the kernel requires it."
+ },
+ "pool": {
+  "declaredTotal": 583,
+  "uniqueNames": 582,
+  "categories": 98,
+  "arrays": {
+   "RENDRE_MATLIB": 487,
+   "RT_STARTER_MATS": 16,
+   "RT_EXTRA_MATS": 53,
+   "RT_MARBLE_MATS": 20,
+   "RT_MEDIA_MATS": 6,
+   "RT_FLOOR_MATS": 1
+  },
+  "liveDrawerTotal": 567,
+  "liveDrawerNote": "rtInitMats() uses RENDRE_MATLIB *instead of* RT_STARTER_MATS (starter is a fallback, not a concatenation), so Rendre's live drawer holds 567 of the 583 declared. The curation rule's denominators are measured against the declared pool.",
+  "tagsFieldPresent": 0
+ },
+ "curation": {
+  "brief": "A small subset of Rendre's library, chosen for industrial, jewellery and furniture design. No smoke/volume materials.",
+  "method": "category-prefix rule with per-category caps, applied to `cat` (source data). `tags` does not exist in Rendre's source.",
+  "tieBreak": "within a capped prefix: round-robin across the distinct `cat` values under it (first-appearance order), source order within each.",
+  "prefixes": 47,
+  "rule": [
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Precious",
+    "cap": 4,
+    "taken": 4,
+    "availableLive": 11,
+    "availableDeclaredPool": 11,
+    "names": [
+     "Aurum Beaten Coarse",
+     "Platinum Striated",
+     "Argent Striated",
+     "Argent Beaten Coarse"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Gems",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 3,
+    "availableDeclaredPool": 3,
+    "names": [
+     "Diamond, Yellow",
+     "Diamond, White",
+     "Diamond, Blue"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Niobium",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Niobium Striated",
+     "Niobium Coarse"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Titan",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Titan Mirrored",
+     "Titan Striated"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Argentan",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Argentan Beaten Coarse",
+     "Argentan Combed"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Latten",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Latten Striated",
+     "Latten Coarse Circular Mesh"
+    ]
+   },
+   {
+    "domain": "jewellery",
+    "prefix": "Metal · Bell-Bronze",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Bell-Bronze Striated",
+     "Bell-Bronze Coarse Circular Mesh"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Aluminum",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Aluminum Coarse Toothed",
+     "Aluminum Coarse"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Chrome",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Chrome Beaten Coarse",
+     "Chrome Coarse Circular Mesh"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Steel",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Steel Coarse Toothed",
+     "Steel Coarse"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Austenitic",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 5,
+    "availableDeclaredPool": 5,
+    "names": [
+     "Austenitic Coarse",
+     "Austenitic Striated"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Copper",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Copper Mirrored",
+     "Copper Striated"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metal · Tempered",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 18,
+    "availableDeclaredPool": 18,
+    "names": [
+     "Aluminum, Tempered Striated Blue",
+     "Aluminum, Tempered Striated Orange",
+     "Aluminum, Tempered Mirrored Purple"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Metals",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 8,
+    "availableDeclaredPool": 14,
+    "names": [
+     "Black Chrome",
+     "Bronze",
+     "Gold Brushed"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Plastics",
+    "cap": 4,
+    "taken": 4,
+    "availableLive": 8,
+    "availableDeclaredPool": 10,
+    "names": [
+     "Glossy Black",
+     "Acrylic Blue",
+     "ABS Black",
+     "Nylon"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Synthetic · Nylon",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 7,
+    "availableDeclaredPool": 7,
+    "names": [
+     "Nylon Wave Vitreous Blue",
+     "Nylon Wave Blue"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Synthetic · Carbon Lattice",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 15,
+    "availableDeclaredPool": 15,
+    "names": [
+     "Carbon Lattice Orange",
+     "Carbon Lattice Vitreous Pink"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Glass",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 4,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Frosted Glass",
+     "Smoked Glass",
+     "Glass Green"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Lucida",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Lucida, Frosted, Red",
+     "Lucida, Gradient"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Resin · Optical",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 2,
+    "availableDeclaredPool": 2,
+    "names": [
+     "Resin High Index"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Resin · Vulcanate",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Vulcanate Grained White"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Rubber",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 2,
+    "availableDeclaredPool": 2,
+    "names": [
+     "Rubber Black",
+     "Silicone Gray"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Ceramic",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 2,
+    "availableDeclaredPool": 2,
+    "names": [
+     "Porcelain",
+     "Glazed Cobalt"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Paint",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Car Blue",
+     "Car Red"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Lacquer · Automotive",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 17,
+    "availableDeclaredPool": 17,
+    "names": [
+     "Lacquer, Automotive Deep Blue",
+     "Lacquer, Automotive White",
+     "Lacquer, Automotive Black"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Lacquer · Metallic",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 19,
+    "availableDeclaredPool": 19,
+    "names": [
+     "Lacquer, Metallic Amber",
+     "Lacquer, Metallic Light Blue"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Lacquer Palette",
+    "cap": 4,
+    "taken": 4,
+    "availableLive": 29,
+    "availableDeclaredPool": 29,
+    "names": [
+     "Fire Thorn",
+     "Green Xtreme",
+     "Hot Azalea",
+     "Juiced Melon"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Lacquer · Lustrous",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Lacquer Gloss Purple",
+     "Lacquer Gloss Red"
+    ]
+   },
+   {
+    "domain": "industrial",
+    "prefix": "Architectural · Glazing",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Lucida Window Red"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Heartwood · Oak",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Oak Heartwood Black Ash",
+     "Oak Heartwood Vitreous Fire"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Heartwood · Walnut",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 5,
+    "availableDeclaredPool": 5,
+    "names": [
+     "Walnut Lustrous",
+     "Walnut White"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Heartwood · Ash",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 5,
+    "availableDeclaredPool": 5,
+    "names": [
+     "Ash Heartwood Black",
+     "Ash Heartwood Lustrous"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Heartwood · Parquet",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Parquet, Tight, White",
+     "Parquet, Lustrous"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Wood",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 2,
+    "availableDeclaredPool": 2,
+    "names": [
+     "Walnut"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Vellum",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 14,
+    "availableDeclaredPool": 14,
+    "names": [
+     "Orange Vellum Small",
+     "Dark Red Vellum",
+     "White Vellum Perforated"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Cloth · Twill",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 9,
+    "availableDeclaredPool": 9,
+    "names": [
+     "Twill Violet",
+     "Twill Orange"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Cloth · Oxford",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Oxford Pink",
+     "Oxford Violet"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Cloth · Slub Linen",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Slub Linen White",
+     "Slub Linen Tuscan Red"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Cloth · Sateen",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 9,
+    "availableDeclaredPool": 9,
+    "names": [
+     "Sateen Tuscan Red",
+     "Sateen Gold Thread"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Cloth · Corduroy",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 9,
+    "availableDeclaredPool": 9,
+    "names": [
+     "Corduroy Pink"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Bolt · Pile · Clean",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Pile Clean Green"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Resin · Plush",
+    "cap": 1,
+    "taken": 1,
+    "availableLive": 4,
+    "availableDeclaredPool": 4,
+    "names": [
+     "Plush Coarse Green"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Lithic · Marble",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 12,
+    "availableDeclaredPool": 12,
+    "names": [
+     "Marble White Large",
+     "Marble Black"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Lithic · Granite",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 6,
+    "availableDeclaredPool": 6,
+    "names": [
+     "Granite Purple",
+     "Granite Orange Coarse"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Marmo",
+    "cap": 3,
+    "taken": 3,
+    "availableLive": 20,
+    "availableDeclaredPool": 20,
+    "names": [
+     "Ophicalcite Rosa",
+     "Porfido Rosso",
+     "Travertino Romano"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Italia",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 9,
+    "availableDeclaredPool": 9,
+    "names": [
+     "Verde Alpi",
+     "Giallo Smalto"
+    ]
+   },
+   {
+    "domain": "furniture",
+    "prefix": "Architectural · Terrazzo",
+    "cap": 2,
+    "taken": 2,
+    "availableLive": 8,
+    "availableDeclaredPool": 8,
+    "names": [
+     "Terrazzo 16",
+     "Terrazzo Blue"
+    ]
+   }
+  ],
+  "excluded": [
+   {
+    "prefix": "Media",
+    "reason": "smoke/volume participating media — excluded by the user. ⚠ This is where Amber and Glass, Bottle Green live: they ARE jewellery/product materials, excluded on IMPLEMENTATION grounds, not domain grounds."
+   },
+   {
+    "prefix": "Illuminated",
+    "reason": "Neon / Ember / Lava — light sources, not finishes"
+   },
+   {
+    "prefix": "Emissive",
+    "reason": "light sources, not finishes"
+   },
+   {
+    "prefix": "Halation",
+    "reason": "lighting effect, not a finish"
+   },
+   {
+    "prefix": "Edge",
+    "reason": "lighting effect (Edge · Halation, Edge · Wash)"
+   },
+   {
+    "prefix": "Dazzle",
+    "reason": "dazzle-camouflage livery — a graphic, not a finish"
+   },
+   {
+    "prefix": "Phantom",
+    "reason": "render trick (the see-through poster shell), not a material"
+   },
+   {
+    "prefix": "Pattern",
+    "reason": "graphic, not a finish"
+   },
+   {
+    "prefix": "Conduits",
+    "reason": "sci-fi panelling — outside the three domains"
+   },
+   {
+    "prefix": "Waterfront",
+    "reason": "weathered marine set — outside the three domains"
+   },
+   {
+    "prefix": "Architectural · Bitumen",
+    "reason": "roofing — outside the three domains"
+   },
+   {
+    "prefix": "Architectural · Brick",
+    "reason": "masonry — outside the three domains"
+   },
+   {
+    "prefix": "Studio · Floor",
+    "reason": "⚠ Rendre-owned SCENE FURNITURE, not a pickable material. Excluded from the LIBRARY only — the ground plane itself still ships."
+   },
+   {
+    "prefix": "Solution",
+    "reason": "liquids — outside the three domains"
+   },
+   {
+    "prefix": "Miscellanea",
+    "reason": "unclassified"
+   },
+   {
+    "prefix": "Other",
+    "reason": "unclassified"
+   },
+   {
+    "prefix": "Plain",
+    "reason": "Plain Gray / Plain White — Unreason has its own default"
+   }
+  ]
+ },
+ "counts": {
+  "total": 100,
+  "notLiveInRendre": 0,
+  "ofLivePool": 567,
+  "ofDeclaredPool": 583,
+  "percentOfLive": 17.6,
+  "percent": 17.2,
+  "selectedFrom": "live (RT_STARTER_MATS excluded — it is a shadowed fallback, not in Rendre's drawer)",
+  "byDomain": {
+   "jewellery": 17,
+   "industrial": 49,
+   "furniture": 34
+  },
+  "byCategory": {
+   "Metal · Precious · Aurum": 1,
+   "Metal · Precious · Platinum": 1,
+   "Metal · Precious · Argent": 2,
+   "Gems": 3,
+   "Metal · Niobium": 2,
+   "Metal · Titan": 2,
+   "Metal · Argentan": 2,
+   "Metal · Latten": 2,
+   "Metal · Bell-Bronze": 2,
+   "Metal · Aluminum": 2,
+   "Metal · Chrome": 2,
+   "Metal · Steel": 2,
+   "Metal · Austenitic": 2,
+   "Metal · Copper": 2,
+   "Metal · Tempered": 3,
+   "Metals": 3,
+   "Plastics": 4,
+   "Synthetic · Nylon": 2,
+   "Synthetic · Carbon Lattice · Plain": 1,
+   "Synthetic · Carbon Lattice · Vitreous": 1,
+   "Glass": 3,
+   "Lucida · Frosted": 1,
+   "Lucida · Plain": 1,
+   "Resin · Optical": 1,
+   "Resin · Vulcanate": 1,
+   "Rubber": 2,
+   "Ceramic": 2,
+   "Paint": 2,
+   "Lacquer · Automotive": 3,
+   "Lacquer · Metallic": 2,
+   "Lacquer Palette": 4,
+   "Lacquer · Lustrous": 2,
+   "Architectural · Glazing": 1,
+   "Heartwood · Oak": 2,
+   "Heartwood · Walnut": 2,
+   "Heartwood · Ash": 2,
+   "Heartwood · Parquet": 2,
+   "Wood": 1,
+   "Vellum": 3,
+   "Cloth · Twill": 2,
+   "Cloth · Oxford": 2,
+   "Cloth · Slub Linen": 2,
+   "Cloth · Sateen": 2,
+   "Cloth · Corduroy": 1,
+   "Bolt · Pile · Clean": 1,
+   "Resin · Plush": 1,
+   "Lithic · Marble": 2,
+   "Lithic · Granite": 2,
+   "Marmo": 3,
+   "Italia": 2,
+   "Architectural · Terrazzo": 2
+  },
+  "features": {
+   "bump": 66,
+   "sss": 16,
+   "trans": 10,
+   "aniso": 14,
+   "woven": 10,
+   "grain": 10,
+   "grid": 6,
+   "marble": 8,
+   "mottle": 2
+  }
+ },
+ "fieldDefaults": {
+  "metallic": 0,
+  "rough": 0.4,
+  "ior": 1.5,
+  "trans": 0,
+  "alpha": 1,
+  "coat": 0,
+  "coatRough": 0.05,
+  "sheen": 0,
+  "emisStr": 0,
+  "aniso": 0,
+  "sss": 0,
+  "bump": 0
+ },
+ "fieldDefaultsNote": "Applied only where the source omits a field; each value is the default the renderer's own material packer applies. Per-material `defaulted` lists which core fields came from here rather than from source.",
+ "coreFields": [
+  "name",
+  "cat",
+  "base",
+  "metallic",
+  "rough",
+  "ior",
+  "trans",
+  "alpha",
+  "coat",
+  "coatRough",
+  "sheen",
+  "emis",
+  "emisStr",
+  "aniso",
+  "sss",
+  "bump"
+ ],
+ "environment": {
+  "file": "studio_env.hdr",
+  "slug": "studio",
+  "name": "Rendre Studio (default)",
+  "format": "RADIANCE RGBE, 32-bit_rle_rgbe",
+  "height": 192,
+  "width": 384,
+  "bytes": 31612,
+  "origin": "The renderer's default studio dome, decoded for env slug \"studio\".",
+  "license": "Original procedural work, synthesized rather than captured. No third-party attribution required.",
+  "higherResolution": {
+   "bytes": 606634,
+   "note": "A higher-resolution dome exists and is not copied here. The wider library it belongs to is mostly the same original procedural work, with a few domes CC0 from Poly Haven."
+  }
+ },
+ "materials": [
+  {
+   "name": "Aurum Beaten Coarse",
+   "cat": "Metal · Precious · Aurum",
+   "base": [
+    1,
+    0.766,
+    0.336
+   ],
+   "metallic": 1,
+   "rough": 0.2,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.55,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Platinum Striated",
+   "cat": "Metal · Precious · Platinum",
+   "base": [
+    0.76,
+    0.735,
+    0.7
+   ],
+   "metallic": 1,
+   "rough": 0.51,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Argent Striated",
+   "cat": "Metal · Precious · Argent",
+   "base": [
+    0.972,
+    0.96,
+    0.915
+   ],
+   "metallic": 1,
+   "rough": 0.42,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Argent Beaten Coarse",
+   "cat": "Metal · Precious · Argent",
+   "base": [
+    0.972,
+    0.96,
+    0.915
+   ],
+   "metallic": 1,
+   "rough": 0.12,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.55,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Diamond, Yellow",
+   "cat": "Gems",
+   "base": [
+    0.95,
+    0.88,
+    0.45
+   ],
+   "metallic": 0,
+   "rough": 0.02,
+   "ior": 2.42,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "dispersion": 0.9,
+   "isolate": 1,
+   "domain": "jewellery",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Diamond, White",
+   "cat": "Gems",
+   "base": [
+    0.97,
+    0.98,
+    1
+   ],
+   "metallic": 0,
+   "rough": 0.02,
+   "ior": 2.42,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "dispersion": 0.9,
+   "isolate": 1,
+   "domain": "jewellery",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Diamond, Blue",
+   "cat": "Gems",
+   "base": [
+    0.65,
+    0.82,
+    0.92
+   ],
+   "metallic": 0,
+   "rough": 0.02,
+   "ior": 2.42,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "dispersion": 0.9,
+   "isolate": 1,
+   "domain": "jewellery",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Niobium Striated",
+   "cat": "Metal · Niobium",
+   "base": [
+    0.3,
+    0.36,
+    0.52
+   ],
+   "metallic": 1,
+   "rough": 0.54,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Niobium Coarse",
+   "cat": "Metal · Niobium",
+   "base": [
+    0.3,
+    0.36,
+    0.52
+   ],
+   "metallic": 1,
+   "rough": 0.24,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Titan Mirrored",
+   "cat": "Metal · Titan",
+   "base": [
+    0.64,
+    0.59,
+    0.52
+   ],
+   "metallic": 1,
+   "rough": 0.18,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Titan Striated",
+   "cat": "Metal · Titan",
+   "base": [
+    0.64,
+    0.59,
+    0.52
+   ],
+   "metallic": 1,
+   "rough": 0.68,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Argentan Beaten Coarse",
+   "cat": "Metal · Argentan",
+   "base": [
+    0.7,
+    0.62,
+    0.47
+   ],
+   "metallic": 1,
+   "rough": 0.25,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.55,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Argentan Combed",
+   "cat": "Metal · Argentan",
+   "base": [
+    0.7,
+    0.62,
+    0.47
+   ],
+   "metallic": 1,
+   "rough": 0.45,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.35,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Latten Striated",
+   "cat": "Metal · Latten",
+   "base": [
+    0.91,
+    0.778,
+    0.423
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Latten Coarse Circular Mesh",
+   "cat": "Metal · Latten",
+   "base": [
+    0.91,
+    0.778,
+    0.423
+   ],
+   "metallic": 1,
+   "rough": 0.1,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.45,
+   "grid": {
+    "shape": "circular",
+    "barCol": [
+     0.3458,
+     0.2956,
+     0.1607
+    ],
+    "pitch": 14,
+    "thickness": 0.42,
+    "hue": 0,
+    "seed": 764
+   },
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Bell-Bronze Striated",
+   "cat": "Metal · Bell-Bronze",
+   "base": [
+    0.714,
+    0.428,
+    0.181
+   ],
+   "metallic": 1,
+   "rough": 0.56,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Bell-Bronze Coarse Circular Mesh",
+   "cat": "Metal · Bell-Bronze",
+   "base": [
+    0.714,
+    0.428,
+    0.181
+   ],
+   "metallic": 1,
+   "rough": 0.16,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.45,
+   "grid": {
+    "shape": "circular",
+    "barCol": [
+     0.2713,
+     0.1626,
+     0.0688
+    ],
+    "pitch": 14,
+    "thickness": 0.42,
+    "hue": 0,
+    "seed": 968
+   },
+   "domain": "jewellery",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Aluminum Coarse Toothed",
+   "cat": "Metal · Aluminum",
+   "base": [
+    0.913,
+    0.922,
+    0.924
+   ],
+   "metallic": 1,
+   "rough": 0.4,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.5,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Aluminum Coarse",
+   "cat": "Metal · Aluminum",
+   "base": [
+    0.913,
+    0.922,
+    0.924
+   ],
+   "metallic": 1,
+   "rough": 0.3,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Chrome Beaten Coarse",
+   "cat": "Metal · Chrome",
+   "base": [
+    0.6,
+    0.625,
+    0.66
+   ],
+   "metallic": 1,
+   "rough": 0.15,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.55,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Chrome Coarse Circular Mesh",
+   "cat": "Metal · Chrome",
+   "base": [
+    0.6,
+    0.625,
+    0.66
+   ],
+   "metallic": 1,
+   "rough": 0.05,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.45,
+   "grid": {
+    "shape": "circular",
+    "barCol": [
+     0.228,
+     0.2375,
+     0.2508
+    ],
+    "pitch": 14,
+    "thickness": 0.42,
+    "hue": 0,
+    "seed": 807
+   },
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Steel Coarse Toothed",
+   "cat": "Metal · Steel",
+   "base": [
+    0.545,
+    0.56,
+    0.585
+   ],
+   "metallic": 1,
+   "rough": 0.4,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.5,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Steel Coarse",
+   "cat": "Metal · Steel",
+   "base": [
+    0.545,
+    0.56,
+    0.585
+   ],
+   "metallic": 1,
+   "rough": 0.3,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Austenitic Coarse",
+   "cat": "Metal · Austenitic",
+   "base": [
+    0.52,
+    0.5,
+    0.478
+   ],
+   "metallic": 1,
+   "rough": 0.22,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Austenitic Striated",
+   "cat": "Metal · Austenitic",
+   "base": [
+    0.52,
+    0.5,
+    0.478
+   ],
+   "metallic": 1,
+   "rough": 0.52,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Copper Mirrored",
+   "cat": "Metal · Copper",
+   "base": [
+    0.955,
+    0.638,
+    0.538
+   ],
+   "metallic": 1,
+   "rough": 0,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Copper Striated",
+   "cat": "Metal · Copper",
+   "base": [
+    0.955,
+    0.638,
+    0.538
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Aluminum, Tempered Striated Blue",
+   "cat": "Metal · Tempered",
+   "base": [
+    0.0062,
+    0.0526,
+    0.2338
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Aluminum, Tempered Striated Orange",
+   "cat": "Metal · Tempered",
+   "base": [
+    0.4127,
+    0.1226,
+    0
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Aluminum, Tempered Mirrored Purple",
+   "cat": "Metal · Tempered",
+   "base": [
+    0.0549,
+    0,
+    0.1351
+   ],
+   "metallic": 1,
+   "rough": 0,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.305,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Black Chrome",
+   "cat": "Metals",
+   "base": [
+    0.18,
+    0.19,
+    0.21
+   ],
+   "metallic": 1,
+   "rough": 0.06,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Bronze",
+   "cat": "Metals",
+   "base": [
+    0.7,
+    0.43,
+    0.22
+   ],
+   "metallic": 1,
+   "rough": 0.24,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Gold Brushed",
+   "cat": "Metals",
+   "base": [
+    1,
+    0.73,
+    0.2
+   ],
+   "metallic": 1,
+   "rough": 0.3,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 1,
+   "sss": 0,
+   "bump": 0.3,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "sss"
+   ]
+  },
+  {
+   "name": "Glossy Black",
+   "cat": "Plastics",
+   "base": [
+    0.02,
+    0.02,
+    0.025
+   ],
+   "metallic": 0,
+   "rough": 0.06,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Acrylic Blue",
+   "cat": "Plastics",
+   "base": [
+    0.05,
+    0.22,
+    0.7
+   ],
+   "metallic": 0,
+   "rough": 0.1,
+   "ior": 1.49,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "ABS Black",
+   "cat": "Plastics",
+   "base": [
+    0.04,
+    0.04,
+    0.045
+   ],
+   "metallic": 0,
+   "rough": 0.4,
+   "ior": 1.46,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.3,
+   "coatRough": 0.18,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Nylon",
+   "cat": "Plastics",
+   "base": [
+    0.78,
+    0.77,
+    0.72
+   ],
+   "metallic": 0,
+   "rough": 0.6,
+   "ior": 1.53,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Nylon Wave Vitreous Blue",
+   "cat": "Synthetic · Nylon",
+   "base": [
+    0.0004,
+    0.0239,
+    0.0365
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.264,
+   "bump": 0.12,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Nylon Wave Blue",
+   "cat": "Synthetic · Nylon",
+   "base": [
+    0.0004,
+    0.0239,
+    0.0365
+   ],
+   "metallic": 0,
+   "rough": 1,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.264,
+   "bump": 0.28,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Carbon Lattice Orange",
+   "cat": "Synthetic · Carbon Lattice · Plain",
+   "base": [
+    0.0843,
+    0.021,
+    0.0038
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0.594,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.28,
+   "grid": {
+    "shape": "diamond",
+    "barCol": [
+     0.02529,
+     0.0063,
+     0.00114
+    ],
+    "pitch": 18,
+    "thickness": 0.5,
+    "hue": 0,
+    "seed": 35
+   },
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Carbon Lattice Vitreous Pink",
+   "cat": "Synthetic · Carbon Lattice · Vitreous",
+   "base": [
+    0.3233,
+    0.0355,
+    0.1249
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.1,
+   "sheen": 0.594,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.12,
+   "grid": {
+    "shape": "diamond",
+    "barCol": [
+     0.09698999999999999,
+     0.010649999999999998,
+     0.037469999999999996
+    ],
+    "pitch": 18,
+    "thickness": 0.5,
+    "hue": 0,
+    "seed": 14
+   },
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Frosted Glass",
+   "cat": "Glass",
+   "base": [
+    0.92,
+    0.95,
+    0.96
+   ],
+   "metallic": 0,
+   "rough": 0.32,
+   "ior": 1.5,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Smoked Glass",
+   "cat": "Glass",
+   "base": [
+    0.35,
+    0.36,
+    0.4
+   ],
+   "metallic": 0,
+   "rough": 0.04,
+   "ior": 1.5,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Glass Green",
+   "cat": "Glass",
+   "base": [
+    0.55,
+    0.85,
+    0.7
+   ],
+   "metallic": 0,
+   "rough": 0.03,
+   "ior": 1.5,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Lucida, Frosted, Red",
+   "cat": "Lucida · Frosted",
+   "base": [
+    1,
+    0.2909,
+    0.2213
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.5,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.2,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lucida, Gradient",
+   "cat": "Lucida · Plain",
+   "base": [
+    0.98,
+    0.28,
+    0.02
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.45,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    0.05,
+    0.35,
+    0.95
+   ],
+   "emisStr": 2,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Resin High Index",
+   "cat": "Resin · Optical",
+   "base": [
+    0.8881,
+    0.8881,
+    0.8881
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.8,
+   "trans": 1,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Vulcanate Grained White",
+   "cat": "Resin · Vulcanate",
+   "base": [
+    0.6412,
+    0.6409,
+    0.6408
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "grain": {
+    "ringCol": [
+     0.4168,
+     0.4166,
+     0.4165
+    ],
+    "scale": 3.2,
+    "contrast": 0.55,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 412
+   },
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Rubber Black",
+   "cat": "Rubber",
+   "base": [
+    0.045,
+    0.045,
+    0.05
+   ],
+   "metallic": 0,
+   "rough": 0.78,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0.1,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.15,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Silicone Gray",
+   "cat": "Rubber",
+   "base": [
+    0.55,
+    0.56,
+    0.57
+   ],
+   "metallic": 0,
+   "rough": 0.62,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0,
+   "sheen": 0.2,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.15,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Porcelain",
+   "cat": "Ceramic",
+   "base": [
+    0.93,
+    0.93,
+    0.92
+   ],
+   "metallic": 0,
+   "rough": 0.12,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.6,
+   "coatRough": 0.06,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Glazed Cobalt",
+   "cat": "Ceramic",
+   "base": [
+    0.06,
+    0.12,
+    0.52
+   ],
+   "metallic": 0,
+   "rough": 0.1,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.8,
+   "coatRough": 0.05,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Car Blue",
+   "cat": "Paint",
+   "base": [
+    0.02,
+    0.1,
+    0.42
+   ],
+   "metallic": 0.3,
+   "rough": 0.26,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Car Red",
+   "cat": "Paint",
+   "base": [
+    0.55,
+    0.02,
+    0.03
+   ],
+   "metallic": 0.2,
+   "rough": 0.28,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Lacquer, Automotive Deep Blue",
+   "cat": "Lacquer · Automotive",
+   "base": [
+    0.02,
+    0.05,
+    0.24
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer, Automotive White",
+   "cat": "Lacquer · Automotive",
+   "base": [
+    0.8156,
+    0.8156,
+    0.8156
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer, Automotive Black",
+   "cat": "Lacquer · Automotive",
+   "base": [
+    0.02,
+    0.02,
+    0.02
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer, Metallic Amber",
+   "cat": "Lacquer · Metallic",
+   "base": [
+    0.7455,
+    0.5333,
+    0.0742
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.2,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer, Metallic Light Blue",
+   "cat": "Lacquer · Metallic",
+   "base": [
+    0.0006,
+    0.3613,
+    0.913
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.2,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Fire Thorn",
+   "cat": "Lacquer Palette",
+   "base": [
+    0.5907,
+    0.0452,
+    0.0103
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Green Xtreme",
+   "cat": "Lacquer Palette",
+   "base": [
+    0.0056,
+    0.147,
+    0.0176
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Hot Azalea",
+   "cat": "Lacquer Palette",
+   "base": [
+    0.5777,
+    0.2232,
+    0.552
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Juiced Melon",
+   "cat": "Lacquer Palette",
+   "base": [
+    0.0185,
+    0.5906,
+    0.3324
+   ],
+   "metallic": 1,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer Gloss Purple",
+   "cat": "Lacquer · Lustrous",
+   "base": [
+    0.2123,
+    0.0037,
+    0.8879
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lacquer Gloss Red",
+   "cat": "Lacquer · Lustrous",
+   "base": [
+    0.8881,
+    0.0037,
+    0.0037
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Lucida Window Red",
+   "cat": "Architectural · Glazing",
+   "base": [
+    0.6038,
+    0.0012,
+    0.0242
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "industrial",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Oak Heartwood Black Ash",
+   "cat": "Heartwood · Oak",
+   "base": [
+    0,
+    0,
+    0
+   ],
+   "metallic": 0,
+   "rough": 0.55,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.35,
+   "grain": {
+    "ringCol": [
+     0,
+     0,
+     0
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 48
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Oak Heartwood Vitreous Fire",
+   "cat": "Heartwood · Oak",
+   "base": [
+    0.1378,
+    0.0026,
+    0
+   ],
+   "metallic": 0,
+   "rough": 0.55,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.12,
+   "grain": {
+    "ringCol": [
+     0.05512,
+     0.00104,
+     0
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 41
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Walnut Lustrous",
+   "cat": "Heartwood · Walnut",
+   "base": [
+    0.007,
+    0.0021,
+    0.0012
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.12,
+   "grain": {
+    "ringCol": [
+     0.0028000000000000004,
+     0.00084,
+     0.00047999999999999996
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 10
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Walnut White",
+   "cat": "Heartwood · Walnut",
+   "base": [
+    0.44,
+    0.34,
+    0.26
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.35,
+   "grain": {
+    "ringCol": [
+     0.23756,
+     0.23756,
+     0.23756
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 33
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Ash Heartwood Black",
+   "cat": "Heartwood · Ash",
+   "base": [
+    0.012,
+    0.012,
+    0.012
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.35,
+   "grain": {
+    "ringCol": [
+     0.0048000000000000004,
+     0.0048000000000000004,
+     0.0048000000000000004
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 43
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Ash Heartwood Lustrous",
+   "cat": "Heartwood · Ash",
+   "base": [
+    0.1414,
+    0.0677,
+    0.0263
+   ],
+   "metallic": 0,
+   "rough": 0.5,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.12,
+   "grain": {
+    "ringCol": [
+     0.05656,
+     0.02708,
+     0.010520000000000002
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 46
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Parquet, Tight, White",
+   "cat": "Heartwood · Parquet",
+   "base": [
+    1,
+    1,
+    1
+   ],
+   "metallic": 0,
+   "rough": 0.3,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.35,
+   "grain": {
+    "ringCol": [
+     0.4,
+     0.4,
+     0.4
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 48
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Parquet, Lustrous",
+   "cat": "Heartwood · Parquet",
+   "base": [
+    1,
+    0.568,
+    0.3608
+   ],
+   "metallic": 0,
+   "rough": 0.34,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.12,
+   "grain": {
+    "ringCol": [
+     0.4,
+     0.22719999999999999,
+     0.14432
+    ],
+    "scale": 3,
+    "contrast": 0.7,
+    "fiber": 0.8,
+    "hue": 0,
+    "seed": 46
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Walnut",
+   "cat": "Wood",
+   "base": [
+    0.26,
+    0.15,
+    0.08
+   ],
+   "metallic": 0,
+   "rough": 0.45,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.3,
+   "coatRough": 0.2,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.4,
+   "grain": {
+    "ringCol": [
+     0.09,
+     0.05,
+     0.02
+    ],
+    "scale": 3.5,
+    "contrast": 0.8,
+    "fiber": 0.9,
+    "hue": 0,
+    "seed": 4
+   },
+   "domain": "furniture",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Orange Vellum Small",
+   "cat": "Vellum",
+   "base": [
+    0.2164,
+    0.0552,
+    0.0006
+   ],
+   "metallic": 0,
+   "rough": 0.601,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.06,
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Dark Red Vellum",
+   "cat": "Vellum",
+   "base": [
+    0.0409,
+    0,
+    0.0021
+   ],
+   "metallic": 0,
+   "rough": 0.3,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 1,
+   "bump": 0.06,
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "White Vellum Perforated",
+   "cat": "Vellum",
+   "base": [
+    0.314,
+    0.314,
+    0.314
+   ],
+   "metallic": 0,
+   "rough": 0.3,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.22,
+   "grid": {
+    "shape": "circular",
+    "barCol": [
+     0.1193,
+     0.1193,
+     0.1193
+    ],
+    "pitch": 26,
+    "thickness": 0.3,
+    "hue": 0,
+    "seed": 78
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Twill Violet",
+   "cat": "Cloth · Twill",
+   "base": [
+    0.0395,
+    0.0212,
+    0.3613
+   ],
+   "metallic": 0,
+   "rough": 0.78,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.04,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.4,
+   "woven": {
+    "thread2": [
+     0.079625,
+     0.0659,
+     0.320975
+    ],
+    "pitch": 19,
+    "contrast": 0.42,
+    "irregular": 0.2,
+    "hue": 0,
+    "seed": 44,
+    "structure": "twill"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Twill Orange",
+   "cat": "Cloth · Twill",
+   "base": [
+    0.669,
+    0.1066,
+    0.0334
+   ],
+   "metallic": 0,
+   "rough": 0.78,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.04,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.4,
+   "woven": {
+    "thread2": [
+     0.5517500000000001,
+     0.12995,
+     0.07505
+    ],
+    "pitch": 19,
+    "contrast": 0.42,
+    "irregular": 0.2,
+    "hue": 0,
+    "seed": 13,
+    "structure": "twill"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Oxford Pink",
+   "cat": "Cloth · Oxford",
+   "base": [
+    0.3554,
+    0.0385,
+    0.1369
+   ],
+   "metallic": 0,
+   "rough": 0.7,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.06,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.3,
+   "woven": {
+    "thread2": [
+     0.31655,
+     0.078875,
+     0.152675
+    ],
+    "pitch": 21,
+    "contrast": 0.32,
+    "irregular": 0.16,
+    "hue": 0,
+    "seed": 20,
+    "structure": "basket"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Oxford Violet",
+   "cat": "Cloth · Oxford",
+   "base": [
+    0.15,
+    0.053,
+    0.361
+   ],
+   "metallic": 0,
+   "rough": 0.7,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.06,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.3,
+   "woven": {
+    "thread2": [
+     0.40085,
+     0.38389999999999996,
+     0.371525
+    ],
+    "pitch": 21,
+    "contrast": 0.32,
+    "irregular": 0.16,
+    "hue": 0,
+    "seed": 17,
+    "structure": "basket"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Slub Linen White",
+   "cat": "Cloth · Slub Linen",
+   "base": [
+    0.624,
+    0.624,
+    0.5583
+   ],
+   "metallic": 0,
+   "rough": 0.9,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.02,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.46,
+   "woven": {
+    "thread2": [
+     0.518,
+     0.518,
+     0.468725
+    ],
+    "pitch": 15,
+    "contrast": 0.55,
+    "irregular": 0.88,
+    "hue": 0,
+    "seed": 34,
+    "structure": "plain"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Slub Linen Tuscan Red",
+   "cat": "Cloth · Slub Linen",
+   "base": [
+    0.1214,
+    0.0044,
+    0
+   ],
+   "metallic": 0,
+   "rough": 0.9,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.02,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.01,
+   "bump": 0.46,
+   "woven": {
+    "thread2": [
+     0.14105,
+     0.0533,
+     0.05
+    ],
+    "pitch": 15,
+    "contrast": 0.55,
+    "irregular": 0.88,
+    "hue": 0,
+    "seed": 38,
+    "structure": "plain"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Sateen Tuscan Red",
+   "cat": "Cloth · Sateen",
+   "base": [
+    0.1214,
+    0.0044,
+    0
+   ],
+   "metallic": 0,
+   "rough": 0.52,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.4,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.02,
+   "bump": 0.18,
+   "woven": {
+    "thread2": [
+     0.14105,
+     0.0533,
+     0.05
+    ],
+    "pitch": 24,
+    "contrast": 0.2,
+    "irregular": 0.12,
+    "hue": 0,
+    "seed": 13,
+    "structure": "satin"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Sateen Gold Thread",
+   "cat": "Cloth · Sateen",
+   "base": [
+    0.5906,
+    0.4851,
+    0.2345
+   ],
+   "metallic": 0,
+   "rough": 0.52,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.4,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.02,
+   "bump": 0.18,
+   "woven": {
+    "thread2": [
+     0.49295,
+     0.41382499999999994,
+     0.225875
+    ],
+    "pitch": 24,
+    "contrast": 0.2,
+    "irregular": 0.12,
+    "hue": 0,
+    "seed": 6,
+    "structure": "satin"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Corduroy Pink",
+   "cat": "Cloth · Corduroy",
+   "base": [
+    0.7682,
+    0.0762,
+    0.2874
+   ],
+   "metallic": 0,
+   "rough": 0.86,
+   "ior": 1.4,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0.05,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.02,
+   "bump": 0.62,
+   "woven": {
+    "thread2": [
+     0.62615,
+     0.10715000000000001,
+     0.26555
+    ],
+    "pitch": 7,
+    "contrast": 0.62,
+    "irregular": 0.18,
+    "hue": 0,
+    "seed": 24,
+    "structure": "rib"
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Pile Clean Green",
+   "cat": "Bolt · Pile · Clean",
+   "base": [
+    0.0353,
+    0.1884,
+    0
+   ],
+   "metallic": 0,
+   "rough": 1,
+   "ior": 1.45,
+   "trans": 0.104,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 1,
+   "bump": 0.4,
+   "woven": {
+    "thread2": [
+     0.076475,
+     0.19130000000000003,
+     0.05
+    ],
+    "pitch": 18,
+    "contrast": 0.3,
+    "irregular": 0.3,
+    "hue": 0,
+    "seed": 27
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Plush Coarse Green",
+   "cat": "Resin · Plush",
+   "base": [
+    0.2918,
+    0.6654,
+    0.0296
+   ],
+   "metallic": 0,
+   "rough": 0.2,
+   "ior": 1.42,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 1,
+   "bump": 0.4,
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Marble White Large",
+   "cat": "Lithic · Marble",
+   "base": [
+    1,
+    1,
+    1
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "veined",
+    "vein": [
+     0.32,
+     0.32,
+     0.32
+    ],
+    "clast": [
+     0.8,
+     0.8,
+     0.8
+    ],
+    "veinScale": 1.3,
+    "veinContrast": 0.62,
+    "warp": 0.85,
+    "redox": 0.5,
+    "speckle": 0.05,
+    "clastScale": 2.5,
+    "clastRand": 0.9,
+    "hue": 0,
+    "seed": 594
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Marble Black",
+   "cat": "Lithic · Marble",
+   "base": [
+    0.0011,
+    0.0011,
+    0.0011
+   ],
+   "metallic": 0,
+   "rough": 0.1,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "veined",
+    "vein": [
+     0.4206,
+     0.4206,
+     0.4206
+    ],
+    "clast": [
+     0.2009,
+     0.2009,
+     0.2009
+    ],
+    "veinScale": 2.6,
+    "veinContrast": 0.62,
+    "warp": 0.85,
+    "redox": 0.5,
+    "speckle": 0.05,
+    "clastScale": 2.5,
+    "clastRand": 0.9,
+    "hue": 0,
+    "seed": 720
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Granite Purple",
+   "cat": "Lithic · Granite",
+   "base": [
+    0.34,
+    0.16,
+    0.42
+   ],
+   "metallic": 0,
+   "rough": 0,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.101,
+   "bump": 0.2,
+   "marble": {
+    "structure": "speckled",
+    "vein": [
+     0.67,
+     0.58,
+     0.71
+    ],
+    "clast": [
+     0.538,
+     0.412,
+     0.594
+    ],
+    "veinScale": 5.5,
+    "veinContrast": 0.5,
+    "warp": 0.35,
+    "redox": 0.5,
+    "speckle": 0.85,
+    "clastScale": 7,
+    "clastRand": 0.95,
+    "hue": 0,
+    "seed": 98
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Granite Orange Coarse",
+   "cat": "Lithic · Granite",
+   "base": [
+    0.7221,
+    0.2172,
+    0
+   ],
+   "metallic": 0,
+   "rough": 0.536,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0.726,
+   "bump": 0.4,
+   "marble": {
+    "structure": "speckled",
+    "vein": [
+     0.861,
+     0.6086,
+     0.5
+    ],
+    "clast": [
+     0.8055,
+     0.452,
+     0.3
+    ],
+    "veinScale": 3.41,
+    "veinContrast": 0.5,
+    "warp": 0.35,
+    "redox": 0.5,
+    "speckle": 0.85,
+    "clastScale": 7,
+    "clastRand": 0.95,
+    "hue": 0,
+    "seed": 297
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Ophicalcite Rosa",
+   "cat": "Marmo",
+   "base": [
+    0.6,
+    0.26,
+    0.18
+   ],
+   "metallic": 0,
+   "rough": 0.09,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.3,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "breccia",
+    "vein": [
+     0.86,
+     0.83,
+     0.78
+    ],
+    "clast": [
+     0.035,
+     0.06,
+     0.055
+    ],
+    "veinScale": 8,
+    "veinContrast": 0.62,
+    "warp": 1.3,
+    "speckle": 0.22,
+    "clastScale": 6,
+    "clastRand": 1,
+    "redox": 0.5,
+    "hue": 0,
+    "seed": 12
+   },
+   "domain": "furniture",
+   "sourceArray": "RT_MARBLE_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Porfido Rosso",
+   "cat": "Marmo",
+   "base": [
+    0.135,
+    0.032,
+    0.055
+   ],
+   "metallic": 0,
+   "rough": 0.12,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0.22,
+   "coatRough": 0.05,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "speckled",
+    "vein": [
+     0.56,
+     0.4,
+     0.44
+    ],
+    "veinScale": 2,
+    "veinContrast": 0,
+    "warp": 0,
+    "speckle": 0.82,
+    "clastScale": 10,
+    "clastRand": 0.95,
+    "redox": 0.5,
+    "hue": 0,
+    "seed": 6
+   },
+   "domain": "furniture",
+   "sourceArray": "RT_MARBLE_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Travertino Romano",
+   "cat": "Marmo",
+   "base": [
+    0.74,
+    0.62,
+    0.45
+   ],
+   "metallic": 0,
+   "rough": 0.2,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.1,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "clouded",
+    "vein": [
+     0.55,
+     0.43,
+     0.28
+    ],
+    "veinScale": 1.5,
+    "veinContrast": 0.34,
+    "warp": 0.35,
+    "speckle": 0,
+    "clastScale": 3,
+    "clastRand": 0.9,
+    "redox": 0.5,
+    "hue": 0,
+    "seed": 19
+   },
+   "domain": "furniture",
+   "sourceArray": "RT_MARBLE_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Verde Alpi",
+   "cat": "Italia",
+   "base": [
+    0.04,
+    0.16,
+    0.1
+   ],
+   "metallic": 0,
+   "rough": 0.12,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.05,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.1,
+   "marble": {
+    "structure": "breccia",
+    "vein": [
+     0.72,
+     0.75,
+     0.7
+    ],
+    "clast": [
+     0.02,
+     0.09,
+     0.06
+    ],
+    "veinScale": 2.8,
+    "veinContrast": 0.75,
+    "warp": 0.85,
+    "speckle": 0,
+    "clastScale": 2.5,
+    "clastRand": 0.9,
+    "redox": 0.5,
+    "hue": 0,
+    "seed": 21
+   },
+   "domain": "furniture",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss"
+   ]
+  },
+  {
+   "name": "Giallo Smalto",
+   "cat": "Italia",
+   "base": [
+    0.93,
+    0.72,
+    0.07
+   ],
+   "metallic": 0,
+   "rough": 0.18,
+   "ior": 1.5,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.04,
+   "sheen": 0,
+   "emis": [
+    0,
+    0,
+    0
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0,
+   "domain": "furniture",
+   "sourceArray": "RT_EXTRA_MATS",
+   "liveInRendre": true,
+   "defaulted": [
+    "alpha",
+    "aniso",
+    "sss",
+    "bump"
+   ]
+  },
+  {
+   "name": "Terrazzo 16",
+   "cat": "Architectural · Terrazzo",
+   "base": [
+    0.0887,
+    0.1046,
+    0.1413
+   ],
+   "metallic": 0,
+   "rough": 0.448,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 0,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.15,
+   "mottle": {
+    "tone2": [
+     0.0444,
+     0.0523,
+     0.0707
+    ],
+    "tone3": [
+     0.4988,
+     0.5075,
+     0.5277
+    ],
+    "scale": 7,
+    "irregular": 0.9,
+    "seed": 221,
+    "soft": 0
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  },
+  {
+   "name": "Terrazzo Blue",
+   "cat": "Architectural · Terrazzo",
+   "base": [
+    0.2502,
+    0.3967,
+    0.4019
+   ],
+   "metallic": 0,
+   "rough": 0.116,
+   "ior": 1.45,
+   "trans": 0,
+   "alpha": 1,
+   "coat": 1,
+   "coatRough": 0.03,
+   "sheen": 0,
+   "emis": [
+    1,
+    1,
+    1
+   ],
+   "emisStr": 0,
+   "aniso": 0,
+   "sss": 0,
+   "bump": 0.15,
+   "mottle": {
+    "tone2": [
+     0.1251,
+     0.1983,
+     0.2009
+    ],
+    "tone3": [
+     0.5876,
+     0.6682,
+     0.671
+    ],
+    "scale": 7,
+    "irregular": 0.9,
+    "seed": 563,
+    "soft": 0
+   },
+   "domain": "furniture",
+   "sourceArray": "RENDRE_MATLIB",
+   "liveInRendre": true
+  }
+ ]
+}

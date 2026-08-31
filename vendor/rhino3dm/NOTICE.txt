@@ -1,0 +1,64 @@
+rhino3dm — THIRD-PARTY NOTICE
+================================================================
+
+  rhino3dm.wasm
+  rhino3dm.module.js
+  rhino3dm.cjs
+
+Copyright (c) Robert McNeel & Associates
+SPDX-License-Identifier: MIT
+https://github.com/mcneel/rhino3dm
+
+This is McNeel's own openNURBS binding, published by them under MIT. Centina
+uses it only for .3dm read and write, through the separate `io3dm.mjs` entry
+point; nothing under `kernel/` touches it. No part of this project is derived
+from any McNeel product beyond this library.
+
+
+WHY THIS IS A LOCAL BUILD AND NOT AN NPM RELEASE
+----------------------------------------------------------------
+These files are built from rhino3dm's source rather than taken from a
+published release, because no release exposes the Brep trim API (BrepLoop,
+BrepTrim and the two list types) that READING a trimmed .3dm requires, nor any
+Brep authoring at all, which WRITING one requires.
+
+`rebuild.sh` in this directory reproduces the build from an upstream checkout.
+
+
+WHAT brep_authoring.patch CHANGES
+----------------------------------------------------------------
+⚠ THIS BUILD IS MODIFIED, and the modification is ours. `brep_authoring.patch`
+is the exact diff. It adds bindings for ON_Brep's own existing construction API
+(AddSurface, AddEdgeCurve, AddTrimCurve, NewVertex, NewEdge, NewFace, NewLoop,
+NewTrim, the tolerance setters, Compact) to `src/bindings/bnd_brep.{h,cpp}`. No
+openNURBS or rhino3dm behaviour is changed and nothing is reimplemented — the
+capability was already in ON_Brep and was simply not reachable from JavaScript.
+
+The only other local change is the trailing `export default rhino3dm;` that
+turns McNeel's UMD output into an ES module.
+
+The patch is a derivative of McNeel's MIT-licensed source and carries the same
+terms. It is written to be offerable upstream rather than forked indefinitely.
+
+
+MIT LICENSE
+----------------------------------------------------------------
+Copyright (c) Robert McNeel & Associates
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

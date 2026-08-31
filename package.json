@@ -1,0 +1,49 @@
+{
+  "name": "centina",
+  "version": "0.1.0-alpha.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "A NURBS kernel in plain JavaScript. Curves, surfaces, trimming, booleans, fillets and SubD as math over plain serializable data \u2014 no dependencies, no build step, no renderer, no DOM. Pre-alpha; the README says what it does not do.",
+  "keywords": [
+    "nurbs",
+    "cad",
+    "geometry",
+    "kernel",
+    "b-rep",
+    "boolean",
+    "subd",
+    "3dm"
+  ],
+  "author": "Phil Renato",
+  "exports": {
+    ".": "./kernel/index.mjs",
+    "./io3dm": "./io3dm.mjs",
+    "./io3dm.mjs": "./io3dm.mjs",
+    "./*.mjs": "./kernel/*.mjs",
+    "./*": "./kernel/*.mjs"
+  },
+  "files": [
+    "kernel",
+    "io3dm.mjs",
+    "LICENSE",
+    "TRADEMARK.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "rhino3dm": "^8.17.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/philrenato/centina.git"
+  },
+  "homepage": "https://github.com/philrenato/centina",
+  "bugs": {
+    "url": "https://github.com/philrenato/centina/issues"
+  }
+}

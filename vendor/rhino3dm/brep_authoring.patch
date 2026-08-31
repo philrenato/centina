@@ -1,0 +1,226 @@
+diff --git a/src/bindings/bnd_brep.cpp b/src/bindings/bnd_brep.cpp
+index 676861c..296e38e 100644
+--- a/src/bindings/bnd_brep.cpp
++++ b/src/bindings/bnd_brep.cpp
+@@ -636,6 +636,162 @@ void initBrepBindings(rh3dmpymodule& m)
+ 
+ #endif
+ 
++
++// ---------------------------------------------------------------------------
++// AUTHORING
++//
++// The tables take OWNERSHIP of what they are given, so every one of these
++// duplicates its argument first. Handing over a script-owned object instead
++// would let embind free it while the brep still points at it.
++//
++// Every function bounds-checks its indices and returns -1/false rather than
++// trusting the caller: these are reached from JS, where an off-by-one is a
++// wrong number and not a compile error, and ON_Brep's own accessors would
++// happily read past the end.
++// ---------------------------------------------------------------------------
++int BND_Brep::AddSurface(const BND_Surface* surface)
++{
++  if (nullptr == m_brep || nullptr == surface || nullptr == surface->m_surface) return -1;
++  ON_Surface* dup = surface->m_surface->DuplicateSurface();
++  if (nullptr == dup) return -1;
++  return m_brep->AddSurface(dup);
++}
++
++int BND_Brep::AddEdgeCurve(const BND_Curve* curve)
++{
++  if (nullptr == m_brep || nullptr == curve || nullptr == curve->m_curve) return -1;
++  ON_Curve* dup = curve->m_curve->DuplicateCurve();
++  if (nullptr == dup) return -1;
++  return m_brep->AddEdgeCurve(dup);
++}
++
++int BND_Brep::AddTrimCurve(const BND_Curve* curve)
++{
++  if (nullptr == m_brep || nullptr == curve || nullptr == curve->m_curve) return -1;
++  ON_Curve* dup = curve->m_curve->DuplicateCurve();
++  if (nullptr == dup) return -1;
++  return m_brep->AddTrimCurve(dup);
++}
++
++int BND_Brep::NewVertex(ON_3dPoint point, double tolerance)
++{
++  if (nullptr == m_brep) return -1;
++  ON_BrepVertex& v = m_brep->NewVertex(point, tolerance);
++  return v.m_vertex_index;
++}
++
++int BND_Brep::NewEdge(int vertex0, int vertex1, int curve3dIndex, double tolerance)
++{
++  if (nullptr == m_brep) return -1;
++  if (vertex0 < 0 || vertex0 >= m_brep->m_V.Count()) return -1;
++  if (vertex1 < 0 || vertex1 >= m_brep->m_V.Count()) return -1;
++  if (curve3dIndex < 0 || curve3dIndex >= m_brep->m_C3.Count()) return -1;
++  ON_BrepEdge& e = m_brep->NewEdge(m_brep->m_V[vertex0], m_brep->m_V[vertex1], curve3dIndex, nullptr, tolerance);
++  // ⚠ SET IT AGAIN, EXPLICITLY. NewEdge takes an edge_tolerance argument and
++  // the edge still comes back with m_tolerance = ON_UNSET_VALUE
++  // (-1.23432e+308), which ON_Brep::IsValid rejects by name: "edge.m_tolerance
++  // ... should be >= 0.0". An unset tolerance is not a small tolerance, and a
++  // brep carrying one is invalid however good its geometry is.
++  e.m_tolerance = tolerance;
++  return e.m_edge_index;
++}
++
++int BND_Brep::NewFace(int surfaceIndex)
++{
++  if (nullptr == m_brep) return -1;
++  if (surfaceIndex < 0 || surfaceIndex >= m_brep->m_S.Count()) return -1;
++  ON_BrepFace& f = m_brep->NewFace(surfaceIndex);
++  return f.m_face_index;
++}
++
++int BND_Brep::NewLoop(int faceIndex, int loopType)
++{
++  if (nullptr == m_brep) return -1;
++  if (faceIndex < 0 || faceIndex >= m_brep->m_F.Count()) return -1;
++  ON_BrepLoop::TYPE t = ON_BrepLoop::unknown;
++  switch (loopType)
++  {
++    case 1: t = ON_BrepLoop::outer; break;
++    case 2: t = ON_BrepLoop::inner; break;
++    case 3: t = ON_BrepLoop::slit; break;
++    case 4: t = ON_BrepLoop::crvonsrf; break;
++    case 5: t = ON_BrepLoop::ptonsrf; break;
++    default: t = ON_BrepLoop::unknown; break;
++  }
++  ON_BrepLoop& l = m_brep->NewLoop(t, m_brep->m_F[faceIndex]);
++  return l.m_loop_index;
++}
++
++int BND_Brep::NewTrim(int loopIndex, int edgeIndex, bool reversed, int curve2dIndex, double tolerance)
++{
++  if (nullptr == m_brep) return -1;
++  if (loopIndex < 0 || loopIndex >= m_brep->m_L.Count()) return -1;
++  if (edgeIndex < 0 || edgeIndex >= m_brep->m_E.Count()) return -1;
++  if (curve2dIndex < 0 || curve2dIndex >= m_brep->m_C2.Count()) return -1;
++  ON_BrepTrim& t = m_brep->NewTrim(m_brep->m_E[edgeIndex], reversed ? true : false, m_brep->m_L[loopIndex], curve2dIndex);
++  // A trim with no tolerance set reads as exact, and OpenNURBS's validator
++  // then measures the pcurve against the edge at zero slack. Setting both
++  // components is what makes a fitted boundary declare its own accuracy.
++  t.m_tolerance[0] = tolerance;
++  t.m_tolerance[1] = tolerance;
++  return t.m_trim_index;
++}
++
++// A SINGULAR trim: a loop member with a real (u,v) extent and NO 3-D length,
++// which is how ON represents a POLE. A revolved disc (a cylinder cap) collapses
++// its whole u=0 edge to one point, so the face's loop genuinely passes through
++// a place where the surface has no width — and a loop that simply OMITS that
++// stretch does not close. OpenNURBS reports it as "loop is not valid", which
++// reads like a broken trim rather than a missing one.
++//
++// It takes a VERTEX rather than an edge, because there is no edge: the whole
++// span is that single point. `iso` says which side of the parametric rectangle
++// the degenerate stretch runs along (ON_Surface::W_iso = 3, S_iso = 4,
++// E_iso = 5, N_iso = 6), which the caller knows and the brep cannot infer.
++int BND_Brep::NewSingularTrim(int loopIndex, int vertexIndex, int isoType, int curve2dIndex, double tolerance)
++{
++  if (nullptr == m_brep) return -1;
++  if (loopIndex < 0 || loopIndex >= m_brep->m_L.Count()) return -1;
++  if (vertexIndex < 0 || vertexIndex >= m_brep->m_V.Count()) return -1;
++  if (curve2dIndex < 0 || curve2dIndex >= m_brep->m_C2.Count()) return -1;
++  if (isoType < 0 || isoType > ON_Surface::N_iso) return -1;
++  ON_Surface::ISO iso = ON_Surface::ISO(isoType);
++  ON_BrepTrim& t = m_brep->NewSingularTrim(m_brep->m_V[vertexIndex], m_brep->m_L[loopIndex], iso, curve2dIndex);
++  t.m_tolerance[0] = tolerance;
++  t.m_tolerance[1] = tolerance;
++  return t.m_trim_index;
++}
++
++bool BND_Brep::SetTrimIsoFlags()
++{
++  if (nullptr == m_brep) return false;
++  m_brep->SetTrimIsoFlags();
++  return true;
++}
++
++bool BND_Brep::SetVertexTolerances(bool lazy)
++{
++  if (nullptr == m_brep) return false;
++  return m_brep->SetVertexTolerances(lazy);
++}
++
++bool BND_Brep::SetEdgeTolerances(bool lazy)
++{
++  if (nullptr == m_brep) return false;
++  return m_brep->SetEdgeTolerances(lazy);
++}
++
++bool BND_Brep::SetTrimTolerances(bool lazy)
++{
++  if (nullptr == m_brep) return false;
++  return m_brep->SetTrimTolerances(lazy);
++}
++
++void BND_Brep::Compact()
++{
++  if (nullptr != m_brep) m_brep->Compact();
++}
++
+ #if defined(ON_WASM_COMPILE)
+ using namespace emscripten;
+ 
+@@ -736,6 +892,20 @@ void initBrepBindings(void*)
+     .property("isManifold", &BND_Brep::IsManifold)
+     .property("isSurface", &BND_Brep::IsSurface)
+     .function("flip", &BND_Brep::Flip)
++    .function("addSurface", &BND_Brep::AddSurface, allow_raw_pointers())
++    .function("addEdgeCurve", &BND_Brep::AddEdgeCurve, allow_raw_pointers())
++    .function("addTrimCurve", &BND_Brep::AddTrimCurve, allow_raw_pointers())
++    .function("newVertex", &BND_Brep::NewVertex)
++    .function("newEdge", &BND_Brep::NewEdge)
++    .function("newFace", &BND_Brep::NewFace)
++    .function("newLoop", &BND_Brep::NewLoop)
++    .function("newTrim", &BND_Brep::NewTrim)
++    .function("newSingularTrim", &BND_Brep::NewSingularTrim)
++    .function("setTrimIsoFlags", &BND_Brep::SetTrimIsoFlags)
++    .function("setVertexTolerances", &BND_Brep::SetVertexTolerances)
++    .function("setEdgeTolerances", &BND_Brep::SetEdgeTolerances)
++    .function("setTrimTolerances", &BND_Brep::SetTrimTolerances)
++    .function("compact", &BND_Brep::Compact)
+     ;
+ }
+ #endif
+diff --git a/src/bindings/bnd_brep.h b/src/bindings/bnd_brep.h
+index 37e7c5e..a7f4435 100644
+--- a/src/bindings/bnd_brep.h
++++ b/src/bindings/bnd_brep.h
+@@ -149,6 +149,33 @@ public:
+   //public BrepSolidOrientation SolidOrientation
+   bool IsManifold() const { return m_brep->IsManifold(); }
+   bool IsSurface() const { return m_brep->IsSurface(); }
++
++  // AUTHORING. ON_Brep is fully capable of being built up; none of it was
++  // reachable from JS, which is what blocked writing a trimmed face to .3dm.
++  // Everything here COPIES its input before handing it to the brep, because
++  // ON_Brep::AddSurface/AddEdgeCurve/AddTrimCurve take ownership and a
++  // script-side object must not be freed out from under its owner.
++  // Indices are returned rather than references so the caller can wire the
++  // topology up by index, which is the only shape that survives embind.
++  int AddSurface(const class BND_Surface* surface);
++  int AddEdgeCurve(const class BND_Curve* curve);
++  int AddTrimCurve(const class BND_Curve* curve);
++  int NewVertex(ON_3dPoint point, double tolerance);
++  int NewEdge(int vertex0, int vertex1, int curve3dIndex, double tolerance);
++  int NewFace(int surfaceIndex);
++  int NewLoop(int faceIndex, int loopType);
++  int NewTrim(int loopIndex, int edgeIndex, bool reversed, int curve2dIndex, double tolerance);
++  int NewSingularTrim(int loopIndex, int vertexIndex, int isoType, int curve2dIndex, double tolerance);
++  bool SetTrimIsoFlags();
++  bool SetVertexTolerances(bool lazy);
++  bool SetEdgeTolerances(bool lazy);
++  bool SetTrimTolerances(bool lazy);
++  void Compact();
++  // NOTE: there is deliberately no join here. ON_Brep has none — JoinEdges
++  // appears only in comments in this opennurbs; Rhino's join lives above the
++  // library. It is not needed: a multi-face solid is authored as ONE brep
++  // whose faces already SHARE their edges, which is the state our own sewn
++  // solid is already in.
+   //public override GeometryBase Duplicate()
+   //public Brep DuplicateSubBrep(IEnumerable<int> faceIndices)
+   //public Curve[] DuplicateEdgeCurves()
