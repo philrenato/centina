@@ -10,7 +10,7 @@ import { bridgeEdgeRunsHub, bridgeEdgeRuns } from '../kernel/subdedit.mjs';
 import { buildTopology, edgeKey, subdivideCatmullClark } from '../kernel/subd.mjs';
 
 // A fixture built to be genuinely awkward rather than convenient: N arms as
-// separate one-quad flaps standing around a centre, each contributing ONE
+// separate one-quad flaps standing around a center, each contributing ONE
 // naked run, deliberately NOT coplanar (every arm is tilted out of the hub
 // plane) so nothing here can pass by lying flat.
 function flapRing(n, m = 2, tilt = 0.35) {
@@ -69,7 +69,7 @@ test('bridgeEdgeRunsHub: three runs join through one hub, and the result is a co
   }
   assert.equal(directedReuse(out.cage.faces), 0, 'no directed edge is traversed twice — consistently wound');
   // A junction is a PATCH, not a cap: it closes the runs it was given and
-  // opens its own free sides between neighbouring arms, two per arm per
+  // opens its own free sides between neighboring arms, two per arm per
   // segment row. Asserted as exact accounting rather than as a direction,
   // because "fewer naked edges" is simply the wrong expectation here — and
   // an approximate one would hide an arm that failed to attach.

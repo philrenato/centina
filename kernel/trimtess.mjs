@@ -54,15 +54,15 @@
 // MANIFOLDNESS — the paragraph above is TRUE but not SUFFICIENT, and area
 // alone cannot see the gap, because every artifact involved is area-neutral.
 // Agreement on the shared crossing bit-for-bit is not enough on its own: a
-// cell can invent an EXTRA collinear vertex its neighbour has no reason to
+// cell can invent an EXTRA collinear vertex its neighbor has no reason to
 // know about (see removeCollinearSpikes), and a bridge-crossed cell can emit
 // one wholly-inside-the-hole face (see dropSpuriousTriangles). Left in, an
-// ordinary off-centre hole on a 10x10 grid welds to Euler characteristic -4
+// ordinary off-center hole on a 10x10 grid welds to Euler characteristic -4
 // (an annulus must give 0), 11 edges shared by three faces, and 13
 // T-junctions, and its overlapping faces put the area as much as 140 units
 // out on a 10000-unit fixture. Both are cleaned up, and a third pass
 // (repairTJunctions) makes seam sharing explicit rather than merely likely.
-// Measured over 400 randomised off-centre-hole fixtures (radius, position,
+// Measured over 400 randomised off-center-hole fixtures (radius, position,
 // grid resolution 5-20, loop segment count 16-48): 397 come out fully clean
 // — chi = 0, ZERO non-manifold edges, ZERO T-junctions, area exact to
 // ~1e-12 — and ZERO of the 400 have a non-manifold edge or a T-junction of
@@ -78,7 +78,7 @@
 //       hole sits entirely inside ONE grid cell — remains genuinely lossy:
 //       measured area error up to ~1.4% of the trimmed region (worst when
 //       the hole is near-concentric with its own cell, tailing to exactly
-//       zero as it moves off-centre). Its own console.error fires there.
+//       zero as it moves off-center). Its own console.error fires there.
 //       That is the ear-clipper failing on a symmetric keyholed polygon, a
 //       different defect from the ones repaired above, and it is not
 //       addressed.
@@ -414,7 +414,7 @@ function removeSpikes(poly, tol = 1e-9) {
 // one. Its shoelace contribution is exactly zero, so the polygon's area
 // stays correct — but the ear-clipper then triangulates it into a face
 // whose edge spans the full cell edge (10,40)-(20,40), straight across the
-// (10,40)-(16.394,40) split the NEIGHBOURING cell correctly produced. That
+// (10,40)-(16.394,40) split the NEIGHBORING cell correctly produced. That
 // is what makes the welded mesh non-manifold: not, as first supposed, two
 // cells deriving a shared crossing INDEPENDENTLY and disagreeing (they do
 // not — both compute 16.3940000000 bit-identically, exactly as this file's
@@ -453,7 +453,7 @@ function removeCollinearSpikes(poly, tol = 1e-9) {
 // two former neighbors coincident (dedupeConsecutive's case), and removing
 // a coincident pair can leave a fresh collinear reversal. Running them once
 // each, in any fixed order, provably leaves real degeneracies behind —
-// measured directly on a 10x10 grid with an off-centre hole, where a single
+// measured directly on a 10x10 grid with an off-center hole, where a single
 // pass left a spurious (20,40) that a second pass removes. Iterating to a
 // FIXED POINT is what actually closes it; the loop is bounded because every
 // pass that changes anything strictly shortens the polygon.
@@ -581,7 +581,7 @@ function makeVertex(srf, u, v) {
 // clip result triangulates into one extra half-cell face lying wholly
 // inside the hole — worth up to half a grid cell of spurious area (200 of
 // 10000 on a real fixture), and the last thing standing between an
-// ordinary off-centre hole and an exactly-correct Euler characteristic.
+// ordinary off-center hole and an exactly-correct Euler characteristic.
 function dropSpuriousTriangles(triangles, outerLoop, holes) {
   if (!outerLoop) return triangles;
   const out = [];
@@ -600,7 +600,7 @@ function dropSpuriousTriangles(triangles, outerLoop, holes) {
 // triangulation, and that ordering is load-bearing rather than incidental.
 //
 // The obvious fix for a T-junction is to insert the missing crossing into
-// the neighbouring cell's polygon BEFORE triangulating it, so both cells
+// the neighboring cell's polygon BEFORE triangulating it, so both cells
 // agree on the seam. That was built and measured first, and it is WRONG:
 // feeding extra collinear vertices to the ear-clipper measurably corrupts
 // its output (area error rose from ~1e-12 to as much as 280 units on a
@@ -618,7 +618,7 @@ function dropSpuriousTriangles(triangles, outerLoop, holes) {
 // live on cell boundaries, which are by definition constant-u or
 // constant-v lines) — measured across 400 randomised fixtures, zero
 // T-junctions of any orientation survive — but a future construction that
-// emitted a slanted shared edge would need this generalised.
+// emitted a slanted shared edge would need this generalized.
 function repairTJunctions(triangles, srf, tol = 1e-9) {
   if (!triangles.length) return triangles;
   const q = 1e-9;

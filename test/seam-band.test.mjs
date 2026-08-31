@@ -149,7 +149,7 @@ test('a loop that straddles the seam and returns is refused as its OWN case', ()
   const loop = [];
   for (let i = 0; i < 24; i++) {
     const t = (i / 24) * 2 * Math.PI;
-    // centred exactly ON the seam (u = uMin), so half the loop lands at the
+    // centered exactly ON the seam (u = uMin), so half the loop lands at the
     // top of the u range and half at the bottom
     let u = uMin + ru * Math.cos(t);
     if (u < uMin) u += (uMax - uMin);

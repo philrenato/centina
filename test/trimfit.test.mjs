@@ -94,14 +94,14 @@ test('A SQUARE SPLITS INTO ITS FOUR SIDES, and every one is an exact line', () =
   assert.equal(res.runs.length, 4);
   assert.equal(res.stats.corners, 4);
   for (const run of res.runs) {
-    assert.equal(run.kind, 'line', 'a straight side must be recognised, not splined');
+    assert.equal(run.kind, 'line', 'a straight side must be recognized, not splined');
     assert.equal(run.pcurve.ctrlPts.length, 2, 'a line has two control points');
   }
 });
 
 test('...INCLUDING THE SIDES THAT RUN BACKWARDS — the direction must not decide the answer', () => {
   // fitLine canonicalizes its direction so near-identical input cannot flicker
-  // between opposite ones, which means a run travelling in -x comes back with
+  // between opposite ones, which means a run traveling in -x comes back with
   // its endpoints swapped. Rejecting that would discard an exact answer over a
   // convention, and it silently did: two of these four sides fitted as
   // six-control-point splines. Both traversal directions are asserted so the

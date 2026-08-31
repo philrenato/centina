@@ -133,7 +133,7 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
    slab test computes `0 * Infinity` = NaN. Comparisons against NaN are all
    false, so the node is not rejected — it is silently MISSED. Every one of these
    rays is aimed straight down an axis and originates on a coordinate a box face
-   sits on, which is exactly the alignment a modelling app produces constantly
+   sits on, which is exactly the alignment a modeling app produces constantly
    and a random ray never does. */
 {
   const pos = scatterTriangles(600, 12);

@@ -283,7 +283,7 @@ test('shellSolid: a closed box (zero faces removed) is a genuinely hollow closed
 // THE CORNER TEST. This is the one that fails on the old per-face-normal
 // construction and passes on the exact plane-intersection one: three inner
 // walls meeting at a corner must meet at ONE point. The old build gave each
-// of them its own corner, a few millimetres apart, which is exactly the
+// of them its own corner, a few millimeters apart, which is exactly the
 // gapping-and-crossing a shelled box showed.
 test('shellSolid: three inner walls meeting at a corner meet at ONE point — the inner cavity has exactly 8 corners, not 24', () => {
   const h = 20, t = 3;
@@ -489,13 +489,13 @@ test('shellSolid: a solid that is not closed is refused honestly (there is no in
 });
 
 // A single panel's own corner lifted with NO corresponding move in the
-// neighbouring panels that share that physical vertex is not a real
+// neighboring panels that share that physical vertex is not a real
 // push-pull edit (solidVertexGroups moves a topological vertex in EVERY
 // panel that owns it, consistently) — it is an inconsistent mutation that
 // tears the solid open at that corner, and shellSolid still refuses it
 // honestly, now for the true reason (a real gap in the topology) rather
 // than the old "not flat" message that generalization below retires.
-test('shellSolid: moving ONE panel\'s corner without its neighbours tears the solid open, and is still refused honestly', () => {
+test('shellSolid: moving ONE panel\'s corner without its neighbors tears the solid open, and is still refused honestly', () => {
   const panels = boxPanels(20);
   panels[0].srf.ctrlNet[1][1][2] += 5; // only the top face's own corner moves
   assert.throws(() => shellSolid(panels, [], 2), /not a closed solid/i);
@@ -676,7 +676,7 @@ test('shellSolid: a REBUILT box\'s inner wall is a genuine clean inset lattice �
   };
   const distinct = dedupe(allInnerPts);
   // Isolate the TOP face's own inner wall (z close to h - t = 17) — its
-  // neighbours (the 4 side faces) are ALSO offset inward by t, so a UNIFORM
+  // neighbors (the 4 side faces) are ALSO offset inward by t, so a UNIFORM
   // box shell's top face genuinely shrinks by t on every edge too: the true
   // inner-top footprint is x,y in [-(h-t), h-t], a real, independently
   // derived prediction, never read back from the shell itself.
@@ -719,7 +719,7 @@ test('shellSolid: a zero / non-finite thickness refuses honestly', () => {
 // The curvature test is structural (degree, rationality), not a threshold, so
 // there is no tolerance gap to invert the way a coincidence refusal has. The
 // number that actually helps is different: whether the face is a real curve or
-// a nearly-flat one the modeller could rebuild as a plane and shell.
+// a nearly-flat one the modeler could rebuild as a plane and shell.
 //
 // The bound is measured over the CONTROL NET rather than the surface, so by
 // the convex-hull property it OVERSTATES the true sagitta and can never claim
@@ -752,7 +752,7 @@ test('shellSolid: a curved face is refused WITH a measured bow, not just named',
 test('shellSolid: the bow is an UPPER bound — it never claims a face is flatter than it is', () => {
   // The same arch evaluated on its own surface never leaves the control net's
   // z range, so the reported bound must be at least the true deviation. This
-  // is the direction that matters: understating it would invite a modeller to
+  // is the direction that matters: understating it would invite a modeler to
   // treat a real curve as near-flat.
   const arch = { srf: {
     degU: 1, knotsU: [0, 0, 1, 1],

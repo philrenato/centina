@@ -113,7 +113,7 @@ export function fieldPeak(field) {
 // UNWEIGHTED, and that is a real claim about what the number means. Field
 // nodes are evenly spaced in the surface's PARAMETER domain, not in area,
 // so on a surface whose parameterization is uneven this mean weights
-// parameter space rather than square millimetres. It is "the average
+// parameter space rather than square millimeters. It is "the average
 // value over the grid", which is a statement about the field, not about
 // the geometry the field happens to be read against — the same stance the
 // record's own missing domain already takes.

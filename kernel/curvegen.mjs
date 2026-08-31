@@ -265,12 +265,12 @@ export function pointDistance(a, b) {
 // ⚠ SQUARE AND SAWTOOTH ARE DISCONTINUOUS AND MUST NOT BE FITTED SMOOTH.
 // `smoothFit` is false for them by default, exactly as the L-System above
 // stays degree-1 to keep its fractal corners: a degree-3 interpolation through
-// a step rings badly on both sides of every edge, which reads as a modelling
+// a step rings badly on both sides of every edge, which reads as a modeling
 // error rather than as the square wave the reader asked for. Exposed rather
 // than hidden so a reader who WANTS the ringing (it is a real, useful shape)
 // can have it.
 //
-// `skew` pulls the waveform's peak away from the centre of its period: 0.5 is
+// `skew` pulls the waveform's peak away from the center of its period: 0.5 is
 // symmetric, and at the extremes a triangle becomes a sawtooth. It is applied
 // to the phase WITHIN the cycle, so it leaves period and amplitude untouched.
 export const WAVE_FORMS = ['sine', 'square', 'triangle', 'sawtooth'];
@@ -327,7 +327,7 @@ export function waveCurve(params = {}) {
 export function waveWantsSmoothFit(form) { return form === 'sine' || form === 'triangle'; }
 
 // ===========================================================================
-// 5. HARMONIC — a Fourier sum, which is the wave family generalised
+// 5. HARMONIC — a Fourier sum, which is the wave family generalized
 // ===========================================================================
 //
 // The teaching curve of the set: one term is a sine, and adding odd harmonics
@@ -377,9 +377,9 @@ export const NOISE_CURVE_DEFAULTS = {
   seed: 1, octaves: 4, frequency: 1, lacunarity: 2, persistence: 0.5,
   amplitude: 10, length: 100, samples: 240, closed: false, radius: 40, start: [0, 0, 0],
 };
-// The fBm scalar itself, exported so its octave behaviour can be pinned
+// The fBm scalar itself, exported so its octave behavior can be pinned
 // directly: with persistence 0.5 the octave amplitudes are 1, 1/2, 1/4 ...
-// and the normalisation below keeps the result in -1..1 whatever `octaves` is.
+// and the normalization below keeps the result in -1..1 whatever `octaves` is.
 export function fbm1D(x, y, seed, octaves, frequency, lacunarity, persistence, noise2D) {
   let sum = 0, amp = 1, freq = frequency, norm = 0;
   const oct = Math.max(1, Math.round(octaves));
@@ -389,7 +389,7 @@ export function fbm1D(x, y, seed, octaves, frequency, lacunarity, persistence, n
        usual `* 2 - 1` applied on top pushes the sum to -3..1 and biases every
        curve downward, which reads as "that is just what noise looks like"
        rather than as a defect. Measured before the fix: -1.33 out of a
-       normaliser that guarantees -1..1. Check the convention of the noise you
+       normalizer that guarantees -1..1. Check the convention of the noise you
        are handed; do not assume the [0,1] one. */
     sum += amp * noise2D(x * freq, y * freq, seed + o * 1013);
     norm += amp;
@@ -694,7 +694,7 @@ export function lissajousCurve(params = {}) {
 // into a 2n-petal one and the classic 3-petal trefoil becomes a 6-petal
 // flower.
 //
-// The rational generalisation r = a*cos(n*theta/d) with n/d in lowest terms
+// The rational generalization r = a*cos(n*theta/d) with n/d in lowest terms
 // closes after d*pi when n*d is odd and 2*d*pi otherwise (the same signed-r
 // argument, one period of cos(n*theta/d) later). n/d = 7/2 and 2/7 are both
 // real, very different, and both closed.
@@ -860,7 +860,7 @@ export function catenaryCurve(params = {}) {
 // identity is the family's oracle and it holds to machine precision.
 //
 // ⚠ gcd(p,q) MUST BE 1 OR IT IS NOT A KNOT. With gcd(p,q) = g > 1 the
-// parametrisation above returns to its start after 2*pi/g and then retraces
+// parametrization above returns to its start after 2*pi/g and then retraces
 // the same points g times over — the object is a LINK of g separate
 // components, and a single point chain cannot represent it. That is refused
 // by name: emitting the g-fold retrace would look correct on screen and give

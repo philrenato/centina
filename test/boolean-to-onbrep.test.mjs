@@ -156,7 +156,7 @@ test('EVERY BOOLEAN ASSEMBLES INTO AN ON_Brep — no call refused mid-build', ()
 
 test('AND OPENNURBS GIVES ITS OWN VERDICT ON EACH — recorded whatever it is', () => {
   // ⚠ This test asserts that a verdict EXISTS and is legible, not that it is
-  // favourable. An honest first contact with an independent validator is worth
+  // favorable. An honest first contact with an independent validator is worth
   // more than a green check, and the log below is the finding.
   for (const op of ['union', 'intersect', 'difference']) {
     const r = results[op];

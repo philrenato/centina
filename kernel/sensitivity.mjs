@@ -98,8 +98,8 @@ export const SENSITIVITY_DEFAULTS = Object.freeze({
   // Motion below motionTol * geomScale is treated as no motion at all.
   // geomScale is the largest sample coordinate magnitude, because absolute
   // float error in an evaluation scales with the magnitude of the
-  // coordinates involved — a geometry sitting 10 metres from the origin
-  // genuinely cannot resolve a nanometre of response.
+  // coordinates involved — a geometry sitting 10 meters from the origin
+  // genuinely cannot resolve a nanometer of response.
   motionTol: 1e-9,
 
   // When the fine step produces no measurable motion, retry ONCE at
@@ -479,7 +479,7 @@ function jacobianAt(req, value, opt, spec) {
     basePoints: base.points,
     jacobian: fine.jac,
     jacobianNorm: jNorm,
-    // RMS millimetres of geometric motion per unit change of the param —
+    // RMS millimeters of geometric motion per unit change of the param —
     // the honest scalar answer to "how strongly does this param bite?"
     sensitivity: jNorm / Math.sqrt(sampleCount),
     asymmetry: fine.asymmetry,

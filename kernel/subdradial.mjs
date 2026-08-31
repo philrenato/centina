@@ -37,7 +37,7 @@
 //    hypothetical.
 //
 // THE TIE-EPSILON DISCIPLINE IS INHERITED DELIBERATELY, and for a reason
-// that has an exact analogue here. subdreflect.mjs documents a real bug a
+// that has an exact analog here. subdreflect.mjs documents a real bug a
 // review caught: checking "does this vertex map back onto ITSELF" FIRST,
 // as a privileged case, let a vertex self-pair even when a genuinely
 // closer real partner existed. The radial version of that bug is a vertex
@@ -163,7 +163,7 @@ export function findCageRotationPartners(cage, axisOrigin, axisDir, angleRad, op
 }
 
 // Verifies that `next` genuinely has the claimed ORDER — the cyclic
-// analogue of the mirror module's involution check, and a strictly
+// analog of the mirror module's involution check, and a strictly
 // stronger statement: applying it exactly `order` times must return every
 // vertex to itself, and no smaller positive number of steps may do so for
 // any vertex that is not on the axis.

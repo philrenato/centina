@@ -19,7 +19,7 @@ import { matchEdge, tangentDeviationAcross, edgeGap } from '../kernel/matchedge.
 import { insertKnot } from '../kernel/knots.mjs';
 
 const dom = (knots, degree) => [knots[degree], knots[knots.length - 1 - degree]];
-// Sample a surface over its own domain, so two DIFFERENT parametrisations of
+// Sample a surface over its own domain, so two DIFFERENT parametrizations of
 // the same shape can be compared fairly.
 function grid(srf, n = 11) {
   const [uMin, uMax] = dom(srf.knotsU, srf.degU);
@@ -87,7 +87,7 @@ test('rescaling a direction\'s domain moves nothing', () => {
   const before = grid(s);
   const out = surfaceRescaleDomain(s, 'v', -4, 11);
   assert.equal(knotsIn(out, 'v')[0], -4);
-  assert.ok(worstBetween(before, grid(out)) < 1e-9, 'an affine reparametrisation moves no point');
+  assert.ok(worstBetween(before, grid(out)) < 1e-9, 'an affine reparametrization moves no point');
 });
 
 test('interior multiplicities ignore the clamped ends and count repeats', () => {
@@ -131,7 +131,7 @@ test('⭐ a pair Match Edge REFUSED before now matches, and the break closes', (
   // formula into two different control nets. Two B-spline nets whose points
   // follow the same rule are NOT the same curve — control points are not
   // interpolated — so a fixture built that way has edges that miss each other
-  // by millimetres while looking identical on paper, and every match measured
+  // by millimeters while looking identical on paper, and every match measured
   // on it would be measuring the gap instead.
   const rows = [];
   for (let i = 0; i < 4; i++) {

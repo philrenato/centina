@@ -37,7 +37,7 @@ const moved = (a, b) => {
   }
   return worst;
 };
-// How far the OUTERMOST rows moved — the ones a neighbour is joined to.
+// How far the OUTERMOST rows moved — the ones a neighbor is joined to.
 const movedOnBoundary = (a, b) => {
   const nu = a.ctrlNet.length, nv = a.ctrlNet[0].length;
   let worst = 0;
@@ -61,7 +61,7 @@ test('falloff 1 fades to nothing across BOTH continuity rows, full strength insi
   assert.ok(g[0][4] < 1e-9, `the boundary row fades to nothing, got ${g[0][4]}`);
   assert.ok(g[1][4] < 1e-9, `and so does the row behind it, which carries the tangent, got ${g[1][4]}`);
   assert.ok(g[4][4] > 0.99, `the middle keeps full strength, got ${g[4][4]}`);
-  // Monotone from edge to centre — a fade that wobbles would read as a defect
+  // Monotone from edge to center — a fade that wobbles would read as a defect
   // in the surface rather than in the fade.
   for (let i = 1; i <= 4; i++) assert.ok(g[i][4] >= g[i - 1][4] - 1e-12, `row ${i} does not dip`);
 });

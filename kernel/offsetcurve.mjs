@@ -207,7 +207,7 @@ function to2D(p, frame) { return [dot3(p, frame.e1), dot3(p, frame.e2)]; }
    --------------------------------------------------------------- */
 
 // ROUND JOIN / ROUND CAP — a genuine circular arc of radius |distance|
-// centred on the ORIGINAL corner vertex, from the incoming edge's own
+// centered on the ORIGINAL corner vertex, from the incoming edge's own
 // perpendicular foot to the outgoing edge's own perpendicular foot, built
 // as a chain of at most-90-degree rational quadratic spans via
 // `filletCornerArc` ("ROUND join: filletCornerArc at the offset distance
@@ -271,7 +271,7 @@ function roundArcSpans(vertex, dIn, dOut, distance, n, turn) {
 // their true intersection — the same miter point, which for an inner corner
 // lies BACK inside the overlap. For a straight-edge input the caller can act
 // on that directly, so an inner miter reports `trimTo: M` and NO segments at
-// all: the two neighbouring offset edges are shortened to meet exactly at M,
+// all: the two neighboring offset edges are shortened to meet exactly at M,
 // which removes the fold outright rather than emitting a spike and relying
 // on the pruning pass to clean it up afterwards. (`offsetPolyCurve` cannot
 // trim a genuinely curved segment back to an arbitrary point without knot
@@ -311,7 +311,7 @@ function cornerJoin(vertex, dIn, dOut, distance, n, opts) {
 // runs back at the mirrored distance, and the second cap closes the loop.
 // `dirIn` is the direction of travel ARRIVING at `pt` on the forward side.
 // 'flat' is the straight chord (SVG `stroke-linecap: butt`); 'round' is the
-// exact semicircular arc of radius |distance| centred on `pt` (SVG
+// exact semicircular arc of radius |distance| centered on `pt` (SVG
 // `stroke-linecap: round`), built through the same at-most-90-degree span
 // machinery a round join uses, so a 180-degree turn stays well-conditioned.
 // The sweep direction is -sign(distance)*PI, which is what carries the cap
@@ -387,7 +387,7 @@ function densifySegments(segments, arcTolerance) {
 }
 
 // A closed outline's own point list is a RING: the first point is implicitly
-// the last one's neighbour, so a literally repeated closing point would only
+// the last one's neighbor, so a literally repeated closing point would only
 // contribute a zero-length segment to every downstream test. Dropped here
 // once, matching cleanPoints' own convention on the way in.
 function dropClosingDuplicate(pts, closed) {
@@ -554,7 +554,7 @@ function offsetPolylineSide(points, distance, n, opts) {
     dirs.push(d);
   }
   // Build every offset edge first, THEN resolve the corners — an inner
-  // miter shortens its two neighbours to meet exactly at the intersection
+  // miter shortens its two neighbors to meet exactly at the intersection
   // (see cornerJoin's `trimTo`), which is only expressible if the edges
   // already exist as mutable endpoints rather than as an append-only stream.
   const edges = [];

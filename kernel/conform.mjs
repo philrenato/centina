@@ -338,7 +338,7 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
   }
 
   // ONE mapping pass over the whole object, with each run's shared endpoint
-  // contributing a SINGLE mapped point that both neighbouring runs then
+  // contributing a SINGLE mapped point that both neighboring runs then
   // interpolate exactly — which is what makes the chain watertight at every
   // corner and what keeps `mapped[i]` aligned with `sampleParams[i]` for the
   // two invariants this module is gated on.

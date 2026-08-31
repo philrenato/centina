@@ -52,7 +52,7 @@
 //     goes; a welded one must measure it).
 //
 // OUTWARDNESS IS A SEPARATE FACT FROM CONSISTENCY, and is settled here
-// too. `orientLoops` above guarantees only that neighbours AGREE; which
+// too. `orientLoops` above guarantees only that neighbors AGREE; which
 // way the whole component ends up facing is decided by whichever face
 // happened to seed its own traversal, so a shell can come back globally
 // inside-out with every check above still passing. Chi, the naked-edge
@@ -68,7 +68,7 @@ const DEFAULT_WELD_TOL = 1e-6;
 // WELDING
 // ---------------------------------------------------------------------
 // Coincident corners become ONE vertex. A plain spatial hash on the
-// tolerance grid, probing the 27 neighbouring cells so a pair straddling
+// tolerance grid, probing the 27 neighboring cells so a pair straddling
 // a cell boundary still welds — the same technique kernel/flatten.mjs's
 // own weld already uses, restated here rather than imported because that
 // one welds a triangulation's own index arrays, not free point lists.
@@ -150,10 +150,10 @@ export function orientLoops(loops) {
         for (const u of uses.get(ukey(a, b))) {
           if (u.face === f) continue;
           // `u` was recorded against the face's ORIGINAL winding, so read
-          // the neighbour's CURRENT direction off its live loop instead.
+          // the neighbor's CURRENT direction off its live loop instead.
           const nb = u.face;
           const dir = loopEdgeDirection(out[nb], a, b);
-          if (dir === 0) continue; // that edge is no longer on this neighbour (shouldn't happen — defensive)
+          if (dir === 0) continue; // that edge is no longer on this neighbor (shouldn't happen — defensive)
           if (comp[nb] < 0) {
             comp[nb] = c;
             if (dir === +1) { out[nb].reverse(); flippedFlag[nb] = true; flipped++; } // same direction as us: disagrees, flip it
@@ -238,7 +238,7 @@ const SHELL_RAY_DIRS = [
 // fan over a non-convex (or non-planar) loop genuinely produces
 // triangles that escape the loop — a plain even/odd count would be
 // corrupted by them. Signed crossings are not: an escaped triangle is
-// traversed the other way round by its neighbours and cancels exactly,
+// traversed the other way round by its neighbors and cancels exactly,
 // so the sum is the winding number regardless of how the loop was
 // triangulated. Inside reads +/-1 (sign following the shell's own
 // current orientation), outside reads 0.
@@ -416,7 +416,7 @@ export function buildBrepSolid(faceLoops, opts = {}) {
 
   // Edge census FIRST, on the raw loops. Deliberately before orientation:
   // an edge shared by three or more faces makes "which way should the
-  // neighbour be wound" ill-posed, so an unfiltered orientation pass
+  // neighbor be wound" ill-posed, so an unfiltered orientation pass
   // would report a confusing 'non-orientable' for what is really a
   // non-manifold edge. Undirected counts are orientation-independent, so
   // this ordering costs nothing and names the real fault.

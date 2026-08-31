@@ -78,7 +78,7 @@ const domV = (srf) => [srf.knotsV[0], srf.knotsV[srf.knotsV.length - 1]];
 
 test('the operands are what this file claims: two radius-15 balls that overlap, with both seams in the same half-plane', () => {
   const A = ball([0, 0, 0]), B = ball(OFFSET);
-  // Read off the SURFACE over a (u,v) grid, about each body's OWN centre — the
+  // Read off the SURFACE over a (u,v) grid, about each body's OWN center — the
   // only reading that tells a real ball from a distorted control net.
   for (const X of [A, B]) {
     let lo = Infinity, hi = -Infinity;
@@ -96,7 +96,7 @@ test('the operands are what this file claims: two radius-15 balls that overlap, 
     assert.ok(lo > R - 0.05 && hi < R + 0.05, `ball at [${X.centre}] spans radius ${lo.toFixed(4)}..${hi.toFixed(4)}`);
   }
   const apart = dist(A.centre, B.centre);
-  assert.ok(apart > 0 && apart < 2 * R, `centres ${apart.toFixed(4)} apart — the balls must genuinely interpenetrate`);
+  assert.ok(apart > 0 && apart < 2 * R, `centers ${apart.toFixed(4)} apart — the balls must genuinely interpenetrate`);
 
   // BOTH SEAMS IN THE PLANE y = 0. A revolve started at angle 0 puts its seam
   // meridian on +x, and B is translated within that plane, so B's seam is a
@@ -145,7 +145,7 @@ test('the cut really does cross BOTH operands\' seams at one and the same place 
   assert.equal(segA[0], segB[0], `the two seams are crossed in different segments (${segA[0]} vs ${segB[0]}) — they do not coincide, and this fixture has no coincidence to test`);
 
   // And that shared segment straddles the y = 0 half-plane both seams live in,
-  // on the far side of B's centre where BOTH meridians run — so the coincidence
+  // on the far side of B's center where BOTH meridians run — so the coincidence
   // is the geometric one claimed and not two unrelated crossings that happen to
   // fall in one sample step.
   const a = samples[segA[0]], b = samples[segA[0] + 1];
@@ -210,7 +210,7 @@ test('a pair with NO closed direction anywhere is untouched by the seam pass —
   // Two boxes. Nothing here is closed in u or v, so the pass must decline
   // before it projects anything, and the boolean must be exactly what it always
   // was. This is the guard on the early-out being a real skip rather than a
-  // silent behaviour change for every planar face in the suite.
+  // silent behavior change for every planar face in the suite.
   const quad = (p00, p10, p11, p01) => {
     const w = (p) => [p[0], p[1], p[2], 1];
     return { degU: 1, degV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1], ctrlNet: [[w(p00), w(p01)], [w(p10), w(p11)]] };

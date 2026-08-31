@@ -38,7 +38,7 @@ function cageStats(cage) {
 // than predicted from the input: in-range indices, no vertex used twice
 // within one face, consistent winding (a consistently wound manifold uses
 // each DIRECTED edge at most once — a reused one is a face wound backwards
-// against its neighbour), no edge left non-manifold, and acceptance by
+// against its neighbor), no edge left non-manifold, and acceptance by
 // subdivideCatmullClark itself, which is what runs kernel/subd.mjs's own
 // validateCage over the cage.
 function assertValidCage(cage, label) {
@@ -114,7 +114,7 @@ test('local insert: exact vertex/face/edge deltas the construction predicts, and
   assert.equal(after.E, before.E + 3, 'each rung splits in two (+2) and the new edge is +1');
   assert.equal(after.euler, before.euler, 'a refinement must not change the Euler characteristic');
   assert.deepEqual(after.faceSizes, { 4: before.faceSizes[4] - 1, 5: 2 },
-    'the seed quad becomes two quads (net -1+2 = +1 quad, so 4-count goes 52 -> 51) and exactly two neighbours become pentagons');
+    'the seed quad becomes two quads (net -1+2 = +1 quad, so 4-count goes 52 -> 51) and exactly two neighbors become pentagons');
   assert.equal(after.naked, 0, 'still closed');
   assert.equal(after.nonManifold, 0);
   assertValidCage(out, 'local insert');
@@ -127,11 +127,11 @@ test('local insert: the T-junction is exactly where the construction puts it —
   const topo = buildTopology(r.cage);
 
   assert.equal(r.insertedVertexIndices.length, 2);
-  assert.equal(r.tJunctionFaceIndices.length, 2, 'one widened neighbour per split rung');
+  assert.equal(r.tJunctionFaceIndices.length, 2, 'one widened neighbor per split rung');
   assert.equal(r.splitFaceIndices.length, 2, 'the seed face is replaced by exactly two faces');
 
   const pentagons = r.tJunctionFaceIndices.map((i) => r.cage.faces[i]);
-  for (const p of pentagons) assert.equal(p.length, 5, 'a widened quad neighbour is a 5-gon');
+  for (const p of pentagons) assert.equal(p.length, 5, 'a widened quad neighbor is a 5-gon');
   // Every pentagon in the OUTPUT is one of the reported ones — the report is
   // complete, not merely correct about the faces it happens to name.
   const allPentagonIdx = r.cage.faces.map((f, i) => (f.length === 5 ? i : -1)).filter((i) => i >= 0);
@@ -140,13 +140,13 @@ test('local insert: the T-junction is exactly where the construction puts it —
   for (const nv of r.insertedVertexIndices) {
     // A T-vertex sits in the interior of a rung, so it has the rung's two
     // halves plus the one new edge = valence 3, and it is used by the two
-    // replacement halves plus the single widened neighbour = 3 faces.
+    // replacement halves plus the single widened neighbor = 3 faces.
     assert.equal(topo.vertexEdges[nv].length, 3, `new vertex ${nv} should be valence 3`);
     assert.equal(topo.vertexFaces[nv].length, 3, `new vertex ${nv} should touch 3 faces`);
     const owners = pentagons.filter((p) => p.includes(nv));
     assert.equal(owners.length, 1, `new vertex ${nv} should lie on exactly one pentagon`);
   }
-  // No pentagon may carry a vertex its own neighbour across that edge lacks:
+  // No pentagon may carry a vertex its own neighbor across that edge lacks:
   // that is the crack this repair exists to prevent, and it is checked
   // structurally by assertValidCage's directed-edge pass on the whole cage.
   assertValidCage(r.cage, 'T-junction cage');
@@ -289,7 +289,7 @@ test('local insert is a refinement, not a deformation: the limit surface moves n
 
   const localDev = surfaceDeviation(cage, insertEdgeLocal(cage, seedKey, 0.5, 0).cage);
   // GROUND TRUTH, not a chosen tolerance: the whole-loop insert is the
-  // shipped, already-accepted behaviour for this same seed edge and the same
+  // shipped, already-accepted behavior for this same seed edge and the same
   // t. A local cut touches strictly less of the cage, so it has no business
   // disturbing the limit surface by more than the loop cut does. Comparing
   // against that number instead of an invented epsilon means the bar moves
@@ -351,7 +351,7 @@ test('second local insert on a cage that already carries a T-junction: the penta
 
   // The 6-gon carries BOTH T-vertices: the one from the first insert and the
   // one from the second. That is the specific thing a naive implementation
-  // loses, by rebuilding the neighbour from the original quad and dropping
+  // loses, by rebuilding the neighbor from the original quad and dropping
   // the vertex already spliced into it.
   const hex = chosen.r.cage.faces.find((f) => f.length === 6);
   const firstT = first.insertedVertexIndices.filter((v) => hex.includes(v));

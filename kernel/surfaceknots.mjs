@@ -82,7 +82,7 @@ export function interiorKnotMultiplicities(knots, degree) {
 // sweep direction runs 0..4 while a hand-built patch runs 0..1; taking the
 // union of two knot vectors that do not live on the same interval produces a
 // vector that is not a superset of either, and every insertion after it lands
-// somewhere arbitrary. Rescaling is an affine reparametrisation and moves no
+// somewhere arbitrary. Rescaling is an affine reparametrization and moves no
 // point on the surface.
 export function harmonizeDirections(a, dirA, b, dirB, opts = {}) {
   const degA = degreeIn(a, dirA), degB = degreeIn(b, dirB);

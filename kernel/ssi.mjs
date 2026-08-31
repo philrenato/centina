@@ -195,7 +195,7 @@ const CLAMP_EPS = 1e-9;
 // tangency, no boundary — refused outright with "did not close or reach a
 // boundary within 400 steps". Measured directly, and the marching math was
 // never at fault: the SAME pair at stepLen 1/2/3 closes correctly with
-// radius 30.0000 every time. A millimetre-scale CAD document reaches this
+// radius 30.0000 every time. A millimeter-scale CAD document reaches this
 // immediately, so boolean completeness cannot even be MEASURED
 // until it is fixed — which is why this lands ahead of the seeding work
 // that is otherwise sequenced first.
@@ -326,7 +326,7 @@ function wrapParam(x, min, max) {
 // the sample silently lands on a completely different real point. Found by
 // measurement, not inspection: on a closed extruded wall exactly one sample
 // per component — always the one whose step crossed the seam — sat ~2e-2 off
-// BOTH surfaces while every neighbour was at machine precision. Wrapping
+// BOTH surfaces while every neighbor was at machine precision. Wrapping
 // inside the loop keeps every evaluation on the real surface, so the answer
 // the corrector converges to is the answer the caller keeps.
 function correctorStep(srf1, srf2, u1, v1, u2, v2, Qpred, T, fixed, wrapParams) {

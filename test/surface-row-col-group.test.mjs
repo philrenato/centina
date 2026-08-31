@@ -105,7 +105,7 @@ test('surfaceRowGroup/surfaceColGroup: a partial (non-closed) revolve — every 
 
 // ---------------------------------------------------------------
 // FACE (ISOCURVE-CELL) CHAINS — the ordinary-surface counterpart of a
-// SubD face loop. Same fixtures, so the closed-direction behaviour is
+// SubD face loop. Same fixtures, so the closed-direction behavior is
 // proven against a surface genuinely known to be closed rather than a
 // hand-built grid that only looks like one.
 // ---------------------------------------------------------------
@@ -160,7 +160,7 @@ test('nearestCellDirection: the press position picks the direction, compared in 
   // Opposite edges agree, so there is no thin band where a few pixels
   // flip the answer — it only changes across the cell's own diagonal.
   assert.equal(nearestCellDirection(0.1, 0.5), nearestCellDirection(0.9, 0.5));
-  // A dead-centre press is a real tie and resolves the SAME way every
+  // A dead-center press is a real tie and resolves the SAME way every
   // time, so re-reading one press cannot appear to do nothing.
   const centre = nearestCellDirection(0.5, 0.5);
   for (let k = 0; k < 5; k++) assert.equal(nearestCellDirection(0.5, 0.5), centre);

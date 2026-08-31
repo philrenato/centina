@@ -197,7 +197,7 @@ function harmonizeDomainSeams(uvLoops, srf) {
 // three collinear points enclosing no area at all. `splitSelfTouching` cannot
 // see it because the two traversals share no vertex — the way out is densified
 // and the way back is a single segment — and `hasRepeatedPoint` cannot see it
-// because no point is repeated exactly. The neighbouring piece's boundary stops
+// because no point is repeated exactly. The neighboring piece's boundary stops
 // at 0.6085, so the overshoot has no partner and reads as naked edges.
 //
 // Only a REVERSAL is dropped, never a merely collinear point: three collinear
@@ -329,7 +329,7 @@ function harmonizeCutLine(loops, ai, value, srf) {
 }
 
 // A harmonized loop that visits one (u,v) twice reads as not-a-disk later and
-// takes its whole fragment down with it, so it is dropped in favour of the loop
+// takes its whole fragment down with it, so it is dropped in favor of the loop
 // it came from. PER LOOP, not per line: one loop that cannot take the extra
 // points is no reason to leave every other loop on that line unwelded.
 function repeatsAPoint(loop, eps) {
@@ -617,7 +617,7 @@ function splitAtSeam(loop, srf) {
     // boundary polygon is then three collinear points with no area at all,
     // and the T-junction pass rightly splits that chord at the pole and
     // reports a repeated corner. A third of the way round subtends 120
-    // degrees, so no piece's chord can pass through the centre.
+    // degrees, so no piece's chord can pass through the center.
     const span = aMax - aMin;
     const cuts = [aMin + span / 3, aMin + (2 * span) / 3];
     const pieces = [
@@ -916,7 +916,7 @@ function stripClosingPoint(loop) {
  * T-junction between them sits at machine precision. But a fragment wrapping
  * a closed direction is cut into pieces, and that cut lands where it lands —
  * generally BETWEEN two consecutive samples, at a point that is on the true
- * curve and therefore off the neighbour's straight chord by that chord's own
+ * curve and therefore off the neighbor's straight chord by that chord's own
  * sagitta. Measured on box-union-cylinder: 1.7e-3mm on a 0.41mm chord of a
  * radius-12 circle, six orders outside the floor. Loosening the floor to
  * admit it would also admit the demonstrated false positive, which is the
@@ -929,7 +929,7 @@ function stripClosingPoint(loop) {
  * sampled curve can take two cuts inside one gap; see corroboratedSubdivision.
  * That is the literal definition of the T-junction being repaired, and it is
  * evidence a merely-passing vertex from an unrelated face cannot manufacture:
- * to reach the chain at all it has to be an edge-neighbour of something
+ * to reach the chain at all it has to be an edge-neighbor of something
  * already on the path to BOTH of this edge's endpoints. The proximity bound is
  * then only a sanity guard, and stays relative to the edge's own length (a
  * chord's sagitta scales as length/8R, so a fixed absolute number would be
@@ -974,8 +974,8 @@ const T_JUNCTION_CORROBORATED_OFF_EDGE_FRAC = 0.05;
 //
 // The case that forces this is not exotic geometry but a PRIMITIVE: ToNURBS
 // on a SuperB emits adjacent patches at different isolation levels (a face is
-// converted at the first level it becomes regular, its neighbour a level
-// later), so a coarse patch's edge legitimately carries the fine neighbours'
+// converted at the first level it becomes regular, its neighbor a level
+// later), so a coarse patch's edge legitimately carries the fine neighbors'
 // shared corner at its middle — a hanging node whose position is EXACTLY on
 // the coarse edge's curve (both are the same limit surface, agreeing to
 // ~1e-15) and 1–11 mm off its chord on a rounded box a few hundred mm across.
@@ -1169,7 +1169,7 @@ function edgeKey(i, j) {
 //
 // A single corroborated point is the ordinary case — one cut landing between
 // two samples of a shared curve — but a coarsely sampled curve can take two
-// cuts inside one gap, and then the neighbour subdivides the edge as
+// cuts inside one gap, and then the neighbor subdivides the edge as
 // a -> p1 -> p2 -> b with no (a,p2) or (p1,b) edge anywhere. So this asks for
 // a PATH rather than a single hop, walking the candidates in order along the
 // edge: the answer either way is the exact vertex list the other side already
@@ -1248,7 +1248,7 @@ function buildPointGrid(points, cell) {
 // Every point that could possibly lie within `searchTol` of this segment,
 // found by walking the cells the segment passes through.
 //
-// EXHAUSTIVE ONLY IF THE NEIGHBOURHOOD IS SIZED TO THE TOLERANCE, which is
+// EXHAUSTIVE ONLY IF THE NEIGHBORHOOD IS SIZED TO THE TOLERANCE, which is
 // why the caller has to say what its tolerance is. The step is half a cell,
 // so any point OF the segment is within a quarter cell of some sample; a
 // candidate lying up to `searchTol` off the segment is therefore within
@@ -1260,7 +1260,7 @@ function buildPointGrid(points, cell) {
 // size/4 <= size, and it is genuinely exceeded here: the corroborated
 // off-edge tolerance is a fraction of the EDGE's own length while the cell
 // is the MEAN edge length, so an edge an order of magnitude longer than the
-// mean reaches past its own sample's neighbours. Missing a candidate there
+// mean reaches past its own sample's neighbors. Missing a candidate there
 // only ever costs a T-junction insertion — which degrades honestly into a
 // naked edge and an open-shell refusal rather than a wrong solid — but the
 // claim of exhaustiveness would be false, and the radius is cheap to get right.

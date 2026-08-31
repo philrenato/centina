@@ -842,7 +842,7 @@ function variableRadiusScaler(rail, radiusOpts) {
 // relevant property).
 //
 // NOT FIXED HERE, and the two numerical traps any future fix will hit.
-// Padding each seam-touching span's local fit from its neighbour is UNSAFE
+// Padding each seam-touching span's local fit from its neighbor is UNSAFE
 // the instant the two spans have very different arc-length footprints (a
 // short fillet arc next to a long straight run): the borrowed samples pack
 // into a knot-density cluster and reproduce the SAME class of Runge's-

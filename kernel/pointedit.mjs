@@ -56,7 +56,7 @@ function surfaceNormalAtParam(srf, u, v) {
   const vMin = srf.knotsV[srf.degV], vMax = srf.knotsV[srf.knotsV.length - 1 - srf.degV];
   const tries = [
     [u, v],
-    // nudge a hair toward the domain centre, so a Greville abscissa sitting
+    // nudge a hair toward the domain center, so a Greville abscissa sitting
     // exactly on a pole/edge singularity gets a real normal from just inside
     [u + (u < (uMin + uMax) / 2 ? 1 : -1) * (uMax - uMin) * 1e-4, v + (v < (vMin + vMax) / 2 ? 1 : -1) * (vMax - vMin) * 1e-4],
   ];
@@ -155,7 +155,7 @@ function clampedUniformKnots(count) {
 //       shape reproduce an edit EXACTLY (evaluating a degree-1 B-spline at
 //       its own control-point parameters returns the control points);
 //   (b) a PARTITION OF UNITY (Σ_k N_k = 1) — so an interpolated value is a
-//       true weighted average of its neighbours, never amplified or lost;
+//       true weighted average of its neighbors, never amplified or lost;
 //   (c) NON-NEGATIVE with NO overshoot — so a sculpt bump reconstructed on a
 //       finer net never grows the spurious negative side-lobes a cubic-basis
 //       reconstruction (which also fails (a) at interior nodes and rings)

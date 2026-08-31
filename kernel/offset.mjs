@@ -96,7 +96,7 @@ function normalGrid(srf) {
 // guessed constant. Matches the shape of Pipe's own honest auto-clamp-and-
 // explain (cornerRadius floored to the tube radius, with a status message
 // naming why). A full global self-intersection test is genuinely harder,
-// separate scope; this local adjacent-neighbour-crossing check is the honest
+// separate scope; this local adjacent-neighbor-crossing check is the honest
 // cheap v1 signal.
 const SELF_INTERSECT_SAFETY = 0.98; // stay just off the exact degenerate boundary (matches Pipe's own small margin), so the clamped result is provably fold-free, never sitting on the zero-area edge
 
@@ -223,8 +223,8 @@ export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
 //
 // WHY THIS IS A PLANE PROBLEM, NOT A SURFACE-OFFSET PROBLEM. The first
 // version of this command offset each remaining face along its OWN local
-// normals, independently of its neighbours. Every inner face therefore
-// shrank toward its own centre, so at every inner corner the neighbours
+// normals, independently of its neighbors. Every inner face therefore
+// shrank toward its own center, so at every inner corner the neighbors
 // missed each other — gapping in places, crossing in others — and the rim
 // at an opening was built by offsetting the REMOVED face inward, which for
 // a box puts the rim inside the plane of the wall beside it, buried and
@@ -242,7 +242,7 @@ export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
 // which is a 3x3 linear system with an exact answer — no blending, no
 // tolerance, no iteration. The inner surface built from those points is
 // watertight and self-intersection-free BY CONSTRUCTION, because every
-// inner face shares its corners with its neighbours rather than computing
+// inner face shares its corners with its neighbors rather than computing
 // them independently.
 //
 // A corner touching a face that is being OPENED uses that face's ORIGINAL
@@ -281,7 +281,7 @@ export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
 // own two adjacent edges — for a bilinear patch this is exact, not an
 // approximation: Su and Sv at a corner of S(u,v) are literally the two
 // edge vectors meeting there). Offsetting each corner's own tangent plane
-// by the wall thickness and intersecting them with its neighbours' offset
+// by the wall thickness and intersecting them with its neighbors' offset
 // tangent planes is the IDENTICAL Gram-Schmidt corner solve below — the
 // planar case is the special case where all four corners share one
 // tangent plane (the face's own), so that path is untouched byte-for-byte
@@ -290,7 +290,7 @@ export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
 // offset of a warped bilinear surface is not itself bilinear, so a
 // bilinear patch through the four offset corners is a real approximation
 // IN THE INTERIOR of a warped face — exact at every corner and edge
-// (shared with a neighbour, so still watertight), approximate only in
+// (shared with a neighbor, so still watertight), approximate only in
 // between. shellSolid measures that residual directly (interiorApprox on
 // its return value) rather than asserting it away.
 const SHELL_PLANAR_TOL = 1e-6;   // mm — these control points are coplanar BY CONSTRUCTION or not at all, never within a hand-drawn tolerance (matches the app's own PANEL_FLAT_TOL/SOLID_FACE_TOL)
@@ -405,7 +405,7 @@ function shellDecomposeToQuads(panels) {
 
 // Weld coincident corners into one shared vertex list. Spatial-hashed (the
 // cell is three orders of magnitude wider than the tolerance, so a match can
-// only ever be in this cell or one of its 26 neighbours) so a rebuilt Box
+// only ever be in this cell or one of its 26 neighbors) so a rebuilt Box
 // with a dense control grid stays cheap.
 function shellWeld(quads) {
   const pts = [], cells = new Map();
@@ -495,7 +495,7 @@ function shellOrientOutward(pts, faces) {
         const other = pair[0] === u ? pair[1] : pair[0];
         // this face's ACTUAL traversal of the shared edge, after its own flip
         const fa = flip[fi] ? u.b : u.a, fb = flip[fi] ? u.a : u.b;
-        // the neighbour must traverse it the other way round
+        // the neighbor must traverse it the other way round
         const wants = (other.a === fb && other.b === fa) ? false : true;
         if (flip[other.fi] === null) { flip[other.fi] = wants; comp.push(other.fi); stack.push(other.fi); }
         else if (flip[other.fi] !== wants) return { ok: false, reason: 'non-orientable' };
@@ -732,7 +732,7 @@ export function shellSolid(panels, removedIndices, distance) {
     const bowNote = flattest != null
       ? ` The flattest of them bows at most ${flattest.toFixed(3)}mm off its own plane; a face that is genuinely near-flat can be rebuilt as a plane and shelled.`
       : '';
-    throw new Error(`shellSolid: ${dec.curved.length} of ${sourceCount} face${sourceCount === 1 ? '' : 's'} ${dec.curved.length === 1 ? 'is' : 'are'} CURVED (face${dec.curved.length === 1 ? '' : 's'} ${dec.curved.join(', ')}). An exact shell offsets each face's own PLANE and meets its neighbours at the intersection; a curved wall meeting a flat cap needs a real junction blend this kernel does not have yet. Refused rather than shipping a shell that is not a valid solid.${bowNote}`);
+    throw new Error(`shellSolid: ${dec.curved.length} of ${sourceCount} face${sourceCount === 1 ? '' : 's'} ${dec.curved.length === 1 ? 'is' : 'are'} CURVED (face${dec.curved.length === 1 ? '' : 's'} ${dec.curved.join(', ')}). An exact shell offsets each face's own PLANE and meets its neighbors at the intersection; a curved wall meeting a flat cap needs a real junction blend this kernel does not have yet. Refused rather than shipping a shell that is not a valid solid.${bowNote}`);
   }
   if (!dec.quads.length) throw new Error('shellSolid: no face of this solid has any area to shell');
 
@@ -828,7 +828,7 @@ export function shellSolid(panels, removedIndices, distance) {
       const a = l[i], b = l[(i + 1) % l.length];
       if (keptEdgeCount.get(ekey(a, b)) !== 1) continue;
       // wound b -> a so the rim traverses the shared edge opposite to the
-      // outer face, the same convention that keeps two ordinary neighbours
+      // outer face, the same convention that keeps two ordinary neighbors
       // consistent
       out.push(shellFacePanel([welded.pts[b], welded.pts[a], inner[a], inner[b]]));
       rimCount++;

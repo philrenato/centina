@@ -20,7 +20,7 @@ function manifoldReport(cage) {
   return { boundary, nonManifold, chi: cage.vertices.length - ctx.edgeMap.size + cage.faces.length };
 }
 
-test('one selected face becomes four quads, and only its neighbours change at all', () => {
+test('one selected face becomes four quads, and only its neighbors change at all', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const r = subdivideFaces(cage, [0]);
   assert.equal(r.faceCountBefore, 6);
@@ -115,7 +115,7 @@ test('selecting every face is equivalent in TOPOLOGY to a global refinement', ()
   const global = subdivideCatmullClark(cage);
   assert.equal(out.faces.length, global.faces.length);
   assert.equal(out.vertices.length, global.vertices.length);
-  assert.equal(out.faces.every((f) => f.length === 4), true, 'no widened neighbours when nothing is left unselected');
+  assert.equal(out.faces.every((f) => f.length === 4), true, 'no widened neighbors when nothing is left unselected');
   // Deliberately NOT asserting equal POSITIONS: the global step applies
   // the smooth Catmull-Clark rules and genuinely moves points, while a
   // local refine must not move anything outside the selection and so

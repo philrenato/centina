@@ -399,7 +399,7 @@ test('ARCS: splitting the sweep into four panels is the SAME surface — the fou
       const b = surfacePoint(whole, domU(whole)[0] + (domU(whole)[1] - domU(whole)[0]) * 0.37, wv0 + (wv1 - wv0) * ((k + f) / 4));
       assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9, `quarter ${k} deviates from the full panel at f=${f}`);
     }
-    // and it JOINS its neighbour exactly: the last control column of one
+    // and it JOINS its neighbor exactly: the last control column of one
     // quarter is the first of the next, component for component.
     const next = four[4 + ((k + 1) % 4)].srf;
     for (let r = 0; r < q.ctrlNet.length; r++) {

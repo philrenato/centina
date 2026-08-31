@@ -690,9 +690,9 @@ export function filletSegmentsToCurve(segments) {
 // true involute exactly. Two checkable identities (verified numerically in
 // test/gear.test.mjs, not eyeballed): |P| == rb*sqrt(1+t^2) exactly, and the
 // NORMAL to the involute at any point is at distance exactly rb from the base
-// centre (i.e. is tangent to the base circle — the taut-string property; note
+// center (i.e. is tangent to the base circle — the taut-string property; note
 // it is the NORMAL, not the tangent, that is tangent to the base circle for
-// this parametrisation, since dP/dt = rb*t*(cos t, sin t) is radial).
+// this parametrization, since dP/dt = rb*t*(cos t, sin t) is radial).
 export function involutePoint(baseRadius, t, startAngle = 0, handed = 1) {
   const x0 = baseRadius * (Math.cos(t) + t * Math.sin(t));
   const y0 = handed * baseRadius * (Math.sin(t) - t * Math.cos(t));
@@ -835,7 +835,7 @@ export function buildRackProfile(module, teethLength, pressureAngleDeg = 20, opt
   const halfTip = p / 4 - add * tanA;  // half tooth thickness at the tip land
   const back = opts.backHeight ?? 2 * m;
   const yTop = add, yRoot = -ded, yBottom = -ded - back;
-  // Top toothed edge, +x order. Tooth k centred at xc = k*p; flanks:
+  // Top toothed edge, +x order. Tooth k centered at xc = k*p; flanks:
   //   left flank  x = xc - p/4 + y*tanA,  right flank x = xc + p/4 - y*tanA.
   const ring = [];
   for (let k = 0; k < N; k++) {

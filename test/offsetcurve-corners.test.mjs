@@ -121,7 +121,7 @@ test('offsetPolyline: each offset edge is EXACTLY parallel to its source edge an
   const r = offsetPolyline(ASYM, d, NZ, { join: 'miter' });
   // Every emitted LINE segment must run parallel (|dot| === 1) to SOME source
   // edge; the only non-parallel lines a miter join can emit are the two halves
-  // of the miter itself, which are collinear with their own neighbouring
+  // of the miter itself, which are collinear with their own neighboring
   // offset edges by construction, so this is a total claim, not a sampled one.
   for (const seg of r.segments) {
     if (seg.type !== 'line') continue;
@@ -164,8 +164,8 @@ test('offsetPolyline: zero distance is the exact identity (matching offsetCurve2
    2. OFFSET DISTANCE IS ACTUALLY ACHIEVED — dense sampling
    ================================================================ */
 
-test('offsetPolyline: a ROUND-joined offset sits at EXACTLY |d| from the source everywhere, corners included (the arc is centred on the corner vertex)', () => {
-  // A round join's arc is centred on the ORIGINAL corner vertex at radius
+test('offsetPolyline: a ROUND-joined offset sits at EXACTLY |d| from the source everywhere, corners included (the arc is centered on the corner vertex)', () => {
+  // A round join's arc is centered on the ORIGINAL corner vertex at radius
   // |d|, so unlike a miter (further at the corner) or a bevel (nearer), a
   // fully round-joined offset is at exactly |d| along its whole length. That
   // is checked here on the ANALYTIC segments, not on the densified polyline —
@@ -187,13 +187,13 @@ test('offsetPolyCurve: on a genuinely CURVED chain the distance is achieved to t
   // A quarter arc (R=40, one 90-degree rational span) joined tangent-
   // continuously to a straight run. offsetCurve2D moves control points, and a
   // rational quarter arc's own MIDDLE control point sits at R*sqrt(2) from the
-  // centre and is OFF the curve — moving it radially by d instead of by
+  // center and is OFF the curve — moving it radially by d instead of by
   // d*sec(45deg) is exactly where the approximation lives. The resulting worst
   // deviation is therefore ~ d*(sec(45deg) - 1)/... — measured here at
   // 1.03mm for d=6, i.e. 17.2% of d, on a 90-degree span.
   //
   // THE TOLERANCE AND WHY IT IS THE RIGHT ONE: 0.20*|d| — just above the
-  // measured 0.172*|d|, and tied to |d| rather than to an absolute millimetre
+  // measured 0.172*|d|, and tied to |d| rather than to an absolute millimeter
   // figure because the error of this technique scales with offset distance
   // times local curvature, not with model size. A tighter absolute number
   // would be a fixture-fitted constant, and an absolute-mm bound would silently
@@ -234,7 +234,7 @@ test('offsetPolyCurve: on a genuinely CURVED chain the distance is achieved to t
    3. ROUND JOINS ARE REAL TANGENT ARCS
    ================================================================ */
 
-test('offsetPolyline: a ROUND join is a genuine tangent circular arc — exact radius, and tangent to BOTH neighbouring offset edges at its own two ends', () => {
+test('offsetPolyline: a ROUND join is a genuine tangent circular arc — exact radius, and tangent to BOTH neighboring offset edges at its own two ends', () => {
   const d = 6;
   const r = offsetPolyline(ASYM, d, NZ, { join: 'round' });
   const arcs = r.segments.filter((s) => s.type === 'arc');
@@ -243,8 +243,8 @@ test('offsetPolyline: a ROUND join is a genuine tangent circular arc — exact r
   for (let i = 0; i < r.segments.length; i++) {
     const seg = r.segments[i];
     if (seg.type !== 'arc') continue;
-    // The arc must be centred on a REAL source vertex at radius exactly |d| —
-    // found by search rather than assumed, so a wrong centre cannot pass.
+    // The arc must be centered on a REAL source vertex at radius exactly |d| —
+    // found by search rather than assumed, so a wrong center cannot pass.
     const centre = ASYM.find((v) => Math.abs(Math.hypot(seg.p0[0] - v[0], seg.p0[1] - v[1]) - d) < 1e-9);
     assert.ok(centre, 'the round join arc starts exactly |d| from one of the source vertices');
     for (let k = 0; k <= 40; k++) {
@@ -587,7 +587,7 @@ test('offsetPolyCurve: a real corner between two curved segments gets the same j
   assert.ok(arcs.length >= 1, 'the round join emitted a real arc');
   for (const a of arcs) for (let k = 0; k <= 20; k++) {
     const p = arcAt(a, k / 20);
-    assert.ok(Math.abs(Math.hypot(p[0] - arcEnd[0], p[1] - arcEnd[1]) - Math.abs(d)) < 1e-9, 'the join arc is centred exactly on the shared corner point at radius |d|');
+    assert.ok(Math.abs(Math.hypot(p[0] - arcEnd[0], p[1] - arcEnd[1]) - Math.abs(d)) < 1e-9, 'the join arc is centered exactly on the shared corner point at radius |d|');
   }
   // The offset CURVE segments' own endpoints must land exactly on the join's
   // own endpoints — the claim in offsetPolyCurve's header that a clamped

@@ -50,7 +50,7 @@ test('involute: exact identities at raw sample points (radius and taut-string no
         }
         // Taut-string property (test in the unrotated frame): the NORMAL to
         // the involute is tangent to the base circle, i.e. its distance from
-        // the base centre is exactly rb.
+        // the base center is exactly rb.
         if (startAngle === 0) {
           for (let i = 1; i <= 20; i++) {
             const t = i * 0.06;

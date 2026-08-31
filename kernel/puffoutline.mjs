@@ -117,7 +117,7 @@ export function selfIntersection(pts) {
     const len12 = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
     for (let j = i + 1; j < n; j++) {
       if (j === i) continue;
-      // neighbours share a vertex; the first and last segments share one too
+      // neighbors share a vertex; the first and last segments share one too
       if (j === (i + 1) % n || i === (j + 1) % n) continue;
       const p3 = pts[j], p4 = pts[(j + 1) % n];
       const len34 = Math.hypot(p4[0] - p3[0], p4[1] - p3[1]);
@@ -241,7 +241,7 @@ export function prepareOutline(raw, { count = 128, tol = 0.15 } = {}) {
  * inflation is faithful to it — every wobble in the line becomes a lobe in the solid, and the
  * medial axis between lobes becomes a crease. The fix cannot be to hope for a clean stroke.
  *
- * ⚠ TAUBIN, NOT A PLAIN LAPLACIAN, AND THE DIFFERENCE IS THE WHOLE POINT. A plain neighbour
+ * ⚠ TAUBIN, NOT A PLAIN LAPLACIAN, AND THE DIFFERENCE IS THE WHOLE POINT. A plain neighbor
  * average shrinks a closed curve on every pass — smooth it enough to remove tremor and the drawn
  * shape has visibly deflated. Alternating a positive step with a slightly LARGER negative one
  * cancels that. Measured over 10/20/40 iterations on gentle, typical and scribbly strokes, the
@@ -296,7 +296,7 @@ export function taubinSmoothClosed(pts, { iters = 20, lam = 0.63139836, mu = -0.
 
 // ── THE SECOND MEASURED NEGATIVE ON THE SEAM. BOTH ATTEMPTS ARE RECORDED SO NEITHER IS REPEATED ──
 // A CURVATURE-OUTLIER FAIRING was written here and removed. The idea: do not look for the seam,
-// smooth wherever curvature is an outlier against its own LOCAL neighbourhood, so the seam is found
+// smooth wherever curvature is an outlier against its own LOCAL neighborhood, so the seam is found
 // because it is an outlier and a deliberate corner is left alone because a shape that is sharp all
 // the way round has none. Measured, worst-over-mean curvature:
 //
@@ -308,7 +308,7 @@ export function taubinSmoothClosed(pts, { iters = 20, lam = 0.63139836, mu = -0.
 //
 // ⚠ IT DID EXACTLY THE OPPOSITE OF ITS PURPOSE, and the reason is worth keeping: after Taubin the
 // seam is a BROAD ELEVATED REGION spread over several points, so no single point stands out from
-// its neighbours — while a deliberate corner IS a single-point spike. "Local outlier" is a detector
+// its neighbors — while a deliberate corner IS a single-point spike. "Local outlier" is a detector
 // for sharp corners, which is the one thing that must not be touched. The control caught it; a
 // seam-only fixture set would have shown a harmless no-op and hidden the corner damage entirely.
 //
@@ -322,7 +322,7 @@ export function taubinSmoothClosed(pts, { iters = 20, lam = 0.63139836, mu = -0.
 // samples with the first few and average them — so the join is smooth by construction and there is
 // never a spike to detect. That is a change to `closeOutline`, not to a fairing pass.
 // ⚠ Whatever is tried, keep a DRAWN TRIANGLE in the fixtures. It is the control that says the fix
-// distinguishes an artefact from an intention.
+// distinguishes an artifact from an intention.
 
 // ── A THIRD CONSTRUCTION, KEPT UNUSED ───────────────────────────────────────────────────────────
 // The blend above was built exactly as this note asked — the last K points and the first K replaced
@@ -364,7 +364,7 @@ export function taubinSmoothClosed(pts, { iters = 20, lam = 0.63139836, mu = -0.
 //      overshoots its own start; K came out 0 on every gap fixture. Right idea for an overshoot,
 //      no idea at all for a gap.
 //   4. DISTRIBUTE THE CLOSING GAP — walk each end toward the gap's midpoint by a ramp, so the
-//      correction is proportional to the artefact and a corner (which has no gap) cannot be
+//      correction is proportional to the artifact and a corner (which has no gap) cannot be
 //      touched. Elegant, and WORSE than doing nothing on every gap fixture (gap 8%: 4.4x -> 6.8x):
 //      pulling the ends together sharpens the local turn.
 

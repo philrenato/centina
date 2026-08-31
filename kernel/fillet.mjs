@@ -9,7 +9,7 @@
        Solid Modeling." ASME Computers in Mechanical Engineering (CIME) 3,
        pp. 65-73, 1984. The rolling-sphere formulation itself.
      · Choi, B. K. & Ju, S. Y., "Constant-radius blending in surface
-       modelling." Computer-Aided Design 21(4), pp. 213-220, 1989.
+       modeling." Computer-Aided Design 21(4), pp. 213-220, 1989.
        DOI 10.1016/0010-4485(89)90046-8. The FEASIBILITY precondition, from
        its own abstract: two surfaces can be blended at radius r as long as
        their offset surfaces at distance r are smooth, so that the
@@ -55,7 +55,7 @@ function norm(a) {
  *
  *     phi = acos(coNormalA . coNormalB)          always in [0, pi]
  *     setback d     = r / tan(phi / 2)
- *     centre offset = r / sin(phi / 2)
+ *     center offset = r / sin(phi / 2)
  *
  * theta is the angle measured through the MATERIAL and runs to 2*pi; phi is the
  * angle between the two directions the faces actually extend in. They agree on
@@ -65,11 +65,11 @@ function norm(a) {
  * Worked both ways by hand, which is how the sign error surfaced:
  *   · BOX EDGE, theta = phi = 90 degrees, ball of radius r in a right-angled
  *     corner at the origin with cA = +y and cB = +x. Tangency at (0, r) and
- *     (r, 0), centre at (r, r). So d = r and the centre sits r*sqrt(2) along the
+ *     (r, 0), center at (r, r). So d = r and the center sits r*sqrt(2) along the
  *     45-degree bisector. r/tan(45) = r and r/sin(45) = r*sqrt(2). Agree.
  *   · CONCAVE EDGE of an L-shaped solid, theta = 270 degrees, cA = +x and
  *     cB = +y so phi is still 90. The ball rounds the inside corner: tangency
- *     at (edge + r*cA) and (edge + r*cB), centre at edge + (r, r). The setback
+ *     at (edge + r*cA) and (edge + r*cB), center at edge + (r, r). The setback
  *     is +r, exactly as in the convex case. Against theta it would have been
  *     r/tan(135) = -r, putting both tangency points on the wrong side of the
  *     edge and the blend inside the solid.
@@ -98,7 +98,7 @@ export function rollingBallSection({ point, coNormalA, coNormalB, theta, radius,
   // theta near pi is a smooth junction (phi near pi), theta near 2*pi is a thin
   // slot (phi near 0 again). Guarding those here as well duplicated the cases
   // and described them wrongly — a knife edge comes back from that duplicate
-  // path labelled "too nearly tangent", which is the opposite condition.
+  // path labeled "too nearly tangent", which is the opposite condition.
   //
   // ⚠ BUT THETA BEING ABSENT OR IN THE WRONG UNITS IS NOT AN ANGLE DEGENERACY,
   // and phi genuinely cannot see it: phi is derived from the co-normals alone.
@@ -188,7 +188,7 @@ export function maxRadiusForSetback({ phi, widthA, widthB }) {
  * Unlike the curvature bound this is computable from FIRST derivatives, so it
  * is a refusal this app can actually make honestly.
  *
- * `spine` is a polyline of ball centres, `radii` the radius at each. Returns
+ * `spine` is a polyline of ball centers, `radii` the radius at each. Returns
  * the worst margin and where it occurs, so a refusal can point at the span that
  * is asking too much rather than at the whole edge.
  */
@@ -283,7 +283,7 @@ export function sectionArc(section) {
  * in planes perpendicular to the EDGE; the true envelope's characteristic circle
  * lies perpendicular to the SPINE. Those coincide only while the spine runs
  * parallel to the edge, which it does exactly when the dihedral angle is
- * constant — as theta varies, the centre moves within the cross-section plane
+ * constant — as theta varies, the center moves within the cross-section plane
  * too, and the spine tilts away.
  *
  * What this construction DOES guarantee, exactly and at every section:
@@ -301,7 +301,7 @@ export function sectionArc(section) {
  * ⚠ AN EARLIER VERSION OF THIS PARAGRAPH SAID THE DEPARTURE WAS ABOUT 3% AND
  * "CONVERGES RATHER THAN FALLING WITH SECTION COUNT". Both were the measuring
  * instrument, not the surface: distance was taken to a POLYLINE through the ball
- * centres, whose own chord error is second order, so every surface at every
+ * centers, whose own chord error is second order, so every surface at every
  * degree reported O(h^2) and appeared to stall. Struck rather than softened,
  * because a stale claim in a comment outlives the code it describes and leaves
  * the next reader choosing between two paragraphs that disagree.
@@ -314,7 +314,7 @@ export function sectionArc(section) {
  * ⚠ V IS AN APPROXIMATION AND SAYS SO. Taking the section control points as the
  * net makes the surface pass exactly through the FIRST and LAST sections and
  * approximate the ones between. On a straight edge of constant dihedral every
- * section is a translate of its neighbours, so the approximation is exact and
+ * section is a translate of its neighbors, so the approximation is exact and
  * the result is a true cylindrical patch; on a curved edge or a varying angle
  * the error falls with section count and is what
  * `blendRadiusDeviation` measures. Nothing here claims it is zero.
@@ -348,7 +348,7 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
 
      It was invisible to every test because `blendRadiusDeviation` is
      parameterisation-free and the straight-edge fixture has CONSTANT weight,
-     where a uniform chord scaling cancels in the normalisation. What it broke
+     where a uniform chord scaling cancels in the normalization. What it broke
      was real: two sections 2.9992 apart whose distorted midpoints coincided were
      refused as "all at the same place", and three such sections produced
      duplicate parameters that made `solveLinearSystem` THROW straight through
@@ -405,7 +405,7 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
          `isFiniteNet` rejects the net for w <= 0. A negative control weight also
          destroys the convex-hull and variation-diminishing properties the rest
          of the evaluation assumes. */
-      if (!(wj > EPS)) return { ok: false, reason: `the weight interpolation overshot to ${wj.toFixed(4)} — sections whose sweep changes too sharply between neighbours cannot be interpolated at this degree; add sections or lower degV` };
+      if (!(wj > EPS)) return { ok: false, reason: `the weight interpolation overshot to ${wj.toFixed(4)} — sections whose sweep changes too sharply between neighbors cannot be interpolated at this degree; add sections or lower degV` };
       row.push([sol[0][j] / wj, sol[1][j] / wj, sol[2][j] / wj, wj]);
     }
     ctrlNet.push(row);
@@ -425,7 +425,7 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
  * HOW FAR THE BUILT SURFACE STRAYS FROM THE BALL THAT DEFINED IT.
  *
  * The defining property of a constant-radius blend is that every point on it is
- * exactly `radius` from the SPINE — the locus of ball centres. Anything else is
+ * exactly `radius` from the SPINE — the locus of ball centers. Anything else is
  * a surface that merely looks like a fillet.
  *
  * ⚠ MEASURED TO THE NEAREST POINT ON THE SPINE, not to the spine "at the same
@@ -436,7 +436,7 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
  * blend whose real error is a small fraction of a percent. The parameterisation
  * is free to be whatever it likes — what must hold is the distance.
  *
- * `spine` is a polyline of ball centres. `evalSrf(srf, u, v)` is the caller's
+ * `spine` is a polyline of ball centers. `evalSrf(srf, u, v)` is the caller's
  * own surface evaluator, kept as a parameter so this module stays independent
  * of the rest of the kernel. `vFrom`/`vTo` trim the sampled span, because the
  * nearest point on a FINITE polyline clamps at its ends and would report an end
@@ -456,10 +456,10 @@ function distToPolyline(p, poly) {
   return best;
 }
 export function blendRadiusDeviation(srf, spine, radius, evalSrf, uSteps = 9, vSteps = 17, vFrom = 0.05, vTo = 0.95) {
-  if (!Array.isArray(spine) || spine.length < 2) return { worst: Infinity, worstAt: null, reason: 'a spine needs at least two centres' };
+  if (!Array.isArray(spine) || spine.length < 2) return { worst: Infinity, worstAt: null, reason: 'a spine needs at least two centers' };
   /* ⚠⚠ THE SPINE POLYLINE IS THE RULER, AND ITS OWN ERROR IS SECOND ORDER.
 
-     Distance is measured to a POLYLINE through the ball centres, and a polyline
+     Distance is measured to a POLYLINE through the ball centers, and a polyline
      cuts the chord off a curving spine by roughly sagitta = L^2 / (8*rho) per
      segment. Sample the spine at the same density as the sections and that
      chord error DOMINATES: every surface, at every V degree, measures O(h^2) —
@@ -502,17 +502,17 @@ export function blendRadiusDeviation(srf, spine, radius, evalSrf, uSteps = 9, vS
  * departs from the true envelope wherever the dihedral varies.
  *
  * This does the same job the other way round and gets the envelope for free. A
- * sphere of radius r centred at m is tangent to a face with OUTWARD unit normal
+ * sphere of radius r centered at m is tangent to a face with OUTWARD unit normal
  * n exactly where it touches, and that point is simply
  *
  *     tangency = m + r * n
  *
- * (outward, so the touch point is on the far side of the centre from the
- * material — checked on a box: material in x>0, y>0, centre (r, r), face x = 0
+ * (outward, so the touch point is on the far side of the center from the
+ * material — checked on a box: material in x>0, y>0, center (r, r), face x = 0
  * whose outward normal is -x, giving (r,r) + r*(-1,0) = (0, r), which is where
  * the ball actually touches).
  *
- * The two tangency points and the centre then span the section plane, and that
+ * The two tangency points and the center then span the section plane, and that
  * plane is the characteristic one: the envelope condition for a constant-radius
  * canal surface is (p - m) . m' = 0, so the contact points lie in the plane
  * through m perpendicular to the spine tangent. Building the section from the
@@ -525,16 +525,16 @@ export function blendRadiusDeviation(srf, spine, radius, evalSrf, uSteps = 9, vS
  */
 export function envelopeSection({ centre, radius, toTouchA, toTouchB, normalA, normalB }) {
   if (!(radius > 0)) return { ok: false, reason: 'radius must be positive' };
-  /* ⚠ THESE POINT FROM THE CENTRE TOWARDS THE TOUCH POINT, and they are NOT
+  /* ⚠ THESE POINT FROM THE CENTER TOWARDS THE TOUCH POINT, and they are NOT
      "the face's outward normal" in general — the parameters are named for the
      direction rather than for the normal precisely because that distinction is
      invisible when it is wrong.
 
-     On a CONVEX edge the ball sits inside the material, so centre-to-touch and
+     On a CONVEX edge the ball sits inside the material, so center-to-touch and
      the outward normal coincide and either name works. On a CONCAVE edge the
      ball sits in the void and they are OPPOSITE, so passing an outward normal
      puts the tangency point 2r away on the far side of the ball. It is still
-     exactly `radius` from the centre, so any check that only measures the radius
+     exactly `radius` from the center, so any check that only measures the radius
      reports a perfect blend that touches neither face — measured here at 6mm
      from the plane it was meant to sit on, with the radius reading 3.000000000.
 
@@ -653,7 +653,7 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
       return fold({ built, dev: m.worst, n, instrumentBound: !!m.instrumentBound, measureFloor: m.floor, deviationSigned: m.signed });
     }
     /* MEASURED AGAINST A SPINE SAMPLED FAR FINER THAN THE SECTIONS. Using the
-       section centres themselves makes the ruler's own chord error the thing
+       section centers themselves makes the ruler's own chord error the thing
        being reported — see blendRadiusDeviation. A 12x denser spine puts the
        instrument roughly two orders below the surface it is judging. */
     const fine = [];
@@ -745,7 +745,7 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
  *
  * A reference too close to being equidistant between the two arcs is refused
  * with the margin, rather than tie-broken by segment index in silence — a point
- * at the centre of a square would otherwise take segment 0 and drop the bottom.
+ * at the center of a square would otherwise take segment 0 and drop the bottom.
  *
  * Returns the new loop, and the two splice parameters so a caller can tell
  * whether the ends landed where it expected rather than trusting that they did.
@@ -765,7 +765,7 @@ function segCrossUV(p0, p1, a0, a1) {
 }
 /* ⚠⚠ A TANGENCY RUN MAY CROSS ITS FACE'S BOUNDARY RATHER THAN END ON IT, and
    that is the ORDINARY case wherever the boundary it runs into is curved.
-   The run spans its own EDGE, so where the neighbouring boundary curves away
+   The run spans its own EDGE, so where the neighboring boundary curves away
    from that edge's end the run simply carries on past it. Measured on the
    plainest solid a person can draw with one curved side: a 4mm round left the
    run 1.172mm beyond the cap's boundary, and every rim of the shape refused with
@@ -780,7 +780,7 @@ function segCrossUV(p0, p1, a0, a1) {
 function clipChainToLoop(loop, chain, reach) {
   const n = loop.length;
   /* ⚠ EXTENDED FIRST, THEN CLIPPED, because a run can miss its boundary in
-     EITHER direction and the two are the same question. Where the neighbouring
+     EITHER direction and the two are the same question. Where the neighboring
      boundary curves AWAY the run overshoots and wants clipping; where it curves
      TOWARDS, the run stops short and wants extending — measured at 1.172mm short
      on a cap whose boundary bulges past the end of the edge being rounded.
@@ -872,7 +872,7 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
      mechanically. `head` and `tail` land on the same loop parameter, so the
      forward interval is empty, `dropIsForward` is false, the kept arc is empty,
      and the else branch discards the face's entire boundary — leaving a
-     zero-area trim loop and taking its four neighbouring faces naked with it. */
+     zero-area trim loop and taking its four neighboring faces naked with it. */
   if (spansTwoPlaces(clipped)) chain = clipped;
   const head = nearest(chain[0]);
   const tail = nearest(chain[chain.length - 1]);
@@ -913,7 +913,7 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
        9.49e-18 against a 1e-7 margin — a tie to the last bit, refused as a
        coin toss.
 
-       Neighbours are therefore skipped and every other segment still counted,
+       Neighbors are therefore skipped and every other segment still counted,
        so the square keeps its refusal: its opposite side is not adjacent. */
     let second = Infinity;
     const adjacent = (i) => i === drop.seg || (i + 1) % n === drop.seg || (drop.seg + 1) % n === i;
@@ -1237,7 +1237,7 @@ export function chamferSectionArcFor(spec) {
  * ⚠ THE DEFAULT DEVIATION MEASURE CANNOT JUDGE A CHAMFER, and it fails in the
  * direction that looks like success. `blendRadiusDeviation` reports
  * |distance-to-spine - radius|; a chamfer's chord midpoint sits at
- * r*cos(sweep/2) from the ball centre, so a PERFECT chamfer on a 90 degree edge
+ * r*cos(sweep/2) from the ball center, so a PERFECT chamfer on a 90 degree edge
  * measures r*(1-cos45) ~ 0.293r of "deviation" — about 1.46mm on a 5mm chamfer
  * against a 0.01mm tolerance. The refinement loop then chases a number that can
  * never fall, ramps to `maxSections`, and returns its best effort with
@@ -1347,7 +1347,7 @@ export function blendSectionCurvature(srf, evalSrf, v = 0.5, samples = 9) {
   const bc = len(sub(c, b));
   const R = (len(ab) * len(ac) * bc) / (2 * nLen);
   if (!Number.isFinite(R) || !(R > EPS)) return { ok: true, curvature: 0, radius: Infinity, residual: 0, flat: true };
-  // The centre lies in the plane of the three points, at the intersection of two
+  // The center lies in the plane of the three points, at the intersection of two
   // perpendicular bisectors — solved directly rather than iterated.
   const nHat = mul(n, 1 / nLen);
   const abMid = mul(add(a, b), 0.5), acMid = mul(add(a, c), 0.5);

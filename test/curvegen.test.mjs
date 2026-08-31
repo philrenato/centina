@@ -425,7 +425,7 @@ test('valueNoise2D returns -1..1, which is the convention fbm1D is built on', ()
   assert.ok(hi > 0.2, `valueNoise2D never goes meaningfully positive (max ${hi})`);
 });
 
-test('fbm1D stays within -1..1 at EVERY octave count, and stays centred', () => {
+test('fbm1D stays within -1..1 at EVERY octave count, and stays centered', () => {
   for (let oct = 1; oct <= 8; oct++) {
     let lo = Infinity, hi = -Infinity, sum = 0, n = 0;
     for (let i = 0; i < 2000; i++) {
@@ -435,7 +435,7 @@ test('fbm1D stays within -1..1 at EVERY octave count, and stays centred', () => 
     assert.ok(lo >= -1 - 1e-12 && hi <= 1 + 1e-12, `fbm1D octaves=${oct} out of range: ${lo}..${hi}`);
     // THE DOWNWARD BIAS IS THE ACTUAL DEFECT THIS GUARDS. A stray `* 2 - 1`
     // leaves the mean near -0.5 while the range check above can still pass.
-    assert.ok(Math.abs(sum / n) < 0.25, `fbm1D octaves=${oct} is biased off-centre (mean ${(sum / n).toFixed(3)})`);
+    assert.ok(Math.abs(sum / n) < 0.25, `fbm1D octaves=${oct} is biased off-center (mean ${(sum / n).toFixed(3)})`);
   }
 });
 
@@ -588,7 +588,7 @@ test('rouletteCurve: R = 4r with d = r is EXACTLY an astroid', () => {
 
 /* AND THE DEGENERATE CASE IS REAL GEOMETRY, not a failure to guard: a
    hypotrochoid with R = 2r and d = r collapses to a STRAIGHT LINE through the
-   centre (the Tusi couple). Worth pinning because a "that looks broken" guard
+   center (the Tusi couple). Worth pinning because a "that looks broken" guard
    added later would destroy a correct result. */
 test('rouletteCurve: R = 2r with d = r is exactly a straight line (the Tusi couple)', () => {
   const pts = rouletteCurve({ mode: 'hypotrochoid', R: 20, r: 10, d: 10, turns: 1, samples: 400 });
@@ -598,7 +598,7 @@ test('rouletteCurve: R = 2r with d = r is exactly a straight line (the Tusi coup
 });
 
 /* THE CARDIOID, FROM ITS OWN CLOSED FORM RATHER THAN FROM A GUESS. For an
-   epitrochoid the distance from the centre satisfies
+   epitrochoid the distance from the center satisfies
      rho^2 = (R+r)^2 + d^2 - 2(R+r)d*cos((R/r)*t)
    so with R = r = d the radius runs between |(R+r)-d| and (R+r)+d -- that is
    20..60 here, NOT 0..80. A first draft of this test asserted the cusp sat at
@@ -812,7 +812,7 @@ test('spiralCurve: `height` makes it conical, and z is linear over the run', () 
 
 test('spiralCurve: an overflowing logarithmic spiral is refused by name, not emitted as Infinity', () => {
   assert.throws(() => spiralCurve({ kind: 'logarithmic', turns: 40, growth: 3, startRadius: 5 }), /overflows/);
-  // The neighbouring case that DOES fit is not refused, so the guard is not just "big numbers are scary".
+  // The neighboring case that DOES fit is not refused, so the guard is not just "big numbers are scary".
   const ok = spiralCurve({ kind: 'logarithmic', turns: 40, growth: 1, startRadius: 5, samples: 200 });
   assert.ok(ok.every((q) => q.every(Number.isFinite)), 'e^251 is representable and must be produced');
   assert.deepEqual(SPIRAL_KINDS, ['archimedean', 'logarithmic', 'fermat']);
@@ -974,7 +974,7 @@ test('roseCurve: the petal count is exactly n for odd n and exactly 2n for even 
   }
 });
 
-test('roseCurve: the rational generalisation n/d gives the petals the same rule predicts', () => {
+test('roseCurve: the rational generalization n/d gives the petals the same rule predicts', () => {
   /* For n/d in lowest terms the traversal is d*pi when n*d is odd and 2*d*pi
      otherwise, and r = cos(n*theta/d) has one zero every pi/(n/d) of theta —
      so the petal count is n*d / gcd, i.e. n if n*d is odd and 2n otherwise
@@ -1289,7 +1289,7 @@ test('torusKnotCurve: a non-coprime (p,q) is refused as a LINK, and non-integers
   assert.throws(() => torusKnotCurve({ p: 6, q: 9 }), /LINK of 3 components/);
   assert.throws(() => torusKnotCurve({ p: 0, q: 0 }), /LINK/);
   assert.throws(() => torusKnotCurve({ p: 2.5, q: 3 }), /INTEGER/);
-  // The neighbouring coprime cases are NOT refused, so the guard is discriminating.
+  // The neighboring coprime cases are NOT refused, so the guard is discriminating.
   assert.doesNotThrow(() => torusKnotCurve({ p: 2, q: 5, samples: 50 }));
   assert.doesNotThrow(() => torusKnotCurve({ p: 6, q: 7, samples: 50 }));
   assert.doesNotThrow(() => torusKnotCurve({ p: 1, q: 0, samples: 50 }));
@@ -1304,7 +1304,7 @@ test('torusKnotCurve: a non-coprime (p,q) is refused as a LINK, and non-integers
 /* ⚠⚠ AN EXACT ORACLE IS NOT AUTOMATICALLY A DISCRIMINATING ONE. The
    superformula tests above carry the scar: a fixture that agreed to nine
    decimals was completely blind to n1, because cos^2 + sin^2 = 1 and 1 raised
-   to any power is 1. The defence is mechanical rather than clever — every
+   to any power is 1. The defense is mechanical rather than clever — every
    parameter of every family is perturbed from a fixture chosen so nothing
    masks it, and the emitted chain must MOVE.
 

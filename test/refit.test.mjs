@@ -463,7 +463,7 @@ test('a PERFECT circle handed to fitEllipse: circular flag, equal radii, canonic
 test('axis assignment is stable: radiusX is always the major axis, and the frame stays right-handed', () => {
   // Build the SAME ellipse twice, once with the two radii passed in the
   // opposite order (and the frame rotated 90 degrees to match), so the
-  // shape is identical but the CONSTRUCTION labelled its axes the other
+  // shape is identical but the CONSTRUCTION labeled its axes the other
   // way round. The fit must report the same major axis either way.
   const { normal, ex, ey } = obliqueFrame(31);
   const a = fitEllipse(sampleCurve(makeEllipse(CENTER, ex, ey, RX, RY, 4), 60));

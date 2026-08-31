@@ -38,7 +38,7 @@ test('maxSafeDisplacementScale: an edge that GROWS (a >= 0) is never constrained
 });
 
 test('maxSafeDisplacementScale: a 3-point row with one shrinking edge and one growing edge is bound by the shrinking one alone', () => {
-  // Points at x=0,1,2 (nu=3, nv=1). Middle point pulls toward BOTH neighbours
+  // Points at x=0,1,2 (nu=3, nv=1). Middle point pulls toward BOTH neighbors
   // at unit scale: va=0 (i=0), vb=(-2,0,0) (i=1), vc=0 (i=2).
   //   edge(0,1): Pa=(0,0,0) Pb=(1,0,0), e2=1, dv=vb-va=(-2,0,0), a=-2 -> crit=1/2=0.5
   //   edge(1,2): Pa=(1,0,0) Pb=(2,0,0), e2=1, dv=vc-vb=(2,0,0),  a=+2 -> no constraint

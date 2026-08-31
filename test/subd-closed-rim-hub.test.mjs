@@ -99,7 +99,7 @@ function symmetricJunction(n, opts = {}) {
 }
 // AWKWARD — uneven angles, every arm tilted out of the junction plane by a
 // different amount, different radii and different lengths. Nothing here is
-// symmetric, so nothing can pass by cancelling.
+// symmetric, so nothing can pass by canceling.
 function awkwardJunction() {
   const specs = [
     { dir: [1, 0, 0.22], radius: 5, inner: 13, outer: 44, segments: 2 },
@@ -172,10 +172,10 @@ test('bridgeClosedRimsHub: every rim edge stops being naked and becomes a real i
 });
 
 // ── the crotch pairing: a check winding cannot make ──────────────────────
-test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between neighbouring arms, which no winding check could tell', () => {
-  // BOTH neighbour pairings close a valid, consistently wound ring, so
+test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between neighboring arms, which no winding check could tell', () => {
+  // BOTH neighbor pairings close a valid, consistently wound ring, so
   // directedEdgeReuse cannot discriminate them at all: pairing each arm's
-  // next-facing vertex with the WRONG side of its neighbour passes every
+  // next-facing vertex with the WRONG side of its neighbor passes every
   // structural check in this file while flinging each crotch edge right
   // across an arm's own body. Confirmed the hard way — an earlier version of
   // this test only asserted that the two arms joined are ANGULARLY ADJACENT,
@@ -184,8 +184,8 @@ test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between ne
   //
   // What actually settles it is LENGTH: a crotch edge is the near contact
   // between two arms, so it must be shorter than the gap between those two
-  // arms' own centres. The inverted pairing measures ~23 against a 16mm
-  // centre gap on this fixture; the correct one measures ~9.
+  // arms' own centers. The inverted pairing measures ~23 against a 16mm
+  // center gap on this fixture; the correct one measures ~9.
   const n = 6, facets = 6, inner = 16;
   const { cage, rims } = symmetricJunction(n, { facets, inner, radius: 4 });
   const out = bridgeClosedRimsHub(cage, rims);
@@ -202,10 +202,10 @@ test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between ne
     const a = rimOf.get(ends[0]), b = rimOf.get(ends[1]);
     assert.ok(a !== undefined && b !== undefined, 'both ends are real rim vertices');
     assert.notEqual(a, b, 'a crotch spans two DIFFERENT arms');
-    assert.equal(Math.min((a - b + n) % n, (b - a + n) % n), 1, `arms ${a} and ${b} are neighbours in the fixture's own angular order`);
+    assert.equal(Math.min((a - b + n) % n, (b - a + n) % n), 1, `arms ${a} and ${b} are neighbors in the fixture's own angular order`);
     const gap = Math.hypot(...centres[a].map((c, k) => c - centres[b][k]));
     const span = Math.hypot(...out.cage.vertices[ends[0]].map((c, k) => c - out.cage.vertices[ends[1]][k]));
-    assert.ok(span < gap, `crotch edge spans ${span.toFixed(2)}, which has to be under the ${gap.toFixed(2)} between the two arms' own centres`);
+    assert.ok(span < gap, `crotch edge spans ${span.toFixed(2)}, which has to be under the ${gap.toFixed(2)} between the two arms' own centers`);
     worst = Math.max(worst, span / gap);
     checked++;
   }
@@ -338,7 +338,7 @@ test('bridgeClosedRimsHub: refuses three coincident rims — no junction plane t
   // Every arm starting at the SAME point puts all three rim centroids on top
   // of one another, so there is no spread to take a plane from.
   const { cage, rims } = mergeParts([[1, 0, 0], [-0.5, 0.866, 0], [-0.5, -0.866, 0]].map((d) => arm(d, { facets: 6, inner: 0, outer: 40, radius: 5 })));
-  assert.throws(() => bridgeClosedRimsHub(cage, rims), /collinear about their own centre|sits on the junction axis/);
+  assert.throws(() => bridgeClosedRimsHub(cage, rims), /collinear about their own center|sits on the junction axis/);
 });
 
 test('bridgeClosedRimsHub: refuses a genuinely three-dimensional junction by name rather than guessing at one', () => {

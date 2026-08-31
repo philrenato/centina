@@ -4,7 +4,7 @@
 // p = degree. U = knot vector, length n+p+2.
 //
 // ⚠ THESE THREE FUNCTIONS ARE THE FLOOR OF EVERY SURFACE EVALUATION IN THE
-// PROJECT, so their allocation behaviour is a whole-app performance fact rather
+// PROJECT, so their allocation behavior is a whole-app performance fact rather
 // than a local detail. Written the way the book prints them — `Array.from`,
 // `new Array(p+1).fill(0)` — A2.3 allocates NINE arrays per call at degree 3,
 // and a single fillet rebuild calls it often enough that it measured 36% of the

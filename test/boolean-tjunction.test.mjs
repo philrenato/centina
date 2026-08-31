@@ -155,7 +155,7 @@ test('a vertex from an unrelated face MERELY PASSING NEAR an edge is not spliced
 
 test('a genuine T-junction is still inserted at real marched precision', () => {
   // The other side of the same threshold: an offset at the scale a real
-  // marcher actually leaves (~1e-14) must still be recognised, or the
+  // marcher actually leaves (~1e-14) must still be recognized, or the
   // tightened tolerance would have bought correctness by breaking the
   // feature it guards.
   const loops = [

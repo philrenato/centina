@@ -177,7 +177,7 @@ function nakedEdgesOf(cage) {
 // THE FIXTURE SWEEP
 //
 // Deliberately includes the shapes a person authoring one fixture would
-// skip: facets=1 (as coarse as a cage gets, where neighbourhoods overlap
+// skip: facets=1 (as coarse as a cage gets, where neighborhoods overlap
 // in ways denser cages never do), a genus-1 torus, two cages with real
 // POLES (cone apex, sphere/ellipsoid), an OPEN cage (plane), and
 // deliberately ASYMMETRIC dimensions alongside perfectly symmetric ones —

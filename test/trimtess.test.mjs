@@ -343,10 +343,10 @@ function countTJunctions(welded, tol = 1e-6) {
   return n;
 }
 
-test('MANIFOLD: an ordinary OFF-CENTRE hole welds into a real annulus — chi == 0, zero non-manifold edges, zero T-junctions, exact area', () => {
+test('MANIFOLD: an ordinary OFF-CENTER hole welds into a real annulus — chi == 0, zero non-manifold edges, zero T-junctions, exact area', () => {
   const srf = makeFlatPlane();
   const outer = trivialTrimLoop(srf);          // the full parametric rectangle: a plane
-  const hole = makeUVHole(0.38, 0.44, 0.22, 32); // genuinely off-centre, the reported fixture
+  const hole = makeUVHole(0.38, 0.44, 0.22, 32); // genuinely off-center, the reported fixture
   const expectedArea = 100 * (Math.abs(signedArea2D(outer)) - Math.abs(signedArea2D(hole)));
   const tris = tessellateTrimmedSurface(srf, outer, 10, 10, [hole]);
   const w = weldMesh(tris);
@@ -363,7 +363,7 @@ test('MANIFOLD: an ordinary OFF-CENTRE hole welds into a real annulus — chi ==
 test('MANIFOLD: a hole crossing grid lines at a SHALLOW angle (where seam artifacts are worst) is still manifold and exact', () => {
   const srf = makeFlatPlane();
   const outer = trivialTrimLoop(srf);
-  // Deliberately irrational-looking centre and a radius that puts long,
+  // Deliberately irrational-looking center and a radius that puts long,
   // near-tangent arc runs along several cell edges — the configuration a
   // crossing-point mismatch would show up in first.
   const hole = makeUVHole(0.413, 0.527, 0.25, 48);

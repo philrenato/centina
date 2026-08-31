@@ -1,7 +1,7 @@
 // THE ENVIRONMENT AND ITS SAMPLING DISTRIBUTION.
 //
 // Everything here runs on the CPU, which matters: the failures this catches are
-// invisible in a rendered image. An unnormalised pdf makes every render off by
+// invisible in a rendered image. An unnormalized pdf makes every render off by
 // one constant factor, which reads as an exposure error and gets
 // compensated for in the exposure — after which the renderer is permanently and
 // invisibly mis-weighted. A furnace test is how that gets caught, and it needs
@@ -93,7 +93,7 @@ console.log(`  distribution ${D.cw}x${D.ch}, aux ${D.aux.length} floats`);
 }
 
 /* ⭐ THE WHITE FURNACE. mean(L/pdf) against the same integral summed directly.
-   They agree only if the pdf is normalised AND the solid-angle conversion is
+   They agree only if the pdf is normalized AND the solid-angle conversion is
    right — and this is the only check in the file that would catch either. */
 {
   const f = envFurnaceError(D, img.data, img.width, img.height, 300000);

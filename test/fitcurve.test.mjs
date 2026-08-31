@@ -276,7 +276,7 @@ const sampledArcLength = (crv, n = 4000) => {
 /* A RUN WITH ONE VERY LONG LEG IS THE CASE THAT BREAKS A CHORD-LENGTH FIT, and
    four points is not few enough to be safe from it. These are real coordinates
    off a traced letter "j": three points a fraction of a unit apart at one end
-   and a seventeen-unit straight leg to the other. Chord-length parametrisation
+   and a seventeen-unit straight leg to the other. Chord-length parametrization
    spends 96% of the domain on that leg, so all the shape change has to happen
    in the remaining 4% — which the curve can only do by throwing a control point
    thirty units clear of data that never leaves x = 1.4 to 1.7.
@@ -290,7 +290,7 @@ test('A RUN WITH ONE LONG LEG IS NOT THREADED INTO A LOOP — four points is not
   const ratio = sampledArcLength(res.curve) / polylineLength(pts);
   assert.ok(ratio <= 1.02, `the fit is ${ratio.toFixed(4)}x the length of its own data`);
   // And it stays inside the data's own footprint — this run is very nearly a
-  // straight line and the curve has no licence to leave it.
+  // straight line and the curve has no license to leave it.
   const p = res.curve.degree, U = res.curve.knots;
   const t0 = U[p], t1 = U[U.length - 1 - p];
   for (let i = 0; i <= 200; i++) {
@@ -315,7 +315,7 @@ test('A LEAST-SQUARES FIT DOES NOT BULGE OFF A LONG UNSAMPLED LEG', () => {
    can see WHY a count was passed over rather than only that it was. A candidate
    inside the corridor scores zero or less. */
 test('EVERY TRIED COUNT REPORTS HOW FAR IT LEFT THE CORRIDOR', () => {
-  // A superellipse, so the circle/ellipse recogniser cannot answer first and
+  // A superellipse, so the circle/ellipse recognizer cannot answer first and
   // the least-squares search actually runs.
   const pts = Array.from({ length: 24 }, (_, i) => {
     const t = (i / 24) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);

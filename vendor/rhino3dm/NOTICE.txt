@@ -31,7 +31,7 @@ WHAT brep_authoring.patch CHANGES
 is the exact diff. It adds bindings for ON_Brep's own existing construction API
 (AddSurface, AddEdgeCurve, AddTrimCurve, NewVertex, NewEdge, NewFace, NewLoop,
 NewTrim, the tolerance setters, Compact) to `src/bindings/bnd_brep.{h,cpp}`. No
-openNURBS or rhino3dm behaviour is changed and nothing is reimplemented — the
+openNURBS or rhino3dm behavior is changed and nothing is reimplemented — the
 capability was already in ON_Brep and was simply not reachable from JavaScript.
 
 The only other local change is the trailing `export default rhino3dm;` that

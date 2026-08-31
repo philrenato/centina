@@ -17,9 +17,9 @@
 //
 //   - vertexLimitPosition, the Halstead/Kass/DeRose mask, verified three ways
 //     before any of this existed;
-//   - limitSamples below, which walks the natural parametrisation down to a
+//   - limitSamples below, which walks the natural parametrization down to a
 //     dyadic corner and reads that refined vertex's own limit position. Its
-//     parametrisation is derived from subdivideCatmullClark's child ordering
+//     parametrization is derived from subdivideCatmullClark's child ordering
 //     by composing forward maps, NOT by the index arithmetic the cap builder
 //     uses to find the same points — and the first test proves it right by
 //     making it reproduce a regular face's exact patch.
@@ -153,7 +153,7 @@ function extrudedBoxCage() {
 }
 
 test('the ground-truth sampler is right: on a REGULAR face it reproduces the exact patch', () => {
-  // Nothing below means anything if the parametrisation is wrong, and a wrong
+  // Nothing below means anything if the parametrization is wrong, and a wrong
   // one still produces perfectly real points at perfectly real parameters.
   for (const cage of [subdivideCatmullClark(subdivideCatmullClark(BOX())), superbTorusCage([0, 0, 0], 30, 10, 8)]) {
     const ctx = buildTopology(cage);
@@ -262,14 +262,14 @@ test('EXACT: two caps sharing a star edge carry the IDENTICAL control row — ev
   }
 });
 
-test('EXACT: a cap takes its outer rows FROM its regular neighbours — every interior control point ===', () => {
+test('EXACT: a cap takes its outer rows FROM its regular neighbors — every interior control point ===', () => {
   // The two control points strictly inside a shared row are copied, so they
   // are identical by construction. The two CORNERS are the interesting case:
   // a corner belongs to more than two patches and can only carry one value,
   // and the regular patches themselves do not agree on it to the last bit.
   // So the claim asserted is the one that is true — the whole row matches one
-  // of the cap's two neighbours, and matches the other everywhere except that
-  // shared corner, by no more than the two neighbours already differ.
+  // of the cap's two neighbors, and matches the other everywhere except that
+  // shared corner, by no more than the two neighbors already differ.
   for (const [cage, lv, label] of [[BOX(), 3, 'box'], [ELLIPSOID(), 2, 'ellipsoid'], [extrudedBoxCage(), 2, 'extruded']]) {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
     const ctx = buildTopology(r.refinedCage);
@@ -412,8 +412,8 @@ test('the star-edge tangent break shrinks with isolation level — it is a real 
 
 test('EXACT: the cap interpolates the true limit surface at the three points it is solved for', () => {
   // This is the gate on the whole star refinement, including the fact that it
-  // reads its ground truth out of a LOCAL neighbourhood rather than the whole
-  // cage: if that neighbourhood were too small, these three points would be
+  // reads its ground truth out of a LOCAL neighborhood rather than the whole
+  // cage: if that neighborhood were too small, these three points would be
   // wrong and the interpolation would land somewhere else. Checked against
   // the independent descent sampler, not against the index arithmetic the
   // builder uses to find the same vertices.
@@ -475,7 +475,7 @@ test('the ACC interior mask reduces EXACTLY to the uniform B-spline one at valen
   // The correctness check that matters for a mask re-derived rather than
   // transcribed: at valence 4 it has to reproduce the number
   // clampedBicubicPatchSurface already produces for a regular face, reached a
-  // completely different way. A wrong generalisation still looks plausible
+  // completely different way. A wrong generalization still looks plausible
   // everywhere else.
   const cage = subdivideCatmullClark(subdivideCatmullClark(BOX()));
   const ctx = buildTopology(cage);
@@ -499,7 +499,7 @@ test('the ACC interior mask reduces EXACTLY to the uniform B-spline one at valen
 
 test('a region that cannot be capped is REFUSED with a reason, never covered by a patch that is not the surface', () => {
   // Isolation 0 on a box: no face is regular yet, so no leftover has the two
-  // emitted neighbours a cap is built from.
+  // emitted neighbors a cap is built from.
   const r = subdToPatches(BOX(), { maxIsolation: 0, cap: true });
   assert.equal(r.caps.length, 0);
   assert.equal(r.uncovered.length, 6);

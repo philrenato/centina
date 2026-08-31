@@ -145,7 +145,7 @@ test('the blend is continuous and monotone from untouched to matched', () => {
   assert.ok(half < none && full < half, `the break must fall as the blend rises (${none.toFixed(2)} -> ${half.toFixed(2)} -> ${full.toFixed(4)})`);
 });
 
-test('a reversed neighbour is matched without twisting', () => {
+test('a reversed neighbor is matched without twisting', () => {
   const base = makeBase(), target = makeTarget();
   // Same target, its shared edge built in the opposite direction.
   const flipped = { ...target, ctrlNet: target.ctrlNet.map((row) => [...row].reverse()) };
@@ -330,7 +330,7 @@ test('G2 is refused by name on a surface too shallow to carry it', async () => {
 // zero with it — so a purely relative ratio divides a vanishing residual by a
 // vanishing scale and returns 1.0, the worst reading it can produce, precisely
 // when the join is perfect. The measure has to stay meaningful as both sides
-// approach flat, which means the scale needs a floor the MODEL can recognise
+// approach flat, which means the scale needs a floor the MODEL can recognize
 // rather than a numerical epsilon.
 test('curvature deviation against a plane grows with the residual instead of pinning at 1', async () => {
   const { curvatureDeviationAcross } = await import('../kernel/matchedge.mjs');

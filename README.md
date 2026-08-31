@@ -3,7 +3,7 @@
 A NURBS kernel in plain JavaScript. No dependencies, no build step, no renderer,
 no DOM — just math over plain serializable data.
 
-Centina is the geometry kernel of [Unreason3D](#the-app), a NURBS modeller built
+Centina is the geometry kernel of [Unreason3D](#the-app), a NURBS modeler built
 to teach CAD to design students.
 
 > **Pre-alpha.** `0.1.0-alpha.0`. The API is not frozen and the
@@ -89,8 +89,8 @@ import { curvePoint } from 'centina/curve.mjs';
 
 ## What it does **not** do
 
-- **No STEP import.** It needs tolerant modelling, which is not built.
-- **No tolerant modelling or geometry healing.** Input is expected to be clean.
+- **No STEP import.** It needs tolerant modeling, which is not built.
+- **No tolerant modeling or geometry healing.** Input is expected to be clean.
 - **No non-manifold topology.**
 - **No face-face blend with hold lines.**
 - **Booleans do not close on every placement.** A cylinder through a box
@@ -136,7 +136,7 @@ files and globs, not directories. Use `npm test`, or `node --test 'test/*.test.m
 
 ## The app
 
-Unreason3D is a single-file NURBS modeller — one `.html`, no build step. Centina
+Unreason3D is a single-file NURBS modeler — one `.html`, no build step. Centina
 is what it is built on, and `kernel/` is the source of truth. The app carries
 generated copies of some kernel modules inline because it has no build step;
 those are artifacts, not forks.

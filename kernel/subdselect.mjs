@@ -261,11 +261,11 @@ function distSqToSegment(p, a, b) {
 // left-right, because that strip is exactly the one crossing that edge.
 // So the direction is read from the gesture rather than assumed, and the
 // explicit re-read control is left to handle only the genuinely
-// ambiguous press (dead centre) or a misread.
+// ambiguous press (dead center) or a misread.
 //
 // Deliberately geometric and n-gon-safe: it is nearest-of-n edges, so it
 // answers for any face, not only the quads a loop can actually walk. A
-// dead-centre press on a square is a real tie; ties resolve to the
+// dead-center press on a square is a real tie; ties resolve to the
 // earliest edge in the face's own cyclic order, which is stable across
 // calls rather than arbitrary per call — a caller re-reading the same
 // click must get the same answer, or the re-read control would appear to

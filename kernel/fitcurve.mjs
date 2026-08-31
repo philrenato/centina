@@ -45,7 +45,7 @@ import { makeLine, makeCircle, makeEllipse } from './primitives.mjs';
 // curve is INSIDE it, so distances measured to that polyline are too large by
 // the sagitta of the sampling — on a radius-25 circle at 960 segments that is
 // 1.3e-4, which is a floor no amount of asking for 1e-6 can get under. A
-// measure whose own discretisation dominates the quantity it reports cannot
+// measure whose own discretization dominates the quantity it reports cannot
 // certify a tolerance at all; it just reports its own step size.
 //
 // The conservative property survives refinement for free: whatever t the
@@ -116,7 +116,7 @@ function pointSegmentDistanceSq(q, a, b) {
 // the data can be asked for it.
 //
 // So: for each chord Q_i..Q_{i+1}, take the circle through it and each of its
-// two neighbouring points, and keep the larger of the two sagittas that circle
+// two neighboring points, and keep the larger of the two sagittas that circle
 // cuts over that chord. That is the ordinary second-order reconstruction of
 // what the samples imply happens between them — zero where three points are
 // collinear, and exactly the shape's own bulge where they are not. The curve is
@@ -189,7 +189,7 @@ function corridorExcess(points, crv, closed, tolerance) {
 }
 
 // THE SPACING OF THE SAMPLES IS NOT THE SHAPE OF THE SAMPLES, and a fit has
-// to decide which of the two it believes. Chord-length parametrisation (P&T
+// to decide which of the two it believes. Chord-length parametrization (P&T
 // Eq. 9.5) spends parameter in proportion to distance. That is right when the
 // points are evenly spread and wrong when they are not — and the samplers this
 // kernel actually has are ADAPTIVE, which means they put their points far
@@ -201,10 +201,10 @@ function corridorExcess(points, crv, closed, tolerance) {
 // only do by throwing a control point a long way out, and the bulge that
 // leaves lands on the long straight leg, where there is no sample to object.
 //
-// CENTRIPETAL parametrisation (P&T Eq. 9.6, after Lee, CAGD 6(2), 1989) takes
+// CENTRIPETAL parametrization (P&T Eq. 9.6, after Lee, CAGD 6(2), 1989) takes
 // the SQUARE ROOT of each chord. It is the standard answer to exactly this
 // case: it damps the ratio between the longest and the shortest leg without
-// throwing the spacing information away, which is what uniform parametrisation
+// throwing the spacing information away, which is what uniform parametrization
 // would do.
 function centripetalParams(points) {
   const n = points.length - 1;
@@ -231,7 +231,7 @@ function centripetalParams(points) {
   return ubar;
 }
 
-// WHICH PARAMETRISATION SUITS THIS DATA IS A QUESTION ABOUT THIS DATA, so it
+// WHICH PARAMETRIZATION SUITS THIS DATA IS A QUESTION ABOUT THIS DATA, so it
 // is measured rather than declared. Every fit below is built BOTH ways against
 // the same bound, and of the candidates that MEET the bound the SHORTER curve
 // is returned.
@@ -262,15 +262,15 @@ function sampledLength(crv, samples = 256) {
 
 // The two are ordered so that chord-length is asked first and therefore wins
 // an exact tie: it is P&T's own default and the one every other fit and loft
-// in this kernel parametrises with, so a change of answer is always a change
+// in this kernel parametrizes with, so a change of answer is always a change
 // this comparison actually paid for.
 const PARAMETRISATIONS = [chordLengthParams, centripetalParams];
 
-// A9.1's three ingredients assembled against a STATED parametrisation rather
+// A9.1's three ingredients assembled against a STATED parametrization rather
 // than a derived one — which is what `interpAtParams` was factored out of
 // `globalCurveInterp` to allow. With `chordLengthParams` this is
 // `globalCurveInterp` exactly; the point of writing it out is that the closed
-// and open interpolations below can then be run under either parametrisation
+// and open interpolations below can then be run under either parametrization
 // through one code path instead of two that could drift apart.
 function interpolateWith(points, requestedDegree, paramsOf) {
   const n = points.length - 1;
@@ -319,7 +319,7 @@ function approximationKnotVector(ubar, p, n) {
 
 // P&T Eq. 9.63-9.67. The two end control points are FIXED to the first and
 // last input point rather than solved for, so a fitted boundary still meets
-// its neighbours exactly at the corners the topology already agreed on —
+// its neighbors exactly at the corners the topology already agreed on —
 // which matters more here than a marginally lower residual, because a gap at
 // a shared corner is a naked edge.
 function leastSquaresFit(points, p, n, ubar) {
@@ -364,7 +364,7 @@ function leastSquaresFit(points, p, n, ubar) {
 }
 
 // A CLOSED LOOP IS FITTED BY WRAPPING, the same device closedCurveInterp
-// already uses and for the same reason: an open fit's clamped end behaviour
+// already uses and for the same reason: an open fit's clamped end behavior
 // lands in padding that is then discarded, so the kept range behaves as if
 // the curve continues periodically instead of showing a kink at the seam.
 // Genuinely periodic B-spline approximation (P&T §9.4.2) is machinery this
@@ -418,10 +418,10 @@ function closeSeamExactly(crv) {
 
 // EXACT WHERE THE SHAPE IS ACTUALLY EXACT. A plane cutting a cylinder or a
 // sphere gives a genuine circle or ellipse, and the commonest booleans a
-// student runs are exactly those. Recognising one and emitting the RATIONAL
-// primitive is not an optimisation — it is the difference between a boundary
+// student runs are exactly those. Recognizing one and emitting the RATIONAL
+// primitive is not an optimization — it is the difference between a boundary
 // Rhino re-reads as a circle and one it re-reads as a spline that happens to
-// look round. The recogniser's own residual is not trusted for this: the
+// look round. The recognizer's own residual is not trusted for this: the
 // primitive is built and then measured against the original points like any
 // other candidate.
 function tryPrimitive(points, tolerance, closed, opts = {}) {
@@ -445,7 +445,7 @@ function tryPrimitive(points, tolerance, closed, opts = {}) {
     // ⚠ A PRIMITIVE DOES NOT INTERPOLATE ITS ENDPOINTS. fitLine returns the
     // input projected ONTO the fitted line, so an open fit can move the first
     // and last points by the residual — harmless for a display curve and fatal
-    // for a TRIM, whose ends must meet its neighbours exactly. Measured as
+    // for a TRIM, whose ends must meet its neighbors exactly. Measured as
     // u = -0.000754 on a pcurve that should have started at 0: outside the
     // domain, and OpenNURBS rejects the loop for not joining. So a primitive
     // that moves an endpoint is rejected here and the least-squares path takes
@@ -462,7 +462,7 @@ function tryPrimitive(points, tolerance, closed, opts = {}) {
       // that discards an exact answer over a convention. `fitLine`
       // CANONICALIZES its direction (largest component positive) so that
       // near-identical input cannot flicker between opposite directions — a
-      // property worth having, and one that means a run travelling in -x
+      // property worth having, and one that means a run traveling in -x
       // returns start and end swapped. Measured: two of a square's four sides,
       // every one of them perfectly straight, fell through to a 6-control-point
       // least-squares spline purely because of which way the loop happened to
@@ -512,10 +512,10 @@ export function fitCurveToPoints(points, opts = {}) {
   // RAISE THE COUNT UNTIL IT CLEARS, rather than guessing one. Growth is
   // geometric so a curve needing many spans is reached in a few solves, and
   // the ceiling is m (at which point the fit has as many freedoms as points
-  // and any remaining error is the parametrisation, not the count).
+  // and any remaining error is the parametrization, not the count).
   // ⚠ THE CEILING IS n < m, NOT n <= m, and it is a conditioning limit rather
   // than a formality. As the free control points approach the interior point
-  // count the normal equations lose rank — neighbouring samples share a
+  // count the normal equations lose rank — neighboring samples share a
   // parameter to within the solver's pivot threshold — and the solve throws.
   // Stopping one short keeps every refusal a statement about the DATA instead
   // of about the matrix.
@@ -595,9 +595,9 @@ export function fitCurveToPoints(points, opts = {}) {
   // oscillation can be spent; it does not bound an EXCURSION, and the spacing
   // does. Four points off a letter's stem — three of them a fraction of a unit
   // apart and the fourth seventeen units away — interpolate under chord-length
-  // parametrisation into a curve 2.10x the length of its own data, swinging
+  // parametrization into a curve 2.10x the length of its own data, swinging
   // fourteen units clear of a run that is very nearly straight. So this branch
-  // builds both parametrisations too, and answers with the shorter.
+  // builds both parametrizations too, and answers with the shorter.
   const INTERP_MAX_POINTS = 12;
   const interpolants = [];
   let wanderingInterp = null;
@@ -612,7 +612,7 @@ export function fitCurveToPoints(points, opts = {}) {
            `interp.ctrlPts` was undefined on the closed branch and the guard was
            always false. The closed interpolation therefore never once fired:
            every closed contour silently fell through to the least-squares path
-           above. Normalised here exactly as `conform.mjs` normalises the same
+           above. Normalized here exactly as `conform.mjs` normalizes the same
            call, so the two consumers cannot disagree about what it returns. */
         const raw = closed ? interpolateClosedWith(points, p, paramsOf) : interpolateWith(points, p, paramsOf);
         interp = (closed && raw && raw.crv)
@@ -645,7 +645,7 @@ export function fitCurveToPoints(points, opts = {}) {
   // spanning a hundred units and turning thirty degrees a step has a legitimate
   // interpolation sitting 2.36 outside its own corridor, and refusing that would
   // reject the exact case the interpolation fallback exists to serve. So a
-  // candidate that leaves the corridor is deprioritised, never rejected.
+  // candidate that leaves the corridor is deprioritized, never rejected.
   const strayed = wandering && wanderingInterp
     ? (wandering.length <= wanderingInterp.length ? { c: wandering, k: 'nurbs' } : { c: wanderingInterp, k: 'interpolated' })
     : wandering ? { c: wandering, k: 'nurbs' } : wanderingInterp ? { c: wanderingInterp, k: 'interpolated' } : null;

@@ -69,7 +69,7 @@ export function representativeInteriorPoint(outer, holes = [], opts = {}) {
   const deep = deepestInteriorPoint(ring, holeRings);
   if (deep) return deep;
   // Scaled to the region's own size so this behaves identically on a face
-  // measured in millimetres and one measured in a unit parameter domain.
+  // measured in millimeters and one measured in a unit parameter domain.
   const baseStep = opts.step ?? Math.sqrt(area) * 1e-3;
   const ccw = signedArea2D(ring) > 0;
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -99,7 +99,7 @@ export function representativeInteriorPoint(outer, holes = [], opts = {}) {
 // building a real medial axis, and bounded work regardless of how many
 // edges the fragment has. Distance is measured to EVERY boundary edge,
 // holes included, so a point deep inside the outer loop but hugging a hole
-// is correctly rejected in favour of one with real clearance all round.
+// is correctly rejected in favor of one with real clearance all round.
 function deepestInteriorPoint(ring, holeRings) {
   const edges = [];
   for (const loop of [ring, ...holeRings]) {

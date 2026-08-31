@@ -22,7 +22,7 @@
 //    non-convex ring, where picking three points and crossing them is not.
 //
 // 2. WHAT PLANARITY TOLERANCE. RELATIVE to the curve's own size (its sample
-//    bounding-box diagonal), never an absolute millimetre count — otherwise
+//    bounding-box diagonal), never an absolute millimeter count — otherwise
 //    a 5mm curve and a 500mm curve are judged by wildly different standards,
 //    and this kernel has no document scale to appeal to. Deliberately
 //    GENEROUS (1%), because the near-planar case is the one that
@@ -40,7 +40,7 @@
 //
 // DELIBERATELY NOT BUILT HERE, named rather than silently missing: the space-
 // curve MINIMUM SELF-DISTANCE report Phase C also describes (a
-// clearance number with a parametric-neighbourhood exclusion for the s ~= t
+// clearance number with a parametric-neighborhood exclusion for the s ~= t
 // pairs that are trivially zero). Real, separate, and it needs its own
 // decision about what an actionable clearance number even is. This module is
 // the planar half plus its named consumer.
@@ -71,7 +71,7 @@ export const PLANARITY_TOL_FRAC = 0.01;
 // largest is simply the best-conditioned one), independent of winding, and
 // independent of the order the samples arrive in. This project already
 // reached for the same fix once, in `bridgeEdgeRunsHub`, against the same
-// underlying failure: a sum of signed cross products cancelling on symmetric
+// underlying failure: a sum of signed cross products canceling on symmetric
 // input. SIGN is deliberately not meaningful here — a self-intersection is a
 // topological fact about the projected polygon, and which way the normal
 // points cannot change it.

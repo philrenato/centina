@@ -296,8 +296,8 @@ test('a one-surface pair that DOES close still closes, and closes without sharin
   };
   const A = ball(0), B = ball(55);
   // MEASURED, not assumed: both bodies really are radius 40 about their own
-  // stated centre, and 55 apart, so they genuinely overlap. Distance from the
-  // centre, not from the axis — a body translated in x has no radial symmetry
+  // stated center, and 55 apart, so they genuinely overlap. Distance from the
+  // center, not from the axis — a body translated in x has no radial symmetry
   // about the z axis to read.
   for (const [cx, X] of [[0, A], [55, B]]) {
     let lo = Infinity, hi = -Infinity;

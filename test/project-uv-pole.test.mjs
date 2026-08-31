@@ -7,14 +7,14 @@
 // sample stays pinned where the pole left it.
 //
 // This is not a hypothetical surface. A cylinder CAP in this app is a revolved
-// disc (`revolvedCapPanel` — a line from centre to rim, revolved), so its u=0
-// parametric edge IS its centre, collapsed to a single point. Any loop walking
+// disc (`revolvedCapPanel` — a line from center to rim, revolved), so its u=0
+// parametric edge IS its center, collapsed to a single point. Any loop walking
 // that face's own parametric boundary crosses the pole.
 //
 // ⚠ THE FAILURE LOOKED LIKE GEOMETRY AND WAS NOT. It surfaced as a boolean that
 // could not be exported as a joined solid, refusing with "curve is not on the
 // surface — sample N is 12.000000 away" on a radius-12 cap: exactly the
-// centre-to-rim distance. Every one of those points projects EXACTLY when
+// center-to-rim distance. Every one of those points projects EXACTLY when
 // seeded cold, so nothing was off the surface — the seed was.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,14 +28,14 @@ const CENTRE = [0, 0, 0];
 const cap = revolve(makeLine(CENTRE, [R, 0, 0]), CENTRE, [0, 0, 1], 0, 2 * Math.PI);
 const onRim = (a) => [R * Math.cos(a), R * Math.sin(a), 0];
 
-test('THE FIXTURE IS THE REAL SHAPE: a cap is a revolved disc with a pole at its centre', () => {
+test('THE FIXTURE IS THE REAL SHAPE: a cap is a revolved disc with a pole at its center', () => {
   assert.equal(cap.degU, 1);
   assert.equal(cap.degV, 2, 'the revolved direction is the rational quadratic a circle needs');
-  // u = 0 is the centre for EVERY v — that is what makes it a pole, and what
+  // u = 0 is the center for EVERY v — that is what makes it a pole, and what
   // makes the partials collapse there.
   for (const v of [0, 0.7, 1.9, 3.3]) {
     const p = surfacePoint(cap, cap.knotsU[0], cap.knotsV[0] + v);
-    assert.ok(Math.hypot(p[0], p[1], p[2]) < 1e-9, `u=0 must be the centre at v=${v}, got ${JSON.stringify(p)}`);
+    assert.ok(Math.hypot(p[0], p[1], p[2]) < 1e-9, `u=0 must be the center at v=${v}, got ${JSON.stringify(p)}`);
   }
 });
 

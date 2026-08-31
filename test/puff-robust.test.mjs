@@ -70,7 +70,7 @@ for (const [label, outline] of refusals) {
 
 // ── STROKES THAT ARE SHAPES AND LOOK LIKE MISTAKES ───────────────────────────
 /* ⚠ A POINTER THAT REPORTS THE SAME POSITION TWICE IS ORDINARY, AND IT USED TO
-   BE REFUSED BY NAME: a zero-length segment lies on top of its neighbour, and the
+   BE REFUSED BY NAME: a zero-length segment lies on top of its neighbor, and the
    self-intersection test reads that as the outline crossing itself. The reader
    was told their circle crossed itself. */
 {
@@ -95,7 +95,7 @@ for (const [label, outline] of refusals) {
    path length, the crossing test against which SIDE of a ray a vertex falls on
    rather than against a distance, the rim selection against the height it just
    set. An absolute tolerance anywhere in there passes at size 1 and fails at 0.001
-   or 1000, which is a defect nobody sees until someone works in millimetres. */
+   or 1000, which is a defect nobody sees until someone works in millimeters. */
 for (const [name, poly] of [['circle', circle], ['bean', bean]]) {
   const base = puffCage(poly, opts);
   for (const k of [1e-3, 1e3, 1e6]) {

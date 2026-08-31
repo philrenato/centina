@@ -189,9 +189,9 @@ export function projectPointsToSurfaceUV(pts, srf, opts = {}) {
     // direction to move in, and every later sample stays pinned at the pole.
     //
     // Measured on a cylinder cap (a revolved disc, whose u=0 edge IS its
-    // centre, collapsed to a point): rim -> pole -> rim refuses with the sample
+    // center, collapsed to a point): rim -> pole -> rim refuses with the sample
     // after the pole "12.000000 away" — exactly the disc's radius, the distance
-    // from the centre to the rim it should have found. Every one of those points
+    // from the center to the rim it should have found. Every one of those points
     // projects EXACTLY when seeded cold, so nothing is off the surface and the
     // refusal was about the seed, not the geometry.
     //
@@ -547,7 +547,7 @@ export function seamCrossingSpine(loopUV, srf) {
 // cyclic sample list at every crossing; each run between two consecutive
 // crossings lies on one continuous side of the seam, and gets the crossing's
 // own interpolated seam point attached at each end, on whichever edge that
-// end's own neighbouring sample sits against. Every chain then reaches the
+// end's own neighboring sample sits against. Every chain then reaches the
 // rectangle's edge at both ends, which is exactly the property the
 // arrangement needs and the property a raw wrapped chain lacks.
 //
@@ -766,7 +766,7 @@ function seamJumps(loopUV, srf, cyclic = true, forceAxis = -1) {
 //
 // The other-axis value is interpolated across the jump by how far through it
 // the edge falls, which is the curve's own crossing value rather than either
-// neighbouring sample's.
+// neighboring sample's.
 function seamPointAt(loopUV, k, ai, oi, aMin, aMax) {
   const n = loopUV.length;
   const p = loopUV[k], q = loopUV[(k + 1) % n];
@@ -791,7 +791,7 @@ function samePt2(p, q) {
 // leave the chain's own terminal sample alone" — the case an OPEN chain's
 // first and last sub-chains have (they end at the curve's real endpoints,
 // not at a seam). With both ends supplied this is byte-identical to the
-// closed-loop behaviour it was written for.
+// closed-loop behavior it was written for.
 function closeChainOnSeam(chain, startPt, endPt) {
   const body = chain.filter((p, i) => !(i === 0 && startPt && samePt2(p, startPt)) && !(i === chain.length - 1 && endPt && samePt2(p, endPt)));
   return [...(startPt ? [startPt] : []), ...body, ...(endPt ? [endPt] : [])];

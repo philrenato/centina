@@ -292,7 +292,7 @@ test('CHARYBDIS: a REVERSED ramp genuinely inverts the falloff — the knob does
   const axis = normalize([0, 0, 1]);
   const angle = Math.PI / 2;
   const inner = 5, outer = 15;
-  // Nothing at the centre, everything at the rim: the exact opposite of
+  // Nothing at the center, everything at the rim: the exact opposite of
   // the default. A point just inside innerRadius must now barely move,
   // and a point just inside outerRadius must sweep the full angle.
   const reversed = { interp: 'smooth', stops: [[0, 0], [1, 1]] };

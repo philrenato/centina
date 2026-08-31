@@ -44,7 +44,7 @@
 // pulled back along their own rails first — that pull-back is this file's
 // job, and the thing HUB_INSET (0.62) generalizes to. The
 // number transfers; the mechanism does not. HUB_INSET lerps a rim toward
-// the hub CENTRE; what a pipe network needs is a translation ALONG each
+// the hub CENTER; what a pipe network needs is a translation ALONG each
 // rail, so the tube is genuinely shorter rather than squashed sideways.
 // And a single fraction cannot be right at every angle: two cylinders of
 // radius r whose axes cross at angle theta interpenetrate out to exactly
@@ -292,7 +292,7 @@ function mergeCage(target, cage) {
 
 // The plane residual of a set of points about their own mean, as a
 // fraction of how far they spread. Exactly the quantity junctionPlaneOrder
-// needs to be small: it fits ONE plane through the rim centres and orders
+// needs to be small: it fits ONE plane through the rim centers and orders
 // them by angle in it, which only means anything if they genuinely lie in
 // a plane. Three points always do, so this is only ever asked of N >= 4.
 function planarityResidual(pts) {
@@ -305,7 +305,7 @@ function planarityResidual(pts) {
       if (cl > best) { best = cl; nrm = c; }
     }
   }
-  if (!(best > 0)) return 0; // every point on one line through the centre: no plane is picked out, and no arm is out of it
+  if (!(best > 0)) return 0; // every point on one line through the center: no plane is picked out, and no arm is out of it
   const n = normalize(nrm);
   const spread = pts.reduce((acc, p) => acc + length(sub(p, centre)), 0) / pts.length;
   if (!(spread > 0)) return 0;
@@ -497,14 +497,14 @@ function buildComponent(comp, det, cfg) {
     if (N >= 4) {
       // Three arms always lie in a plane, so the single-plane hub can only
       // be wrong from four up. Measured on the arm DIRECTIONS, which is
-      // equivalent to measuring the rim centres: every rim sits the same
+      // equivalent to measuring the rim centers: every rim sits the same
       // inset along its own arm, so the two sets differ by one uniform
       // scale and one translation, neither of which changes planarity.
       const residual = planarityResidual(dirs);
       if (residual > PIPE_NETWORK_PLANARITY_TOLERANCE) {
         return {
           ok: false,
-          reason: `the ${N}-arm junction at (${J.point.map((v) => v.toFixed(2)).join(', ')}) is genuinely three-dimensional (its arms sit ${(residual * 100).toFixed(0)}% of their own spread out of any one plane) — this hub orders its arms around ONE plane, and two arms on opposite sides of it can project to the same angle and be joined to the wrong neighbour. A truly 3D junction needs a different construction, not a bigger version of this one`,
+          reason: `the ${N}-arm junction at (${J.point.map((v) => v.toFixed(2)).join(', ')}) is genuinely three-dimensional (its arms sit ${(residual * 100).toFixed(0)}% of their own spread out of any one plane) — this hub orders its arms around ONE plane, and two arms on opposite sides of it can project to the same angle and be joined to the wrong neighbor. A truly 3D junction needs a different construction, not a bigger version of this one`,
           junctionPoint: J.point,
           planarityResidual: residual,
         };

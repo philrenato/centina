@@ -435,7 +435,7 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
     // ⚠ THE VERTICES COME FROM THE CURVES THAT WERE ACTUALLY WRITTEN, not from
     // the polyline they were fitted to. A fitted run interpolates its own
     // endpoints exactly — the fitter is asked for that precisely so a boundary
-    // still meets its neighbours at the corners topology already agreed on —
+    // still meets its neighbors at the corners topology already agreed on —
     // so the two agree; reading it off the written curve is what makes that an
     // invariant this code HOLDS rather than one it assumes holds elsewhere.
     // One vertex per corner, SHARED by the run that ends there and the run that
@@ -564,7 +564,7 @@ export function brepRecordToRhino(rhino, record, tolerance) {
         // ⚠⚠ A SINGULAR TRIM IS A LOOP MEMBER WITH NO EDGE. It is how ON
         // represents a POLE — a stretch of the parametric rectangle where the
         // surface collapses to a single point, as a revolved disc does along
-        // its centre. It has a real pcurve and no 3-D length, so it takes a
+        // its center. It has a real pcurve and no 3-D length, so it takes a
         // VERTEX rather than an edge, and it closes a loop that would otherwise
         // have a hole where the sew could not carry it.
         if (t.singular) {
@@ -602,7 +602,7 @@ export function brepRecordToRhino(rhino, record, tolerance) {
   brep.setTrimTolerances(true);
   brep.compact();
   // ASK OPENNURBS, DO NOT ASSUME — the same rule the single-face path follows,
-  // and the only independent judgement anywhere in this pipeline.
+  // and the only independent judgment anywhere in this pipeline.
   const [valid, log] = brep.isValidWithLog;
   return valid
     ? { brep, log: '', counts: { faces: record.faces.length, edges: edgeIndex.filter((i) => i >= 0).length, vertices: vertexPoints.length, trims: trimCount } }
@@ -647,9 +647,9 @@ export function exportDocument(rhino, payload) {
   for (const layer of payload.layers || []) {
     const rlayer = new rhino.Layer();
     rlayer.name = layer.name;
-    /* ⚠⚠ ALPHA, OR THE LAYER IS INVISIBLE TO SHADING. rhino3dm's colour setter
+    /* ⚠⚠ ALPHA, OR THE LAYER IS INVISIBLE TO SHADING. rhino3dm's color setter
        takes {r,g,b,a} and a missing `a` writes ZERO — a fully transparent layer
-       colour. Reported from Rhino as "they are coming in on a layer that cannot
+       color. Reported from Rhino as "they are coming in on a layer that cannot
        be shaded… so I have to put them on a new layer with shading". Checked
        against a file Rhino itself wrote: its Default layer is 0,0,0,255, and
        ours was 138,141,144,0. */
@@ -734,7 +734,7 @@ export function exportDocument(rhino, payload) {
 // multi-face Brep as one panel per face, each carrying its own trim loops
 // as 3-D polylines under `trimEdges3d`. Turning those into the (u,v) the
 // app stores is the caller's job and can fail; a panel whose boundary is
-// not recovered keeps the old behaviour of arriving at its full untrimmed
+// not recovered keeps the old behavior of arriving at its full untrimmed
 // extent, and the app says so rather than letting it pass for faithful.
 // Each panel's own "face N" name is unchanged. worker.js's own job is turning THESE plain
 // objects back into real table entries (a curve/surface imports as a plain

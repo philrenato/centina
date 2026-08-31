@@ -106,7 +106,7 @@ function cutCurves(A, B) {
 // translate on a euclidean control net left one of them spanning 17.29 to 22.91
 // while every assertion still passed. A fixture that is never measured is a
 // free variable in every result that rests on it.
-test('SEAM STRADDLE fixture: both operands really are radius-20 spheres at the centres claimed', () => {
+test('SEAM STRADDLE fixture: both operands really are radius-20 spheres at the centers claimed', () => {
   // Exactly the three operands the tests below actually build — measuring some
   // other sphere would leave the ones under test unmeasured, which is the very
   // gap this closes.

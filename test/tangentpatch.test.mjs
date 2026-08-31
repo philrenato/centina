@@ -60,7 +60,7 @@ function holeInSurface(n, { R = 1.2, u0 = 0.4, v0 = -0.3, wobble = 0, warp = 1 }
  *
  *  That component is legitimate: it lies in the same tangent plane, so the G1
  *  request is unchanged and only the interior shape moves. What it does change
- *  is the ORIENTATION POLL — the chord from a boundary point to the far centre
+ *  is the ORIENTATION POLL — the chord from a boundary point to the far center
  *  swings past perpendicular partway along a side, so the sign test genuinely
  *  disagrees with itself along that side.
  */
@@ -321,7 +321,7 @@ test('⚠ WITH STRAIGHT SIDES AND NO CROSS-TANGENT THE PATCH IS THE LINEAR MAP E
      This is linear precision, and it holds for corners placed anywhere in
      space — not only coplanar ones, which is why it is a stronger statement
      than the flatness test above and catches a weight scheme that is merely
-     normalised rather than correct. */
+     normalized rather than correct. */
   for (const n of [3, 5, 7, 9]) {
     const V = [];
     for (let i = 0; i < n; i++) {
@@ -450,7 +450,7 @@ test('⚠ THE PATCH IS TANGENT TO THE SURFACE AROUND THE HOLE, AND THE RESIDUAL 
 
 test('⚠ THE PATCH AGREES IN DIRECTION WITH THE SURFACE, not merely in plane', () => {
   /* An everted patch has the RIGHT tangent plane everywhere and is folded flat
-     against its neighbour; an unsigned angle reads 0.00 degrees for it. Only
+     against its neighbor; an unsigned angle reads 0.00 degrees for it. Only
      the signed comparison can see it. */
   for (const n of [3, 5, 6]) {
     const fx = holeInSurface(n, { wobble: 0.25 });
@@ -501,7 +501,7 @@ test('⚠ AT A CORNER THE LIMIT NORMAL EXISTS WHEN THE INPUT IS COMPATIBLE — m
 test('⚠ AND WHEN THE INPUT CREASES AT A CORNER THE SPREAD DOES NOT FALL — so the measurement can fail', () => {
   /* Without this the test above is decorative: any measurement that always
      converges is measuring the ruler. One side's cross-tangent is tilted out of
-     its neighbour's plane near a shared corner, which is a genuine crease in
+     its neighbor's plane near a shared corner, which is a genuine crease in
      the DATA, and the spread must then stand still at every radius. */
   const n = 5;
   const fx = holeInSurface(n, { wobble: 0.2 });
@@ -523,7 +523,7 @@ test('⚠ A CORNER WHOSE TWO SIDES NAME DIFFERENT TANGENT PLANES IS REFUSED AT B
   const t0 = fx.tangent[0];
   bad[0] = (s) => { const d = t0(s); return [d[0], d[1], d[2] + 1.2 * s * s]; };
   const r = nSidedTangentPatch({ boundary: fx.boundary, tangent: bad });
-  assert.equal(r.ok, false, 'a fill that cannot be tangent to both neighbours must refuse, not reproduce the crease silently');
+  assert.equal(r.ok, false, 'a fill that cannot be tangent to both neighbors must refuse, not reproduce the crease silently');
   assert.match(r.reason, /at corner 1 .*crease/);
   assert.ok(r.cornerAngleDeg > 20, `the reported disagreement ${r.cornerAngleDeg} must be the real one`);
   // And a caller who genuinely wants a crease running into that corner can say so.
@@ -710,12 +710,12 @@ test('⚠ THERE IS NO CENTRAL POLE AND NO BOUNDARY 0/0 — the interior is a val
       const onEdge = domainPoint(D, i, 0.37, 0);
       assert.ok(dist(p.evaluateXY(onEdge[0], onEdge[1]), fx.boundary[i](0.37)) < 1e-12);
     }
-    // And the centre of the domain, where a split-into-quads scheme would put
+    // And the center of the domain, where a split-into-quads scheme would put
     // its extraordinary point, is an ordinary evaluation with an ordinary normal.
     const centre = patchNormalAt(p, 0, 0, 1e-6);
-    assert.ok(centre, `n=${n}: the centre of the domain has no normal`);
+    assert.ok(centre, `n=${n}: the center of the domain has no normal`);
     const near = patchNormalAt(p, 1e-4, 1e-4, 1e-6);
-    assert.ok(angAbs(centre, near) < 0.01, `n=${n}: the normal swings ${angAbs(centre, near)} degrees across the domain centre`);
+    assert.ok(angAbs(centre, near) < 0.01, `n=${n}: the normal swings ${angAbs(centre, near)} degrees across the domain center`);
   }
 });
 
@@ -729,7 +729,7 @@ test('⚠ THE WEIGHT MUST VANISH ON THE OTHER SIDES TO SECOND ORDER, not merely 
      and still has linear precision — because on the boundary the rival weights
      are zero either way. What it loses is G1: the rivals then fall only
      linearly with the distance from a side, so the patch's tangent plane there
-     is a blend of the wanted one and its neighbours'. It shows up ONLY in a
+     is a blend of the wanted one and its neighbors'. It shows up ONLY in a
      tangency measurement, and only because that measurement converges.
 
      Held here by requiring the convergence to be first-order in the offset: the
@@ -757,7 +757,7 @@ test('⚠ THE WEIGHT MUST VANISH ON THE OTHER SIDES TO SECOND ORDER, not merely 
 
 test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-sample one everts the fill', () => {
   /* The field is already smooth. Deciding its sign per sample injects a
-     discontinuity it never had, wherever the chord to the far centre swings
+     discontinuity it never had, wherever the chord to the far center swings
      past perpendicular — which an asymmetric hole does. The symptom is a fold,
      so the guard is that a hole built to have exactly that swing still passes
      the validator, and that its patch still agrees in direction with the

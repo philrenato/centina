@@ -22,7 +22,7 @@
 // A control point with no sample near it appears in no data row, so its column of
 // the normal equations is all zeros and the matrix is singular — the solve does
 // not merely fit badly, it fails. The fairness rows give every control point a
-// relationship to its neighbours, so an unconstrained one is pulled to the smooth
+// relationship to its neighbors, so an unconstrained one is pulled to the smooth
 // continuation of the ones around it instead of being undetermined. That is why
 // the default is non-zero and why zero is refused.
 //
@@ -121,7 +121,7 @@ export function fitPatch(inputs, opts = {}) {
   const uCount = Math.max(degree + 1, Math.round(opts.uCount ?? 6));
   const vCount = Math.max(degree + 1, Math.round(opts.vCount ?? 6));
   /* ⚠ THE DEFAULT IS DELIBERATELY LOW, AND IT WAS MEASURED RATHER THAN CHOSEN.
-     The fairness rows are normalised against the data rows, so `stiffness` is
+     The fairness rows are normalized against the data rows, so `stiffness` is
      roughly "how much fairness is worth relative to fidelity" — and at 0.5 that
      is already strong enough to hold a surface visibly off its own input: four
      boundary curves fitted at 0.05mm with 0.02 came back at 3.58mm with 0.5, on
@@ -142,7 +142,7 @@ export function fitPatch(inputs, opts = {}) {
   if (!plane || !plane.ok) return refuse(PATCH_REFUSAL.DEGENERATE_PLANE, 'the input has no best-fit plane to lay a patch over');
   const { origin, xAxis, yAxis, normal } = plane;
 
-  // Parameterise by the in-plane coordinates, normalised to the data's own
+  // Parameterise by the in-plane coordinates, normalized to the data's own
   // extent. The domain is the data's bounding box in that plane, so a patch is
   // never larger than what it was asked to cover.
   const su = [], sv = [];

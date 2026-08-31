@@ -7,13 +7,13 @@
 //
 // The three-sided case is Nielson's side-vertex interpolant with (b_j b_k)^2
 // weights and a cubic Hermite ray per side (`sideVertexPatch`, cornerblend.mjs).
-// THIS MODULE IS THAT SCHEME, GENERALISED, and it reduces to it identically at
+// THIS MODULE IS THAT SCHEME, GENERALIZED, and it reduces to it identically at
 // N = 3 rather than approximating it — see the reduction argument on
 // `nSidedTangentPatch`.
 //
 // ═══ WHAT WAS CHOSEN, AND AGAINST WHAT ═════════════════════════════════════
 //
-// PARAMETERISATION: a regular N-gon domain carrying GENERALISED BARYCENTRIC
+// PARAMETERISATION: a regular N-gon domain carrying GENERALIZED BARYCENTRIC
 // COORDINATES (mean value, Floater, "Mean value coordinates", CAGD 20(1),
 // 2003). A point of the patch is addressed by N coordinates lambda_0..lambda_N-1
 // that sum to one; the whole interpolant is written in them, exactly as the
@@ -21,7 +21,7 @@
 //
 // The two alternatives, and why not:
 //   · A MIDPOINT SPLIT into N quadrilateral sub-patches (the Catmull-Clark-like
-//     route) introduces an EXTRAORDINARY POINT at the centre where N quads
+//     route) introduces an EXTRAORDINARY POINT at the center where N quads
 //     meet. That point is a genuine parametric singularity: the sub-patch
 //     partials there do not agree, so the normal is a limit rather than a
 //     value, and every downstream consumer that differentiates the surface —
@@ -32,7 +32,7 @@
 //     It is the more famous construction and it does not reduce to the
 //     side-vertex scheme already in this kernel at N = 3, so adopting it would
 //     leave two unrelated schemes meeting along the same fillet chain, each
-//     with its own fold behaviour and its own tuning. Agreeing with the
+//     with its own fold behavior and its own tuning. Agreeing with the
 //     three-sided patch that already ships is worth more here than matching
 //     the literature's most-cited form.
 //
@@ -59,7 +59,7 @@
 // ⚠ THE ONE 0/0 THE CONSTRUCTION WOULD OTHERWISE HAVE IS REMOVED ALGEBRAICALLY
 // RATHER THAN GUARDED. The three-sided scheme runs a Hermite from the boundary
 // point out to the OPPOSITE VERTEX; N sides have no opposite vertex, and the
-// generalisation is the far point F_i = (sum of lambda_m V_m over m not in
+// generalization is the far point F_i = (sum of lambda_m V_m over m not in
 // {i, i+1}) / rho_i, with rho_i that same sum of coordinates. F_i is 0/0 on
 // side i itself. But F_i only ever enters multiplied by Hermite terms that
 // carry a factor of rho_i, so the division cancels before it is taken:
@@ -92,7 +92,7 @@
 //     with r — 0.27, 0.027, 0.0027 degrees at r = 1e-2, 1e-3, 1e-4. The limit
 //     exists and is unique, so the patch is G1 at the corner too.
 //   · corner-INCOMPATIBLE input (one side's cross-tangent tilted out of the
-//     neighbour's plane near that corner): the spread sits between 45 and 49
+//     neighbor's plane near that corner): the spread sits between 45 and 49
 //     degrees at every radius down to 1e-5. There is no limit; it is G0 there.
 // The patch reproduces the input's crease; it does not repair one. Which is why
 // corner compatibility is CHECKED at build time rather than discovered later.
@@ -140,7 +140,7 @@ export function regularDomain(n) {
  *  an angle at pi is infinite. Both have exact answers — the Lagrange value at
  *  a vertex, linear interpolation on an edge — and both are returned as such,
  *  because the alternative is a coordinate vector made of infinities whose
- *  normalised value happens to look plausible.
+ *  normalized value happens to look plausible.
  */
 export function meanValueCoords(vertices, x, y, tol = 1e-12) {
   const n = vertices.length;
@@ -201,7 +201,7 @@ const TANGENT_SCALE = 0.25;
  *  point inward: its magnitude and any component along the boundary change the
  *  interior shape, not the tangent plane. Omit it entirely for a G0 fill.
  *
- *  Evaluation is by generalised barycentric coordinate: `evaluate(lambda)` with
+ *  Evaluation is by generalized barycentric coordinate: `evaluate(lambda)` with
  *  an array of N non-negative numbers summing to one, or `evaluateXY(x, y)` for
  *  a point of the regular N-gon domain.
  *
@@ -293,10 +293,10 @@ export function nSidedTangentPatch(opts = {}) {
   }
 
   /* ⚠⚠ THE CROSS-TANGENT'S ORIENTATION IS DECIDED ONCE PER SIDE, BY MAJORITY,
-     NOT ONCE PER SAMPLE. The field is already smooth — it is the neighbouring
+     NOT ONCE PER SAMPLE. The field is already smooth — it is the neighboring
      surface's normal crossed with the boundary tangent, and both vary smoothly
      — so a per-sample sign test injects a discontinuity the field never had:
-     the chord to the far centre swings past perpendicular partway along an
+     the chord to the far center swings past perpendicular partway along an
      asymmetric side, the test changes its mind there, and the ray family
      reverses mid-boundary. One decision per side, polled across it.
 
@@ -330,7 +330,7 @@ export function nSidedTangentPatch(opts = {}) {
        limit normal's spread over approach directions is 0.27 degrees at r=1e-2
        and falls linearly to 0.0027 at r=1e-4 when the corner data agrees, and
        stands still between 45 and 49 degrees at EVERY radius when one side's
-       cross-tangent is tilted out of its neighbour's plane. The second case has no limit normal
+       cross-tangent is tilted out of its neighbor's plane. The second case has no limit normal
        at all, so it is refused by name at build time.
 
        A hole that genuinely has a crease running into a corner is a real thing
@@ -371,7 +371,7 @@ export function nSidedTangentPatch(opts = {}) {
          coordinate puts the Hermite outside the curve it was built from, and a
          set that does not sum to one is not a point of the domain at all.
          Float drift of a few ulps from a caller's own arithmetic is fine;
-         gross denormalisation is that caller's bug. */
+         gross denormalization is that caller's bug. */
       if (l < -1e-9) return null;
       sum += l;
     }
@@ -446,7 +446,7 @@ export function nSidedTangentPatch(opts = {}) {
      is a self-intersecting surface that no watertight check will accept, and a
      scheme with no closed-form fold criterion cannot promise otherwise. The
      sweep costs a few thousand evaluations once, which is the cost of a
-     modelling operation and not of a frame; a caller who has already judged the
+     modeling operation and not of a frame; a caller who has already judged the
      input can pass validate: false knowingly. */
   if (validate) {
     const v = nSidedPatchFolds(patch, foldOptions || {});
@@ -499,7 +499,7 @@ export function nSidedPatchFolds(patch, opts = {}) {
   const creaseLimit = opts.creaseLimitDeg ?? 75;
 
   // Inward signed distance to every domain edge; the domain is convex and
-  // centred on the origin, so a point is inside exactly when all are positive.
+  // centered on the origin, so a point is inside exactly when all are positive.
   const edge = [];
   for (let i = 0; i < n; i++) {
     const a = D[i], b = D[(i + 1) % n];
@@ -508,7 +508,7 @@ export function nSidedPatchFolds(patch, opts = {}) {
     edge.push({ a, nx: ey / L, ny: -ex / L, tx: ex / L, ty: ey / L, L });
   }
   // For a counter-clockwise polygon the inward normal of edge (a -> b) is
-  // (-(b-a).y, (b-a).x) rotated; fix the sign once against the centre.
+  // (-(b-a).y, (b-a).x) rotated; fix the sign once against the center.
   for (const e of edge) {
     const d = e.nx * (0 - e.a[0]) + e.ny * (0 - e.a[1]);
     if (d < 0) { e.nx = -e.nx; e.ny = -e.ny; }
@@ -579,7 +579,7 @@ export function nSidedPatchFolds(patch, opts = {}) {
     return { ok: false, folds: false, reversals, worstAdjacentDeg: worstDeg, samples: grid.size, reason: `only ${grid.size} of the patch could be sampled — it cannot be judged, so it is not passed` };
   }
   /* ⚠ A SIGN FLIP IS NOT THE ONLY WAY TO FAIL. A patch creased at eighty-nine
-     degrees between neighbouring samples has not technically reversed and is
+     degrees between neighboring samples has not technically reversed and is
      not a surface anyone wants. */
   const folds = reversals > 0 || worstDeg > creaseLimit;
   return {
@@ -587,7 +587,7 @@ export function nSidedPatchFolds(patch, opts = {}) {
     reason: folds
       ? (reversals > 0
         ? `the ${patch.sides}-sided patch folds over itself — ${reversals} adjacent normal reversal(s), worst turn ${worstDeg.toFixed(1)} degrees. The hole is too distorted for one patch to span.`
-        : `the ${patch.sides}-sided patch creases — neighbouring samples turn ${worstDeg.toFixed(1)} degrees, past the ${creaseLimit} degree limit, so it is not folded but it is not a smooth fill either.`)
+        : `the ${patch.sides}-sided patch creases — neighboring samples turn ${worstDeg.toFixed(1)} degrees, past the ${creaseLimit} degree limit, so it is not folded but it is not a smooth fill either.`)
       : null,
   };
 }

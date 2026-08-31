@@ -188,7 +188,7 @@ function brepSignedVolume(solid) {
 }
 
 test('a consistently INSIDE-OUT cube is turned outward, and reports that it was', () => {
-  // Every neighbour agrees with every neighbour here, so `orientLoops`
+  // Every neighbor agrees with every neighbor here, so `orientLoops`
   // has nothing to fix — this is exactly the case that used to come back
   // inside-out with a clean bill of health.
   const res = buildBrepSolid(consistentCube(3, false));
@@ -241,7 +241,7 @@ test('two DISJOINT solids are both outer — the case a largest-volume rule woul
 });
 
 test('a VOID shell is classified as one and faces INTO the cavity, whichever way it arrives', () => {
-  // A hollow cube: a 6-unit outer with a 2-unit cavity centred inside it,
+  // A hollow cube: a 6-unit outer with a 2-unit cavity centered inside it,
   // fed in with BOTH shells wound outward — so the inner one is genuinely
   // wrong on arrival and must be reversed.
   const res = buildBrepSolid([

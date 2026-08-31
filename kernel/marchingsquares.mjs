@@ -34,7 +34,7 @@
 // Edge A joins c0-c1 (bottom), B joins c1-c2 (right), C joins c2-c3 (top),
 // D joins c3-c0 (left). Each non-ambiguous case emits ONE segment between
 // two edge crossings; the two saddle cases (5, 10) emit two, disambiguated
-// by the cell-centre average (the standard resolution).
+// by the cell-center average (the standard resolution).
 const SEG_TABLE = {
   1: [['D', 'A']],
   2: [['A', 'B']],
@@ -99,7 +99,7 @@ export function marchingSquares(values, uCount, vCount, threshold, opts = {}) {
 
 // Stitch the loose per-cell segments into continuous polylines. Endpoints on
 // a shared cell edge carry identical coordinates (same edge, same interpolant
-// from the same node values), so a quantised key matches them. The seam fold
+// from the same node values), so a quantized key matches them. The seam fold
 // (index uCount ≡ 0 when wrapU) is what lets the two halves of a seam-crossing
 // contour join into ONE polyline.
 function chainSegments(segments, uCount, vCount, wrapU, wrapV) {

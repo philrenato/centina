@@ -266,7 +266,7 @@ function castRay(triangles, origin, dir, scaleLen, accel) {
       // every direction refuse, leaving no point classifiable against any
       // solid of revolution at all. Skipping is safe for the same reason the
       // exactly-zero case was already skipped: a genuine crossing of a
-      // zero-area region is measure-zero, and in a closed mesh the neighbours
+      // zero-area region is measure-zero, and in a closed mesh the neighbors
       // sharing its edges still register the real crossing.
       const maxEdge = Math.max(length(e1), length(e2), length(sub(c, b)));
       if (nLen <= DEGENERATE_TRIANGLE_AREA_RATIO * maxEdge * maxEdge) continue;
@@ -292,7 +292,7 @@ function castRay(triangles, origin, dir, scaleLen, accel) {
       const t = dot(e2, qv) * inv;
       if (t <= tEps) continue;
       // On or within baryEps of an edge or vertex: this hit is shared with the
-      // neighbouring triangle, so it would be counted twice or zero times.
+      // neighboring triangle, so it would be counted twice or zero times.
       if (u < baryEps || v < baryEps || w < baryEps) {
         return { degenerate: true, why: 'the ray grazes a shared triangle edge or vertex, where parity counting is ill-defined' };
       }

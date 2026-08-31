@@ -39,7 +39,7 @@ function axisOf(srf) {
   };
 }
 
-// A circle in the surface's own parameters, centred at `aCentre` on the wrap
+// A circle in the surface's own parameters, centered at `aCentre` on the wrap
 // axis, with every point brought back into the domain — which is what a real
 // projection returns, and what makes the chain discontinuous.
 function uvCircle(dom, aCentre, oCentre, ra, ro, n) {
@@ -138,14 +138,14 @@ test('SEAM STRADDLE: the pieces account for the whole region — closed areas su
     `pieces account for the whole region (${total} vs ${truth})`);
 });
 
-test('SEAM STRADDLE: an off-centre straddle still splits into exactly the two real pieces', () => {
+test('SEAM STRADDLE: an off-center straddle still splits into exactly the two real pieces', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;
   const ra = (dom.aMax - dom.aMin) * 0.1;
   const ro = (dom.oMax - dom.oMin) * 0.1;
   const N = 96;
-  // Centre pushed off the seam so the two pieces are genuinely unequal — an
+  // Center pushed off the seam so the two pieces are genuinely unequal — an
   // even split would pass a symmetric fixture for the wrong reason.
   const centre = dom.aMin + ra * 0.4;
 

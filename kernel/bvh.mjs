@@ -214,7 +214,7 @@ export function buildBVH(positions, opts = {}) {
 }
 
 /* THE SLAB TEST, AND THE TWO WAYS IT GOES WRONG ON AN AXIS-ALIGNED RAY.
-   A modelling app produces axis-aligned rays constantly and a random ray
+   A modeling app produces axis-aligned rays constantly and a random ray
    generator never does, so both of these hide from exactly the test most likely
    to be written first.
 

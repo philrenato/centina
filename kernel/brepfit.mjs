@@ -12,7 +12,7 @@
 // happens to be where the marcher took a sample. Only ~30 vertices are
 // genuine branch points.
 //
-// So the merge is not an optimisation, it is the difference between a B-rep
+// So the merge is not an optimization, it is the difference between a B-rep
 // and a polyline wearing one. A face boundary here is 76 straight segments
 // where the geometry is one smooth curve.
 //
@@ -463,7 +463,7 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
       // ⚠ THE WALK CAN START MID-CHAIN. `loop.halfEdge` is whichever half-edge
       // the builder happened to store, so a single chain can appear as the
       // first group AND the last one. Left alone that emits the same edge
-      // twice and neither piece joins its neighbour.
+      // twice and neither piece joins its neighbor.
       if (groups.length > 1 && groups[0].chainIndex === groups[groups.length - 1].chainIndex) {
         const tail = groups.pop();
         groups[0].halfEdges = [...tail.halfEdges, ...groups[0].halfEdges];

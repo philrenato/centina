@@ -355,7 +355,7 @@ test('subdPipeNetwork: the arity report names every junction, of every kind', ()
 // ─────────────────────────────────────────────────────────────────────────
 // THE SHALLOW-ANGLE FINDING — measured, not assumed.
 
-test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried inside a neighbouring tube', () => {
+test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried inside a neighboring tube', () => {
   // Two arms 60 degrees apart plus a third out of their way. At 60 degrees
   // two radius-5 cylinders interpenetrate out to 5/tan(30) = 8.66mm, so a
   // fixed 0.62*radius = 3.10mm pull-back leaves each rim deep inside the
@@ -384,7 +384,7 @@ test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried
       }
     }
   }
-  assert.ok(worst <= 1e-9, `no rim vertex sits inside a neighbouring tube (worst ${worst.toFixed(4)}mm)`);
+  assert.ok(worst <= 1e-9, `no rim vertex sits inside a neighboring tube (worst ${worst.toFixed(4)}mm)`);
   assertWellFormed(cage, '60-degree junction');
 });
 

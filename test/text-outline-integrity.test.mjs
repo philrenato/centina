@@ -195,7 +195,7 @@ test('A CLOSED FIT ACTUALLY CLOSES — first and last control point, not a flag'
 // because deviation is measured AT the samples and an excursion happens between
 // them:
 //   - "t" span 4->9: six points, five control points, and the last leg nine
-//     units long with nothing on it. Under chord-length parametrisation the fit
+//     units long with nothing on it. Under chord-length parametrization the fit
 //     comes back 1.57x its own polyline.
 //   - "j" span 9->12: four points, three of them a fraction of a unit apart and
 //     the fourth seventeen units away, through the interpolation last resort —

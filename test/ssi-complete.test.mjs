@@ -218,7 +218,7 @@ test('two surfaces that do not meet refuse, rather than inventing a component', 
 // the caller then wrapped it back in, silently moving the sample to a
 // different real point. Measured before the fix: exactly one sample per
 // component, always the seam-crossing one, sat ~1e-2 off BOTH surfaces while
-// every neighbour was at machine precision. Asserting the residual at the
+// every neighbor was at machine precision. Asserting the residual at the
 // stored parameters is what catches that class outright.
 function worstSampleResidual(srf1, srf2, components) {
   let worst = 0;

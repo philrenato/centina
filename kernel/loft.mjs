@@ -27,7 +27,7 @@ import { extractSubCurve } from './knots.mjs';
 
 // SURFACE REBUILD — surfaces need to
 // be rebuildable just like curves, in both directions with varying
-// degrees. resettable" — the surface analogue of SketchCurve's own
+// degrees. resettable" — the surface analog of SketchCurve's own
 // already-shipped point-count/degree Rebuild. Unlike a curve's own Rebuild
 // (which decimates/inserts among a stored working POINT SET, kernel/
 // simplify.mjs), a surface has no equivalent "list of picks" to resample —
@@ -218,7 +218,7 @@ export function networkCorrectionSurface(grid, uParams, vParams, degU = 3, degV 
 // read 0.0002 at the same place. So it was Rebuild that introduced the crease,
 // not closure itself.
 //
-// The cure is the surface analogue of closedCurveInterp, and the same one:
+// The cure is the surface analog of closedCurveInterp, and the same one:
 // sample the closed direction at DISTINCT stations (the endpoint duplicate is
 // dropped), wrap-pad by the degree at both ends so the solver sees a genuinely
 // periodic sequence, interpolate, then keep the middle. What comes back is

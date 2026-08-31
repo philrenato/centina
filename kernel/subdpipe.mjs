@@ -170,7 +170,7 @@ export function subdPipeCage(rail, opts = {}) {
 // function: kernel/subdedit.mjs's `bridgeClosedRimsHub`, which takes N
 // closed rims in exactly the shape `startRim`/`endRim` return them.
 //
-// WHAT THE NEIGHBOURING MACHINERY DOES AND DOES NOT DO, stated precisely,
+// WHAT THE NEIGHBORING MACHINERY DOES AND DOES NOT DO, stated precisely,
 // because being wrong about it is worse than not knowing. bridgeEdgeRunsHub
 // takes OPEN edge runs, and a tube rim is a CLOSED loop — but handing it a
 // rim is not caught by anything intrinsic to an open run's own

@@ -12,7 +12,7 @@
 // boundary, a hole falling entirely inside one cell, a boundary grazing
 // a grid line at a shallow angle, two loops exactly concentric). Those
 // are measure-zero configurations. A hand-built fixture essentially never
-// lands on one; a sweep across loop radius, centre offset, rotation and
+// lands on one; a sweep across loop radius, center offset, rotation and
 // grid resolution lands on them constantly, because it is generating
 // hundreds of relationships rather than choosing one.
 //
@@ -49,7 +49,7 @@ function flatPatch(W = 100, H = 100) {
   };
 }
 
-// A regular n-gon in UV, centred at (cu,cv), radius r, rotated by phi.
+// A regular n-gon in UV, centered at (cu,cv), radius r, rotated by phi.
 // Wound COUNTER-CLOCKWISE (positive signed area) — the outer-loop
 // convention trimLoopsValid enforces.
 function ngon(n, cu, cv, r, phi = 0) {
@@ -80,7 +80,7 @@ test('CORPUS BASELINE: the flat patch and the generated loops are what they clai
 });
 
 // ===================================================================
-// THE MAIN SWEEP. Radius, centre offset, rotation, vertex count and grid
+// THE MAIN SWEEP. Radius, center offset, rotation, vertex count and grid
 // resolution, all varied together — roughly 2,000 configurations, of
 // which a meaningful fraction put a loop vertex or edge into an exact
 // relationship with a grid line that no hand-built fixture would reach.

@@ -86,7 +86,7 @@ function clampInt(v, lo, hi, dflt) {
 // The (nu+1)x(nv+1) grid vertices in [0,1]^2. An interior intersection (not
 // on any of the four outer grid lines) is jittered by up to
 // irregularity * 0.45 * cellSize, so even at irregularity 1 a vertex never
-// crosses into a neighbouring cell (no inverted/self-overlapping cell). The
+// crosses into a neighboring cell (no inverted/self-overlapping cell). The
 // outer grid lines (i=0,i=nu,j=0,j=nv) are NEVER jittered, keeping both the
 // UV domain boundary and a closed direction's seam clean.
 export function gridVertices(nu, nv, irregularity, seed) {

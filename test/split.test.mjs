@@ -219,7 +219,7 @@ test('a crease is found even where it is sharp at only one end of the edge', () 
 });
 
 test('a POLE is not a crease, and the answer cannot depend on where the object was built', () => {
-  // A flat circular cap: one whole control row collapsed to the centre. The
+  // A flat circular cap: one whole control row collapsed to the center. The
   // one-sided differences there are not a direction at all — at the origin they
   // come out exactly zero, and far from it they come out as float noise at that
   // magnitude, which has a uniformly random direction. The same disc must
@@ -229,7 +229,7 @@ test('a POLE is not a crease, and the answer cannot depend on where the object w
   const ws = [1, w, 1, w, 1, w, 1, w, 1];
   const discAt = (ox, oy) => ({
     degU: 1, knotsU: [0, 0, 1, 1], degV: 2, knotsV: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
-    // U row 0 is the collapsed centre; U row 1 is the rim.
+    // U row 0 is the collapsed center; U row 1 is the rim.
     ctrlNet: [
       rim.map((_, i) => [ox, oy, 0, ws[i]]),
       rim.map((p, i) => [ox + p[0] * ws[i], oy + p[1] * ws[i], 0, ws[i]].map((c, d) => (d < 2 ? (d === 0 ? ox + p[0] : oy + p[1]) : c))),

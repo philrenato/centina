@@ -26,7 +26,7 @@
 // A FACE WITH NO INTERSECTION CURVE IS NOT SPLIT AT ALL. It lies wholly
 // inside or wholly outside the other solid, so its own trim loop IS its
 // single fragment and one classification decides it. This is not an
-// optimisation: running an empty split just to get one fragment back would
+// optimization: running an empty split just to get one fragment back would
 // route the commonest face in any real boolean through the machinery most
 // likely to refuse.
 //
@@ -476,8 +476,8 @@ function calibrationFloor(samples, srfA, srfB) {
 // HOW FAR OFF ITS OWN CHORD A POINT OF THIS CURVE CAN SIT, measured from the
 // polyline rather than assumed.
 //
-// A sample straddled by its two neighbours is a point of the TRUE curve, and
-// its distance from the chord joining those neighbours is that two-segment
+// A sample straddled by its two neighbors is a point of the TRUE curve, and
+// its distance from the chord joining those neighbors is that two-segment
 // chord's sagitta, directly observed. A chord half as long has a quarter the
 // sagitta, so one segment's own bound is about a quarter of what is measured
 // here — returning the measured two-segment figure therefore keeps a fourfold

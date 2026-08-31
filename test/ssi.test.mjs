@@ -211,7 +211,7 @@ test('a marched closed loop closes on its FIRST lap, not its second', () => {
   assert.ok(comp.closed, 'and that loop is closed');
 
   // Total turn about the EXACT circle axis. For two equal-radius spheres the
-  // intersection plane is perpendicular to the centre line, so the axis is
+  // intersection plane is perpendicular to the center line, so the axis is
   // known in closed form -- no centroid fitting, nothing derived from the
   // marched samples themselves, so this cannot agree with the code under test
   // by construction.

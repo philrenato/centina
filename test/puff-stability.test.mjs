@@ -86,7 +86,7 @@ for (const [name, poly] of SHAPES) {
 // ── REBUILD COST ─────────────────────────────────────────────────────────────
 /* Everything expensive is a property of the OUTLINE and nothing else — cleaning
    the stroke, the reach table, the width table, and per density rung a subdivided
-   rim and the growth that centres it. A caller keeping one plain object between
+   rim and the growth that centers it. A caller keeping one plain object between
    frames pays that once and a fraction of a millisecond per frame after. */
 const timeit = (fn, n) => { const t = process.hrtime.bigint(); for (let i = 0; i < n; i += 1) fn(i); return Number(process.hrtime.bigint() - t) / 1e6 / n; };
 for (const [name, poly] of [['circle', circle], ['bean', bean], ['tailed', tailed]]) {

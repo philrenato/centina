@@ -343,7 +343,7 @@ for (const n of [3, 4, 5, 6, 7]) {
     }
   });
 
-  test(`geometric contraction, n=${n}: repeated A(n) application on a REAL asymmetric neighborhood converges monotonically toward vertexLimitPosition's own value — the discrete-refinement analogue of "evaluated at a sequence of (u,v) approaching (0,0)"`, () => {
+  test(`geometric contraction, n=${n}: repeated A(n) application on a REAL asymmetric neighborhood converges monotonically toward vertexLimitPosition's own value — the discrete-refinement analog of "evaluated at a sequence of (u,v) approaching (0,0)"`, () => {
     const template = standardNeighborhoodCage(n);
     const realCage = {
       vertices: template.vertices.map((_, i) => [
@@ -384,7 +384,7 @@ for (const n of [3, 4, 5, 6, 7]) {
 
 test('n=4 (regular) run through the SAME general vertex-limit machinery agrees EXACTLY with step 1\'s own regular bicubic fast path, at their one shared point (u,v)=(0,0) — proving the two paths agree at the boundary, not just independently "look right"', () => {
   // A real 4x4 regular grid (step 1's own domain) has its own vertex-0
-  // analogue sitting at grid[1][1] (the shared corner of the center 2x2
+  // analog sitting at grid[1][1] (the shared corner of the center 2x2
   // face, per bicubicRegularPatchSurface's own documented layout) — its
   // one-ring neighborhood in the (2n+1)=9-point template's own index
   // order (center, 4 spokes = its 4 orthogonal grid neighbors, 4 corners

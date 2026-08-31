@@ -162,7 +162,7 @@ function lineExtension(frame, length, degree) {
   return { ok: true, crv: degree > 1 ? degreeElevateCurve(seg, Math.min(degree, 3)) : seg };
 }
 
-/* AN ARC ON THE OSCULATING CIRCLE. Radius 1/kappa, centre on the normal side, so
+/* AN ARC ON THE OSCULATING CIRCLE. Radius 1/kappa, center on the normal side, so
  * the extension leaves with the curve's own tangent AND its own curvature: G2 at
  * the join by construction rather than by fitting. A straight end has no
  * osculating circle — infinite radius — and is refused by name rather than

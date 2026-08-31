@@ -92,7 +92,7 @@
 // line — a straight segment, i.e. no blend at all. Degree 4 is achievable
 // only in the special case where the two triples share their middle point
 // (which for straight edges means it must be the corner vertex itself), and
-// degree 4 admits no analogue at all once a neighbor has NONZERO curvature.
+// degree 4 admits no analog at all once a neighbor has NONZERO curvature.
 // The quintic is therefore the minimal degree that works uniformly, and it is
 // what a general G2 Hermite blend has to be. A caller that genuinely needs a
 // cubic REPRESENTATION can have one as a cubic B-SPLINE with interior knots
@@ -418,7 +418,7 @@ export function peakCurvature(crv, samples = 129) {
 // about 2.7 at a near-reversal) while the resulting peak curvature barely
 // does — 1.10 to 1.18 times the arc's own 1/R for G2, 1.12 to 1.32 for G3,
 // which is the price documented in the header. The obvious "elegant" constant
-// choice — put b_k exactly ON the corner vertex, the direct analogue of the
+// choice — put b_k exactly ON the corner vertex, the direct analog of the
 // arc, whose single interior control point IS the vertex — is a TERRIBLE
 // default: clustering k+1 of the 2k+2 control points at the vertex pulls the
 // blend hard into the corner, measured at 3x (30 degree turn) to 35x (170
@@ -627,7 +627,7 @@ export function blendPolyline(points, radius, opts = {}) {
   return { ok: true, segments, closed: base.closed, cornerCount: base.cornerCount, continuity: k };
 }
 
-// Composes a blend segment list into ONE NurbsCrv, the direct analogue of
+// Composes a blend segment list into ONE NurbsCrv, the direct analog of
 // `filletSegmentsToCurve` (which does not know the 'blend' type — extending
 // it is deliberately NOT done here so this module stays a separate file; see
 // the report note about what remains to be wired into the app). Uses the same

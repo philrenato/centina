@@ -37,7 +37,7 @@ test('sampling at an open direction\'s own node fractions returns that node EXAC
 
 test('bilinear between four nodes is their exact weighted blend, not an approximation', () => {
   const f = rampField(4, 3);
-  // Dead centre of the cell spanning nodes (0,0)(1,0)(0,1)(1,1):
+  // Dead center of the cell spanning nodes (0,0)(1,0)(0,1)(1,1):
   // fractions half a cell in, i.e. 0.5/3 and 0.5/2.
   const got = sampleFieldFraction(f, 0.5 / 3, 0.5 / 2, false, false);
   const expected = (0 + 10 + 1 + 11) / 4;
@@ -66,7 +66,7 @@ test('a CLOSED direction genuinely bridges the seam: the last cell blends node N
 test('wrap is per-direction: closing U must not change what V does', () => {
   const f = rampField(4, 3);
   // j contributes exactly +1 per node in this fixture, so the difference
-  // between two samples that vary ONLY in V isolates V's own behaviour
+  // between two samples that vary ONLY in V isolates V's own behavior
   // regardless of however U happened to resolve. Differencing rather than
   // reading a value directly is what makes this a real independence
   // check: at an arbitrary fu the U blend is fractional, so any test that
@@ -226,7 +226,7 @@ test('one degenerate node reads as outside instead of poisoning the whole field'
   const f = fieldFromDistances(4, 3, (i, j) => (i === 2 && j === 1 ? NaN : i), 0, 3, null);
   assert.ok(isField(f), 'the field is still well-formed');
   assert.equal(f.values[2 * 3 + 1], 0, 'the degenerate node reads as fully outside');
-  assert.ok(f.values[2 * 3 + 0] > 0, 'its neighbour is unaffected');
+  assert.ok(f.values[2 * 3 + 0] > 0, 'its neighbor is unaffected');
 });
 
 test("an edited ramp's own endpoints are honoured OUTSIDE the band, not overridden", () => {

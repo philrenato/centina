@@ -15,7 +15,7 @@ const near = (a, b, tol = 1e-12) => assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1
 
 test('three different radii give the three patch corners in closed form', () => {
   // On an orthogonal corner the setback IS the radius (r/tan(45 degrees)), so
-  // each corner is simply the two neighbouring radii read off the shared face.
+  // each corner is simply the two neighboring radii read off the shared face.
   const r = cornerPatchCorners([0, 0, 0], orthoEdges(5, 8, 3));
   assert.equal(r.ok, true, r.reason);
   near(cornerOn(r, 'z0'), [8, 5, 0]);
@@ -33,7 +33,7 @@ test('EQUAL radii reduce to the spherical case — every corner sits on the ball
   const centre = [rad, rad, rad]; // the ball tangent to all three planes
   for (const c of r.corners) {
     const d = Math.hypot(c.point[0] - centre[0], c.point[1] - centre[1], c.point[2] - centre[2]);
-    assert.ok(Math.abs(d - rad) < 1e-12, `corner on ${c.face} is ${d} from the ball centre, want ${rad}`);
+    assert.ok(Math.abs(d - rad) < 1e-12, `corner on ${c.face} is ${d} from the ball center, want ${rad}`);
   }
 });
 
@@ -266,7 +266,7 @@ test('the handoff station is 2*sqrt(a*c), and the rolling ball is genuinely trip
 });
 
 test('EQUAL to the third as well collapses the torus onto the sphere case', () => {
-  // a = c: the centre circle has radius 2a and the ball radius a, and the
+  // a = c: the center circle has radius 2a and the ball radius a, and the
   // handoff offset becomes 2a — the construction must not disagree with the
   // spherical corner where both are valid.
   const a = 4;
@@ -276,7 +276,7 @@ test('EQUAL to the third as well collapses the torus onto the sphere case', () =
   assert.ok(Math.abs(r.handoff.offsetAlongEdge - 2 * a) < 1e-12);
 });
 
-test('⚠ A TILTED THIRD EDGE IS REFUSED — the centre traces an ellipse and no torus exists', () => {
+test('⚠ A TILTED THIRD EDGE IS REFUSED — the center traces an ellipse and no torus exists', () => {
   // This is the whole condition for exactness, and getting it wrong would ship a
   // torus that is quietly the wrong surface.
   const tilted = octant(5, 3, [0, Math.sin(0.3), Math.cos(0.3)]);
@@ -455,7 +455,7 @@ test('the patch does not FOLD across the ratios a student will actually reach', 
       }
     }
     assert.equal(flips, 0, `radii ${a},${b},${cc}: ${flips} ADJACENT normal reversals — the patch folds over itself`);
-    // A neighbouring pair swinging more than a right angle is a crease forming
+    // A neighboring pair swinging more than a right angle is a crease forming
     // even where the sign has not yet flipped.
     assert.ok(worstStep < 90, `radii ${a},${b},${cc}: adjacent normals differ by ${worstStep.toFixed(1)} degrees`);
   }
@@ -502,7 +502,7 @@ test('a fold is DETECTED rather than shipped — the validator agrees with the s
 // ── WHAT SURVIVED THE LAST REVIEW ───────────────────────────────────────────
 // Each of these closes a mutation that passed every other test in this file.
 
-test('⚠ AN EVERTED PATCH MUST FAIL — a plane test cannot see a surface folded flat against its neighbour', () => {
+test('⚠ AN EVERTED PATCH MUST FAIL — a plane test cannot see a surface folded flat against its neighbor', () => {
   /* Negating the Hermite launch sends the patch OUTWARD across each boundary
      and back, genuinely everted. Tangency measured as an angle between
      UNSIGNED normals reads 0.00 degrees for it, because the tangent plane is
@@ -535,7 +535,7 @@ test('⚠ SWAPPED FACE LABELS ARE REFUSED — a reported gap that nothing acts o
   const bad = orthoEdges(5, 8, 3);
   const fa = bad[0].faceA; bad[0].faceA = bad[0].faceB; bad[0].faceB = fa;
   const r = cornerPatchCorners([0, 0, 0], bad);
-  assert.equal(r.ok, false, 'mislabelled faces must refuse, not return a plausible corner');
+  assert.equal(r.ok, false, 'mislabeled faces must refuse, not return a plausible corner');
   assert.match(r.reason, /do not meet|disagree/);
 });
 
@@ -650,7 +650,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
 
   // ⚠ AND EVERY CROSSING IS INSIDE THE MATERIAL. This is the half that is easy
   // to get wrong from outside the module: `tA`/`tB` are measured ALONG each
-  // tangency line from its own base point, NOT from the face centre. Checking
+  // tangency line from its own base point, NOT from the face center. Checking
   // them against half-extents rather than full spans produces a confident,
   // wrong "the blends meet past the edge of the material" refusal — which is
   // what happened the first time this was measured.
@@ -674,7 +674,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
    closure classifier, the trim splice, the .3dm writer — reads a surface with a
    trim loop. `cornerPatchSurface` bridges the two by SAMPLING and
    INTERPOLATING, and what has to be proven is that the bridge does not lose the
-   boundary, because the boundary is exactly what the neighbouring blends carry.
+   boundary, because the boundary is exactly what the neighboring blends carry.
    =========================================================================== */
 {
   const { cornerPatchSurface } = await import('../kernel/cornerblend.mjs');
@@ -818,7 +818,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
   ]);
 
   /* The rolling ball's own axis, derived from the co-normals alone and never
-     from the setback: the centre rides the bisector of the wedge, and a ball of
+     from the setback: the center rides the bisector of the wedge, and a ball of
      radius r inscribed in a wedge of angle psi sits r/sin(psi/2) from the edge.
      Independent of the crossing under test, which is what lets it be a ruler
      for it. */
@@ -946,7 +946,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
   test('the INSCRIBED BALL is the ruler for the setback, convex and concave alike', () => {
     /* Solved for rather than read off the same formula: place a ball tangent to
        both faces, then require the returned point to be the foot of the
-       perpendicular from its centre — at exactly r, square to the edge and
+       perpendicular from its center — at exactly r, square to the edge and
        square to the co-normal. That is what tangency means, and it is what a
        flipped sign fails. */
     const d = [0, 0, 1], r = 5;
@@ -962,7 +962,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
       assert.ok(Math.abs(v3.dot(centre, nA) - r) < 1e-12, 'phi=' + phiDeg + ': the ball is not r from face A');
       assert.ok(Math.abs(v3.dot(centre, nB) - r) < 1e-12, 'phi=' + phiDeg + ': the ball is not r from face B');
       const arm = v3.sub(centre, L.point);
-      assert.ok(Math.abs(v3.len(arm) - r) < 1e-12, 'phi=' + phiDeg + ': the returned point is ' + v3.len(arm) + ' from the ball centre, want ' + r);
+      assert.ok(Math.abs(v3.len(arm) - r) < 1e-12, 'phi=' + phiDeg + ': the returned point is ' + v3.len(arm) + ' from the ball center, want ' + r);
       assert.ok(Math.abs(v3.dot(arm, d)) < 1e-12, 'phi=' + phiDeg + ': the contact arm is not square to the edge');
       assert.ok(Math.abs(v3.dot(arm, cA)) < 1e-12, 'phi=' + phiDeg + ': the contact arm is not square to the face');
       assert.ok(v3.dot(L.point, cA) > 0, 'phi=' + phiDeg + ': the tangency landed on the far side of the edge, off the face');
@@ -997,7 +997,7 @@ test('A DOCUMENT\'S OWN RADII close exactly — the unequal-radius corner patch 
     }
     // And they are the points the geometry says, not merely each other's: on an
     // orthogonal corner the setback is the radius, so each crossing reads off
-    // its two neighbouring radii.
+    // its two neighboring radii.
     const r = cornerPatchCorners([0, 0, 0], concaveOrthoEdges(5, 8, 3));
     near(cornerOn(r, 'z0'), [8, 5, 0]);
     near(cornerOn(r, 'y0'), [3, 0, 5]);

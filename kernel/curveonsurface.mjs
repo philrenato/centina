@@ -8,7 +8,7 @@
 // sphere" work. Between two stations either side of a seam the naive route is
 // the long way around the entire surface, because 0.95 -> 0.05 reads as a
 // journey of -0.9 rather than +0.1. Interpolating in RAW parameters therefore
-// draws a stroke that crosses the whole model to reach a point two millimetres
+// draws a stroke that crosses the whole model to reach a point two millimeters
 // away. So consecutive stations are unwrapped first — each step takes the
 // SHORTER of the two ways round a closed direction, accumulating into a
 // continuous coordinate that may run outside the domain — and only the final

@@ -13,7 +13,7 @@
 // too dark, in the specular highlights only, and stays that way. They are
 // derived from one mapping here for that reason.
 //
-// ⚠ AND AN UNNORMALISED PDF IS THE SAME KIND OF FAILURE. Estimating an integral
+// ⚠ AND AN UNNORMALIZED PDF IS THE SAME KIND OF FAILURE. Estimating an integral
 // as the mean of `L / pdf` is only correct when the pdf integrates to one over
 // its domain; a pdf off by a constant makes every render off by that constant,
 // which reads as an exposure error and gets compensated for in the
@@ -228,9 +228,9 @@ export function envPdfDir(D, dir) {
  *
  * A Monte Carlo estimate of the environment's total irradiance, `mean(L/pdf)`,
  * against the same integral summed directly over the texels. They agree only if
- * the pdf is correctly normalised AND the solid-angle conversion is right.
+ * the pdf is correctly normalized AND the solid-angle conversion is right.
  *
- * This is the single check that catches an unnormalised pdf. Left uncaught it is
+ * This is the single check that catches an unnormalized pdf. Left uncaught it is
  * not visible as an error anywhere: every render is off by one constant factor,
  * which reads as the exposure being wrong and gets compensated for in the
  * exposure — after which the renderer is permanently, invisibly mis-weighted.

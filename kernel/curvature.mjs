@@ -14,7 +14,7 @@
 // against the closed forms rather than against itself.
 //
 // The rational derivative recurrence is Piegl & Tiller's (The NURBS Book, A4.4),
-// specialised to order 2 rather than written generally — the general form needs
+// specialized to order 2 rather than written generally — the general form needs
 // binomial tables and there are only six terms.
 import { findSpan, dersBasisFuns } from './basis.mjs';
 
@@ -91,10 +91,10 @@ export function surfaceDerivs2(srf, u, v) {
 // GAUSSIAN AND MEAN CURVATURE, from the two fundamental forms.
 //
 // Sign convention, stated because it is otherwise a coin toss: the normal is
-// Su x Sv normalised, so a sphere built by revolving outward reads POSITIVE
+// Su x Sv normalized, so a sphere built by revolving outward reads POSITIVE
 // mean curvature. Gaussian curvature has no such ambiguity — it is positive on
 // a dome or a bowl alike, zero on anything developable, negative on a saddle,
-// which is exactly what makes it the honest one to colour by.
+// which is exactly what makes it the honest one to color by.
 export function surfaceCurvature(srf, u, v) {
   const d = surfaceDerivs2(srf, u, v);
   const n = cross3(d.Su, d.Sv);
@@ -102,7 +102,7 @@ export function surfaceCurvature(srf, u, v) {
   // A POLE HAS NO TANGENT PLANE. Su x Sv vanishes where the surface degenerates
   // to a point (the top of a sphere, the apex of a cone), and every quantity
   // below divides by it. Reported as null rather than as Infinity or a large
-  // number that would dominate any colour scale built from it.
+  // number that would dominate any color scale built from it.
   if (nl < 1e-12) return { ok: false, reason: 'degenerate point (pole) — no tangent plane, so no curvature', K: null, H: null, k1: null, k2: null, normal: null };
   const N = scale3(n, 1 / nl);
   const E = dot3(d.Su, d.Su), F = dot3(d.Su, d.Sv), G = dot3(d.Sv, d.Sv);
@@ -121,7 +121,7 @@ export function surfaceCurvature(srf, u, v) {
 
 // The tightest bend anywhere on the surface, and where. This is the "minimum
 // radius of curvature" check — the number that says whether a
-// shape can be cut with a given tool, or moulded at all.
+// shape can be cut with a given tool, or molded at all.
 export function minimumRadiusOfCurvature(srf, samplesU = 24, samplesV = 24) {
   const dom = (knots, deg) => [knots[deg], knots[knots.length - 1 - deg]];
   const [uMin, uMax] = dom(srf.knotsU, srf.degU);

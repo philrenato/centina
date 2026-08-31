@@ -1,4 +1,4 @@
-// MATCH EDGE — reshaping one surface's boundary to meet its neighbour, at a
+// MATCH EDGE — reshaping one surface's boundary to meet its neighbor, at a
 // stated order of continuity. The read-only sibling (the continuity overlay)
 // shows a student the crease; this is the half that closes it.
 //
@@ -28,7 +28,7 @@
 // WEIGHTS TRAVEL WITH THE POSITIONS THEY BELONG TO. G0 is a substitution, so it
 // takes the target's weight along with the target's point — keeping the base's
 // own weight there would reproduce the target's position under a different
-// rational parametrisation, which is a different curve through the same control
+// rational parametrization, which is a different curve through the same control
 // points. G1 only ever redirects, so it keeps the weight it found.
 import { surfacePointAndPartials } from './surface.mjs';
 
@@ -64,12 +64,12 @@ export function edgeRows(ctrlNet, edge) {
 //
 // This is matchEdge's G1 branch turned inside out. That one HOLDS the magnitude
 // of each column's boundary-to-second-row vector and REDIRECTS it to agree with
-// a neighbour. This one holds the DIRECTION — the surface's own — and scales the
+// a neighbor. This one holds the DIRECTION — the surface's own — and scales the
 // magnitude. So:
 //   · the boundary row is not written at all, so G0 is exact by construction and
 //     costs nothing to verify;
 //   · every column's cross-boundary direction is unchanged, so the tangent PLANE
-//     along the edge is exact too, and a surface matched to a neighbour stays
+//     along the edge is exact too, and a surface matched to a neighbor stays
 //     matched.
 // What changes is how far the second row sits from the edge, which is what
 // "fullness" means: the surface leaves the edge on the same heading and then
@@ -91,7 +91,7 @@ export function edgeRows(ctrlNet, edge) {
 // on a sphere-octant variant at factor 2: the edge does not move at all and the
 // tangent plane still tilts 1.73 degrees mid-edge, falling to exactly 0 at both
 // corners — which is to say, precisely BETWEEN the stations a control-point check
-// looks at. A surface matched to a rational neighbour is exactly this shape,
+// looks at. A surface matched to a rational neighbor is exactly this shape,
 // because the G0 blend writes the target's boundary weights over an unchanged
 // second row. So the result reports which regime it is in rather than promising
 // the stronger one everywhere.
@@ -127,7 +127,7 @@ export function endBulgeNet(ctrlNet, edge, factor) {
      surface and report success. Computed per column and reported as
      `maxSafeFactor` — the caller clamps and says why rather than discovering it in
      a shading mode. Columns whose third row lies BEHIND the second impose no
-     limit: that direction is already travelling away from the net. */
+     limit: that direction is already traveling away from the net. */
   const SAFETY = 0.98;
   const depthDir = (edge === 'u0' || edge === 'u1') ? 'u' : 'v';
   let maxSafeFactor = Infinity;
@@ -428,7 +428,7 @@ export function mergeAcrossSeam(base, baseEdge, target, targetEdge, opts = {}) {
 // ⚠ ONLY THE NORMAL COMPONENT IS CONSTRAINED, and that is not a simplification
 // — it is the difference between GEOMETRIC continuity and parametric. Forcing
 // the whole vector would additionally demand the two surfaces share a
-// parametrisation, which they have no reason to and which would drag the base's
+// parametrization, which they have no reason to and which would drag the base's
 // shape around for no visible gain. The tangential part is left where the base
 // already had it, exactly as G1 preserves the base's own row spacing.
 //
@@ -474,7 +474,7 @@ function edgeStation(srf, edge, s) {
 // NORMAL CURVATURE ACROSS THE BOUNDARY — the quantity G2 has to equalise.
 //
 // Not the raw second derivative: that depends on how fast each surface is
-// parametrised, and two patches can be perfectly curvature-continuous while
+// parametrized, and two patches can be perfectly curvature-continuous while
 // their second derivatives differ by a scale factor. The normal curvature
 // (second fundamental form over the first) is the geometric quantity, and it is
 // what a reflection line actually reads.
@@ -515,7 +515,7 @@ export function applyG2(baseSrf, baseEdge, targetSrf, targetEdge, g1Net, opts = 
   const bThird = thirdRowIndices(g1Net, baseEdge);
   const tThird = thirdRowIndices(targetSrf.ctrlNet, targetEdge);
   if (!bThird) return { ok: false, reason: 'this surface is only two control points deep across the seam, so it has no third row to solve for — rebuild it deeper to reach G2', net: null };
-  if (!tThird) return { ok: false, reason: 'the neighbour is only two control points deep across the seam, so it carries no curvature there to match', net: null };
+  if (!tThird) return { ok: false, reason: 'the neighbor is only two control points deep across the seam, so it carries no curvature there to match', net: null };
   const b = edgeRows(g1Net, baseEdge);
   const t = edgeRows(targetSrf.ctrlNet, targetEdge);
   if (b.along !== t.along) return { ok: false, reason: 'the two edges carry different control counts along the seam — harmonise them first', net: null };
@@ -524,8 +524,8 @@ export function applyG2(baseSrf, baseEdge, targetSrf, targetEdge, g1Net, opts = 
   const rev = orientation === 'reversed';
   const count = bThird.length;
   // ⚠ THE STATIONS ARE COUPLED, so one pass overshoots. Moving row k changes the
-  // curvature at its neighbours too — the along-seam basis functions overlap —
-  // so solving each station against a target its neighbours are still moving
+  // curvature at its neighbors too — the along-seam basis functions overlap —
+  // so solving each station against a target its neighbors are still moving
   // lands past it. Measured on a five-deep patch: a single pass took the base
   // from 0.0415 to -0.012 against a target of 0.0020, overshooting worst at
   // mid-span, which is exactly where the overlap is greatest.
@@ -551,7 +551,7 @@ export function applyG2(baseSrf, baseEdge, targetSrf, targetEdge, g1Net, opts = 
     const have = normalCurvatureAcross({ ...baseSrf, ctrlNet: net }, baseEdge, s, derivs2);
     if (!want || !have) continue;
     // ⚠ THE TWO NORMALS NEED NOT POINT THE SAME WAY. Each is Su x Sv in its own
-    // surface's parametrisation, and two patches that meet perfectly can still
+    // surface's parametrization, and two patches that meet perfectly can still
     // be built with opposite orientation — which flips the SIGN of the normal
     // curvature and turns a match into a doubling. Compared through the base's
     // normal, so the quantity means the same thing on both sides.
@@ -595,7 +595,7 @@ export function applyG2(baseSrf, baseEdge, targetSrf, targetEdge, g1Net, opts = 
 // reading the measure can produce, at the exact moment the match is perfect. A
 // zebra across that join is smooth while the number calls it a total break.
 //
-// So the floor is a curvature the MODEL can recognise: one over the base's own
+// So the floor is a curvature the MODEL can recognize: one over the base's own
 // size. Where both sides are genuinely curved this is the same relative measure
 // it always was; where both approach flat it degrades to an absolute difference
 // expressed in units of the surface, which is the only thing left that means
@@ -620,7 +620,7 @@ export function curvatureDeviationAcross(base, baseEdge, target, targetEdge, der
   const orientation = edgeOrientation(base.ctrlNet, baseEdge, target.ctrlNet, targetEdge);
   const kRef = 1 / netSpan(base.ctrlNet);
   let worst = 0, measured = 0;
-  for (let i = 1; i < samples - 1; i++) { // skip the corners, where a neighbouring edge's own behaviour intrudes
+  for (let i = 1; i < samples - 1; i++) { // skip the corners, where a neighboring edge's own behavior intrudes
     const s = i / (samples - 1);
     const sT = orientation === 'reversed' ? 1 - s : s;
     const cb = normalCurvatureAcross(base, baseEdge, s, derivs2);

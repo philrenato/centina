@@ -117,7 +117,7 @@ test('divideSrfGrid produces no NaN/Infinity anywhere across a full grid on the 
 
 // A full 360deg revolve of an OPEN straight profile (a cylinder) wraps in
 // V (the sweep) but not U (the profile itself never wraps) — the surface
-// analogue of divideByArcLength's own closed-curve seam case, now proven
+// analog of divideByArcLength's own closed-curve seam case, now proven
 // per-direction: the closed V direction must place exactly vCount points
 // around the full loop (never repeating the v=vMin/v=vMax seam column),
 // while the open U direction is completely unaffected (still uCount+1).

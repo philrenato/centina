@@ -7,7 +7,7 @@
 // raster -> iso-contours -> corner-split spans -> ONE closed NURBS curve per
 // contour, plus the line/word layout that places those contours in a plane.
 // It is pure: no DOM, no three.js, no font file format. The CALLER supplies
-// glyph outlines already normalised into em units, which is the one thing a
+// glyph outlines already normalized into em units, which is the one thing a
 // browser can produce and this module cannot.
 //
 // WHERE THE OUTLINES COME FROM, stated plainly because it bounds the accuracy
@@ -68,7 +68,7 @@ export function glyphCoverageToContours(coverage, width, height, opts = {}) {
     // loop by pushing the first point again before marking it closed, so every
     // contour arrives with `pts[0] === pts[n-1]`; measured across a 28-glyph
     // bank, 40 contours out of 40. Carried forward, that zero-length edge is a
-    // coincident-point hazard in every chord-length parametrisation downstream
+    // coincident-point hazard in every chord-length parametrization downstream
     // (a repeated parameter is what makes a least-squares solve singular), and
     // `polylineCurve(pts, true)` would append a third copy of the same point.
     // The contract is stated in two places already — `simplifyClosedContour`'s
@@ -316,7 +316,7 @@ export function polylineCurve(points, closed) {
 // exactly the internal corners Tier 1's corner fillet is pointed at.
 // So a contour carrying corners is split into corner-to-corner SPANS, each
 // span fitted on its own (`exactEndpoints`, so the shared vertex is
-// interpolated by both neighbours and the seam is watertight), and the spans
+// interpolated by both neighbors and the seam is watertight), and the spans
 // chained with joinCurvesC0 into one curve whose knot multiplicity AT each
 // corner is what makes the corner sharp.
 //

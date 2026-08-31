@@ -136,7 +136,7 @@ export function fitTrimLoop(srf, uv, opts = {}) {
   for (const runUV of runsUV) {
     if (runUV.length < 2) continue;
     // ⚠ EXACT ENDPOINTS, ALWAYS. A fitted run has to start and end exactly
-    // where its neighbours do, or the loop does not close and OpenNURBS
+    // where its neighbors do, or the loop does not close and OpenNURBS
     // rejects it for not joining — a gap at a shared corner is a naked edge
     // wherever it appears. The fitter fixes its end control points to the
     // first and last input point for exactly this, at the cost of a marginally

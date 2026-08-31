@@ -31,7 +31,7 @@ test('a single Gaussian bump traces exactly ONE closed, circle-ish contour at a 
   const c = contours[0];
   assert.ok(c.closed, 'the contour is a closed loop');
   const rExpect = sigma * Math.sqrt(2 * Math.log(2));
-  // Every vertex sits at ~rExpect from the centre (a real, checkable
+  // Every vertex sits at ~rExpect from the center (a real, checkable
   // geometric property — this is a circle, not just "some curve came out").
   let minR = Infinity, maxR = -Infinity;
   for (const [ci, cj] of c.pts) {
@@ -61,7 +61,7 @@ test('a linear ramp traces a single straight iso-line at the exact constant colu
 });
 
 test('SEAM WRAP: a bump straddling a closed-U seam traces ONE continuous contour with wrap, TWO without', () => {
-  // A bump centred ON the seam (column 0, which wraps to column uCount).
+  // A bump centered ON the seam (column 0, which wraps to column uCount).
   // Distance from the seam is the WRAPPED column distance min(i, uCount-i).
   const uCount = 24, vCount = 21, cy = 10, sigma = 4;
   const v = field(uCount, vCount, (i, j) => {

@@ -28,7 +28,7 @@
 //
 // HOW (a, b) AND THE CORNERS ARE CHOSEN: BY MEASUREMENT, NOT BY FORMULA. A tensor patch forces
 // opposite arcs equal, and a comma's two tips sit 33/63 edges apart around its hole loop — no
-// corner placement can centre both. An aspect-ratio formula picked b = 5 there and the columns
+// corner placement can center both. An aspect-ratio formula picked b = 5 there and the columns
 // crossed near the wrapped tip (worst dihedral 136 degrees, 5 residual folds Winslow could not
 // remove). So the builder enumerates a small candidate set of (rows, corner) placements, builds
 // each cheap patch, and scores it on the thing that actually matters — fold count, then worst 3D
@@ -45,7 +45,7 @@
 import { distanceToBoundary, pointInPolygon } from './puffoutline.mjs';
 
 /** Arc-length coordinate of each target along the spine polyline — the tips of the cap are its
- *  extremes. Projection onto segments, not nearest sample: a coarse spine must not quantise. */
+ *  extremes. Projection onto segments, not nearest sample: a coarse spine must not quantize. */
 export function sigmaAlong(targets, spinePts) {
   const n = spinePts.length;
   const cum = new Float64Array(n);
@@ -198,7 +198,7 @@ function patchWorstDihedral(gxy, zAt, am, bm, N, bnd, hole, zHole, ringIn, zIn) 
 /**
  * Build the whole puff mesh with the grid cap.
  * @param pts      prepared outline, N points, CCW — ring 0, byte-identical
- * @param targets  per-point interior target ([x,y] per boundary point; the single centre repeated
+ * @param targets  per-point interior target ([x,y] per boundary point; the single center repeated
  *                 on the star-shaped path, the smoothed spine attachment on the spined path)
  * @param sigma    per-point coordinate along the spine (null on the star path — PCA stands in)
  * @param o        { dmax, effH, prof, smoothing, bottomScale, capFrac, capBands, capRows }
@@ -284,7 +284,7 @@ export function buildGridCage(pts, targets, sigma, o) {
     d.push(row);
   }
   // ⚠ THE HOLE RING (k = M0) IS LOCKED, LIKE RING 0, AND THE PICTURE FOUND IT. The shipped S6
-  // stencil clamps its inward neighbour at the last ring, so the one-sided average drags the field
+  // stencil clamps its inward neighbor at the last ring, so the one-sided average drags the field
   // down exactly there — on a disc the hole ring sagged to 0.9938 of the sphere radius, a visible
   // circular dimple at the patch seam in the render. The hole's raw distance is exact, and the
   // patch interior samples the raw field too, so locking it removes both the sag and the seam
@@ -344,7 +344,7 @@ export function buildGridCage(pts, targets, sigma, o) {
 
   // Candidate rows: the aspect formula, the two splits that make one side match the tips' natural
   // index distance exactly, and the slit — deduplicated and clamped. Candidate corners per rows
-  // value: the best tip-centring index and a few offsets around it. Winner by (folds, dihedral).
+  // value: the best tip-centering index and a few offsets around it. Winner by (folds, dihedral).
   const tipGap = cd(imx, imn);                               // natural side lengths: tipGap, N - tipGap
   const rowCand = new Set();
   const clampRows = (x) => Math.max(1, Math.min(half - 1, x));

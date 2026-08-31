@@ -7,7 +7,7 @@
 //      measuring them proves nothing — the chord deviation is the real number.
 //   2. A stroke near a seam takes the SHORT way round. Interpolating in raw
 //      parameters sends it the long way across the whole model to reach a point
-//      millimetres away, and the control below measures exactly that.
+//      millimeters away, and the control below measures exactly that.
 //   3. Change the surface, re-evaluate the SAME stations, and the stroke
 //      follows — which is the entire point of storing (u,v) rather than 3-D.
 import test from 'node:test';

@@ -83,7 +83,7 @@ function bboxDiagonal(vertices) {
 // offending vertex, its real position, and — for the ambiguous case — its
 // candidate partners) rather than silently guessing wrong, matching this
 // project's "refuse rather than guess" standard (computeAverageNormal's
-// own cancelled-normal refusal, extrudeFaces' own degenerate-direction
+// own canceled-normal refusal, extrudeFaces' own degenerate-direction
 // refusal). `opts.tolerance` defaults to a scale-relative epsilon (the
 // cage's own bounding-box diagonal * 1e-4, floored at 1e-6) rather than a
 // fixed absolute number, so this behaves consistently whether the cage is

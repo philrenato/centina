@@ -22,7 +22,7 @@ function boxLoops(lo, hi) {
 }
 
 test('massProperties: an axis-aligned box, well away from the origin, matches its own closed form exactly', () => {
-  // Deliberately off-origin and non-cubic: an origin-centred cube would let a
+  // Deliberately off-origin and non-cubic: an origin-centered cube would let a
   // sign error, a centroid error and a missing translation term all cancel.
   const lo = [7, -13, 3], hi = [7 + 4, -13 + 6, 3 + 9];
   const w = 4, h = 6, d = 9;
@@ -134,7 +134,7 @@ test('massProperties: a sphere tessellation CONVERGES on 4/3 pi r^3 from below, 
   assert.ok(e[2] < 2e-3, `a 64-band sphere should already be within 0.2%, got ${(e[2] * 100).toFixed(4)}%`);
   // The centroid is exact at ANY resolution — it is fixed by symmetry, not by
   // how finely the surface is cut, so this checks the weighting rather than
-  // the discretisation.
+  // the discretization.
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(coarse.centroid[k]) < 1e-9);
   // A sphere's inertia is isotropic: 2/5 m r^2, approached from below with it.
   const iso = (2 / 5) * fine.volume * R * R;

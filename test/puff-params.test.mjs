@@ -3,7 +3,7 @@
 // `PUFF_PARAMS` is what a UI builds rows from, so everything a row needs has to
 // be in it and everything in it has to be true of the code. Two failures this
 // catches and nothing else does: a bound written in the declaration while the
-// code clamps to a different one, and a control that is wired up, labelled,
+// code clamps to a different one, and a control that is wired up, labeled,
 // draggable and inert.
 import { strict as assert } from 'node:assert';
 import { puffCage, puffFaceAspect, PUFF_PARAMS, puffResolveParams, puffDensityForFaces } from '../kernel/puff.mjs';

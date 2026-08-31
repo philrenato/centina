@@ -125,7 +125,7 @@ section(1, () => {
 //    Displacing the four corners of one inscribed tetrahedron by +d and the
 //    other four by -d leaves the subdivision IDENTICAL. Every rule is a
 //    weighted average; the vertex rule's own P coefficient is (n-3)/n, which is
-//    zero at valence 3, and the two colours cancel everywhere else.
+//    zero at valence 3, and the two colors cancel everywhere else.
 // --------------------------------------------------------------------------
 
 section(2, () => {
@@ -161,7 +161,7 @@ section(2, () => {
 // `cylinder` is here with `allowNgons` on deliberately: its preimage is a
 // cylinder, n-gon caps and all, and the inversion is exact on it. What the
 // default REFUSES is handing that preimage back as a simplification (section
-// 5), which is a separate judgement from whether the arithmetic inverts.
+// 5), which is a separate judgment from whether the arithmetic inverts.
 const roundTrips = [['cube', cube, true], ['box2', box2, true], ['torus', torus, true], ['plane', plane, true], ['bump', bump, true], ['twoShells', twoShells, true], ['cylinder', cylinder, false]];
 section(3, () => {
   for (const [name, coarse, quadPreimage] of roundTrips) {

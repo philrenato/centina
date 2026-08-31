@@ -218,9 +218,9 @@ test('the reported distortion TRACKS REALITY — a larger patch of the same sphe
 
 test('CONFORMALITY — LSCM preserves ANGLES better than it preserves AREAS or LENGTHS', () => {
   // This is the property that proves the implementation is LSCM and not
-  // something else: it minimises the conformal (angle) energy, so on a
+  // something else: it minimizes the conformal (angle) energy, so on a
   // genuinely curved patch the angle error must come out materially
-  // smaller than the area and length errors it never optimised.
+  // smaller than the area and length errors it never optimized.
   for (const patch of [spherePatch(35, 50, 40), spherePatch(10, 80, 140)]) {
     const d = flattenNurbsSurface(patch, { uRes: 10, vRes: 10 }).distortion;
     assert.ok(d.angle.rmsRel < 0.5 * d.area.rmsRelErr,

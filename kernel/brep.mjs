@@ -35,7 +35,7 @@
 //   - Baumgart, "A Polyhedron Representation for Computer Vision" (1975) —
 //     the original winged-edge structure this whole family descends from.
 //   - Braid, Hillyard & Stroud, "Stepwise Construction of Polyhedra in
-//     Geometric Modelling" (1978) — the original Euler operators.
+//     Geometric Modeling" (1978) — the original Euler operators.
 //   - Mäntylä, "An Introduction to Solid Modeling" (1988) — the canonical
 //     half-edge B-rep + Euler-operator reference; MVFS / MEV / MEF / KEMR /
 //     KFMRH and their inverses, and the Euler-Poincaré invariant in the
@@ -82,7 +82,7 @@
 //     and this module is the COMBINATORIAL one (cited math). The geometric
 //     layer is engineering on top of this app's own existing tolerance
 //     model (JOIN_TOLERANCE and siblings) and is not attempted here.
-//   - No non-manifold modelling. An edge with more than two half-edges is
+//   - No non-manifold modeling. An edge with more than two half-edges is
 //     REPORTED as an error by validateBrep, not supported.
 
 import { trimLoopsValid } from './trim.mjs';
@@ -584,7 +584,7 @@ function repointVertexHalfEdges(solid) {
   }
 }
 
-// NOT AN EULER OPERATOR — plain bookkeeping, labelled as such. Moves every
+// NOT AN EULER OPERATOR — plain bookkeeping, labeled as such. Moves every
 // shell of `donor` into `host`, so a solid with an internal void (or two
 // disjoint lumps) can be represented and checked. The invariant survives by
 // plain addition and nothing else:
@@ -883,7 +883,7 @@ export function faceTrimValidity(face) {
 
 // Convenience for the common planar case: derive every half-edge's pcurve
 // in a face from its endpoints via a caller-supplied 3D->UV map. Exact for
-// a face whose surface parametrisation is affine in the face's own plane
+// a face whose surface parametrization is affine in the face's own plane
 // (every planar B-rep face this app produces); NOT a general projection,
 // and deliberately not pretending to be one — a curved face's pcurve is a
 // real curve, not a two-point segment, and belongs to whichever operation

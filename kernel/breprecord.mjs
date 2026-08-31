@@ -11,7 +11,7 @@
 // the kept fragments by matching their boundaries in 3-D looks reasonable and
 // does not work: each face's boundary is split at ITS OWN corners, found in ITS
 // OWN parameters, and a corner in one face's (u,v) is not a corner in its
-// neighbour's. Measured on the banked torus pair — of 24 runs across four
+// neighbor's. Measured on the banked torus pair — of 24 runs across four
 // fragments, 6 find a partner within 1e-2 and the other 18 have nothing closer
 // than 95 units. The subdivision the two sides of an edge agree on exists only
 // in the sew.
@@ -144,9 +144,9 @@ export function solidToBrepRecord(solid, opts = {}) {
   // rather than a backwards curve.
   //
   // It happens because `fitSolidEdgeCurves` does not ask for exact endpoints,
-  // and a STRAIGHT chain is recognised by `fitLine`, which CANONICALIZES its
+  // and a STRAIGHT chain is recognized by `fitLine`, which CANONICALIZES its
   // direction (largest component positive) so that near-identical input cannot
-  // flicker between opposite directions. A chain travelling the other way
+  // flicker between opposite directions. A chain traveling the other way
   // therefore comes back as a line running backwards. Curved chains are
   // unaffected, which is exactly why a torus pair never caught this and a box
   // — every edge of it straight — fails on the first one.
@@ -273,12 +273,12 @@ export function solidToBrepRecord(solid, opts = {}) {
   // reported as OPEN, with nothing anywhere naming the missing faces.
   //
   // So an incomplete record refuses, and the caller falls back to exporting
-  // the loose trimmed faces — which is worse geometry honestly labelled,
+  // the loose trimmed faces — which is worse geometry honestly labeled,
   // rather than a solid that is quietly not one.
   // ⚠⚠ A DROPPED DEGENERATE TRIM LEAVES A HOLE THIS CODE CANNOT SEE.
   // `fitFaceLoops` removes a trim whose (u,v) run collapses to a point. When the
   // 3-D run collapses with it that is a POLE, and a cylinder cap (a revolved
-  // disc) has one at its centre. Dropping it is right for the fitter and wrong
+  // disc) has one at its center. Dropping it is right for the fitter and wrong
   // for a B-rep: ON represents a pole as a SINGULAR TRIM, a real member of the
   // loop with no 3-D length, and a loop that simply omits it does not close.
   // OpenNURBS says "brep.m_L[10] loop is not valid" and nothing upstream had
@@ -333,7 +333,7 @@ export function solidToBrepRecord(solid, opts = {}) {
   // emits a loop that is missing the stretch that cut line should have
   // contributed, and 1.33333 is that cut line's own v. So
   // this refuses by name and the caller exports loose trimmed faces — the same
-  // geometry, honestly labelled — instead of a solid with a hole in its
+  // geometry, honestly labeled — instead of a solid with a hole in its
   // topology.
   // ⚠⚠ JUDGED ON WHAT WAS ACTUALLY BUILT, not on the upstream stat. The first
   // version refused using `fitFaceLoops`'s own `loopJoinBreaks`, which is

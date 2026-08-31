@@ -643,7 +643,7 @@ test('bridgeEdgeRuns: two OPPOSITELY-WOUND runs report the twist rather than sil
   // The same two strips, but strip B wound to face strip A independently
   // instead of continuing it as one surface. No manifold-legal NEAR
   // correspondence exists, so the only legal bridge pairs each rim vertex with
-  // the FAR end of the other run — every rung crossing at the centre.
+  // the FAR end of the other run — every rung crossing at the center.
   const cage = twoFacingStripsCage();
   cage.faces = [[0, 1, 4, 3], [1, 2, 5, 4], [6, 7, 10, 9], [7, 8, 11, 10]];
   const out = bridgeEdgeRuns(cage, [3, 4, 5], [9, 10, 11], 2);
@@ -1401,7 +1401,7 @@ test('mergeFaces: merging all four quads of one box face welds them into ONE 8-v
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 2); // 24 faces, 26 vertices
   const side = facesOnSide(cage, 0, 10); // the four +X quads
   const out = mergeFaces(cage, side);
-  // The +X face's own 4 edge-midpoints are shared with the neighbouring box
+  // The +X face's own 4 edge-midpoints are shared with the neighboring box
   // faces (so they survive on the rim); only the single face-CENTER vertex is
   // interior to the merged region and gets pruned.
   assert.equal(out.ngonSize, 8, 'the outer ring of a 3x3 face grid is 8 vertices (4 corners + 4 edge-midpoints)');
@@ -1420,7 +1420,7 @@ test('mergeFaces: a crease on a SURVIVING (rim) edge is kept; a crease on a DISS
   for (const e of topo.edgeMap.values()) {
     const sel = e.faces.filter((f) => selSet.has(f)).length;
     if (sel === 2 && !internal) internal = e;
-    if (sel === 1 && e.faces.length === 2 && !rim) rim = e; // one selected + one surviving neighbour
+    if (sel === 1 && e.faces.length === 2 && !rim) rim = e; // one selected + one surviving neighbor
   }
   assert.ok(internal && rim, 'found a dissolved-internal edge and a surviving rim edge');
   const internalKey = edgeKey(internal.v0, internal.v1);

@@ -158,14 +158,14 @@ test('IT SURVIVES A REAL .3dm WRITE AND READ BACK, still a solid', () => {
 
 // ⚠⚠ A BOX PAIR IS NOT A WEAKER FIXTURE THAN THE TORI — it is the one that
 // catches a whole class the tori structurally cannot. Every edge of a box is
-// STRAIGHT, so `fitLine` recognises it and returns its CANONICALIZED direction
-// (largest component positive), which for a chain travelling the other way is
+// STRAIGHT, so `fitLine` recognizes it and returns its CANONICALIZED direction
+// (largest component positive), which for a chain traveling the other way is
 // a curve running backwards. A trim's `reversed` flag is computed against the
 // chain's traversal order, so a backwards edge curve puts every trim on it a
 // full edge-length from its own edge — and OpenNURBS reports exactly that.
 //
 // The tori cannot see it: their chains are curved, so no primitive is
-// recognised and the least-squares fit interpolates the endpoints in order. All
+// recognized and the least-squares fit interpolates the endpoints in order. All
 // three torus booleans stayed valid throughout, which is precisely why this
 // needed its own fixture rather than a harder torus.
 const quad = (p00, p10, p11, p01) => {
@@ -251,7 +251,7 @@ test('A RECORD THAT IS NOT OK REFUSES rather than building half a brep', () => {
 
 test('THE VENDORED BUILD EXPOSES NewSingularTrim, and it really authors one', () => {
   // ON represents a POLE — a surface edge that collapses to a single point, as
-  // a revolved disc's centre does — as a SINGULAR TRIM: a real loop member with
+  // a revolved disc's center does — as a SINGULAR TRIM: a real loop member with
   // (u,v) extent and no 3-D length. The released rhino3dm binds no such thing,
   // so `vendor/rhino3dm/brep_authoring.patch` adds it alongside the rest of the
   // authoring API.
@@ -309,7 +309,7 @@ test('A SOLID WHOSE LOOPS DO NOT CLOSE IS REFUSED BY NAME, not written and rejec
 // ⭐⭐⭐ A POLE-BEARING SOLID — the case that blocked a cylinder-bearing boolean
 // from ever being one closed solid.
 //
-// A cylinder cap is a revolved DISC: its whole u=0 edge collapses to the centre
+// A cylinder cap is a revolved DISC: its whole u=0 edge collapses to the center
 // point. The sew builds face boundaries from 3-D points and welds consecutive
 // duplicates — correctly — so that stretch vanishes and the face's loop arrives
 // with a hole in it. ON represents exactly that as a SINGULAR TRIM, and the

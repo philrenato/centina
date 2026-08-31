@@ -552,7 +552,7 @@ export function isRegularFace(cage, faceIdx, ctx = buildTopology(cage)) {
 // so U runs face[0]->face[1] and V runs face[0]->face[3], and the patch's
 // parametric corners (0,0)/(1,0)/(1,1)/(0,1) correspond to the face's own
 // vertices in cyclic order. Everything else is read off the surrounding
-// ring: an EDGE-neighbour face contributes the two points just outside
+// ring: an EDGE-neighbor face contributes the two points just outside
 // that edge, and the one remaining face at each corner (the diagonal one,
 // sharing only that single vertex with the center face) contributes the
 // single far corner point.
@@ -566,7 +566,7 @@ export function regularFaceStencil(cage, faceIdx, ctx = buildTopology(cage)) {
   const [a, b, c, d] = face;
   P(1, 1, a); P(2, 1, b); P(2, 2, c); P(1, 2, d);
 
-  // The neighbour across an edge, read so that each of its two off-edge
+  // The neighbor across an edge, read so that each of its two off-edge
   // vertices lands beside the corner it actually adjoins — never assumed
   // from winding, always found by walking that face's own loop.
   const acrossEdge = (p, q, slotP, slotQ) => {
@@ -574,7 +574,7 @@ export function regularFaceStencil(cage, faceIdx, ctx = buildTopology(cage)) {
     const f = cage.faces[nf];
     const kp = f.indexOf(p);
     const nextP = f[(kp + 1) % 4], prevP = f[(kp + 3) % 4];
-    const outerP = nextP === q ? prevP : nextP; // the neighbour of p in that face that ISN'T q
+    const outerP = nextP === q ? prevP : nextP; // the neighbor of p in that face that ISN'T q
     const kq = f.indexOf(q);
     const nextQ = f[(kq + 1) % 4], prevQ = f[(kq + 3) % 4];
     const outerQ = nextQ === p ? prevQ : nextQ;
@@ -589,7 +589,7 @@ export function regularFaceStencil(cage, faceIdx, ctx = buildTopology(cage)) {
 
   // The diagonal face at a corner is the one incident face that is
   // neither the center face nor either of that corner's two edge
-  // neighbours — guaranteed to exist and be unique by the valence-4,
+  // neighbors — guaranteed to exist and be unique by the valence-4,
   // 9-face-block conditions isRegularFace already enforced. Its far
   // corner is the vertex opposite the shared one, i.e. two steps around
   // that quad.
@@ -637,7 +637,7 @@ export function regularFaceToPatch(cage, faceIdx, ctx = buildTopology(cage)) {
 // WHAT THIS DELIBERATELY DOES NOT DO — and this is the honest line, not
 // a missing feature discovered later. It does NOT cap the shrinking hole
 // around an extraordinary vertex. A cap pinned only at that vertex's own
-// exact limit position meets its neighbours at a POINT, not along their
+// exact limit position meets its neighbors at a POINT, not along their
 // shared EDGES, which is precisely the gap a stitch cannot close; the
 // tractable cap has to take its boundary control rows FROM the adjacent
 // patches (they are shared exactly, by construction) and pin only the
@@ -653,7 +653,7 @@ export function regularFaceToPatch(cage, faceIdx, ctx = buildTopology(cage)) {
 // The input cage is never mutated — every level works on a fresh
 // subdivided copy, matching this module's own discipline throughout.
 //
-// CAPPING IS OPT-IN, `{ cap: true }`. Without it the behaviour above is
+// CAPPING IS OPT-IN, `{ cap: true }`. Without it the behavior above is
 // unchanged and the leftovers are reported rather than covered, which is
 // what a caller that wants to know about them relies on. With it, step 8
 // below emits one patch per leftover region and `uncovered` shrinks to
@@ -668,7 +668,7 @@ export function subdToPatches(cage, opts = {}) {
 
   // The final level's own emitted patches, by face index — the cap builder
   // reads its boundary rows straight out of these, so a cap and its
-  // neighbour carry the identical numbers rather than two computations of
+  // neighbor carry the identical numbers rather than two computations of
   // the same number.
   let emittedAtLevel = new Map();
 
@@ -752,13 +752,13 @@ export function subdToPatches(cage, opts = {}) {
 // has E at one corner and three ordinary valence-4 corners, and — MEASURED,
 // not assumed — exactly TWO of its four edges border a face that step 7
 // already emitted as an exact patch; the other two run from E out to a
-// neighbouring corner and are shared with the next face of the same ring.
+// neighboring corner and are shared with the next face of the same ring.
 // So a cap is not a lid over a hole with a free rim. It is a patch whose
 // boundary is almost entirely already decided by surfaces that are exactly
 // the limit surface, and the only real freedom is near E.
 //
 // WHY NOT PIN ONLY THE VERTEX. A cap pinned only at E's own exact limit
-// position meets its neighbours at a POINT and nowhere else — a hole with
+// position meets its neighbors at a POINT and nowhere else — a hole with
 // extra steps, and precisely the gap a B-rep stitch cannot close.
 //
 // THE CONSTRUCTION IS LOOP & SCHAEFER'S ACC (Approximating Catmull-Clark
@@ -769,7 +769,7 @@ export function subdToPatches(cage, opts = {}) {
 //   corner  b00   the vertex's own exact limit position — the Halstead/
 //                 Kass/DeRose mask, which is vertexLimitPosition above.
 //   interior b11  (n*v + 2*(ePrev + eNext) + diag) / (n + 5), where v is
-//                 the corner, ePrev/eNext its two neighbours IN THAT FACE,
+//                 the corner, ePrev/eNext its two neighbors IN THAT FACE,
 //                 diag the face's fourth vertex, and n = valence(v).
 //   edge    b10   the MIDPOINT of the two adjacent faces' own interior
 //                 points at the shared corner.
@@ -796,7 +796,7 @@ export function subdToPatches(cage, opts = {}) {
 // where it is real and named rather than approximated away.
 //
 // THE ONE REFINEMENT ON TOP OF ACC. Of the sixteen control points, thirteen
-// are pinned: the two outer rows are the neighbours' own rows copied
+// are pinned: the two outer rows are the neighbors' own rows copied
 // element for element, and the two rows immediately inside them carry the
 // cross-boundary derivative that makes that join exact. Three are touched
 // by no continuity condition at all — the two star-edge control points
@@ -812,7 +812,7 @@ export function subdToPatches(cage, opts = {}) {
 //
 // WHAT IS EXACT AND WHAT IS NOT, stated plainly:
 //   EXACT  the star corner IS vertexLimitPosition(E), bit for bit.
-//   EXACT  the two outer boundary rows are the neighbouring patches' own
+//   EXACT  the two outer boundary rows are the neighboring patches' own
 //          arrays, so the shared edge curve is literally the same curve.
 //   EXACT  the two star-edge rows are computed once per edge and read by
 //          both caps that share it, so cap meets cap bit for bit.
@@ -836,9 +836,9 @@ export function subdToPatches(cage, opts = {}) {
 // property of the emitted set, not something capping introduces: NO two
 // adjacent regular patches in this module's output are bit-identical along
 // their shared row either. So each cap is bit-identical with one of its two
-// regular neighbours along the whole shared row, and with the other on the
+// regular neighbors along the whole shared row, and with the other on the
 // two interior control points, differing only at the shared corner and only
-// by the amount those two neighbours already differ. Welding the whole
+// by the amount those two neighbors already differ. Welding the whole
 // emitted set to per-edge and per-vertex canonical values would close that
 // last gap; it is deliberately not done here, because it would perturb
 // patches that are currently exactly the limit surface in order to fix a
@@ -963,7 +963,7 @@ function dyadicLimitProbe(outerCage, outerCtx, seedFaces) {
       const mid = edgeOrdinal.get(edgeKey(v0, v1));
       return vertexLimitPosition(r2, edgeOrdinal1.get(edgeKey(v0, mid)), ctx2);
     },
-    // The limit surface at the centre of the quarter of face `faceIdx` that
+    // The limit surface at the center of the quarter of face `faceIdx` that
     // sits at corner `cornerSlot` — the face point of that child face.
     quarterCentre: (outerFace, cornerSlot) => vertexLimitPosition(r2, faceBase1 + childBase[faceMap.get(outerFace)] + cornerSlot, ctx2),
   };
@@ -995,14 +995,14 @@ export function capStarRegions(cage, ctx, live, emitted) {
     plans.push({ fi, E, a, b, c, nAB, nBC, nEA, nCE, rot });
   }
 
-  // Boundary rows first, straight out of the neighbours' own nets.
+  // Boundary rows first, straight out of the neighbors' own nets.
   for (const p of plans) {
     p.rowAB = patchBoundaryRow(emitted.get(p.nAB), cage.faces[p.nAB], p.a, p.b);
     p.rowBC = patchBoundaryRow(emitted.get(p.nBC), cage.faces[p.nBC], p.b, p.c);
   }
 
   // Corners. E is the exact limit position, shared by every cap of its ring.
-  // The rest are claimed from a neighbour's row: a and b from the a-b row,
+  // The rest are claimed from a neighbor's row: a and b from the a-b row,
   // because that pairing is the one that can make a whole row bit-identical
   // — b belongs to this cap alone, and a is claimed by no other cap (in the
   // next cap round the ring, a is the far corner c, which claims nothing).
@@ -1023,7 +1023,7 @@ export function capStarRegions(cage, ctx, live, emitted) {
   // computations of the same number. The other end, the one next to the star,
   // is ACC's too until the refinement below replaces it, so it is never
   // computed here at all — the far end is pinned by the tangency condition on
-  // the neighbouring outer edge and the near end is not.
+  // the neighboring outer edge and the near end is not.
   const starFar = new Map();
   const starEdgeFar = (E, far, f0, f1) => {
     const key = edgeKey(E, far);
@@ -1037,7 +1037,7 @@ export function capStarRegions(cage, ctx, live, emitted) {
 
   // The three unconstrained control points, pulled onto the true limit
   // surface. Only built when there is something to cap, since it costs two
-  // real refinements of a neighbourhood.
+  // real refinements of a neighborhood.
   const probe = plans.length ? dyadicLimitProbe(cage, ctx, plans.map((p) => p.fi)) : null;
   const solvedStar = new Map();
   const solveStarEdge = (E, far) => {

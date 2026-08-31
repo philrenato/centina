@@ -149,7 +149,7 @@ test('thick -> thin -> thick is the named default, symmetric and bounded by its 
   const frac = thickThinThickProfile({ ends: 4, waistFraction: 0.375 });
   assert.equal(frac.ok, true);
   assert.ok(near(frac.radiusAt(0.5), 1.5, 1e-14), `waistFraction must resolve to the same waist (${frac.radiusAt(0.5)})`);
-  // An off-centre waist stays where it was put.
+  // An off-center waist stays where it was put.
   const off = thickThinThickProfile({ ends: 4, waist: 1.5, at: 0.25 });
   assert.ok(near(off.radiusAt(0.25), 1.5, 1e-14));
   assert.ok(near(off.slopeAt(0.25), 0, 1e-14));
@@ -165,7 +165,7 @@ test('thick -> thin -> thick is the named default, symmetric and bounded by its 
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* THE CONE. A straight spine with a LINEAR radius law has an exact envelope:
-   the balls' boundary is a right circular cone. For centres on the z axis and
+   the balls' boundary is a right circular cone. For centers on the z axis and
    r = a + b*z (so b IS dr/ds), the contact point of the ball at height z sits at
    radius r*sqrt(1-b^2) from the axis and at height z - r*b, which eliminates to
 
@@ -201,7 +201,7 @@ test('a variable-radius blend on a straight spine IS the exact cone, to machine 
   assert.ok(worst < 1e-12, `every point must lie ON the cone, not near it (worst ${worst.toExponential(3)})`);
   /* TWO RULERS, ONE NUMBER. The cone equation and the signed canal measure share
      no algebra — one is a closed form in the surface's own coordinates, the
-     other a minimisation over the sphere family — so their agreement is what
+     other a minimization over the sphere family — so their agreement is what
      licenses the canal measure to be believed on the fixtures below, where no
      closed form exists. */
   assert.ok(built.deviation < 1e-12, `and the canal measure must agree it is exact (${built.deviation.toExponential(3)})`);
@@ -211,7 +211,7 @@ test('a variable-radius blend on a straight spine IS the exact cone, to machine 
 test('the section TILT is load-bearing: great-circle sections miss the same cone by 1.5e-2 and never converge', () => {
   /* A constant-radius section builder puts the arc on a GREAT circle of the
      ball. Every point of that arc is still exactly `radius` from the ball
-     centre, so a radius-only instrument reports a perfect blend — this is the
+     center, so a radius-only instrument reports a perfect blend — this is the
      error the unsigned measure cannot see, and the reason `canalDeviation` is
      signed. */
   const measure = (n) => {
@@ -257,7 +257,7 @@ test('the section TILT is load-bearing: great-circle sections miss the same cone
    inclined at 60 degrees, so the dihedral genuinely varies around the
    intersection ellipse — AND the radius varies along it. A ball of radius r
    tangent to both sits at distance (Rc - r) from the axis and r from the plane,
-   both closed form, and the centre MOVES when r changes, which is what makes
+   both closed form, and the center MOVES when r changes, which is what makes
    this a real rolling-ball spine rather than a prescribed one. */
 const Rc = 20, alpha = 60 * Math.PI / 180, S0 = -1.4, SPAN = 2.8;
 function filletBall(t, r) {
@@ -322,7 +322,7 @@ test('the fixture is a real rolling ball before anything is blamed on the code',
 
 test('a CONSTANT profile reproduces the constant-radius blend BIT FOR BIT', () => {
   /* The strongest closed form available: with dr/ds = 0 the tilt is zero, the
-     contact circle's centre is the ball centre and its radius is the ball's, so
+     contact circle's center is the ball center and its radius is the ball's, so
      every control point must come out IDENTICAL — not close, identical. A
      construction that merely converged to the constant-radius one would be a
      second implementation of the same thing, and the two would drift. */
@@ -557,7 +557,7 @@ test('the constant-radius builder still refuses a varying radius when no measure
 /* A PRESCRIBED SPINE, which is the only way the canal condition is reachable.
    For a ball genuinely rolling on fixed faces, n . m' = -r' makes |dr/ds| <= 1
    an identity — see the right-angle test below. What violates the condition is a
-   centre path that does NOT move when the radius does: a variable-radius pipe,
+   center path that does NOT move when the radius does: a variable-radius pipe,
    and equally an app that takes its spine from an offset of the edge curve and
    then applies a profile to it. */
 function pipeBall(profile) {
@@ -640,7 +640,7 @@ test('the margin and the rate cross zero at the same taper — two readings of o
 
 test('a right-angled edge cannot violate the condition however steep the taper — and that is a closed form', () => {
   /* Two planes meeting at a right angle, material in the first quadrant, edge up
-     +z. A ball of radius r sits at (r, r, z), so the centre moves in BOTH faces'
+     +z. A ball of radius r sits at (r, r, z), so the center moves in BOTH faces'
      normal directions as the radius grows and the spine outruns the radius by
      sqrt(2) even in the limit:
 
@@ -667,7 +667,7 @@ test('a right-angled edge cannot violate the condition however steep the taper �
 
 test('feasibility refuses a profile it cannot even sample, rather than throwing through its own contract', () => {
   const p = radiusProfile([[0, 1], [1, 2]]);
-  assert.match(profileFeasibility({ ballAt: () => null, profile: p }).reason, /no ball centre/);
+  assert.match(profileFeasibility({ ballAt: () => null, profile: p }).reason, /no ball center/);
   assert.match(profileFeasibility({ profile: p }).reason, /ball placement/);
   assert.match(profileFeasibility({ ballAt: pipeBall(p), profile: radiusProfile([[0, 1]]) }).reason, /not usable/);
   assert.match(variableRadiusBlend({ ballAt: pipeBall(p), profile: { ok: false, reason: 'x' }, evalSrf: surfacePoint }).reason, /not usable/);

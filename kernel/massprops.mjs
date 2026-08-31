@@ -26,7 +26,7 @@
 //     the solid sits. No centering pass, no bounding-box trick.
 //   - A fan is exact for a PLANAR loop even when it is not convex. A fan
 //     triangle that escapes the polygon is traversed the other way round by
-//     its neighbours and cancels — the 3D generalisation of the shoelace
+//     its neighbors and cancels — the 3D generalization of the shoelace
 //     formula. Convexity is not required and is not checked.
 //   - A face's inner rings need no special handling. A ring wound opposite to
 //     its outer loop subtracts, so a face with holes is measured by iterating

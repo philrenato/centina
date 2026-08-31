@@ -7,7 +7,7 @@
 // geometry through our kernel and through rhino3dm (openNURBS, McNeel) and
 // compares the numbers.
 //
-// BLACK-BOX ONLY. rhino3dm is used strictly as a behavioural oracle: same
+// BLACK-BOX ONLY. rhino3dm is used strictly as a behavioral oracle: same
 // inputs in, outputs compared. No openNURBS source is read, and none of the
 // kernel's own algorithms were derived from it. See the BEHAVIORAL ORACLE —
 // NOT A SOURCE distinction: it is an oracle, never a source of code.
@@ -61,7 +61,7 @@ const rhino = await rhino3dmFactory();
 
 // Two independent evaluations of the same polynomial should agree to roughly
 // machine precision scaled by the geometry's own magnitude. These fixtures sit
-// in the tens of millimetres, so 1e-9 leaves six orders of headroom over the
+// in the tens of millimeters, so 1e-9 leaves six orders of headroom over the
 // ~1e-15 actually observed — tight enough that a real algorithmic divergence
 // cannot hide under it.
 const TOL_POINT = 1e-9;
@@ -180,7 +180,7 @@ for (const [label, srf] of SURFACES) {
 }
 
 test('surface point matches rhino3dm AT a degenerate pole row', () => {
-  // The pole is where a collapsed control row makes the parametrisation
+  // The pole is where a collapsed control row makes the parametrization
   // singular. The point itself is still well defined and every sample along
   // the pole row must land on the SAME physical point in both kernels.
   const ns = surfaceToRhino(rhino, sphere);

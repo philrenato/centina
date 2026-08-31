@@ -12,7 +12,7 @@ import { revolve, makeArc, makeCircle, makeLine, extrude } from '../kernel/primi
 // strongly shaped profile the pole is also, genuinely, the nearest sample of a
 // coarse parameter grid — the true minimum sits inside the first cell beside it,
 // where the surface expands fastest per unit of u — so the search picks the one
-// seed that cannot move and reports a point over a millimetre away from a target
+// seed that cannot move and reports a point over a millimeter away from a target
 // that is ON the surface.
 //
 // These fixtures are the ones that produced that failure in a real boolean: two
@@ -58,10 +58,10 @@ test('closestPointOnSurface: a point on a pole-adjacent revolve is found, not mi
 });
 
 test('closestPointOnSurface: the pole itself still answers, and answers correctly', () => {
-  // Directly above the disc's centre, the closest point IS the pole. A search
+  // Directly above the disc's center, the closest point IS the pole. A search
   // that refuses to seed there must still be able to RETURN there.
   const found = closestPointOnSurface(DISC, [0, 0, 7]);
-  assert.ok(Math.abs(found.distance - 7) < 1e-6, `expected 7 above the centre, got ${found.distance}`);
+  assert.ok(Math.abs(found.distance - 7) < 1e-6, `expected 7 above the center, got ${found.distance}`);
 });
 
 test('closestPointOnSurface: matches a dense reference across pole-carrying surfaces', () => {

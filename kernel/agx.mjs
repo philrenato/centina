@@ -4,17 +4,17 @@
 // gets from one to the other by rotating into a slightly desaturated working
 // basis, compressing in log2 across a fixed exposure window, running a sigmoid
 // in that space, and rotating back. The rotation is what keeps a bright
-// saturated colour from clipping to a flat primary — the desaturation happens
+// saturated color from clipping to a flat primary — the desaturation happens
 // before the curve rather than after it.
 //
 // This is the CPU twin of the shader's `agx()`: same matrices, same window,
 // same polynomial fit (after B. Wrensch). It exists so the transform can be
 // checked without a GPU, and so anything that needs display-referred pixels in
-// JS — a thumbnail, a colour swatch, a regression fixture — gets the identical
+// JS — a thumbnail, a color swatch, a regression fixture — gets the identical
 // answer rather than a second, drifting implementation.
 //
 // ⚠⚠⚠ THE MATRICES ARE COLUMNS, AND ONE OF THEM WAS ONCE WRITTEN AS ROWS.
-// `Minv` was transposed, so `M * Minv` was not the identity: a neutral grey came
+// `Minv` was transposed, so `M * Minv` was not the identity: a neutral gray came
 // back as (1.091, 0.956, 0.953) — red up 9%, green and blue down about 4.5%.
 // That is a warm-pink cast on every pixel the renderer had ever produced, and
 // because the error is MULTIPLICATIVE, brightening a surface made it worse
@@ -44,7 +44,7 @@ export const AGX_MINV = Object.freeze([
   -0.099029744079720, -0.098961176844843, 1.151073672641161,   // column 2
 ]);
 
-/* The log2 window AgX compresses across: about 12.5 stops below middle grey to
+/* The log2 window AgX compresses across: about 12.5 stops below middle gray to
    about 4 above. These bound the sigmoid's domain, so changing either one
    changes the look of every image, not just the extremes. */
 export const AGX_MIN_EV = -12.47393;

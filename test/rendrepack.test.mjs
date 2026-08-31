@@ -307,7 +307,7 @@ function triRay(i, o, d) {
 // -------------------------------------------------------- the empty scene ----
 {
   const empty = packSceneForGPU([], { leafMax: LEAF_MAX });
-  assert.equal(empty.triangleCount, 1, 'an empty scene synthesises one degenerate triangle');
+  assert.equal(empty.triangleCount, 1, 'an empty scene synthesizes one degenerate triangle');
   assert.equal(empty.tris.length, TRI_STRIDE_FLOATS, 'the degenerate triangle is a full 3-vec4 stride');
   assert.ok(empty.nodeCount >= 1, 'the degenerate triangle still builds a root node');
   assert.equal(empty.partMats.length, 1, 'partMats is never zero-length');

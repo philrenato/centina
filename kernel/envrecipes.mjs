@@ -25,29 +25,29 @@
 //    from the wrong side. Do not "simplify" _hdriDirFromUV.
 //
 // 3. THE EXTRA `falloff` EXPONENT is the renderer's own addition;
-//    the generator has no such term. Every catalogued recipe below sets falloff:1,
+//    the generator has no such term. Every cataloged recipe below sets falloff:1,
 //    which makes it a no-op, so the two agree exactly. rtHdriDefaultStrobe
-//    (a HAND-ADDED strobe, not a catalogued one) defaults it to 1.5 instead.
+//    (a HAND-ADDED strobe, not a cataloged one) defaults it to 1.5 instead.
 //
 // 4. THE COMPOSITOR SKIPS A STROBE WITH A FALSY `enabled` (in
-//    rtHdriComposite). The catalogued table below carries NO `enabled` field at
+//    rtHdriComposite). The cataloged table below carries NO `enabled` field at
 //    all — Rendre stamps enabled:true onto each strobe when it instantiates a
 //    recipe into an edit session (rtHdriInstantiateRecipe). So the
 //    rasteriser here treats "field absent" as enabled and only an EXPLICIT false
 //    as off; feeding the raw table straight into Rendre's own compositor instead
 //    would silently render a black dome.
 //
-// 5. Rendre's table shares the colour arrays (HDRI_WARM et al) by reference across
+// 5. Rendre's table shares the color arrays (HDRI_WARM et al) by reference across
 //    every recipe, which is why its instantiator does color.slice(). Here every
-//    strobe gets its own colour array at construction, so a consumer that edits
-//    one recipe cannot discolour the others.
+//    strobe gets its own color array at construction, so a consumer that edits
+//    one recipe cannot discolor the others.
 //
 // 6. The generator's panel() has a `tilt` argument that the strobe schema has
-//    no field for. None of the 29 catalogued recipes uses it, so nothing is lost
+//    no field for. None of the 29 cataloged recipes uses it, so nothing is lost
 //    here — but a NEW recipe that wants a rolled softbox cannot be expressed.
 
 /* ---------------------------------------------------------------------------
-   Colour constants.
+   Color constants.
    --------------------------------------------------------------------------- */
 const HDRI_WARM = [1.0, 0.93, 0.82], HDRI_COOL = [0.82, 0.90, 1.0], HDRI_WHITE = [1, 1, 1];
 const HDRI_CINNABAR = [1.0, 0.22, 0.10], HDRI_SODIUM = [1.0, 0.72, 0.18];
@@ -76,7 +76,7 @@ const _hRg = (az, el, r, w, i, c) => ({
   intensity: i, color: c.slice(), edgeSoftness: 0.18, falloff: 1,
 });
 // wash — mirrors the generator's wash(). span = azimuthal half-span, elC = band
-// centre elevation, elHalf = band half-height. Default softness is 0.35 here,
+// center elevation, elHalf = band half-height. Default softness is 0.35 here,
 // NOT the 0.18 the other three use.
 const _hWs = (az, span, elC, elHalf, i, c, soft) => ({
   kind: 'wash', azimuth: az, elevation: elC, sizeU: span, sizeV: elHalf,
@@ -190,7 +190,7 @@ export function rendreEnvRecipe(slug) {
 /* ---------------------------------------------------------------------------
    Ambient bed (== the generator's base()).
    'bay'  = dark floor with a faint COOL glow BELOW the horizon (the blue tint is
-            in the multipliers 0.98 / 1.06, not in a colour constant).
+            in the multipliers 0.98 / 1.06, not in a color constant).
    'gray' = an even dome brightening toward the top.
    Note the exponents 1.4 and 2.2, and that only 'gray' scales by lvl a second
    time (lvl + lvl*2.2*s^1.4); 'bay' adds a FIXED 0.05*s^2.2 regardless of lvl.
@@ -298,10 +298,10 @@ export function rendreHdriStrobeRaster(u, v, s) {
 /* ---------------------------------------------------------------------------
    Recipe -> equirect radiance map. Mirrors rtHdriComposite,
    with the ambient bed standing in for its baseLayer, which is exactly what
-   rtHdriEditOpen builds for a catalogued studio.
+   rtHdriEditOpen builds for a cataloged studio.
 
    Output is LINEAR radiance, RGB, 3 floats per pixel, row 0 = the ZENITH.
-   Pixel centres: u=(x+0.5)/W, v=(y+0.5)/H — half-texel offsets, not (x/W).
+   Pixel centers: u=(x+0.5)/W, v=(y+0.5)/H — half-texel offsets, not (x/W).
    --------------------------------------------------------------------------- */
 export function rendreRasterEnvRecipe(recipe, W, H) {
   W = W | 0; H = H | 0;

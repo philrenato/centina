@@ -8,7 +8,7 @@
 //   2. Two non-trivial closed solids are built THROUGH THE OPERATORS ALONE
 //      (no hand-written pointer surgery anywhere in this file's fixtures):
 //      a box, and a rectangular block with a rectangular through-hole
-//      (genus 1, two rings — deliberately non-cubic and with an off-centre
+//      (genus 1, two rings — deliberately non-cubic and with an off-center
 //      hole, so a symmetry accident cannot make a wrong answer look right).
 //   3. Every operator's inverse restores the prior STRUCTURE, compared by a
 //      canonical id-free fingerprint; for the three pairs where object
@@ -183,7 +183,7 @@ test('a rectangular block built through the Euler operators alone: the invariant
 });
 
 // The non-trivial fixture: a 60 x 40 x 25 block with a 30 x 20 rectangular
-// through-hole, deliberately OFF-CENTRE (x 15..45 in a 0..60 span, y 10..30
+// through-hole, deliberately OFF-CENTER (x 15..45 in a 0..60 span, y 10..30
 // in a 0..40 span) so nothing here can pass by symmetry.
 function buildWasher(onStep) {
   const block = buildBlock(60, 40, 25, onStep);

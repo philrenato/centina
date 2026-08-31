@@ -324,7 +324,7 @@ export function curveRootFrames(crv, count, opts = {}) {
       // cross(tangent, planeNormal) is the outward side for a loop winding
       // counter-clockwise about that normal; `sign` flips it for the other
       // winding. Verified on a circle: at (r,0,0) with a CCW tangent (0,1,0)
-      // and normal +Z this returns (1,0,0), pointing away from the centre.
+      // and normal +Z this returns (1,0,0), pointing away from the center.
       const outward = cross(tangent, plane.normal);
       if (length(outward) < DEGENERATE) { skippedDegenerate++; continue; }
       normal = scale(normalize(outward), sign);

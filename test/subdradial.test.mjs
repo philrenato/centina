@@ -183,7 +183,7 @@ test('strideForCount is the other direction, and refuses a count the ring cannot
 
 test('the count<->stride round trip is NOT the identity — and that is provably harmless', () => {
   // Stride 5 on a 12-ring gives 12 members; asking for 12 members gives back
-  // stride 1, not 5. If slot labelling mattered, this would be a real bug.
+  // stride 1, not 5. If slot labeling mattered, this would be a real bug.
   assert.equal(orbitOrder(12, 5), 12);
   assert.equal(strideForCount(12, 12), 1);
   // It does not matter, because both strides select the SAME member set at

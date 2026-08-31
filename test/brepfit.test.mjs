@@ -75,7 +75,7 @@ test('EVERY FITTED CURVE HOLDS ITS BOUND, re-measured here rather than taken fro
   assert.ok(fitted.stats.worstDeviation <= TOL);
 });
 
-test('CHAIN ENDPOINTS ARE EXACT, so neighbouring edges still meet where the topology says', () => {
+test('CHAIN ENDPOINTS ARE EXACT, so neighboring edges still meet where the topology says', () => {
   // The fitter interpolates its endpoints rather than least-squaring them,
   // precisely so a shared corner cannot drift. A gap here is a naked edge in
   // anything built from these curves.
@@ -190,7 +190,7 @@ test('HALF THE TRIMS RUN AGAINST THEIR EDGE — orientation is computed, not ass
 test('THE WALK CAN START MID-CHAIN, and the wrap-around group is merged', () => {
   // `loop.halfEdge` is whichever half-edge the builder stored, so one chain can
   // appear as both the first and last group of a walk. Left alone that emits
-  // the same edge twice and neither piece joins its neighbour. It genuinely
+  // the same edge twice and neither piece joins its neighbor. It genuinely
   // happens here, so the merge is exercised rather than theoretical.
   assert.ok(faceLoops.stats.mergedWrapGroups > 0,
     `${faceLoops.stats.mergedWrapGroups} loops started mid-chain`);

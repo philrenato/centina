@@ -118,7 +118,7 @@ test('stitchEdgeRuns: refuses a closed rim however it is written — reversed, r
 });
 
 test('stitchEdgeRuns: the refused closed-rim merge is what the OLD code produced — a crushed, inconsistently wound weld', () => {
-  // Reproduces the unguarded behaviour directly, so the refusal is proven to
+  // Reproduces the unguarded behavior directly, so the refusal is proven to
   // protect against something real rather than being merely conservative.
   // This is stitchEdgeRuns' own arithmetic — pair by index (forward or
   // reversed, whichever is nearer in total), average each pair — run here

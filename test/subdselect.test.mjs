@@ -226,7 +226,7 @@ test('nearestFaceEdgeToPoint: the click position picks the direction — pressin
   assert.deepEqual(new Set(faceLoopFromSeed(cage, seedFace, rightish)), new Set([5, 6, 7, 8, 9]));
 
   // Press near the LEFT edge -> the SAME row. Opposite edges are one
-  // direction, so both presses agree, which is the behaviour that makes
+  // direction, so both presses agree, which is the behavior that makes
   // this feel predictable rather than fiddly.
   const leftish = nearestFaceEdgeToPoint(cage, seedFace, [2.05, 1.5, 0]);
   assert.deepEqual(new Set(faceLoopFromSeed(cage, seedFace, leftish)), new Set([5, 6, 7, 8, 9]));
@@ -239,9 +239,9 @@ test('nearestFaceEdgeToPoint: the click position picks the direction — pressin
   assert.notEqual(rightish, topish);
 });
 
-test('nearestFaceEdgeToPoint: a dead-centre press is a real tie, and resolves the SAME way every time rather than arbitrarily', () => {
+test('nearestFaceEdgeToPoint: a dead-center press is a real tie, and resolves the SAME way every time rather than arbitrarily', () => {
   const cage = buildGridCage(3, 3);
-  const centre = [1.5, 1.5, 0]; // exact centre of face (1,1)
+  const centre = [1.5, 1.5, 0]; // exact center of face (1,1)
   const first = nearestFaceEdgeToPoint(cage, 1 * 3 + 1, centre);
   for (let k = 0; k < 5; k++) {
     assert.equal(nearestFaceEdgeToPoint(cage, 1 * 3 + 1, centre), first, 'stable across repeated reads');

@@ -151,7 +151,7 @@ export function weldTriangulation(triangles, tolerance = null) {
   const positions = [];
   const indexOf = (p) => {
     const bx = Math.floor(p[0] / cell), by = Math.floor(p[1] / cell), bz = Math.floor(p[2] / cell);
-    // Search the 27 neighbouring cells, not just the containing one — a pair
+    // Search the 27 neighboring cells, not just the containing one — a pair
     // of genuinely coincident points can straddle a cell boundary.
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -616,7 +616,7 @@ export function flatteningDistortion(positions, faces, uv) {
 // Pick the two pinned vertices: the (approximate) diameter pair of the
 // mesh, found by two farthest-point passes. Pinning two vertices that are
 // far apart keeps the fixed sub-block well conditioned; pinning two
-// neighbours would fix the layout's scale off a single short edge and
+// neighbors would fix the layout's scale off a single short edge and
 // amplify that edge's own error across the whole result.
 function choosePins(positions, used) {
   const list = [...used];
@@ -744,9 +744,9 @@ export function flattenLSCM(mesh, opts = {}) {
 
   // A conformal map is only defined up to a global SIMILARITY, so the raw
   // solution has an arbitrary overall scale. Fix it with the single uniform
-  // factor s minimising sum over mesh edges of (s*L2d - L3d)^2, i.e.
+  // factor s minimizing sum over mesh edges of (s*L2d - L3d)^2, i.e.
   //   s = sum(L2d*L3d) / sum(L2d^2).
-  // This is the honest normalisation to measure length/area distortion
+  // This is the honest normalization to measure length/area distortion
   // against: it never hides distortion (a genuinely curved input still
   // cannot match every edge), it only removes the meaningless global scale
   // the algorithm itself does not determine.
@@ -788,7 +788,7 @@ export function flattenLSCM(mesh, opts = {}) {
   const developable = defect <= developableTol;
   const note = developable
     ? 'Input is DEVELOPABLE to within tolerance (its discrete Gaussian curvature is zero everywhere), so an essentially exact unrolling exists; the residual distortion below is numerical noise.'
-    : `Input is genuinely DOUBLY CURVED (max interior angle defect ${defect.toExponential(3)} rad). By Gauss's Theorema Egregium NO flattening of it can be distortion-free; the numbers below are the real, measured cost. LSCM minimised ANGLE distortion, not stretch — read the area and edge figures before cutting material.`;
+    : `Input is genuinely DOUBLY CURVED (max interior angle defect ${defect.toExponential(3)} rad). By Gauss's Theorema Egregium NO flattening of it can be distortion-free; the numbers below are the real, measured cost. LSCM minimized ANGLE distortion, not stretch — read the area and edge figures before cutting material.`;
 
   return {
     uv,

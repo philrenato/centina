@@ -39,7 +39,7 @@ function nakedEdgesOf(cage) {
   return [...ctx.edgeMap.values()].filter((e) => e.faces.length === 1).map((e) => edgeKey(e.v0, e.v1));
 }
 
-test('one naked edge grows exactly one face and two vertices, wound with its own neighbour', () => {
+test('one naked edge grows exactly one face and two vertices, wound with its own neighbor', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const naked = nakedEdgesOf(cage);
   assert.equal(naked.length, 4);
@@ -126,7 +126,7 @@ test('THE DEFAULT DIRECTION: a whole boundary loop with no direction given grows
   assert.equal(r.cage.faces.length, cage.faces.length + 8);
   assert.equal(r.cage.vertices.length, cage.vertices.length + 8);
   assert.equal(windingConsistent(r.cage), true);
-  // Every new vertex is further from the centre than the rim it came from,
+  // Every new vertex is further from the center than the rim it came from,
   // and still in the sheet's own plane (z unchanged) — that is what "grew
   // the sheet" means, as opposed to folding a wall up out of it.
   for (const vi of r.newVertexIndices) {

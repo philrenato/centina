@@ -23,10 +23,10 @@
 // as a disc's 0.1599 and the whole sub-voxel class does not arise. THE CRESCENT IS THE FIXTURE
 // THAT MATTERS, not the disc.
 //
-// ⚠ ONE CENTRE IN THIS WHOLE FILE, and it is `inradius.at`. The Swift version carried THREE in one
-// function — bounding-box mid-point for normalisation, centroid for the rings, and the WORLD ORIGIN
-// for the cap — so an asymmetric outline got a skewed cap. The incentre is the only point at which
-// the normalised distance reaches 1, which is the only defensible apex.
+// ⚠ ONE CENTER IN THIS WHOLE FILE, and it is `inradius.at`. The Swift version carried THREE in one
+// function — bounding-box mid-point for normalization, centroid for the rings, and the WORLD ORIGIN
+// for the cap — so an asymmetric outline got a skewed cap. The incenter is the only point at which
+// the normalized distance reaches 1, which is the only defensible apex.
 //
 // ⚠ AND NOTHING HERE IS PARAMETERISED BY ANGLE. Swift's `sampleAngle` was a nearest-angle pick with
 // no interpolation, so any non-star-shaped outline — a crescent, a C, an S — silently collapsed into
@@ -142,7 +142,7 @@ export function classifyLoops(loops) {
     'This is more than one separate shape, and a puff is one body. Draw and puff them one at a time.' };
 }
 
-// Normalise whatever the caller drew into an array of loops of [x,y] pairs.
+// Normalize whatever the caller drew into an array of loops of [x,y] pairs.
 function toLoops(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return [];
   if (typeof raw[0] === 'number') {                                  // flat [x,y,x,y,...]
@@ -176,7 +176,7 @@ function toLoops(raw) {
 // test was green while the displayed shape filled the hollow almost completely. The cage of a C
 // spills 0.00000 outside the drawn line; subdivided twice it spills 0.227, which is 81% of its own
 // inradius, and a comma spills 99.5%. A 1.3-turn spiral passed the cage test and spilled 269%.
-// Catmull-Clark pulls vertices toward neighbourhood averages, so a fan whose straight cage edges
+// Catmull-Clark pulls vertices toward neighborhood averages, so a fan whose straight cage edges
 // stay inside a concave outline bulges straight across the hollow once it is smoothed. Testing the
 // cage was testing the wrong surface.
 //
@@ -333,7 +333,7 @@ export function buildPuff(raw, opts = {}) {
   // ⚠ THE SPINE'S OWN RECORDED BLOCKER WAS MEASURED AGAINST THE WRONG PROFILE. Its header says it
   // could not ship because the cap creased: 172 degrees on a crescent, 178 on a hand-drawn loop.
   // Both numbers were taken with `family: 'tangent'`, whose profile has slope 2 at the peak — a
-  // CONE TIP — which is the same defect that turned out to be the flange and the pinched centre on
+  // CONE TIP — which is the same defect that turned out to be the flange and the pinched center on
   // every ordinary puff. The cap was blamed for the profile's crease. Re-measure before believing
   // that paragraph.
   let spineTarget = null, spineSigma = null;
@@ -380,7 +380,7 @@ export function buildPuff(raw, opts = {}) {
   // spined-only because on my CLEAN fixtures the apex path spilled nothing and the grid slightly
   // worsened the hand's silhouette. Those fixtures were the wrong input — "lines drawn into puff
   // will always be irregular, blobby" — and on an irregular stroke the apex fan is the dominant
-  // artefact: a star of creases radiating from the pole, plainly visible in a render and invisible
+  // artifact: a star of creases radiating from the pole, plainly visible in a render and invisible
   // to every dihedral scan tried. Pass `cap: 'apex'` to get the old lattice.
   // ⚠⚠⚠ 'auto' PICKS THE CAP FROM THE PROFILE FAMILY, and that is measured rather than chosen.
   // A grid patch closes a DOME well and a CONE TIP badly: with the tangent family, whose profile
@@ -429,7 +429,7 @@ export function buildPuff(raw, opts = {}) {
     const f = k / (M + 1);
     const ring = new Array(N);
     for (let i = 0; i < N; i++) {
-      // Per-point target when the shape curves back on itself, the single centre otherwise — and
+      // Per-point target when the shape curves back on itself, the single center otherwise — and
       // for a star-shaped outline `spineTarget` is null, so this is character-for-character the
       // construction that shipped. A shape that worked before cannot change.
       const tx = spineTarget ? spineTarget[i][0] : centre[0];
@@ -439,7 +439,7 @@ export function buildPuff(raw, opts = {}) {
       // ⚠ THE CONTAINMENT TEST THAT REPLACES THE PROXY. Ring 0 IS the outline, where a
       // point-in-polygon test is undefined, so it is exempt; every interior ring point must be
       // inside the shape or the lattice has landed in the hollow. Only the spine path can fail
-      // this — with a single centre, `escaping === 0` already guarantees it.
+      // this — with a single center, `escaping === 0` already guarantees it.
       if (spineTarget && k > 0 && !inside(ring[i][0], ring[i][1])) latticeEscaped++;
     }
     ringXY.push(ring);
@@ -483,8 +483,8 @@ export function buildPuff(raw, opts = {}) {
     for (let k = 0; k <= M; k++) d[k].set(next[k]);
   }
 
-  // ---- S7/S8/S9: normalise, cap, lift -----------------------------------------------------------
-  // ⚠ NORMALISED BY THE PRE-SMOOTHING dmax. Renormalising to the smoothed maximum would cancel the
+  // ---- S7/S8/S9: normalize, cap, lift -----------------------------------------------------------
+  // ⚠ NORMALIZED BY THE PRE-SMOOTHING dmax. Renormalizing to the smoothed maximum would cancel the
   // smoother's own effect and make "peak height drops with pass count" unmeasurable.
   const H = thickness * 4 * dmax;
   const effectiveH = Math.min(H, dmax * 4.0);          // the ported cap, and its ported constant
@@ -721,7 +721,7 @@ const PUFF_RADIUS_SAMPLES = 128;
        vertex at its own pole.
      · `puffiness`, `follow` and `bottomScale` change the height field and NOT
        the silhouette. The cage's (x, y) never reads any of them, and the growth
-       solve that centres the silhouette runs on a fixed reference height, so the
+       solve that centers the silhouette runs on a fixed reference height, so the
        plan view is bit-for-bit the same across the whole of their travel.
 
    ⚠⚠ EVERY LOWER BOUND HERE IS A FACE-QUALITY BOUND, AND EACH ONE IS QUOTED
@@ -906,7 +906,7 @@ function puffQuadBall(n) {
    the maximum only from the point OUTWARD is what makes a point out in the tail
    see the tail.
 
-   ⚠ AND THERE IS NO DIRECTION AT THE CENTRE. Row 0 is the shape's own largest
+   ⚠ AND THERE IS NO DIRECTION AT THE CENTER. Row 0 is the shape's own largest
    inscribed radius for every theta, so the apex height is a property of the
    shape rather than of whichever way `atan2(0, 0)` happens to point.
 
@@ -981,7 +981,7 @@ function puffWidthAt(wt, t, rho) {
    monotone has no arc-length-to-angle map at all, and forcing one would fold the
    cage — a much worse failure than the coarse approximation the fallback gives.
    The `> PI` step guard is what catches it: a monotone traverse of a simple loop
-   never turns half a revolution between two resampled neighbours. */
+   never turns half a revolution between two resampled neighbors. */
 function puffDirMap(poly, centre) {
   const m = poly.length / 2;
   const th = new Float64Array(m + 1);
@@ -1128,7 +1128,7 @@ function puffInsidePoly(poly, x, y) {
    14-21 ms.
 
    ⚠ THE RIM IS SELECTED BY HEIGHT AND THE TOLERANCE IS RELATIVE. An absolute one
-   selects nothing on a millimetre outline and everything on a flat one. */
+   selects nothing on a millimeter outline and everything on a flat one. */
 const PUFF_RIM_TOL = 1e-6;
 function puffRimRing(cage, subdivide, levels, height) {
   let c = cage;
@@ -1179,12 +1179,12 @@ const PUFF_GROW_HI = 3.0;
 const PUFF_GROW_STEPS = 28;
 
 /* ⭐⭐ WHAT A DRAG FRAME ACTUALLY COSTS, AND WHY THE CACHE IS PART OF THE DESIGN
-   RATHER THAN AN OPTIMISATION BOLTED ON.
+   RATHER THAN AN OPTIMIZATION BOLTED ON.
 
    Everything expensive here is a property of the OUTLINE, not of the
    parameters: cleaning and resampling the stroke, the radial reach table, the
    local-width table, and — per density rung — the subdivided rim ring and the
-   growth that centres it. A slider moves none of those. So a caller that keeps
+   growth that centers it. A slider moves none of those. So a caller that keeps
    one plain object between frames and passes it as `opts.cache` pays the whole
    cost once per stroke and a few tenths of a millisecond per frame after that.
 
@@ -1208,7 +1208,7 @@ function puffFingerprint(outline) {
 function puffPrepare(outline) {
   /* ⚠⚠ A REPEATED POINT IS DROPPED HERE AND NOWHERE ELSE. A pointer that reports
      the same position twice contributes a ZERO-LENGTH SEGMENT, and a zero-length
-     segment lies on top of its neighbour — which the self-intersection test reads
+     segment lies on top of its neighbor — which the self-intersection test reads
      as the outline crossing itself. So a perfectly ordinary stroke from a device
      that repeats samples was refused by name, with a message about a crossing
      that does not exist. The duplicate carries no information about the shape, so
@@ -1303,7 +1303,7 @@ function puffSolveRung(pre, n, subdivide) {
     puffWarp(pre.centre, n, 1, pre.radial, pre.wt, pre.rbar, PUFF_SOLVE_REF, pre.dirmap),
     subdivide, levels, refH);
 
-  /* The growth that centres the limit silhouette on the drawn line. Bisected
+  /* The growth that centers the limit silhouette on the drawn line. Bisected
      because the deviation is monotone in it and there is no closed form. */
   let lo = 1, hi = PUFF_GROW_HI;
   const outer = puffRimDev(ring, pre.centre, pre.poly, pre.scale, hi);

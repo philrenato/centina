@@ -151,7 +151,7 @@ function seamBandIndices(index, count, degree, closed) {
   return [...band].sort((a, b) => a - b);
 }
 
-// DIVIDESRF — the surface analogue of curve.mjs's divideByArcLength, but a
+// DIVIDESRF — the surface analog of curve.mjs's divideByArcLength, but a
 // genuinely SIMPLER operation: real Rhino's own DivideSrf places points on a
 // plain PARAMETER-SPACE grid (equal U/V domain fractions), not an
 // arc-length-even one. That's not a corner cut — a general surface patch has
@@ -332,7 +332,7 @@ export function surfaceColGroup(srf, j0, tol = 1e-6) {
 // Grevilles, so there is no duplicated cell to pair — a closed surface's
 // cell strip is simply every cell in that row. Checked rather than
 // assumed; it is why these two functions look so much simpler than their
-// neighbours directly above.
+// neighbors directly above.
 // ---------------------------------------------------------------
 
 // Cell counts for a surface, as [uCells, vCells].
@@ -372,7 +372,7 @@ export function surfaceCellStrip(srf, i0, j0, dir) {
 // parameter distances would let whichever domain happens to be numerically
 // larger win nearly every press regardless of where it actually landed.
 //
-// A dead-centre press is a real tie and resolves to 'u' every time —
+// A dead-center press is a real tie and resolves to 'u' every time —
 // stable across repeated reads, so a caller re-reading the same press
 // gets the same answer and an explicit re-read control does not appear
 // dead on its second press.
@@ -386,7 +386,7 @@ export function nearestCellDirection(fu, fv) {
 // given an arbitrary 3D point known to lie ON (or very near) the surface
 // — the real raycast hit point from a viewport click — find the (u, v)
 // parameter it corresponds to. curve.mjs's closestPointOnCurve already
-// solves the 1D analogue for Sweep1 N-profiles' own rail-stationing need
+// solves the 1D analog for Sweep1 N-profiles' own rail-stationing need
 // (coarse search, then Newton-Raphson refinement on the real derivatives)
 // — this is the same two-stage recipe generalized to 2 parameters. The
 // one real difference from the curve case: a rational SURFACE'S closest-
@@ -463,7 +463,7 @@ export function wrapParam(t, tMin, tMax, closed) {
 // than the geometry warrants: on a strongly shaped revolve the pole is
 // genuinely the nearest sample of the whole grid, because the true minimum
 // hides inside the first cell beside it, where the surface expands fastest per
-// unit of u. A target lying ON such a surface then reads over a millimetre
+// unit of u. A target lying ON such a surface then reads over a millimeter
 // away from it.
 //
 // The escape is a 1-D move, but the live direction is only half of it: WHICH
@@ -474,7 +474,7 @@ export function wrapParam(t, tMin, tMax, closed) {
 // and the search freezes exactly as before. So the dead parameter is CHOSEN,
 // not kept: step just off the degenerate point (a thousandth of the domain,
 // where the collapsed direction has opened up but the geometry is still the
-// pole's own neighbourhood) and scan the dead parameter across its whole
+// pole's own neighborhood) and scan the dead parameter across its whole
 // domain there, at the same 24 samples the seed grid caps itself at.
 //
 // A step is taken only if it genuinely improves, so a target whose nearest

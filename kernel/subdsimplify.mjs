@@ -19,7 +19,7 @@
 //     walking through opposite edges (Daniels, Silva, Shepherd & Cohen,
 //     "Quadrilateral Mesh Simplification", ACM TOG 27(5), SIGGRAPH Asia 2008).
 //     Collapsing one welds the two ends of every edge the strip crosses and
-//     deletes the strip's faces; every neighbouring quad keeps four corners by
+//     deletes the strip's faces; every neighboring quad keeps four corners by
 //     construction, so the result is still all quads.
 //
 // THE INVARIANT BOTH TIERS ARE HELD TO — checkSimplifyInvariants below, and
@@ -57,7 +57,7 @@
 //   REAL, not ill-conditioning: displacing the four corners of one inscribed
 //   tetrahedron by +d and the other four by -d leaves the subdivided cage
 //   identical to floating point, because the vertex rule's own coefficient on
-//   P is (n-3)/n, which is zero at valence 3, and the two colours cancel in
+//   P is (n-3)/n, which is zero at valence 3, and the two colors cancel in
 //   every other rule. No solver recovers a unique answer there, because there
 //   is not one; test/subdsimplify.test.mjs measures the two cages and their
 //   one subdivision. The family is reported through `unique: false`, and the
@@ -272,7 +272,7 @@ const LABEL_E = 1; // an edge point
 const LABEL_P = 2; // a face point
 
 // The structural signature of one Catmull-Clark pass, with no geometry in it:
-// all quads, manifold, and a vertex two-colouring in which one colour is the
+// all quads, manifold, and a vertex two-coloring in which one color is the
 // edge points. Reports what the un-subdivider would find without solving for
 // any positions.
 export function subdivisionSignature(cage) {
@@ -295,7 +295,7 @@ export function isSubdivisionOfSomething(cage) {
   return unsubdivideCage(cage).ok;
 }
 
-const BIPARTITE_DETAIL = 'its vertices cannot be two-coloured with every edge joining the two colours, and one subdivision pass always can be';
+const BIPARTITE_DETAIL = 'its vertices cannot be two-colored with every edge joining the two colors, and one subdivision pass always can be';
 
 function NOT_SUB(detail) {
   return `This cage is not the Catmull-Clark subdivision of a coarser cage, so there is no coarser cage to go back to: ${detail}.`;
@@ -343,8 +343,8 @@ function twoColourVertices(cage, topo) {
 
 // An edge point of a closed region has valence 4 and sits on four fine faces
 // (its two originals and its two face points); one on the boundary has
-// valence 3 and sits on two. Anything else on the candidate edge-point colour
-// rules that colour out immediately, which is what makes a puff cage — eight
+// valence 3 and sits on two. Anything else on the candidate edge-point color
+// rules that color out immediately, which is what makes a puff cage — eight
 // interior valence-3 vertices by construction — refuse in constant time.
 function edgeSideProblem(cage, topo, colour, eSide) {
   for (let v = 0; v < cage.vertices.length; v++) {
@@ -363,7 +363,7 @@ function edgeSideProblem(cage, topo, colour, eSide) {
 
 // Every fine face is [originalVertex, edgePoint, facePoint, edgePoint], so the
 // two non-edge-point corners of a face are DIAGONAL and one of them is the
-// face point. Two-colouring that diagonal relation splits the non-edge-point
+// face point. Two-coloring that diagonal relation splits the non-edge-point
 // vertices into the originals and the face points; the graph it runs on is the
 // coarse cage's own vertex/face incidence graph, so on a connected cage there
 // are exactly two ways round, and geometry has to break the tie.
@@ -384,7 +384,7 @@ function candidateLabelings(cage, topo, colour) {
       list.push(label);
     }
   }
-  if (!list.length) return { ok: false, detail: detail || 'neither colour can be its edge points' };
+  if (!list.length) return { ok: false, detail: detail || 'neither color can be its edge points' };
   return { ok: true, list };
 }
 
@@ -851,7 +851,7 @@ export function unsubdivideCage(cage, opts = {}) {
           `This cage has the shape of a subdivision but not its positions: subdividing the cage it would have come from misses this one by ${pct}% of its size. Its points have been moved since it was subdivided, or it carried a crease of weight between 0 and 1, which one subdivision pass erases without trace.`,
           { residual: nearest.residual });
       }
-      return refuse('NOT_A_SUBDIVISION', NOT_SUB(structural ? structural.detail : 'no labelling of its vertices survives'));
+      return refuse('NOT_A_SUBDIVISION', NOT_SUB(structural ? structural.detail : 'no labeling of its vertices survives'));
     }
     results.push({ ...verified[0], ambiguousLabelings: verified.length });
   }
@@ -891,7 +891,7 @@ export function unsubdivideCage(cage, opts = {}) {
 
 function faceEdgeKey(face, k) { return edgeKey(face[k], face[(k + 1) % 4]); }
 
-// Walk one way from (face, exit edge index), crossing to the neighbouring quad
+// Walk one way from (face, exit edge index), crossing to the neighboring quad
 // through the opposite edge each step.
 function walkChord(cage, edgeMap, f0, j0) {
   const faces = [];
@@ -1047,8 +1047,8 @@ function chordRefusalAndPreview(cage, chord, opts = {}) {
   return { preview, invariants: check.after };
 }
 
-// The collapse itself, with no judgement in it: weld the two ends of every
-// rung, drop the strip's faces, and let every neighbouring quad keep its four
+// The collapse itself, with no judgment in it: weld the two ends of every
+// rung, drop the strip's faces, and let every neighboring quad keep its four
 // corners because its two welded corners land on their partners.
 function applyCollapse(cage, chord) {
   const n = cage.vertices.length;
@@ -1129,7 +1129,7 @@ function smoothInteriorVertices(cage, topo) {
   return out;
 }
 
-// The puff's own technique (kernel/puff.mjs), generalised: move control points
+// The puff's own technique (kernel/puff.mjs), generalized: move control points
 // until their LIMIT positions land on a target. Each pass is a correction, not
 // a search. The best iterate is kept, so a target the cage cannot reach leaves
 // the cage no worse than the pass that got closest.

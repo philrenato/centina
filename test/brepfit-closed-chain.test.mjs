@@ -72,7 +72,7 @@ test('THE FIXTURE REACHES THE CLOSED BRANCH AT ALL — which the rest of the sui
   assert.ok(union.ok, `union refused: ${union.reason}`);
   assert.equal(closedEdges.length, 1, `exactly one fitted edge, and it is the closed intersection loop (got ${closedEdges.length} of ${fitted.edges.length})`);
   assert.equal(closedEdges[0].kind, 'nurbs',
-    'and it is a least-squares fit, not a recognised circle or ellipse — the primitive path would sidestep the branch entirely');
+    'and it is a least-squares fit, not a recognized circle or ellipse — the primitive path would sidestep the branch entirely');
 });
 
 test('A CLOSED EDGE IS NOT LONGER THAN THE CHAIN IT FITS', () => {

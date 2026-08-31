@@ -12,7 +12,7 @@ function makeNet(nu, nv) {
   return { degU: 3, degV: 3, knotsU: [], knotsV: [], ctrlNet: net };
 }
 
-// ---- existing applyPointEdits (WORLD-frame) behaviour — must stay unchanged
+// ---- existing applyPointEdits (WORLD-frame) behavior — must stay unchanged
 
 test('applyPointEdits: empty/undefined edits is a true no-op (same object)', () => {
   const srf = makeNet(4, 4);
@@ -222,7 +222,7 @@ test('resample REFINE (coarse->fine) fills the gaps AND conserves the area-weigh
   // NO OVERSHOOT/AMPLIFICATION: nothing on the fine net exceeds the coarse peak
   const peak = Math.max(...out.map((e) => Math.abs(e.delta[2])));
   assert.ok(peak <= 6 + 1e-9, `no amplification (fine peak ${peak} <= coarse 6)`);
-  // the peak IS reproduced at the coinciding centre node (frac 0.5)
+  // the peak IS reproduced at the coinciding center node (frac 0.5)
   const centre = out.find((e) => Math.abs(e.rowFrac - 0.5) < 1e-9 && Math.abs(e.colFrac - 0.5) < 1e-9);
   assert.ok(centre && Math.abs(centre.delta[2] - 6) < 1e-9, 'the true peak survives exactly at the coinciding node');
 
@@ -239,7 +239,7 @@ test('resample COARSEN (fine->coarse) NEVER lumps — each new CP is one bounded
   let maxIn = 0;
   for (let i = 3; i <= 5; i++) {
     for (let j = 3; j <= 5; j++) {
-      const amt = 4 - (Math.abs(i - 4) + Math.abs(j - 4)); // 4 at centre, 3 on the ring
+      const amt = 4 - (Math.abs(i - 4) + Math.abs(j - 4)); // 4 at center, 3 on the ring
       edits.push({ rowFrac: i / 8, colFrac: j / 8, delta: [0, 0, amt] });
       maxIn = Math.max(maxIn, amt);
     }
@@ -259,7 +259,7 @@ test('resample COARSEN (fine->coarse) NEVER lumps — each new CP is one bounded
 
 test('resample: a resampled field applied to the new net is smooth (monotone falloff, no jagged gaps)', () => {
   // resample the single central bump to a fine net, apply it, and confirm the
-  // resulting displacements decrease monotonically outward from the centre —
+  // resulting displacements decrease monotonically outward from the center —
   // the concrete "stays smooth/non-lumped" property the whole piece exists for
   const edits = [{ rowFrac: 0.5, colFrac: 0.5, delta: [0, 0, 6] }];
   const newNu = 9;
@@ -271,8 +271,8 @@ test('resample: a resampled field applied to the new net is smooth (monotone fal
     profile.push(e ? e.delta[2] : 0);
   }
   const mid = (newNu - 1) / 2;
-  // strictly rising toward the centre, strictly falling after it — no gaps/spikes
-  for (let a = 1; a <= mid; a++) assert.ok(profile[a] >= profile[a - 1] - 1e-12, `rising to centre at ${a}`);
-  for (let a = mid + 1; a < newNu; a++) assert.ok(profile[a] <= profile[a - 1] + 1e-12, `falling from centre at ${a}`);
-  assert.ok(Math.abs(profile[mid] - 6) < 1e-9, 'centre peak intact');
+  // strictly rising toward the center, strictly falling after it — no gaps/spikes
+  for (let a = 1; a <= mid; a++) assert.ok(profile[a] >= profile[a - 1] - 1e-12, `rising to center at ${a}`);
+  for (let a = mid + 1; a < newNu; a++) assert.ok(profile[a] <= profile[a - 1] + 1e-12, `falling from center at ${a}`);
+  assert.ok(Math.abs(profile[mid] - 6) < 1e-9, 'center peak intact');
 });

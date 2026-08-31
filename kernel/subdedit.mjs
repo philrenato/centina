@@ -79,13 +79,13 @@ function bridgeSpanPoint(pA, pB, mA, mB, t, straightness) {
 // the owner face's own loop" trick this module's own winding already relies
 // on, rather than a face normal or a guessed axis. A rim vertex sits on
 // exactly one naked edge pair of its own chain; its owner face gives it one
-// neighbour ALONG the rim (the partner passed in) and one INWARD, into the
+// neighbor ALONG the rim (the partner passed in) and one INWARD, into the
 // surface the rim bounds. `vertex - inward` therefore points away from that
-// surface, along the direction the surface itself is travelling as it
+// surface, along the direction the surface itself is traveling as it
 // reaches the rim — which is precisely the tangent a tangent-continuous
 // bridge has to leave on.
 //
-// Returns null for a genuinely degenerate neighbourhood (a zero-length
+// Returns null for a genuinely degenerate neighborhood (a zero-length
 // inward edge). Callers fall back to the straight chord there, so a
 // degenerate cage produces a plain straight rung rather than a NaN — an
 // honest degrade, matching this module's own posture everywhere else.
@@ -472,7 +472,7 @@ export function extrudeEdges(cage, edgeKeys, direction, distance) {
 //
 // NO T-JUNCTION, BY CONSTRUCTION. The new vertex is inserted into the loop of
 // EVERY face that used the edge, not just one — the same rule per-face
-// subdivide already follows when it widens a neighbour. Skipping the second
+// subdivide already follows when it widens a neighbor. Skipping the second
 // face would leave the new vertex used by one face only: a cage that still
 // renders, still counts right, and subdivides into a crack.
 export function insertPointOnEdge(cage, edgeKeyStr, t = 0.5) {
@@ -625,7 +625,7 @@ export function weldVertices(cage, vertexIndices, position = 'average') {
 // selection) simply stays put — an honest local no-op rather than a guess.
 //
 // t IS BOUNDED, deliberately. At |t| = 1 a sliding vertex lands exactly on
-// the neighbour it is sliding toward, producing a zero-length edge and a
+// the neighbor it is sliding toward, producing a zero-length edge and a
 // degenerate face — a cage that renders and subdivides into garbage. Refused
 // past 0.95 rather than clamped silently.
 export function slideEdges(cage, edgeKeys, t) {
@@ -707,7 +707,7 @@ export function slideEdges(cage, edgeKeys, t) {
 // surface has one in general, which is exactly why this app's own NURBS
 // offset says the same thing about itself. It produces a cage whose limit
 // surface runs roughly `distance` away from the original's, exactly as
-// every SubD modeller's own offset does. Stated here rather than implied.
+// every SubD modeler's own offset does. Stated here rather than implied.
 //
 // SELF-INTERSECTION IS NOT GUARDED. A large enough offset on a concave
 // region folds the cage through itself. The NURBS side has a real
@@ -852,7 +852,7 @@ export function thickenCage(cage, distance) {
 // entire chain refined is a global edit answering a local ask. `local` is a
 // pure SCOPE restriction of the walk above — identical `t`, identical `side`,
 // identical near/far orientation reasoning, identical crease rules — it
-// simply never enqueues the neighbours across its own rungs. That is why it
+// simply never enqueues the neighbors across its own rungs. That is why it
 // is an option on this function rather than a separate one: a sibling copy
 // would have to restate the whole orientation derivation and would drift
 // from it. `recomputeInsertedLoopPositions` keeps working on the result for
@@ -883,7 +883,7 @@ export function thickenCage(cage, distance) {
 // LOCAL'S OWN SCOPE LIMIT: the SEED face must still be a quad, because "the
 // opposite edge" is only well defined for a quad. A face already carrying a
 // T-junction vertex (an n-gon, n>=5) therefore cannot itself seed the next
-// insert — but it can be, and is, correctly WIDENED AGAIN as the neighbour of
+// insert — but it can be, and is, correctly WIDENED AGAIN as the neighbor of
 // one, which is the case that actually recurs when refining locally.
 export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   const local = !!(opts && opts.local);
@@ -939,7 +939,7 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
 
     faceInfos.set(faceIdx, { na, nb, farNa, farNb });
 
-    if (local) continue; // LOCAL: the cut stops at this face's own rungs, so no neighbour is ever enqueued
+    if (local) continue; // LOCAL: the cut stops at this face's own rungs, so no neighbor is ever enqueued
 
     for (const [nearV, farV] of [[na, farNa], [nb, farNb]]) {
       const rKey = edgeKey(nearV, farV);
@@ -995,7 +995,7 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   // T-JUNCTION REPAIR — every rung this insert split is, in general, shared
   // with a face that is NOT itself being split, and that face's own boundary
   // still walks the rung as a single side. Left alone it would omit a vertex
-  // its neighbour has, which is not a T-junction but a crack: the two faces
+  // its neighbor has, which is not a T-junction but a crack: the two faces
   // would agree on the endpoints and disagree about everything between them,
   // and subdivideCatmullClark would refine the mismatch rather than close it.
   // So the new vertex is spliced into that face's loop, in traversal order,
@@ -1060,7 +1060,7 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     rungPairs,
     // Output-array indices, so a caller can highlight what it just made
     // without re-deriving it: the two halves of every split face, and the
-    // untouched-but-widened neighbours that now carry a T-junction vertex
+    // untouched-but-widened neighbors that now carry a T-junction vertex
     // (always empty for a whole-loop insert, which leaves none).
     splitFaceIndices: replacementFaces.map((_, i) => keptFaces.length + i),
     tJunctionFaceIndices,
@@ -1401,7 +1401,7 @@ export function bridgeBoundaryLoops(cage, seedKeyA, seedKeyB, segments = 1, stra
 // THE TRIANGLES ARE THE HONEST COST, stated rather than hidden: each one
 // becomes a valence-3 extraordinary vertex under Catmull-Clark, so the limit
 // surface is slightly less even there than an all-quad bridge between
-// matched rims. That is a real difference a modeller can see if they look
+// matched rims. That is a real difference a modeler can see if they look
 // for it, and it is strictly better than the alternative of refusing, or of
 // silently editing one of the two objects the student built.
 //
@@ -1483,7 +1483,7 @@ function bridgeRunBandFaces(rowNear, rowFar, flip) {
   // A stalled step repeats a vertex, and the face it produces is that same
   // quad with the repeat dropped — so a triangle here is the quad
   // degenerating, not a separately-derived orientation that could disagree
-  // with its neighbours' winding.
+  // with its neighbors' winding.
   const push = (a, b, f0, f1) => {
     if (a === b) out.push(flip ? [a, f0, f1] : [a, f1, f0]);
     else if (f0 === f1) out.push(flip ? [b, a, f0] : [a, b, f0]);
@@ -2163,8 +2163,8 @@ export function mergeFaces(cage, faceIndices) {
 //
 // THE PROBLEM THIS HAS TO SOLVE, and the reason it was deferred once
 // already: refining one face puts a new vertex at the MIDDLE of an edge
-// that an unrefined neighbour still describes as a single side. That is
-// a T-JUNCTION — the neighbour's own face loop never mentions the new
+// that an unrefined neighbor still describes as a single side. That is
+// a T-JUNCTION — the neighbor's own face loop never mentions the new
 // vertex, so the two faces disagree about where their shared boundary
 // is, and subdivideCatmullClark/Reflect/Bridge all inherit a cage that is
 // no longer manifold. A crack that renders fine and corrupts quietly.
@@ -2172,8 +2172,8 @@ export function mergeFaces(cage, faceIndices) {
 // THE FIX, and why it needs no new machinery: this kernel's Catmull-Clark
 // accepts ANY face size — that property is already load-bearing elsewhere
 // (superbCylinderCage's own n-gon caps rely on it), not a new assumption
-// taken on for this. So the neighbour does not need splitting into quads.
-// INSERT the new midpoint into the NEIGHBOUR'S OWN VERTEX LOOP: a quad
+// taken on for this. So the neighbor does not need splitting into quads.
+// INSERT the new midpoint into the NEIGHBOR'S OWN VERTEX LOOP: a quad
 // bordering one refined face becomes a 5-gon, one bordering two becomes a
 // 6-gon, and the T-junction is gone BY CONSTRUCTION rather than by
 // tolerance. Every edge still has exactly two faces that agree on it.
@@ -2241,7 +2241,7 @@ export function subdivideFaces(cage, faceIndices) {
     }
     // An UNSELECTED face keeps its own shape and gains only the midpoints
     // that now genuinely exist on its own sides — this is the whole
-    // T-junction fix, and it is why a neighbour can legally come out a
+    // T-junction fix, and it is why a neighbor can legally come out a
     // 5-gon or a 6-gon.
     const loop = [];
     let widened = false;
@@ -2323,7 +2323,7 @@ export function subdivideFaces(cage, faceIndices) {
 // WHAT IS DECIDED RATHER THAN DERIVED, and how:
 //  - CYCLIC ORDER. The runs arrive as an unordered set; a hub needs to know
 //    which run sits next to which. Taken from each run's own angle about the
-//    hub centre, measured in the junction's own best-fit plane.
+//    hub center, measured in the junction's own best-fit plane.
 //  - RUN DIRECTION. Each run is traversed so that walking the ring is
 //    consistent: a run's far end is whichever of its two endpoints lies
 //    nearer the NEXT run around the ring.
@@ -2336,7 +2336,7 @@ export function subdivideFaces(cage, faceIndices) {
 // Straightness applies at the RIM only, and honestly so: a rung leaves each
 // run along that run's own outgoing surface direction, and arrives at the
 // hub flat, because there is no surface at the hub to be tangent to yet.
-const HUB_INSET = 0.62; // how far in from its own run each inner ring sits, as a fraction of the way to the hub centre
+const HUB_INSET = 0.62; // how far in from its own run each inner ring sits, as a fraction of the way to the hub center
 function norm3(a) { const L = length(a); return L > 1e-12 ? scale(a, 1 / L) : [0, 0, 0]; }
 
 // THE JUNCTION PLANE AND THE CYCLIC ORDER AROUND IT — shared by both hub
@@ -2376,9 +2376,9 @@ function junctionPlaneOrder(mids, centre, who, noun) {
     if (cl > nrmLen) { nrm = c; nrmLen = cl; }
   }
   nrm = norm3(nrm);
-  if (!length(nrm)) throw new Error(`${who}: the ${noun}s are collinear about their own centre, so there is no junction plane to order them around — move one ${noun} off the line the others share`);
+  if (!length(nrm)) throw new Error(`${who}: the ${noun}s are collinear about their own center, so there is no junction plane to order them around — move one ${noun} off the line the others share`);
   // An in-plane reference direction: the first arm's own offset from the
-  // centre, with any out-of-plane part removed. WHICH arm is first only
+  // center, with any out-of-plane part removed. WHICH arm is first only
   // rotates every measured angle by a constant, so the cyclic sequence the
   // sort produces is the same one cut at a different place — a rotation of the
   // ring, which changes nothing about the junction it describes.
@@ -2407,7 +2407,7 @@ export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, cr
   const topology = buildTopology(cage);
   runs.forEach((run, i) => checkOpenRunChain(cage, topology, run, `run ${i}`, 'bridgeEdgeRunsHub'));
 
-  // The hub's own centre and plane — see junctionPlaneOrder below, which both
+  // The hub's own center and plane — see junctionPlaneOrder below, which both
   // hub constructions share so the two cannot drift apart.
   const mids = runs.map((run) => scale(run.reduce((acc, vi) => add(acc, cage.vertices[vi]), [0, 0, 0]), 1 / run.length));
   const centre = scale(mids.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / mids.length);
@@ -2571,7 +2571,7 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
 //     junction plane and an arc on the -normal side.
 //   - Every +side arc, closed through the top pole, is one face; every -side
 //     arc through the bottom pole is another. That is 2N faces.
-//   - Between neighbouring arms, one triangle per pole closes the gap: the
+//   - Between neighboring arms, one triangle per pole closes the gap: the
 //     "crotch" edge joining two adjacent rims is shared by exactly those two
 //     triangles. That is 2N more.
 //
@@ -2604,7 +2604,7 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
 //    broken toward the most BALANCED split — which on that same fixture is
 //    also the geometrically right one, the two vertices nearest the equator.
 //
-//  - WHICH NEIGHBOUR EACH ARM CONNECTS TO is derived and then VERIFIED, not
+//  - WHICH NEIGHBOR EACH ARM CONNECTS TO is derived and then VERIFIED, not
 //    trusted. The derivation: a rim's fill order runs counter-clockwise about
 //    its own outward direction d, and writing the rim in the orthonormal basis
 //    e1 = normalize(n - (n.d)d), e2 = d x e1 gives dot(v - centre, n) =
@@ -2672,7 +2672,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const { nrm, order } = junctionPlaneOrder(mids, centre, 'bridgeClosedRimsHub', 'rim');
 
   // Per rim: where to cut it in two. `s` is each vertex's own height above the
-  // junction plane, measured from that rim's OWN centre — using the hub centre
+  // junction plane, measured from that rim's OWN center — using the hub center
   // instead would bias a whole rim to one side and destroy the split.
   const arms = order.map((ri) => {
     const rim = oriented[ri];
@@ -2709,7 +2709,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
     return { ri, rim, arcPlus: arc(best.p, best.q), arcMinus: arc(best.q, best.p), P: rim[best.p], Q: rim[best.q] };
   });
 
-  // The poles. Each sits at the centre of the vertices it caps — a mean over a
+  // The poles. Each sits at the center of the vertices it caps — a mean over a
   // set, so no arm's position in the array can influence it. A rim whose +side
   // arc is a single edge contributes no interior vertex, which is legal; only
   // if NO arm contributes does the fallback along the normal apply.
@@ -2721,11 +2721,11 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const polePlus = plusInterior.length ? meanOf(plusInterior) : add(centre, scale(nrm, ringScaleAll));
   const poleMinus = minusInterior.length ? meanOf(minusInterior) : sub(centre, scale(nrm, ringScaleAll));
 
-  // Which neighbour each arm's P vertex reaches across to. The derivation in
+  // Which neighbor each arm's P vertex reaches across to. The derivation in
   // this function's own header says NEXT; both choices close a valid ring, so a
   // winding check cannot tell them apart, and the shorter total crotch is what
   // actually decides. On a symmetric junction the two totals differ by a wide
-  // margin — the near neighbour against the far one — so this is not a tie.
+  // margin — the near neighbor against the far one — so this is not a tie.
   const crotchTotal = (nb) => arms.reduce((acc, a, k) => acc + Math.sqrt(distSq(cage.vertices[a.P], cage.vertices[arms[(k + nb + N) % N].Q])), 0);
   const nb = crotchTotal(1) <= crotchTotal(-1) ? 1 : -1;
 

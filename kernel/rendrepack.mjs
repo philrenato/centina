@@ -87,7 +87,7 @@ export function matPack(f, o, m) {
   /* Beer-Lambert absorption density, written for EVERY material and not only
      for glass: 1 = the base tint at one scene unit, 0 = perfectly clear. A
      transmissive material that never had this field authored still needs the
-     default, and zero here would make every tinted glass colourless. */
+     default, and zero here would make every tinted glass colorless. */
   f[o + 31] = m.absorb != null ? m.absorb : 1.0;
   f[o + 32] = m.aniso || 0; f[o + 33] = m.sss || 0;
   /* Spectral dispersion on the transmission lobe, 0 = achromatic glass.
@@ -133,7 +133,7 @@ export function matPack(f, o, m) {
     f[o + 26] = mb.speckle != null ? mb.speckle : 0; f[o + 27] = mb.clastScale != null ? mb.clastScale : 3;
     f[o + 28] = mb.clastRand != null ? mb.clastRand : 0.9; f[o + 29] = mb.hue != null ? mb.hue : 0; f[o + 30] = mb.seed != null ? mb.seed : 0;
   } else if (wv) {
-    // Woven borrows marble's own slots: second thread colour, pitch, contrast,
+    // Woven borrows marble's own slots: second thread color, pitch, contrast,
     // yarn irregularity. Same struct, no growth.
     const tc = wv.thread2 || [0.5, 0.5, 0.5];
     f[o + 16] = tc[0]; f[o + 17] = tc[1]; f[o + 18] = tc[2]; f[o + 19] = wv.pitch != null ? wv.pitch : 18.0;
@@ -153,7 +153,7 @@ export function matPack(f, o, m) {
     f[o + 23] = gd.thickness != null ? gd.thickness : 0.5;
     f[o + 29] = gd.hue != null ? gd.hue : 0; f[o + 30] = gd.seed != null ? gd.seed : 0;
   } else if (mt) {
-    // Mottle is the one family that needed a real THIRD colour, and takes
+    // Mottle is the one family that needed a real THIRD color, and takes
     // marble's clast slot for it — the slot woven, grain and grid leave alone.
     const t2 = mt.tone2 || [0.3, 0.3, 0.2], t3 = mt.tone3 || [0.15, 0.15, 0.1];
     f[o + 16] = t2[0]; f[o + 17] = t2[1]; f[o + 18] = t2[2]; f[o + 19] = mt.scale != null ? mt.scale : 2.5;
@@ -187,7 +187,7 @@ export function packMaterials(materials) {
  *
  * ⚠ NEVER ZERO-LENGTH. A zero-length storage buffer is a WebGPU validation
  * error, so an empty scene still gets one entry — the same reason
- * `gatherGeometry` synthesises a degenerate triangle.
+ * `gatherGeometry` synthesizes a degenerate triangle.
  */
 export function packPartMats(parts) {
   const out = new Uint32Array(Math.max(parts.length, 1));

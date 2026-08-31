@@ -367,7 +367,7 @@ test('superbTorusCage: U and V counts are genuinely INDEPENDENT — an asymmetri
   const tubeHeights = new Set(cage.vertices.map(([, , z]) => z.toFixed(9)));
   assert.equal(tubeHeights.size, 5, 'exactly 5 distinct tube (V) stations, read off Z');
   const swapped = superbTorusCage([0, 0, 0], 30, 10, 5, 12);
-  assert.notDeepEqual(swapped.vertices, cage.vertices, 'swapping U and V is a genuinely different cage, not a relabelling');
+  assert.notDeepEqual(swapped.vertices, cage.vertices, 'swapping U and V is a genuinely different cage, not a relabeling');
 });
 
 test('superbTorusCage: an asymmetric U/V pair is STILL a closed genus-1 torus — the closure argument holds for any pair, not just a square grid', () => {

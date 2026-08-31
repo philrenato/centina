@@ -70,7 +70,7 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
   let worstRadius = 0, worstOnRail = 0;
   for (let s = 0; s <= 6; s++) {
     const ring = cage.vertices.slice(s * 10, s * 10 + 10);
-    // A regular polygon's centroid IS its circumcentre, so the ring's own
+    // A regular polygon's centroid IS its circumcenter, so the ring's own
     // centroid is exactly the frame origin — measure the radius against
     // that, which is exact, rather than against a brute-force nearest
     // rail sample, whose error is just the scan's own resolution.
@@ -78,7 +78,7 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
     for (const v of ring) {
       worstRadius = Math.max(worstRadius, Math.abs(Math.hypot(v[0] - c[0], v[1] - c[1], v[2] - c[2]) - 7));
     }
-    // Separately: that centre genuinely lies ON the rail. Tolerance is
+    // Separately: that center genuinely lies ON the rail. Tolerance is
     // the scan's own step, not a claim about the geometry.
     let best = Infinity;
     for (let i = 0; i <= SCAN; i++) {
@@ -88,7 +88,7 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
     worstOnRail = Math.max(worstOnRail, best);
   }
   assert.ok(worstRadius < 1e-9, `worst radius deviation ${worstRadius}`);
-  assert.ok(worstOnRail < scanRes * 60, `a ring centre drifted off the rail by ${worstOnRail}`);
+  assert.ok(worstOnRail < scanRes * 60, `a ring center drifted off the rail by ${worstOnRail}`);
 });
 
 test('subdPipeCage: stations are ARC-LENGTH even, not parameter even', () => {

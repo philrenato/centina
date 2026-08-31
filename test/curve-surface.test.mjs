@@ -285,7 +285,7 @@ const symmetricS = globalCurveInterp([[0, 0, 0], [40, 0, 20], [80, 0, 0], [120, 
 // not get materially more expensive.
 const asymmetricS = globalCurveInterp([[0, 0, 0], [80, 0, 40], [150, 0, -10], [240, 0, 50]], 3);
 // NEAR-symmetric, not exactly so: one endpoint nudged by a fraction of a
-// millimetre. This is where a PARTIAL version of the bug lives — the
+// millimeter. This is where a PARTIAL version of the bug lives — the
 // midpoint deviation is tiny but nonzero, so whether the old code saw it at
 // all depended entirely on how it compared against the auto-tolerance.
 const nearSymmetricS = globalCurveInterp([[0, 0, 0], [40, 0, 20], [80, 0, 0], [120.00002, 0, 20.00002]], 3);
@@ -352,7 +352,7 @@ test('DIVIDE on a POINT-SYMMETRIC curve places points whose successive TRUE arc-
   assert.ok(uniformSpread > 0.05, `fixture sanity: parameter-even stations must be measurably UNEVEN in true arc length on this curve (spread ${uniformSpread}), or this test could pass without the fix`);
 });
 
-test('a NEAR-symmetric curve (one endpoint nudged a fraction of a millimetre) measures its true arc length too — the partial case, where the midpoint deviation is nonzero but below the auto-tolerance', () => {
+test('a NEAR-symmetric curve (one endpoint nudged a fraction of a millimeter) measures its true arc length too — the partial case, where the midpoint deviation is nonzero but below the auto-tolerance', () => {
   const uMin = nearSymmetricS.knots[0], uMax = nearSymmetricS.knots[nearSymmetricS.knots.length - 1];
   const a = curvePoint(nearSymmetricS, uMin), b = curvePoint(nearSymmetricS, uMax);
   const mid = curvePoint(nearSymmetricS, (uMin + uMax) / 2);

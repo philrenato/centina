@@ -24,11 +24,11 @@
 //     own limit positions;
 //   - subdividing once, the face's own FACE POINT is a vertex of the
 //     refined cage whose limit position is the SAME limit surface at
-//     that face's centre — i.e. the patch at (0.5, 0.5);
-//   - subdividing twice, each of the four sub-face centres gives a
+//     that face's center — i.e. the patch at (0.5, 0.5);
+//   - subdividing twice, each of the four sub-face centers gives a
 //     genuinely OFF-KNOT interior sample at a quarter parameter. Those
 //     matter most: this patch's only knots are at 0 and 1, so a test
-//     that only ever sampled corners and the exact centre would be the
+//     that only ever sampled corners and the exact center would be the
 //     "fixture too clean to discriminate" false-negative this project
 //     has already been bitten by once.
 import test from 'node:test';
@@ -110,7 +110,7 @@ test('a crease anywhere in the 3x3 block disqualifies the face', () => {
   assert.equal(isRegularFace(creased, fi, buildTopology(creased)), false);
 });
 
-test('the stencil is 16 real points with the face at its centre 2x2', () => {
+test('the stencil is 16 real points with the face at its center 2x2', () => {
   const cage = twiceSubdividedBox();
   const ctx = buildTopology(cage);
   const fi = firstRegularFace(cage, ctx);
@@ -123,7 +123,7 @@ test('the stencil is 16 real points with the face at its centre 2x2', () => {
   const flat = grid.flat();
   assert.equal(flat.length, 16);
   for (const p of flat) assert.ok(p && p.length >= 3 && p.every(Number.isFinite));
-  // All 16 distinct: a stencil that accidentally read the same neighbour
+  // All 16 distinct: a stencil that accidentally read the same neighbor
   // twice would still evaluate, and would still be wrong.
   const keys = new Set(flat.map((p) => p.slice(0, 3).map((n) => n.toFixed(9)).join(',')));
   assert.equal(keys.size, 16, 'expected 16 distinct stencil points');
@@ -143,7 +143,7 @@ test('GATE: the patch reproduces the exact limit surface at its four corners', (
   }
 });
 
-test('GATE: the patch reproduces the exact limit surface at the face centre', () => {
+test('GATE: the patch reproduces the exact limit surface at the face center', () => {
   const cage = twiceSubdividedBox();
   const ctx = buildTopology(cage);
   const fi = firstRegularFace(cage, ctx);
@@ -173,7 +173,7 @@ test('GATE: the patch matches at OFF-KNOT interior quarter points', () => {
   // Level-1 sub-faces are pushed in corner order, all-quad cage, so face
   // fi's own four children are 4*fi .. 4*fi+3, child c being the one at
   // the face's corner c. Each child's own level-2 face point therefore
-  // sits at the centre of that quarter of the original face.
+  // sits at the center of that quarter of the original face.
   const quarterOf = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]];
   for (let c = 0; c < 4; c++) {
     const childFace = 4 * fi + c;
@@ -293,7 +293,7 @@ test('subdToPatches never mutates the cage it was given', () => {
 // about the CURVE and the question asked is about the NUMBERS. The two are
 // not the same claim. Two adjacent patches derive the same shared row by
 // running the identical algebra in a different order — the U pass and the V
-// pass swap roles when the neighbouring face's own loop starts elsewhere —
+// pass swap roles when the neighboring face's own loop starts elsewhere —
 // so the rows are algebraically identical and can still round differently in
 // the last bit. On this fixture 108 of 120 adjacent pairs come out bit-
 // identical and 12 do not; subdivide the cage twice first and NONE of 120 do,

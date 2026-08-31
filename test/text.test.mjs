@@ -79,7 +79,7 @@ test('a square annulus builds two exact degree-1 loops', () => {
   assert.equal(built.report.polylineFallbacks, 0);
 });
 
-test('an antialiased disc is recognised as an exact rational conic', () => {
+test('an antialiased disc is recognized as an exact rational conic', () => {
   const disc = raster((x, y) => Math.min(1, Math.max(0, 0.5 + (50 - Math.hypot(x - 70 + 0.5, y - 70 + 0.5)))));
   const cs = glyphCoverageToContours(disc, W, H, EM);
   assert.equal(cs.length, 1);
@@ -119,7 +119,7 @@ test('a backslash-n escape is a line break and lines run downward', () => {
   assert.equal(l.placements[1].y, -1.5);
 });
 
-test('centre and right alignment shift the shorter line', () => {
+test('center and right alignment shift the shorter line', () => {
   const m = { advance: { A: 0.6 }, kern: {} };
   const c = layoutTextGlyphs('AA\\nA', m, { align: 'center' });
   assert.ok(Math.abs(c.placements[2].x - 0.3) < 1e-12);

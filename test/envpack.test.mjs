@@ -64,7 +64,7 @@ console.log(`  source ${img.width}x${img.height}, distribution ${cdfW}x${cdfH}`)
      conditionals and the head of the pdf.
 
      ⚠ THE TOLERANCE IS 2%, NOT AN EPSILON, and that is float32 rather than a
-     packing error. Both factors are DIFFERENCES OF NORMALISED CUMULATIVE SUMS:
+     packing error. Both factors are DIFFERENCES OF NORMALIZED CUMULATIVE SUMS:
      a dim cell contributes ~1e-5 of its row, f32 carries ~1e-7 relative, so the
      subtraction cancels most of the significant digits. Measured here: median
      0.013%, p99 0.37%, worst 0.78%. Tightening this asserts the precision of
@@ -152,7 +152,7 @@ function packedFurnace(p, rgb, width, height, samples, seed) {
 /* ⭐ THE WHITE FURNACE, THROUGH THE PACKED TABLES.
    mean(L/pdf) against the same integral summed directly. It agrees only if
    `pdfOff` addresses the table the packer wrote AND the pdf carries its
-   `cw*ch/total` normalisation AND the solid-angle conversion is right.
+   `cw*ch/total` normalization AND the solid-angle conversion is right.
 
    ⚠⚠ AND IT IS STRUCTURALLY BLIND TO `condOff`, which is measured below
    rather than assumed. The algebra: with `condOff` off by a row, a sample in
@@ -187,7 +187,7 @@ const reference = directIrradiance(img.data, img.width, img.height, cdfW, cdfH);
   assert.ok(e2 > 0.05, `the control failed: pdfOff off by ONE FLOAT still read ${(e2 * 100).toFixed(2)}%`);
   console.log(`  control, pdfOff off by one float: ${(e2 * 100).toFixed(1)}% off`);
 
-  /* And the normalisation — the one that reads as an exposure error and gets
+  /* And the normalization — the one that reads as an exposure error and gets
      compensated for in the exposure slider, after which nothing is ever right
      again. Nothing but a furnace sees it. */
   const scaled = { ...pack, aux: Float32Array.from(pack.aux) };
@@ -412,11 +412,11 @@ const reference = directIrradiance(img.data, img.width, img.height, cdfW, cdfH);
   assert.equal(halfFromFloat(1e-9), 0);
   /* Round-to-nearest-EVEN, not truncation and not round-half-up. f16's step at
      1.0 is 1/1024, so 0.6 of a step rounds up where truncation would drop it,
-     and an exact half goes to the even neighbour in BOTH directions — 0x3c00
+     and an exact half goes to the even neighbor in BOTH directions — 0x3c00
      down, 0x3c02 up. Round-half-up would give 0x3c01 for the first of those. */
   assert.equal(halfFromFloat(1 + 0.6 / 1024), 0x3c01, 'f16 conversion truncates instead of rounding');
-  assert.equal(halfFromFloat(1 + 0.5 / 1024), 0x3c00, 'an exact half did not go to the even neighbour');
-  assert.equal(halfFromFloat(1 + 1.5 / 1024), 0x3c02, 'an exact half did not go to the even neighbour');
+  assert.equal(halfFromFloat(1 + 0.5 / 1024), 0x3c00, 'an exact half did not go to the even neighbor');
+  assert.equal(halfFromFloat(1 + 1.5 / 1024), 0x3c02, 'an exact half did not go to the even neighbor');
 
   const t = pack.tex;
   assert.equal(t.format, 'rgba16float');

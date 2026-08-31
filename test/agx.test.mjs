@@ -1,8 +1,8 @@
-// A TRANSPOSED COLOUR MATRIX IS INVISIBLE IN THE SOURCE AND INVISIBLE ON SCREEN.
+// A TRANSPOSED COLOR MATRIX IS INVISIBLE IN THE SOURCE AND INVISIBLE ON SCREEN.
 //
 // AgX's two matrices are near-identity: every row sums to about one either way
 // round, every entry keeps its magnitude, and the transform still returns
-// plausible colours. Transposing one of them puts a warm-pink cast on every
+// plausible colors. Transposing one of them puts a warm-pink cast on every
 // pixel, and because the error is multiplicative, brightening a surface makes it
 // worse rather than whiter — so the search goes to the lighting and stays there.
 //
@@ -61,7 +61,7 @@ const spread = (c) => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
 
 // ----------------------------------------------- neutral in, neutral out ----
 /* ⚠ THE TOLERANCE IS 1e-3, NOT 1e-6, AND THE NUMBER IS MEASURED RATHER THAN
-   CHOSEN. AgX's inset matrix is not row-normalised — its three row sums differ
+   CHOSEN. AgX's inset matrix is not row-normalized — its three row sums differ
    in the fourth decimal — and the sigmoid between the two rotations amplifies
    that into a channel spread the round trip cannot cancel. The transform is
    therefore neutral to about 2.3e-4 across its whole domain, and an assertion
@@ -71,7 +71,7 @@ const spread = (c) => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
 const NEUTRAL_TOL = 1e-3;
 {
   const grey = agx([0.18, 0.18, 0.18]);
-  assert.ok(spread(grey) < 1e-4, `middle grey came back with a channel spread of ${spread(grey)}`);
+  assert.ok(spread(grey) < 1e-4, `middle gray came back with a channel spread of ${spread(grey)}`);
 
   let worst = 0, worstAt = 0, samples = 0;
   for (let ev = -14; ev <= 6; ev += 0.02) {
@@ -86,7 +86,7 @@ const NEUTRAL_TOL = 1e-3;
 
 // -------------------------------------- the transpose, run and confirmed ----
 /* The defect reproduced exactly: the shader's own record of the incident says a
-   neutral grey came back as (1.091, 0.956, 0.953) relative to correct. Matching
+   neutral gray came back as (1.091, 0.956, 0.953) relative to correct. Matching
    those three numbers is what ties this module to the transform that actually
    shipped, rather than to a plausible reimplementation of it. */
 {
@@ -97,13 +97,13 @@ const NEUTRAL_TOL = 1e-3;
   assert.ok(Math.abs(ratio[0] - 1.091) < 5e-4, `red should come back 9.1% hot, got ${ratio[0]}`);
   assert.ok(Math.abs(ratio[1] - 0.956) < 5e-4, `green should come back 4.4% cold, got ${ratio[1]}`);
   assert.ok(Math.abs(ratio[2] - 0.953) < 5e-4, `blue should come back 4.7% cold, got ${ratio[2]}`);
-  console.log(`  the defect:     transposed Minv tints neutral grey by (${ratio.map((v) => v.toFixed(3)).join(', ')}) — spread ${spread(bad).toFixed(4)}, ${(spread(bad) / NEUTRAL_TOL).toFixed(0)}x the bound`);
+  console.log(`  the defect:     transposed Minv tints neutral gray by (${ratio.map((v) => v.toFixed(3)).join(', ')}) — spread ${spread(bad).toFixed(4)}, ${(spread(bad) / NEUTRAL_TOL).toFixed(0)}x the bound`);
 }
 
 // ----------------------------------------- non-neutral, against the WGSL ----
 /* Symmetry alone would be satisfied by any transform that treats the three
    channels alike, including the wrong one. These are saturated and mixed
-   colours, checked against the row-wise transcription of the shader's
+   colors, checked against the row-wise transcription of the shader's
    expression. */
 {
   const cases = [
@@ -126,7 +126,7 @@ const NEUTRAL_TOL = 1e-3;
   assert.ok(red[0] > red[1] && red[0] > red[2], 'a red input must come back reddest');
   const blue = agx([0.02, 0.02, 1]);
   assert.ok(blue[2] > blue[0] && blue[2] > blue[1], 'a blue input must come back bluest');
-  console.log(`  non-neutral:    ${cases.length} colours match the shader's expression to ${worst.toExponential(1)}, hue order preserved`);
+  console.log(`  non-neutral:    ${cases.length} colors match the shader's expression to ${worst.toExponential(1)}, hue order preserved`);
 }
 
 // ------------------------------------------------ the curve and the window ----

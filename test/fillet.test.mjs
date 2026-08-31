@@ -4,14 +4,14 @@ import { rollingBallSection, maxRadiusForSetback, variableRadiusFeasible, sectio
 
 // Every expected number below is worked out from the geometry, never read off
 // the implementation. A ball of radius r resting in a right-angled corner
-// touches each wall at distance r from the corner and has its centre at
+// touches each wall at distance r from the corner and has its center at
 // r*sqrt(2) along the 45-degree bisector — that is the whole of TEST 1, and it
 // is checkable on paper.
 const R = 5;
 const near = (a, b, tol = 1e-12) => Math.abs(a - b) < tol;
 const nearPt = (p, q, tol = 1e-12) => p.every((v, i) => Math.abs(v - q[i]) < tol);
 
-test('a convex right-angled edge: setback r, centre at r*sqrt(2) on the bisector', () => {
+test('a convex right-angled edge: setback r, center at r*sqrt(2) on the bisector', () => {
   const s = rollingBallSection({
     point: [0, 0, 0], coNormalA: [0, 1, 0], coNormalB: [1, 0, 0],
     theta: Math.PI / 2, radius: R,
@@ -24,7 +24,7 @@ test('a convex right-angled edge: setback r, centre at r*sqrt(2) on the bisector
   assert.ok(nearPt(s.tangencyB, [R, 0, 0]), `tangencyB ${s.tangencyB}`);
   assert.ok(nearPt(s.centre, [R, R, 0]), `centre ${s.centre}`);
   assert.equal(s.convex, true);
-  // The defining property, asserted rather than assumed: the centre is exactly
+  // The defining property, asserted rather than assumed: the center is exactly
   // r from BOTH tangency points.
   assert.ok(near(Math.hypot(...s.centre.map((v, i) => v - s.tangencyA[i])), R));
   assert.ok(near(Math.hypot(...s.centre.map((v, i) => v - s.tangencyB[i])), R));
@@ -126,7 +126,7 @@ test('the section arc is a real circular arc of the requested radius', () => {
   // pi - theta... measured between the two radii, which are 90 degrees apart.
   assert.ok(near(arc.sweep, Math.PI / 2), `sweep ${arc.sweep}`);
   // Evaluate the rational quadratic at t = 0.5 and check it is exactly r from
-  // the centre — the property that makes it an ARC rather than a parabola.
+  // the center — the property that makes it an ARC rather than a parabola.
   /* ⚠ THE NUMERATOR CARRIES THE WEIGHT. Control points are stored CARTESIAN
      with the weight appended, so a rational evaluation is sum(N*w*x) / sum(N*w)
      — an earlier version of this omitted the w from the numerator and passed
@@ -140,7 +140,7 @@ test('the section arc is a real circular arc of the requested radius', () => {
   const num = (i) => 0.25 * p0[i] * p0[3] + 0.5 * p1[i] * p1[3] + 0.25 * p2[i] * p2[3];
   const mid = [num(0) / wMid, num(1) / wMid, num(2) / wMid];
   const d = Math.hypot(mid[0] - s.centre[0], mid[1] - s.centre[1], mid[2] - s.centre[2]);
-  assert.ok(near(d, R, 1e-12), `midpoint is ${d} from the centre, should be exactly ${R}`);
+  assert.ok(near(d, R, 1e-12), `midpoint is ${d} from the center, should be exactly ${R}`);
 
   // AND AWAY FROM THE ORIGIN, which is the only place the broken evaluator and
   // the correct one disagree. Same 90-degree corner, translated.
@@ -152,7 +152,7 @@ test('the section arc is a real circular arc of the requested radius', () => {
   const n2 = (i) => 0.25 * q0[i] * q0[3] + 0.5 * q1[i] * q1[3] + 0.25 * q2[i] * q2[3];
   const m2 = [n2(0) / w2, n2(1) / w2, n2(2) / w2];
   const d2 = Math.hypot(m2[0] - s2.centre[0], m2[1] - s2.centre[1], m2[2] - s2.centre[2]);
-  assert.ok(near(d2, R, 1e-12), `away from the origin the arc midpoint must still be exactly ${R} from the centre (${d2})`);
+  assert.ok(near(d2, R, 1e-12), `away from the origin the arc midpoint must still be exactly ${R} from the center (${d2})`);
 });
 
 import { surfacePoint } from '../kernel/surface.mjs';
@@ -235,11 +235,11 @@ import { envelopeSection, envelopeSectionArc } from '../kernel/fillet.mjs';
 // a varying one.
 const Rc = 20, alpha = 60 * Math.PI / 180, rBall = 3;
 function realRollingBall(sParam) {
-  /* ⚠ NEGATED, because this must point from the ball CENTRE towards the plane.
-     The plane is x*sin(a) - z*cos(a) = 0 and the centre sits at +r along its
-     normal, so reaching the plane means travelling along MINUS that normal.
+  /* ⚠ NEGATED, because this must point from the ball CENTER towards the plane.
+     The plane is x*sin(a) - z*cos(a) = 0 and the center sits at +r along its
+     normal, so reaching the plane means traveling along MINUS that normal.
      Passing the plane's own normal put the tangency point 2r away on the far
-     side — still exactly r from the centre, so the radius check reported a
+     side — still exactly r from the center, so the radius check reported a
      perfect blend that touched nothing. */
   const nPlane = [-Math.sin(alpha), 0, Math.cos(alpha)];
   const rho = Rc - rBall;
@@ -253,7 +253,7 @@ function realRollingBall(sParam) {
 }
 
 /* ⚠ THE SPINE USED TO MEASURE IS SAMPLED FAR FINER THAN THE SECTIONS.
-   Measuring against the section centres themselves reports the RULER's own
+   Measuring against the section centers themselves reports the RULER's own
    chord error — a polyline through a curving spine is second order by
    construction — and that is what made every surface, at every V degree, look
    like O(h^2). With the instrument pushed two orders down, the same surfaces
@@ -287,7 +287,7 @@ function buildAt(count) {
 
 test('the tangency points actually LIE ON both supporting surfaces', () => {
   /* THE CHECK A RADIUS-ONLY INSTRUMENT CANNOT MAKE. Every tangency point is r
-     from the ball centre by construction, whichever way the direction points —
+     from the ball center by construction, whichever way the direction points —
      so "the radius is right" is true even when the blend touches neither face.
      What has to be asserted is CONTACT: the point lies on the cylinder wall and
      on the plane. This is the assertion whose absence hid a 2r sign error. */
@@ -474,11 +474,11 @@ test('a chamfer occupies exactly the same ground as the fillet it toggles from',
   }
   // The middle point is where they differ, and by a knowable amount: the arc
   // bulges out to the radius while the chord cuts across. For a quarter circle
-  // the chord's midpoint sits r*cos(45) from the centre, the arc's sits r.
+  // the chord's midpoint sits r*cos(45) from the center, the arc's sits r.
   const dist = (p) => Math.hypot(p[0] - e.centre[0], p[1] - e.centre[1], p[2] - e.centre[2]);
   const midFlat = [flat.ctrlPts[1][0], flat.ctrlPts[1][1], flat.ctrlPts[1][2]];
   assert.ok(Math.abs(dist(midFlat) - 5 * Math.cos(Math.PI / 4)) < 1e-12,
-    `the chord's midpoint is r*cos(halfSweep) from the centre (${dist(midFlat)})`);
+    `the chord's midpoint is r*cos(halfSweep) from the center (${dist(midFlat)})`);
   assert.equal(flat.ctrlPts[1][3], 1, 'and weight 1, or it would be a conic rather than a line');
 });
 
@@ -516,7 +516,7 @@ test('the splice refuses a chain that never reaches the loop, instead of snappin
 });
 
 test('the splice refuses an ambiguous reference rather than tie-breaking in silence', () => {
-  // The centre of a square is equidistant from all four sides. Picking the
+  // The center of a square is equidistant from all four sides. Picking the
   // lowest segment index there is a coin toss dressed as a decision.
   const r = spliceLoopWithChain(SQUARE, [[0, 0.25], [1, 0.25]], [0.5, 0.5]);
   assert.equal(r.ok, false);
@@ -534,7 +534,7 @@ test('dropNear must name the span being REMOVED, and a reference outside it is c
   assert.ok(Math.abs(Math.abs(signedArea2D(good.loop)) - 0.96) > 0.5 || Math.abs(Math.abs(signedArea2D(good.loop)) - 0.96) < 1e-9,
     `area ${Math.abs(signedArea2D(good.loop))}`);
   // The documented-but-wrong reference produces the OTHER arc. Asserted so the
-  // behaviour is pinned rather than discovered again later.
+  // behavior is pinned rather than discovered again later.
   const outside = spliceLoopWithChain(SQUARE, chain, [0.05, 0]);
   if (outside.ok) {
     const a = Math.abs(signedArea2D(outside.loop));
@@ -715,7 +715,7 @@ test('a smooth section has ZERO curvature where it meets each face, and a circul
     const kEnd = curvatureAt(q.ctrlPts, 0.999);
     assert.ok(kNear < 0.05 * kArc, `${deg}deg: curvature next to the face is ${kNear.toFixed(5)}, under 5% of the arc's ${kArc}`);
     assert.ok(kEnd < 0.05 * kArc, `${deg}deg: and the same at the other end (${kEnd.toFixed(5)})`);
-    assert.ok(kHalf < kNear * 0.6, `${deg}deg: it HALVES when the sample moves half as far from the end (${kHalf.toFixed(6)} against ${kNear.toFixed(6)}) — it is going to zero, not levelling off`);
+    assert.ok(kHalf < kNear * 0.6, `${deg}deg: it HALVES when the sample moves half as far from the end (${kHalf.toFixed(6)} against ${kNear.toFixed(6)}) — it is going to zero, not leveling off`);
     // And it is not zero everywhere — a straight line would pass everything above.
     assert.ok(curvatureAt(q.ctrlPts, 0.5) > 0.5 * kArc, `${deg}deg: the middle genuinely curves`);
   }

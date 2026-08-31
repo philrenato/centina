@@ -335,7 +335,7 @@ const SELF_INTERSECT_SAFETY = 0.98; // same margin as offset.mjs's own SELF_INTE
 // FADE TOWARD THE EDGES. A displacement that runs at full strength straight
 // into the boundary is unusable wherever the surface has to meet something: it
 // pushes the very control rows a Join, a Match Edge or a Bridge depends on, so
-// the seam moves and the neighbour no longer fits. With a falloff the detail
+// the seam moves and the neighbor no longer fits. With a falloff the detail
 // lives in the middle of the panel and the edges stay where they were put.
 //
 // MEASURED IN THE CONTROL NET, not in model space. The net is what is being

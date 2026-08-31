@@ -6,7 +6,7 @@
 // subdivision/refinement scheme actually has to be right.
 //
 // Ground truth throughout is ANALYTIC where the fixture allows it: a line
-// through a circle's centre crosses the circle at exactly `radius`, and that
+// through a circle's center crosses the circle at exactly `radius`, and that
 // number comes from the geometry, not from the function under test.
 
 import test from 'node:test';
@@ -52,10 +52,10 @@ test('TYPE MATRIX 2 — line x RATIONAL circle gives both crossings at exactly t
   // land measurably off and this test would catch it.
   const R = 25;
   const circ = makeCircle([0, 0, 0], X, Y, R);
-  const line = makeLine([-60, 0, 0], [60, 0, 0]); // straight through the centre
+  const line = makeLine([-60, 0, 0], [60, 0, 0]); // straight through the center
   const r = intersectCurves2D(line, circ);
   assert.equal(r.ok, true, r.reason);
-  assert.equal(r.points.length, 2, `a line through the centre must cross a full circle exactly twice, got ${r.points.length}`);
+  assert.equal(r.points.length, 2, `a line through the center must cross a full circle exactly twice, got ${r.points.length}`);
   for (const hit of r.points) {
     const d = Math.hypot(hit.point[0], hit.point[1]);
     assert.ok(Math.abs(d - R) < 1e-7,
@@ -69,7 +69,7 @@ test('TYPE MATRIX 2 — line x RATIONAL circle gives both crossings at exactly t
 
 test('an OFF-ORIGIN rational circle is bounded by its EUCLIDEAN control points', () => {
   // This fixture exists because the obvious one does not discriminate. A
-  // circle centred at the ORIGIN survives a bug that bounds pieces by their
+  // circle centered at the ORIGIN survives a bug that bounds pieces by their
   // HOMOGENEOUS control points instead of their euclidean ones, because
   // multiplying by w<1 shrinks the corners toward the origin by almost exactly
   // the amount the corners overshoot — the wrong box happens to still contain
@@ -82,7 +82,7 @@ test('an OFF-ORIGIN rational circle is bounded by its EUCLIDEAN control points',
   // that is the only bound a rejection may be proven with.
   const C = [100, 60, 0], R = 25;
   const circ = makeCircle(C, X, Y, R);
-  // Crosses well off the centre line, so neither crossing lands on a control
+  // Crosses well off the center line, so neither crossing lands on a control
   // point — a crossing that coincides with one is found even by a broken box.
   const yCut = C[1] + 0.6 * R;
   const line = makeLine([C[0] - 3 * R, yCut, 0], [C[0] + 3 * R, yCut, 0]);

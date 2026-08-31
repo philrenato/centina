@@ -72,10 +72,10 @@ test('SEAM OPEN CHAIN: an open arc crossing the seam splits into two pieces, eac
   );
 });
 
-test('SEAM OPEN CHAIN: the crossing u is interpolated across the jump, not snapped to a neighbouring sample', () => {
+test('SEAM OPEN CHAIN: the crossing u is interpolated across the jump, not snapped to a neighboring sample', () => {
   const srf = closedInV();
   // Deliberately asymmetric: the jump runs 3.9 -> 0.1, so the crossing sits
-  // 3/4 of the way through it. A crossing that merely reused a neighbouring
+  // 3/4 of the way through it. A crossing that merely reused a neighboring
   // sample's u would land on 2.0 or 3.0 and pass a weaker test.
   const chain = [[1.0, 3.5], [2.0, 3.9], [3.0, 0.1], [3.5, 0.5]];
   const r = seamOpenChains(chain, srf);

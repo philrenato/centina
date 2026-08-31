@@ -2,7 +2,7 @@
 //
 // ⚠⚠⚠ THIS IS WIRED, NOT DORMANT. `buildPuff` calls buildSpine/attachToSpine whenever a boundary point
 // cannot see the deepest point in a straight line, and uses the per-point target instead of the
-// single centre. A star-shaped outline never reaches this file, so nothing that already worked
+// single center. A star-shaped outline never reaches this file, so nothing that already worked
 // changed. What was here before this line, and why it was wrong, is worth keeping:
 //
 //   "NOT WIRED. THIS IS CORRECT AND IT IS NOT ENOUGH... What it does NOT solve is the CAP. Ring M
@@ -12,7 +12,7 @@
 //
 // ⚠⚠ BOTH OF THOSE NUMBERS WERE TAKEN WITH `family: 'tangent'`, and that profile turned out to be
 // the defect all by itself — slope 0 at the rim (a thin flaring edge, the reported "flange") and
-// slope 2 at the peak (a cone tip, the pinched centre on every ordinary puff). The cap carried the
+// slope 2 at the peak (a cone tip, the pinched center on every ordinary puff). The cap carried the
 // blame for the profile for four builds. With the Lame hemisphere the disc measures 4.5 degrees
 // worst off-rim, not 52.
 //
@@ -47,7 +47,7 @@
 // THE ONE FACT THE WHOLE DESIGN RESTS ON: the closed ball B(s, r(s)) with r(s) = the distance from
 // s to the boundary lies entirely inside the polygon. So a segment from a boundary point p to s is
 // guaranteed inside IFF |p − s| <= r(s). That single inequality is what makes every spoke safe,
-// and it is why the attachment rule below minimises |p − s| − r(s) rather than |p − s|: nearest
+// and it is why the attachment rule below minimizes |p − s| − r(s) rather than |p − s|: nearest
 // point on the spine carries no containment guarantee at all.
 
 import { distanceToBoundary, pointInPolygon } from './puffoutline.mjs';
@@ -59,7 +59,7 @@ export function signedDistance(pts, x, y) {
   return (pointInPolygon(pts, x, y) ? 1 : -1) * distanceToBoundary(pts, x, y);
 }
 
-/** Refine an interior point onto the local maximum of the distance field — the centre of a
+/** Refine an interior point onto the local maximum of the distance field — the center of a
  *  maximal inscribed ball. A 16-direction pattern search with a halving step: no derivatives, and
  *  the field is not differentiable where we are going. */
 function refineBall(pts, p, step) {
@@ -78,7 +78,7 @@ function refineBall(pts, p, step) {
 }
 
 /**
- * March outward from the root along one direction, re-centring onto the ridge at every step.
+ * March outward from the root along one direction, re-centering onto the ridge at every step.
  * ⚠ THE STOP CONDITION THAT MATTERS IS THE REDUNDANT-BALL TEST, AND IT IS AGAINST THE ROOT.
  * A ball wholly contained in the root's ball adds nothing to the medial axis. Tested against the
  * PREVIOUS step instead it never fires, and a DISC marches all the way to its own rim — which is
@@ -92,7 +92,7 @@ function marchRun(pts, root, r0, dir, opts) {
     const h = 0.35 * Math.max(r, minR);
     let q = [p[0] + u[0] * h, p[1] + u[1] * h];
     if (!pointInPolygon(pts, q[0], q[1])) break;
-    // re-centre perpendicular to the direction of travel: scan for the local max of the field
+    // re-center perpendicular to the direction of travel: scan for the local max of the field
     const nx = -u[1], ny = u[0];
     let bestT = 0, bestR = signedDistance(pts, q[0], q[1]);
     const span = 0.6 * Math.max(r, minR);
@@ -111,7 +111,7 @@ function marchRun(pts, root, r0, dir, opts) {
     // every step — the field is r0 − |q − root| by construction — so an exact `<=` is a coin flip
     // on the last bit, and it came up false: the disc grew a 16-sample spine and 32 runs where it
     // should have had none. A disc must return a single sample, because that is what keeps the
-    // shipped hemisphere oracle and the incentre assertions bit-identical.
+    // shipped hemisphere oracle and the incenter assertions bit-identical.
     if (Math.hypot(q[0] - root[0], q[1] - root[1]) + rq <= r0 * (1 + 1e-6)) break;
     const nu = [q[0] - p[0], q[1] - p[1]];
     const L = Math.hypot(nu[0], nu[1]);
@@ -162,7 +162,7 @@ export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax =
   // ⚠ AND THE TOLERANCE IS NOT TIDINESS EITHER. A drawn "disc" is a 96-gon, so
   // |s − root| + r(s) = r0 holds exactly only along the perpendicular to the nearest EDGE; toward
   // a vertex the marched ball is legitimately a little larger. The slack is what makes a polygon
-  // behave like the circle it is drawn as. 2% of the root radius: far above that discretisation,
+  // behave like the circle it is drawn as. 2% of the root radius: far above that discretization,
   // far below any real limb, and the crescent (whose limbs run 3.3 root-radii) is untouched by it.
   const flat = [];
   for (const rn of runs) for (const s of rn) flat.push(s);
@@ -191,7 +191,7 @@ export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax =
 
 /**
  * Attach every boundary point to the spine sample whose maximal ball reaches it best.
- * ⚠ MINIMISING |p − s| − r(s), NOT |p − s|. The residual it returns IS the safety statement: it is
+ * ⚠ MINIMIZING |p − s| − r(s), NOT |p − s|. The residual it returns IS the safety statement: it is
  * how far the point lies OUTSIDE the ball assigned to it, so zero means the spoke is provably
  * inside the polygon and a large value means the spine does not describe this part of the shape.
  * A branching form passes every containment test and fails here — which is the only place it fails.
@@ -209,7 +209,7 @@ export function attachToSpine(pts, spine, { smoothPasses = 8 } = {}) {
 
   // ⚠⚠⚠ THE TARGET IS SMOOTHED AROUND THE LOOP, AND WITHOUT THIS THE TOOL MADE GARBAGE.
   // The attachment above is a nearest-BALL argmin, and an argmin is a step function: on a
-  // hand-drawn outline neighbouring boundary points land on DIFFERENT spine samples. Measured on a
+  // hand-drawn outline neighboring boundary points land on DIFFERENT spine samples. Measured on a
   // wobbly loop of the kind a pencil actually produces — 8 places where tau jumps by more than one
   // sample, jumping by as much as FOUR — against a perfectly clean map on a smooth disc.
   // Adjacent spokes then point in different directions, the ring lattice zigzags, and the surface
@@ -220,7 +220,7 @@ export function attachToSpine(pts, spine, { smoothPasses = 8 } = {}) {
   //
   // So the TARGET POSITIONS are averaged around the loop rather than the indices. Positions,
   // because the fix has to be continuous: smoothing an integer index still steps. The targets lie
-  // on the medial axis and their neighbours lie along it, so averaging keeps them there — asserted
+  // on the medial axis and their neighbors lie along it, so averaging keeps them there — asserted
   // by the caller, not assumed here.
   const target = new Array(N);
   for (let i = 0; i < N; i++) target[i] = spine.pts[tau[i]].slice();

@@ -234,7 +234,7 @@ export function surfaceCreaseParams(srf, direction, opts = {}) {
   const span = knots[knots.length - 1] - knots[0];
   const step = span * 1e-6;
   // The surface's own size, so the noise floor below is scale-free: the same
-  // shape modelled in millimetres and in metres must answer identically.
+  // shape modeled in millimeters and in meters must answer identically.
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const row of srf.ctrlNet) for (const pt of row) for (let d = 0; d < 3; d++) { if (pt[d] < lo[d]) lo[d] = pt[d]; if (pt[d] > hi[d]) hi[d] = pt[d]; }
   const scale = Math.max(Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]), Math.hypot(lo[0], lo[1], lo[2]), 1e-9);
@@ -253,7 +253,7 @@ export function surfaceCreaseParams(srf, direction, opts = {}) {
       const dOut = [afterOut[0] - after[0], afterOut[1] - after[1], afterOut[2] - after[2]];
       const lIn = Math.hypot(dIn[0], dIn[1], dIn[2]), lOut = Math.hypot(dOut[0], dOut[1], dOut[2]);
       /* ⚠ A POLE MAKES NOISE LOOK LIKE A TANGENT, and `> 0` does not catch it.
-         A flat circular cap collapses a whole control row to its centre, so the
+         A flat circular cap collapses a whole control row to its center, so the
          one-sided differences there are not a direction at all. Built at the
          ORIGIN they come out exactly 0 and a `> 0` test skips them; built at
          x = 400 the same degenerate row differs by float noise at that

@@ -22,7 +22,7 @@ export function curvePointHomogeneous(crv, u) {
   assertCurve(crv, 'curvePoint');
   /* ⚠⚠ OFF-DOMAIN IS REFUSED, BECAUSE THE SILENT ANSWER LOOKS RIGHT. `findSpan`
      clamps to the last real span, so evaluating a circle of radius 10 at u = 99
-     — its domain being [0, 4] — returned a point 10.000 from the centre: on the
+     — its domain being [0, 4] — returned a point 10.000 from the center: on the
      circle, plausible, and meaningless. That is worse than a garbage number,
      which at least announces itself. A NURBS curve is defined on [knots[0],
      knots[last]] and nowhere else.
@@ -203,7 +203,7 @@ const DIVIDE_MAX_DEPTH = 20; // bisection depth safety cap, same role as sampleC
 // RECURSION, and the reason is structural, not a tolerance question. On a
 // span that is POINT-SYMMETRIC about its own midpoint — C(m+s) = 2C(m) -
 // C(m-s), an S-curve through symmetric points, a curve mirrored about its
-// own centre — the midpoint lies EXACTLY on the chord between the span's
+// own center — the midpoint lies EXACTLY on the chord between the span's
 // endpoints, so the single deviation sample reads exactly zero while the
 // curve genuinely bows away everywhere else. Left unguarded that returns
 // the two endpoints alone, and every consumer downstream (arc length,
@@ -453,7 +453,7 @@ export function closestPointOnCurve(crv, targetPt, tolerance) {
 // Whether a curve's own control points wrap around — the start and end
 // control point coincide within tolerance, meaning u=uMin and u=uMax are
 // the SAME physical point (a seam, not two distinct endpoints). The
-// curve analogue of surface.mjs's surfaceClosure, which asks the
+// curve analog of surface.mjs's surfaceClosure, which asks the
 // identical question of a control NET's first/last row or column —
 // applied here to a curve's own single first/last control point.
 export function isCurveClosed(crv, tol = 1e-6) {

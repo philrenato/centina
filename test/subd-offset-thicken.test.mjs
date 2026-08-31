@@ -69,7 +69,7 @@ test('a negative distance offsets INWARD', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const out = offsetCage(cage, -2);
   const r = (c) => Math.hypot(...c.vertices[0]);
-  assert.ok(r(out) < r(cage), 'an inward offset must bring the corner closer to the centre');
+  assert.ok(r(out) < r(cage), 'an inward offset must bring the corner closer to the center');
 });
 
 test('THICKEN turns a sheet into a genuinely closed, consistently wound slab', () => {

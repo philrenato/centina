@@ -234,7 +234,7 @@ test('refuses a 180-degree fold-back, and the miter machinery genuinely cannot d
 test('a turn merely CLOSE to 180 degrees is NOT refused — the miter-limit fallback handles it', () => {
   // 179 degrees: far past PIPE_MITER_LIMIT's own ~168.5-degree ceiling, so
   // the corner routes through applyMiterLimitFallback's fillet rather than
-  // a true miter — which is exactly the downstream behaviour to defer to,
+  // a true miter — which is exactly the downstream behavior to defer to,
   // not duplicate here.
   const theta = (179 * Math.PI) / 180;
   const almostBack = deg1([[0, 0, 0], [-50 * Math.cos(Math.PI - theta), 50 * Math.sin(Math.PI - theta), 0]]);

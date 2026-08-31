@@ -27,7 +27,7 @@ function cube(lo = 0, hi = 10) {
   ];
 }
 
-test('a point at the centre is inside, and a point well outside is outside', () => {
+test('a point at the center is inside, and a point well outside is outside', () => {
   const tris = cube();
   assert.equal(classifyPointInSolid(tris, [5, 5, 5]).region, 'inside');
   assert.equal(classifyPointInSolid(tris, [50, 5, 5]).region, 'outside');
@@ -55,7 +55,7 @@ test('a point DELIBERATELY NEAR a face still classifies correctly — the named 
 
 test('a ray aimed exactly along an EDGE is rejected as degenerate rather than counted — and the point still classifies', () => {
   const tris = cube();
-  // From the centre toward the x=10 / y=10 edge: the hit lands exactly on the
+  // From the center toward the x=10 / y=10 edge: the hit lands exactly on the
   // seam shared by two triangles, where parity counting is ill-defined.
   const edgeDir = [1, 1, 0];
   const forced = classifyPointInSolid(tris, [5, 5, 5], { directions: [edgeDir] });

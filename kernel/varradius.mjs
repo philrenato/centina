@@ -24,16 +24,16 @@
    THE ONE THING A VARIABLE RADIUS CHANGES ABOUT THE SECTION, and it is not
    obvious: THE CONTACT CIRCLE IS NO LONGER A GREAT CIRCLE OF THE BALL.
 
-   A ball of radius r(t) centred at m(t) touches the finished surface along its
-   characteristic circle, the set of points where the neighbouring balls of the
+   A ball of radius r(t) centered at m(t) touches the finished surface along its
+   characteristic circle, the set of points where the neighboring balls of the
    family agree. Differentiating |p - m(t)|^2 = r(t)^2 gives
 
        (p - m) . m' + r r' = 0,
 
    so every contact point p = m + r n satisfies n . T = -r'/|m'| =: tilt, with T
    the unit spine tangent. The contact points therefore lie on a SMALL circle:
-   its centre is m + r*tilt*T, offset from the ball centre ALONG the spine, and
-   its radius is r*sqrt(1 - tilt^2), shrunk. Both reduce to the ball centre and r
+   its center is m + r*tilt*T, offset from the ball center ALONG the spine, and
+   its radius is r*sqrt(1 - tilt^2), shrunk. Both reduce to the ball center and r
    when r' = 0, which is why a constant radius never exposes this.
 
    Skinning great-circle arcs instead — which is what a constant-radius section
@@ -41,7 +41,7 @@
    on the order of 8% of r at |dr/ds| = 0.2 on a right-angled edge, and that
    error is STRUCTURAL: it does not fall with section count, because every
    section is individually in the wrong plane. It is also invisible to any
-   instrument that only asks "is this point r from the ball centre", since a
+   instrument that only asks "is this point r from the ball center", since a
    great-circle arc lies exactly on the ball. What it is not invisible to is the
    signed canal measure below, which asks the stronger question: is this point on
    the boundary of the union of balls, or inside it.
@@ -287,7 +287,7 @@ export function variableRadiusSection({ centre, radius, toTouchA, toTouchB, spin
   const offset = radius * tilt;
   const contactCentre = offset === 0 ? centre.slice() : add(centre, mul(T, offset));
   const contactRadius = tilt === 0 ? radius : radius * Math.sqrt(1 - tilt * tilt);
-  // The sweep is measured at the CONTACT circle's centre, and a tilt opens it:
+  // The sweep is measured at the CONTACT circle's center, and a tilt opens it:
   // cos(sweep) = (nA.nB - tilt^2) / (1 - tilt^2), which exceeds a right angle
   // wherever the tilt is large and the faces are already near-tangent.
   const cosSweep = Math.max(-1, Math.min(1, (cosBetween - tilt * tilt) / (1 - tilt * tilt)));
@@ -309,10 +309,10 @@ export function variableRadiusSection({ centre, radius, toTouchA, toTouchB, spin
 
 /**
  * The same exact rational quadratic `sectionArc` builds, taken about the CONTACT
- * circle rather than about the ball centre. Feeding it the ball centre instead
+ * circle rather than about the ball center. Feeding it the ball center instead
  * is the great-circle error described in this module's header: the arc still
  * passes through both tangency points and still measures `radius` from the ball
- * centre, so only a signed envelope measure can see that it is wrong.
+ * center, so only a signed envelope measure can see that it is wrong.
  */
 export function variableRadiusSectionArc(section) {
   if (!section || !section.ok) return null;
@@ -327,8 +327,8 @@ export function variableRadiusSectionArc(section) {
  * THE SPINE TANGENT AND dr/ds AT ONE PARAMETER.
  *
  * ⚠ THE SPINE IS NOT AN INPUT — IT DEPENDS ON THE RADIUS. A ball of radius r in
- * a right-angled corner sits at (r, r); change r and the centre moves. So the
- * centre path is m(t) = c(t, r(t)) and its derivative is
+ * a right-angled corner sits at (r, r); change r and the center moves. So the
+ * center path is m(t) = c(t, r(t)) and its derivative is
  *
  *     dm/dt = dc/dt + r'(t) * dc/dr,
  *
@@ -348,7 +348,7 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
   const radius = profile.radiusAt(t);
   const drdt = profile.slopeAt(t);
   const b = ballAt(t, radius);
-  if (!b || !Array.isArray(b.centre)) return { ok: false, reason: `the caller supplied no ball centre at t = ${t}` };
+  if (!b || !Array.isArray(b.centre)) return { ok: false, reason: `the caller supplied no ball center at t = ${t}` };
   let dcdt = b.dCentreDt, dcdr = b.dCentreDr;
   if (!dcdt) {
     // Second-order everywhere: central inside, three-point one-sided at the ends
@@ -357,25 +357,25 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
     const at = (x) => { const q = ballAt(x, radius); return q && q.centre; };
     if (t - hT >= 0 && t + hT <= 1) {
       const p1 = at(t + hT), m1 = at(t - hT);
-      if (!p1 || !m1) return { ok: false, reason: 'the caller could not supply a neighbouring ball centre' };
+      if (!p1 || !m1) return { ok: false, reason: 'the caller could not supply a neighboring ball center' };
       dcdt = mul(sub(p1, m1), 1 / (2 * hT));
     } else {
       const s = t - hT < 0 ? 1 : -1;
       const f0 = at(t), f1 = at(t + s * hT), f2 = at(t + 2 * s * hT);
-      if (!f0 || !f1 || !f2) return { ok: false, reason: 'the caller could not supply a neighbouring ball centre' };
+      if (!f0 || !f1 || !f2) return { ok: false, reason: 'the caller could not supply a neighboring ball center' };
       dcdt = mul(add(add(mul(f0, -3), mul(f1, 4)), mul(f2, -1)), s / (2 * hT));
     }
   }
   if (!dcdr) {
     const hR = Math.min(opts.hR || 1e-5, radius * 0.25);
     const p1 = ballAt(t, radius + hR), m1 = ballAt(t, radius - hR);
-    if (!p1 || !m1 || !p1.centre || !m1.centre) return { ok: false, reason: 'the caller could not supply a ball centre at a neighbouring radius' };
+    if (!p1 || !m1 || !p1.centre || !m1.centre) return { ok: false, reason: 'the caller could not supply a ball center at a neighboring radius' };
     dcdr = mul(sub(p1.centre, m1.centre), 1 / (2 * hR));
   }
   const dm = add(dcdt, mul(dcdr, drdt));
   const speed = len(dm);
   if (!(speed > EPS)) {
-    return { ok: false, reason: `the ball centre is stationary at t = ${t} — a spine that does not advance has no tangent and no envelope`, speed };
+    return { ok: false, reason: `the ball center is stationary at t = ${t} — a spine that does not advance has no tangent and no envelope`, speed };
   }
   return {
     ok: true,
@@ -415,11 +415,11 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
  * identity (see `variableRadiusSection`), so |r'| = |n . m'| <= |m'| always: the
  * condition cannot be violated, whatever profile is asked for, because the
  * contact constraint drags the spine along at least as fast as the radius grows.
- * A right-angled edge is stronger still — the centre moves in both faces'
+ * A right-angled edge is stronger still — the center moves in both faces'
  * normal directions at once, capping the rate at 1/sqrt(2) no matter how steep
  * the taper.
  *
- * What violates it is a PRESCRIBED spine: a centre path that does not move when
+ * What violates it is a PRESCRIBED spine: a center path that does not move when
  * the radius does. That is a variable-radius pipe, and it is also what an app
  * produces the moment it takes the spine from an offset of the edge curve, or
  * reuses a spine sampled from an earlier constant-radius build, and then applies
@@ -440,7 +440,7 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
     const t = i / (N - 1);
     const r = profile.radiusAt(t);
     const b = ballAt(t, r);
-    if (!b || !Array.isArray(b.centre)) return { ok: false, reason: `no ball centre at t = ${t.toFixed(4)}` };
+    if (!b || !Array.isArray(b.centre)) return { ok: false, reason: `no ball center at t = ${t.toFixed(4)}` };
     ts.push(t); spine.push(b.centre); radii.push(r);
   }
   const verdict = variableRadiusFeasible(spine, radii);
@@ -468,7 +468,7 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
   }
   return {
     ok: false,
-    reason: `the radius outruns the edge near t = ${where.at.toFixed(3)}: it changes ${dr.toFixed(4)} while the ball centre moves only ${ds.toFixed(4)}, a rate of ${worstRate.toFixed(3)} against a ceiling of 1 — no envelope exists there. Move the stops ${(worstRate).toFixed(2)}x further apart along the edge, or bring their radii within ${ds.toFixed(4)} of each other.`,
+    reason: `the radius outruns the edge near t = ${where.at.toFixed(3)}: it changes ${dr.toFixed(4)} while the ball center moves only ${ds.toFixed(4)}, a rate of ${worstRate.toFixed(3)} against a ceiling of 1 — no envelope exists there. Move the stops ${(worstRate).toFixed(2)}x further apart along the edge, or bring their radii within ${ds.toFixed(4)} of each other.`,
     worstRate, worstAt: where, samples: N,
     worstMargin: verdict.worstMargin,
     excess: dr - ds,
@@ -483,7 +483,7 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
 /**
  * HOW FAR A VARIABLE-RADIUS SURFACE STRAYS FROM THE BALLS THAT DEFINED IT.
  *
- * ⚠ THE CONSTANT-RADIUS TEST DOES NOT GENERALISE, and the way it fails is
+ * ⚠ THE CONSTANT-RADIUS TEST DOES NOT GENERALIZE, and the way it fails is
  * silent. "Every point is r from the spine" becomes "every point is r(t) from
  * m(t) for SOME t", and taking the unsigned min of | |p - m(t)| - r(t) | over t
  * gives zero for any point lying on any sphere of the family — including every
@@ -496,7 +496,7 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
  *     g(p) = min over t of ( |p - m(t)| - r(t) ),
  *
  * which is zero on the envelope, negative for a point swallowed inside a
- * neighbouring ball — a blend that has cut too deep — and positive for a point
+ * neighboring ball — a blend that has cut too deep — and positive for a point
  * standing off the balls entirely. Its sign is returned as well as its size,
  * because those two failures need opposite fixes.
  *

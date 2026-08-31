@@ -20,7 +20,7 @@
 // filled at the offsets it returns and the uniform is given the offsets it
 // returns, and there is no second expression for either.
 //
-// ⚠ THE PDF IS NORMALISED TO THE UNIT SQUARE, in `buildEnvDistribution`, by the
+// ⚠ THE PDF IS NORMALIZED TO THE UNIT SQUARE, in `buildEnvDistribution`, by the
 // `cw*ch/total` factor. Losing it makes every render off by ONE CONSTANT
 // FACTOR — which reads as the exposure being wrong, gets compensated for in the
 // exposure, and after that nothing is ever right again. A white furnace walked
@@ -31,14 +31,14 @@
 // With `condOff` off by a row, a sample in row y draws its column from row
 // y+1's conditional, picking up a factor P(x|y+1)/P(x|y). The pdf is read at
 // the SAME cell and is proportional to that row's weighted luminance, so the
-// row's own normalisation cancels and the estimator stays EXACTLY unbiased:
+// row's own normalization cancels and the estimator stays EXACTLY unbiased:
 // the total energy is right and only the directions are wrong. That is the
 // whole reason the failure reads as "lit from slightly the wrong place" rather
 // than as an exposure error. Catching it takes a check on WHERE the samples
 // land — the sampled cell histogram against the pdf table the walk reports —
 // and it needs a coarse, high-contrast environment to have the resolution to
 // see it. The two guards are complementary, not redundant: the furnace owns
-// `pdfOff` and the normalisation, the histogram owns `condOff`.
+// `pdfOff` and the normalization, the histogram owns `condOff`.
 //
 // ⚠ `envRot` IS NOT PACKED HERE. It lives in the frame uniform, in TURNS: the
 // shader subtracts it directly from a `[0,1]` texture coordinate, so degrees or
@@ -136,7 +136,7 @@ const _u32 = new Uint32Array(_f32.buffer);
  *
  * ⚠ ANYTHING ABOVE 65504 IS CLAMPED, NOT ROUNDED TO INFINITY. A sun in an HDR
  * reaches five and six figures, and an `Inf` texel does not stay in its texel:
- * the sampler filters linearly, so `Inf` bleeds into its neighbours, and
+ * the sampler filters linearly, so `Inf` bleeds into its neighbors, and
  * `Inf * 0` or `Inf - Inf` anywhere downstream is `NaN`. The accumulation
  * buffer only ever adds, so one NaN sample makes that pixel NaN for the whole
  * accumulation — a dead pixel that survives every further sample and clears

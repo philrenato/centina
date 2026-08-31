@@ -257,8 +257,8 @@ test('frames on a planar curve are orthonormal, outward, and lie in the plane', 
     // tangentV is the PLANE normal on a planar curve, which is what makes
     // "flat in the plane, then lift out of it" mean anything.
     assert.ok(Math.abs(Math.abs(dot(f.tangentV, [0, 0, 1])) - 1) < 1e-9, 'tangentV is the plane normal');
-    // Outward: away from the centre, for a circle.
-    assert.ok(dot(f.normal, normalize(f.position)) > 0.999, 'normal points away from the centre');
+    // Outward: away from the center, for a circle.
+    assert.ok(dot(f.normal, normalize(f.position)) > 0.999, 'normal points away from the center');
   }
 });
 
@@ -268,7 +268,7 @@ test('outward stays outward when the winding reverses', () => {
   // exists to prevent.
   const { frames } = curveRootFrames(reverseCurve(circle), 16);
   for (const f of frames) {
-    assert.ok(dot(f.normal, normalize(f.position)) > 0.999, 'still points away from the centre');
+    assert.ok(dot(f.normal, normalize(f.position)) > 0.999, 'still points away from the center');
   }
 });
 

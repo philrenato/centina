@@ -4,7 +4,7 @@
 whole legal part. There is no CLA to sign and nothing to email.
 
 Fork it, commit, open a pull request. Unmerged pull requests are normal and are
-not a judgement about your work — this is a teaching tool with a lot of opinions
+not a judgment about your work — this is a teaching tool with a lot of opinions
 baked into it, and "this is good but it isn't what this project is" is a real and
 common answer. **A fork is a legitimate destination, not a failure state.**
 

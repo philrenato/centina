@@ -16,8 +16,8 @@
 // equal-radius case hides. A blend along one edge is a tube about that edge;
 // with equal radii it stops at a plane perpendicular to itself and its end is a
 // circle. With unequal radii its two tangency curves have to stop at DIFFERENT
-// distances from the corner — one where it meets its neighbour on one shared
-// face, the other where it meets a different neighbour on the other — so its
+// distances from the corner — one where it meets its neighbor on one shared
+// face, the other where it meets a different neighbor on the other — so its
 // end is a skew curve across the tube, not a planar section.
 
 import { networkCorrectionSurface } from './loft.mjs';
@@ -142,7 +142,7 @@ export function tangencyCrossing(lineA, lineB, opts = {}) {
  *  material for the convex edges and outside it for the concave ones at the
  *  same time, which is why the rounding of a convex edge and the filleting of a
  *  concave one are different operations (Rossignac & Requicha, "Offsetting
- *  operations in solid modelling", CAGD 3(2):129-148, 1986, section 2.5), and
+ *  operations in solid modeling", CAGD 3(2):129-148, 1986, section 2.5), and
  *  why a spherical corner exists only where the three concavities agree. What
  *  is crossed here is the blends' OWN tangency lines, each of which needs only
  *  its own edge's rolling ball, so the mixed corner has three of them and no
@@ -244,7 +244,7 @@ export function cornerPatchCorners(vertex, edges, opts = {}) {
   return { ok: true, corners, worstGap };
 }
 
-/* WHERE A BLEND STOPS WHEN ITS NEIGHBOURS DISAGREE — THE APPROXIMATE FORM.
+/* WHERE A BLEND STOPS WHEN ITS NEIGHBORS DISAGREE — THE APPROXIMATE FORM.
 
    With equal radii a blend ends on a plane perpendicular to itself. With
    unequal radii its two tangency curves stop at DIFFERENT distances from the
@@ -315,7 +315,7 @@ export function sideVertexPatch({ corners, boundary, tangent, tangentScale = COR
   for (let i = 0; i < 3; i++) if (typeof boundary[i] !== 'function') return { ok: false, reason: `boundary ${i} is not an evaluable curve` };
   /* ⚠ WITHOUT A CROSS-BOUNDARY TANGENT THIS IS G0 AND ONLY G0. A straight ray
      from the vertex to the boundary carries no information about how the
-     neighbouring surface leaves that boundary, so the patch meets it at
+     neighboring surface leaves that boundary, so the patch meets it at
      whatever angle the geometry happens to give — measured at 45 to 70 degrees
      on a (5, 8, 3) corner, which is a visible crease and not a fillet.
 
@@ -393,7 +393,7 @@ export function sideVertexPatch({ corners, boundary, tangent, tangentScale = COR
        Hermite's own parameter, so coordinates that do not sum to one — or that
        are negative — put it outside the curve it was built from and the point
        returned means nothing. Callers doing floating-point arithmetic drift a
-       few ulps and that is fine; gross denormalisation is a bug in the caller
+       few ulps and that is fine; gross denormalization is a bug in the caller
        and is worth saying so. */
     if (!Number.isFinite(b0) || !Number.isFinite(b1) || !Number.isFinite(b2)) return null;
     if (Math.abs(b0 + b1 + b2 - 1) > 1e-6) return null;
@@ -565,8 +565,8 @@ export function cornerFitsOnFaces(cornerResult, faceExtents) {
    The construction. Edges A and B share a face and carry the same radius a;
    edge C carries c. A ball of radius a tangent to that shared face can roll
    from where the A-blend leaves it to where the B-blend picks it up, and while
-   it rolls it must also stay tangent to the C-blend — so its centre sits at
-   distance a + c from C's axis. Centre path = (plane parallel to the shared
+   it rolls it must also stay tangent to the C-blend — so its center sits at
+   distance a + c from C's axis. Center path = (plane parallel to the shared
    face at height a) INTERSECT (cylinder of radius a + c about C's axis).
 
    ⚠⚠ THAT INTERSECTION IS A CIRCLE ONLY WHEN C'S AXIS IS PERPENDICULAR TO THE
@@ -578,7 +578,7 @@ export function cornerFitsOnFaces(cornerResult, faceExtents) {
 
    The handoff station falls out of the same condition. The A-blend's own axis
    IS the path of that ball (a ball of radius a tangent to both of A's faces has
-   its centre on A's axis), so the handoff is where that axis first reaches
+   its center on A's axis), so the handoff is where that axis first reaches
    distance a + c from C's axis:
        offset^2 = (a + c)^2 - (a - c)^2 = 4ac   ->   offset = 2*sqrt(ac)
    measured along the edge from the foot of C's axis. At exactly that station
@@ -610,7 +610,7 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
      unlike convexity therefore need it on both sides of the same plane at
      once, and there is no such path.
 
-     The third edge fails differently and just as hard. The centre path is the
+     The third edge fails differently and just as hard. The center path is the
      circle at distance a + c from that edge's axis; when the third edge's
      convexity disagrees with the other two, its axis sits a + c from the first
      blend's axis already, so the handoff offset 2*sqrt(ac) collapses — the two
@@ -639,14 +639,14 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
   if (align < Math.cos(alignTolRad)) {
     return {
       ok: false,
-      reason: `the third edge is ${(Math.acos(Math.min(1, align)) * 180 / Math.PI).toFixed(3)} degrees off the shared face's normal — the rolling ball's centre traces an ellipse rather than a circle, so the corner is a general canal surface and not a torus`,
+      reason: `the third edge is ${(Math.acos(Math.min(1, align)) * 180 / Math.PI).toFixed(3)} degrees off the shared face's normal — the rolling ball's center traces an ellipse rather than a circle, so the corner is a general canal surface and not a torus`,
     };
   }
   // C's axis: offset from the vertex into each of ITS two faces by its own
-  // setback, which on the shared face is what puts the torus centre in place.
+  // setback, which on the shared face is what puts the torus center in place.
   const axisPoint = add(vertex, add(mul(norm(edgeC.coNormalA), setbackFor(c, edgeC.phi)),
     mul(norm(edgeC.coNormalB), setbackFor(c, edgeC.phi))));
-  /* The torus: centre on C's axis, one ball-radius off the shared face on the
+  /* The torus: center on C's axis, one ball-radius off the shared face on the
      side the ball ROLLS, with C's axis for its own. Which side that is comes
      from a co-normal rather than from the face normal's stored sign, which is
      whatever the producing recipe happened to build.
@@ -680,7 +680,7 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
     torus: {
       centre: torusCentre,
       axis: dC,
-      majorRadius: a + c,   // where the rolling ball's centre goes
+      majorRadius: a + c,   // where the rolling ball's center goes
       minorRadius: a,       // the ball itself
     },
     handoff: { offsetAlongEdge: offset, note: '2*sqrt(a*c) from the foot of the third edge\'s axis' },
@@ -766,7 +766,7 @@ export function cornerPatchFolds(patch, opts = {}) {
     }
   }
   /* ⚠ A SIGN FLIP IS NOT THE ONLY WAY TO FAIL. A patch creased at eighty-nine
-     degrees between neighbouring samples has not technically reversed and is
+     degrees between neighboring samples has not technically reversed and is
      not a surface anyone wants; the old criterion returned ok for it. */
   const creaseLimit = opts.creaseLimitDeg ?? 75;
   const folds = reversals > 0 || worstDeg > creaseLimit;
@@ -775,7 +775,7 @@ export function cornerPatchFolds(patch, opts = {}) {
     reason: folds
       ? (reversals > 0
         ? `the corner patch folds over itself — ${reversals} adjacent normal reversal(s), worst turn ${worstDeg.toFixed(1)} degrees. At these radii the region between the three blends is too distorted for one patch to span.`
-        : `the corner patch creases — neighbouring samples turn ${worstDeg.toFixed(1)} degrees, past the ${creaseLimit} degree limit, so it is not folded but it is not a fillet either.`)
+        : `the corner patch creases — neighboring samples turn ${worstDeg.toFixed(1)} degrees, past the ${creaseLimit} degree limit, so it is not folded but it is not a fillet either.`)
       : null,
   };
 }
@@ -815,14 +815,14 @@ export function blendEndTrimLoopFromPlane({ startPlane, endPlane, stationAt, uMi
   return { ok: true, loop: lo.concat(hi) };
 }
 
-/* THE PATCH AS A SURFACE THE REST OF A MODELLER CAN HOLD.
+/* THE PATCH AS A SURFACE THE REST OF A MODELER CAN HOLD.
 
    `sideVertexPatch` returns an evaluator over barycentric coordinates, which is
    the right thing for a triangular patch and the wrong shape for everything
    downstream: a closure classifier, a trim splice and a `.3dm` export all read
    a tensor-product surface with a trim loop. So the evaluator is SAMPLED and
    INTERPOLATED, never approximated by a fit that refits its own boundary — the
-   neighbouring blends carry the boundary points, and a patch that merely comes
+   neighboring blends carry the boundary points, and a patch that merely comes
    close to them opens the corner it was built to close.
 
    ⚠ THE TRIANGLE BECOMES A SQUARE BY COLLAPSING ONE CORNER, and the map is

@@ -28,7 +28,7 @@ import { surfaceClosure } from '../kernel/surface.mjs';
 //
 //   3. Cutting that tube open puts a new vertex partway along the shared
 //      intersection circle — a point on the true curve, and therefore off the
-//      neighbouring cap's straight chord by that chord's own sagitta. Both
+//      neighboring cap's straight chord by that chord's own sagitta. Both
 //      sides then disagree about how the shared edge is subdivided, at a
 //      distance far too large for an on-edge test to accept on proximity.
 //
