@@ -76,6 +76,7 @@ export * from './subd.mjs';
 export * from './subdconvert.mjs';
 export * from './subdedit.mjs';
 export * from './subdlimit.mjs';
+export * from './subdmatch.mjs';
 export * from './subdnetwork.mjs';
 export * from './subdpipe.mjs';
 export * from './subdprimitives.mjs';

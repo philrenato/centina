@@ -880,11 +880,29 @@ export function thickenCage(cage, distance) {
 // direction, doubling both the new faces and the T-junctions for a move asked
 // for once. That second cut is one more local insert with the other `side`.
 //
-// LOCAL'S OWN SCOPE LIMIT: the SEED face must still be a quad, because "the
-// opposite edge" is only well defined for a quad. A face already carrying a
-// T-junction vertex (an n-gon, n>=5) therefore cannot itself seed the next
-// insert — but it can be, and is, correctly WIDENED AGAIN as the neighbor of
-// one, which is the case that actually recurs when refining locally.
+// WHAT AN N-GON DOES TO EITHER MODE, and the one place it is still a refusal.
+// "The opposite edge" is well defined only for a quad, so a strip cannot pass
+// through an n-gon. It can END at one, and does: reached mid-strip, a non-quad
+// stops that direction of the walk exactly as a cage boundary or a
+// non-manifold rung already stopped it, and the loop keeps every face it had
+// already crossed. The rung shared with the n-gon is still split, and the
+// T-junction repair below widens the n-gon from n to n+1 so no crack is left —
+// the same repair `local` mode has always relied on. The n-gons a run stopped
+// at come back in `stoppedAtNonQuadFaceIndices`, so a partial loop is stated
+// rather than inferred.
+//
+// The SEED face is the exception, in both modes: a non-quad there has no cut
+// in it at all and no earlier progress to stop after, so it is refused, by a
+// message that names the face, its side count, and the adjacent quad to seed
+// from instead. A face already carrying a T-junction vertex (an n-gon, n>=5)
+// therefore cannot itself seed the next insert — but it can be, and is,
+// correctly WIDENED AGAIN as the neighbor of one, which is the case that
+// actually recurs when refining locally.
+//
+// SO A WHOLE-LOOP INSERT CAN NOW LEAVE T-JUNCTIONS, where it previously could
+// not: on an all-quad cage it still leaves none (the walk crosses every face
+// whose rungs it splits), and on a cage carrying an n-gon it leaves exactly
+// the one widened n-gon at each end where the strip stopped.
 export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   const local = !!(opts && opts.local);
   if (!Number.isFinite(t) || t <= 0 || t >= 1) throw new Error('insertEdgeLoop: t must be a number strictly between 0 and 1');
@@ -894,17 +912,34 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   if (!seedEdge) throw new Error(`insertEdgeLoop: "${seedKey}" is not a real edge of this cage`);
   const face0 = seedEdge.faces[side];
   if (face0 === undefined) throw new Error(`insertEdgeLoop: no face on side ${side} of edge "${seedKey}" (it has ${seedEdge.faces.length} adjacent face${seedEdge.faces.length === 1 ? '' : 's'})`);
+  // THE SEED FACE IS THE ONE PLACE A NON-QUAD IS STILL A REFUSAL, and the
+  // refusal names what it hit. The cut inside a face runs from one of the
+  // near edge's two neighboring sides to the other, leaving across the edge
+  // opposite the near one — which needs exactly one side on each hand and a
+  // single opposite edge, true only of a quad. Met MID-STRIP that is a place
+  // to stop (see the enqueue below). Met as the SEED it is a face with no cut
+  // in it at all, and there is no earlier progress to stop after.
+  if (cage.faces[face0].length !== 4) {
+    const otherSide = side === 0 ? 1 : 0;
+    const otherFace = seedEdge.faces[otherSide];
+    const alt = otherFace === undefined
+      ? 'this edge has only one face'
+      : `side ${otherSide} of this same edge is face ${otherFace}, with ${cage.faces[otherFace].length} sides`;
+    throw new Error(`insertEdgeLoop: the face this insert would start from, face ${face0} on side ${side} of edge "${seedKey}", has ${cage.faces[face0].length} sides, not 4 — a cut leaves a face across the edge opposite the one it entered by, and only a quad has an opposite edge, so there is no cut to make in this face. Seed from an edge of an adjacent quad instead (${alt}); a loop seeded on a quad runs up to this face and stops at it.`);
+  }
 
   const faceInfos = new Map(); // faceIdx -> { na, nb, farNa, farNb }
   const visited = new Set();
+  const stoppedAtNonQuad = new Set(); // INPUT face indices the strip declined to enter
   const queue = [{ faceIdx: face0, nearKey: seedKey }];
 
   while (queue.length) {
     const { faceIdx, nearKey } = queue.shift();
     if (visited.has(faceIdx)) continue;
     visited.add(faceIdx);
+    // Every face dequeued here is a quad: the seed was checked above, and the
+    // enqueue below only ever enqueues quads.
     const face = cage.faces[faceIdx];
-    if (face.length !== 4) throw new Error(`insertEdgeLoop: face ${faceIdx} is not a quad (has ${face.length} sides) — ${local ? 'a local edge insert needs a well-defined opposite edge, which only a quad has' : 'InsertEdge is only defined for a quad-faced strip'}`);
     const nearEdge = topology.edgeMap.get(nearKey);
     const farKey = oppositeEdgeInFace(cage, faceIdx, nearKey);
     if (!farKey) throw new Error(`insertEdgeLoop: face ${faceIdx} has no well-defined opposite edge for "${nearKey}"`);
@@ -950,6 +985,31 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
       const nextFaceIdx = others[0];
       if (visited.has(nextFaceIdx)) continue;
       const nextFace = cage.faces[nextFaceIdx];
+      // A NON-QUAD ENDS THE STRIP HERE, it does not end the operation. This is
+      // the third member of a family the two lines above already handle the
+      // same way: a rung with no face beyond it (a cage boundary) and a rung
+      // with two or more (non-manifold) both stop this direction and keep
+      // whatever the walk already has. "The face beyond has no opposite edge
+      // to leave by" is the same kind of fact and gets the same answer —
+      // it was the only one of the three that threw, which made an n-gon
+      // ANYWHERE along a strip cancel the whole insert, including the part
+      // that was perfectly well defined.
+      //
+      // kernel/subdselect.mjs already reads it this way: edgeRingFromSeed and
+      // faceLoopFromSeed — the walks that SHOW a user which strip an insert
+      // will act on — return a partial ring at an n-gon and throw on nothing.
+      // A pick that highlights a strip has to be a pick the insert can run.
+      //
+      // Crossing instead would be a guess, and there is no rule to guess by.
+      // The two new vertices land inside the near edge's two neighboring
+      // sides; an n-gon has (n-2)/2 sides on each hand rather than one, and
+      // nothing chooses among them. For odd n there is not even an opposite
+      // edge to aim at. So: stop, and leave the n-gon crack-free rather than
+      // cut wrong. The rung shared with it IS still split (it is a rung of a
+      // face that is being split), and the T-junction repair below splices
+      // that new vertex into the n-gon's own boundary, widening it from n to
+      // n+1 — the identical mechanism `local` mode has always relied on.
+      if (nextFace.length !== 4) { stoppedAtNonQuad.add(nextFaceIdx); continue; }
       const idx2 = nextFace.indexOf(nearV);
       if (idx2 === -1) throw new Error(`insertEdgeLoop: rung "${rKey}" traversal error at face ${nextFaceIdx}`);
       const n2 = nextFace.length;
@@ -1003,17 +1063,24 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   // that is still legal input to every rule in kernel/subd.mjs.
   //
   // A face is rebuilt only if one of its own sides is genuinely a split rung;
-  // otherwise it is copied through unchanged. In the whole-loop (non-local)
-  // case, every face across every split rung is itself in `facesToRemove`
-  // (that is exactly what the walk enqueued), so nothing is rebuilt and the
-  // output is unchanged — this repair is reached only by a cut that stops.
+  // otherwise it is copied through unchanged. This repair is reached by a cut
+  // that STOPS — which is `local` mode by construction, and a whole-loop
+  // insert wherever its strip stopped at an n-gon or a cage boundary. On an
+  // all-quad closed band every face across every split rung was itself
+  // enqueued, so nothing is rebuilt and this pass is a no-op.
   const splitRungMid = new Map(); // rung edgeKey -> the new vertex sitting in its interior
   rungPairs.forEach(([nearIdx, farIdx], i) => splitRungMid.set(edgeKey(nearIdx, farIdx), insertedVertexIndices[i]));
 
   const keptFaces = [];
   const tJunctionFaceIndices = [];
+  const stoppedAtNonQuadFaceIndices = [];
   cage.faces.forEach((face, fi) => {
     if (facesToRemove.has(fi)) return;
+    // Recorded here rather than during the walk because the walk knows INPUT
+    // indices and every other index this function returns is an OUTPUT one.
+    // keptFaces leads the output array, so its current length IS that index,
+    // whichever of the two branches below ends up doing the push.
+    if (stoppedAtNonQuad.has(fi)) stoppedAtNonQuadFaceIndices.push(keptFaces.length);
     const n = face.length;
     let splits = false;
     for (let c = 0; c < n && !splits; c++) splits = splitRungMid.has(edgeKey(face[c], face[(c + 1) % n]));
@@ -1060,10 +1127,15 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     rungPairs,
     // Output-array indices, so a caller can highlight what it just made
     // without re-deriving it: the two halves of every split face, and the
-    // untouched-but-widened neighbors that now carry a T-junction vertex
-    // (always empty for a whole-loop insert, which leaves none).
+    // untouched-but-widened neighbors that now carry a T-junction vertex.
     splitFaceIndices: replacementFaces.map((_, i) => keptFaces.length + i),
     tJunctionFaceIndices,
+    // The n-gons the strip stopped at, so "this loop is partial" is something
+    // the caller is TOLD rather than something it has to infer from a face
+    // count. Empty means the loop ran to its natural ends (a closed band, or
+    // a cage boundary at each end) — an all-quad cage always returns empty,
+    // which is every cage that existed before an n-gon was introduced.
+    stoppedAtNonQuadFaceIndices,
   };
 }
 

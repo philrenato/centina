@@ -380,7 +380,7 @@ test('third local insert on a doubly-T-junctioned cage stays valid for every see
     for (const side of [0, 1]) {
       let r;
       try { r = insertEdgeLocal(c2, k, 0.5, side); } catch (e) {
-        assert.match(e.message, /is not a quad/, `unexpected refusal on ${k}/${side}: ${e.message}`);
+        assert.match(e.message, /only a quad has an opposite edge/, `unexpected refusal on ${k}/${side}: ${e.message}`);
         refusedForNgonSeed++;
         continue;
       }
@@ -512,7 +512,7 @@ test('local insert keeps every guard the loop insert has: t range, side range, u
   const sideAtPentagon = sides.indexOf(withT.tJunctionFaceIndices[0]);
   assert.ok(sideAtPentagon >= 0);
   assert.throws(() => insertEdgeLocal(withT.cage, pentEdge, 0.5, sideAtPentagon),
-    /is not a quad .* a local edge insert needs a well-defined opposite edge/);
+    /only a quad has an opposite edge[\s\S]*Seed from an edge of an adjacent quad instead/);
 });
 
 test('local insert transfers a crease on a split rung onto BOTH halves, and leaves the untouched near/far creases alone', () => {

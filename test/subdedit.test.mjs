@@ -1211,7 +1211,7 @@ test('insertEdgeLoop: side=1 on a facets=3 cylinder (triangular caps) honestly r
   const seedKey = edgeKey(0, 1);
   // side=0 -> the side quad (fine); side=1 -> the triangular cap (not a quad, must refuse).
   assert.doesNotThrow(() => insertEdgeLoop(cage, seedKey, 0.5, 0));
-  assert.throws(() => insertEdgeLoop(cage, seedKey, 0.5, 1), /not a quad/);
+  assert.throws(() => insertEdgeLoop(cage, seedKey, 0.5, 1), /only a quad has an opposite edge/);
 });
 
 test('insertEdgeLoop: refuses side values other than 0 or 1', () => {

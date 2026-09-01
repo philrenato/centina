@@ -658,14 +658,22 @@ export function regularFaceToPatch(cage, faceIdx, ctx = buildTopology(cage)) {
 // what a caller that wants to know about them relies on. With it, step 8
 // below emits one patch per leftover region and `uncovered` shrinks to
 // only the regions that could not be capped, each carrying the reason.
-export function subdToPatches(cage, opts = {}) {
-  const maxIsolation = opts.maxIsolation ?? 3;
-  const patches = [];
+// THE ISOLATION LOOP ITSELF, with what to do about a face that came out
+// regular left to the caller. Two callers want the same walk and disagree only
+// about that: the conversion builds a patch, and the pre-flight estimate
+// counts one. Sharing the loop is what stops the estimate from drifting away
+// from the thing it predicts — a predictor with its own copy of the walk is a
+// second implementation, and the first time the two disagree the estimate is
+// silently wrong about the only number it exists to report.
+//
+// `onRegular(cage, faceIdx, ctx, level)` is called once per face that
+// converged, and whatever it returns is stored in the level's own emitted map
+// for the cap builder. Returns the final refined cage, the regions still live
+// on it, that last level's emitted map, and the level reached.
+function isolateRegularFaces(cage, maxIsolation, onRegular, localShare = ISOLATION_LOCAL_SHARE) {
   let current = { vertices: cage.vertices.map((v) => v.slice()), faces: cage.faces.map((f) => f.slice()), creases: { ...(cage.creases || {}) } };
   let live = current.faces.map((_, fi) => fi);
-  const originalFaceCount = cage.faces.length;
   let level = 0;
-
   // The final level's own emitted patches, by face index — the cap builder
   // reads its boundary rows straight out of these, so a cap and its
   // neighbor carry the identical numbers rather than two computations of
@@ -677,16 +685,41 @@ export function subdToPatches(cage, opts = {}) {
     const stillLive = [];
     emittedAtLevel = new Map();
     for (const fi of live) {
-      if (isRegularFace(current, fi, ctx)) {
-        const srf = regularFaceToPatch(current, fi, ctx);
-        emittedAtLevel.set(fi, srf);
-        patches.push({ srf, level, faceIndex: fi, kind: 'regular' });
-      } else {
-        stillLive.push(fi);
-      }
+      if (isRegularFace(current, fi, ctx)) emittedAtLevel.set(fi, onRegular(current, fi, ctx, level));
+      else stillLive.push(fi);
     }
     live = stillLive;
     if (!live.length || level >= maxIsolation) { current = { ...current, __ctx: undefined }; break; }
+
+    // ISOLATION IS LOCAL, SO THE REFINEMENT IS TOO. Every face still live
+    // after the first pass touches an extraordinary vertex or a crease, and
+    // on any cage with an interior the count stops falling almost at once:
+    // a 24x24x6 box cage is 3456 faces, of which 24 are still live after
+    // level 0 and stay 96 for every level after. Refining the WHOLE cage to
+    // serve them takes it to 221,184 faces by level 3 and is, measured, 93%
+    // of this function's entire cost — buildTopology and subdivideCatmullClark
+    // on a cage that is 99.96% pad. Cutting the working cage down to the live
+    // faces plus a margin of rings does the identical arithmetic on the part
+    // that is read.
+    //
+    // THE PAD IS THE SAME MEASURED QUANTITY localNeighbourhoodCage's own
+    // header states, spent one ring per remaining refinement: the sub-cage's
+    // cut edge is a naked boundary from its own perspective, so the boundary
+    // rules fire there and that wrong value spreads one further ring inward
+    // per level. Arriving at the final level with LOCAL_PROBE_RINGS rings
+    // still correct is what the cap's own dyadic probe then asks for, and
+    // ISOLATION_PAD_MARGIN is margin on top of that. The whole claim —
+    // that this changes cost and not one control point — is asserted by
+    // comparing every emitted patch against the whole-cage answer bit for
+    // bit, which is a test and not a comment.
+    {
+      const rings = LOCAL_PROBE_RINGS + ISOLATION_PAD_MARGIN + (maxIsolation - level);
+      const local = localNeighbourhoodCage(current, ctx, live, rings, current.faces.length * localShare);
+      if (local) {
+        current = local.sub;
+        live = live.map((fi) => local.faceMap.get(fi));
+      }
+    }
 
     // subdivideCatmullClark pushes each face's children in corner order,
     // so a face's own children occupy a contiguous run starting at the
@@ -705,6 +738,22 @@ export function subdToPatches(cage, opts = {}) {
     live = nextLive;
     level++;
   }
+  return { current, live, emittedAtLevel, level };
+}
+
+export function subdToPatches(cage, opts = {}) {
+  const maxIsolation = opts.maxIsolation ?? 3;
+  const patches = [];
+  const originalFaceCount = cage.faces.length;
+  const iso = isolateRegularFaces(cage, maxIsolation, (c, fi, ctx, level) => {
+    const srf = regularFaceToPatch(c, fi, ctx);
+    patches.push({ srf, level, faceIndex: fi, kind: 'regular' });
+    return srf;
+  }, opts.localShare ?? ISOLATION_LOCAL_SHARE);
+  let current = iso.current;
+  let live = iso.live;
+  const emittedAtLevel = iso.emittedAtLevel;
+  const level = iso.level;
 
   const ctxFinal = buildTopology(current);
   const describe = (fi) => ({
@@ -741,6 +790,44 @@ export function subdToPatches(cage, opts = {}) {
     refinedCage: current,
     // Share of the original parameter domain left unconverted.
     uncoveredFraction: uncovered.reduce((sum, u) => sum + Math.pow(4, -u.level), 0) / originalFaceCount,
+  };
+}
+
+// WHAT THE CONVERSION WILL COST, WITHOUT PAYING IT. The number a caller has
+// to decide on is how many surfaces come out, and that is not a property of
+// the cage's face count: a torus cage of 576 faces is regular everywhere and
+// converts to 576 patches at level 0, while a 6-face box cage reaches 168
+// because every one of its corners is a star point and the region around each
+// has to be refined three times to isolate it. Nothing readable off the cage
+// up front separates those two cases, so this runs the real isolation walk —
+// the same one subdToPatches runs, not a model of it — and skips only the part
+// that builds geometry.
+//
+// WHAT IT COSTS TO ASK: the walk without patch construction and without the
+// cap's own two refinements, which is roughly half of the conversion on a
+// small cage and a much smaller share on a large one, where building and
+// meshing the patches is what dominates.
+//
+// The count is EXACT, caps included: the cap planner runs too, because whether
+// a leftover region can be capped is decided by topology alone and costs
+// nothing next to building one.
+export function estimateSubdToPatches(cage, opts = {}) {
+  const maxIsolation = opts.maxIsolation ?? 3;
+  let regular = 0;
+  const iso = isolateRegularFaces(cage, maxIsolation, () => { regular++; return null; }, opts.localShare ?? ISOLATION_LOCAL_SHARE);
+  let capped = 0, open = iso.live.length;
+  if (opts.cap && iso.live.length) {
+    const plan = planStarCaps(iso.current, buildTopology(iso.current), iso.live, iso.emittedAtLevel);
+    capped = plan.plans.length;
+    open = plan.refused.length;
+  }
+  return {
+    regular,
+    caps: capped,
+    patches: regular + capped,
+    uncovered: open,
+    levelsUsed: iso.level,
+    uncoveredFraction: open * Math.pow(4, -iso.level) / cage.faces.length,
   };
 }
 
@@ -905,11 +992,34 @@ export function patchBoundaryRow(srf, faceVerts, v0, v1) {
 // fails, this number is the thing to raise.
 const LOCAL_PROBE_RINGS = 5;
 
-function localNeighbourhoodCage(cage, ctx, seedFaces, rings) {
+// Extra rings the isolation loop carries on top of LOCAL_PROBE_RINGS, so the
+// cage it hands the cap probe has the probe's own margin intact rather than
+// exactly spent. One ring is one refinement's worth of inward contamination.
+const ISOLATION_PAD_MARGIN = 1;
+
+// The share of the cage a localized neighborhood may reach before localizing
+// stops being worth its own ring walk. Measured on an open plane cage, whose
+// whole naked border stays live forever: there the padded neighborhood IS the
+// cage, and building it costs `rings` passes over every face to save nothing.
+const ISOLATION_LOCAL_SHARE = 0.6;
+// `{ localShare: 0 }` turns localizing off entirely — no neighborhood can come
+// in under a budget of zero faces — which makes the whole-cage computation
+// reachable as what it is: the reference this shortcut has to agree with, bit
+// for bit, rather than a claim in a comment.
+
+// `maxFaces` abandons the walk the moment the neighborhood stops being a
+// neighborhood. A caller that wants a sub-cage BECAUSE it is smaller (the
+// isolation loop) gains nothing from one that covers the whole cage and pays
+// `rings` passes over every face to find that out; it gets null instead and
+// carries on with the cage it has. The probe passes no budget and always
+// gets its cage.
+function localNeighbourhoodCage(cage, ctx, seedFaces, rings, maxFaces = Infinity) {
   let faceSet = new Set(seedFaces);
+  if (faceSet.size > maxFaces) return null;
   for (let r = 0; r < rings; r++) {
     const next = new Set(faceSet);
     for (const fi of faceSet) for (const v of cage.faces[fi]) for (const nf of ctx.vertexFaces[v]) next.add(nf);
+    if (next.size > maxFaces) return null;
     if (next.size === faceSet.size) break;
     faceSet = next;
   }
@@ -972,7 +1082,14 @@ function dyadicLimitProbe(outerCage, outerCtx, seedFaces) {
 // One cap per leftover region, or an honest refusal naming what the region
 // failed. `emitted` maps a face index at this level to the patch already
 // emitted for it.
-export function capStarRegions(cage, ctx, live, emitted) {
+// WHICH LEFTOVER REGIONS CAN BE CAPPED AT ALL, decided before any geometry is
+// built. Separated from the build because the pre-flight estimate needs this
+// answer and must not pay for the caps to find it out: on an open cage every
+// naked-boundary region refuses, which is 508 of 1564 regions on a 16x16 plane
+// — an estimate that assumed they were all cappable would be half again too
+// large, and it would be too large in exactly the case a caller most wants a
+// straight answer about.
+export function planStarCaps(cage, ctx, live, emitted) {
   const liveSet = new Set(live);
   const refused = [];
   const plans = [];
@@ -994,6 +1111,11 @@ export function capStarRegions(cage, ctx, live, emitted) {
     if (!liveSet.has(nEA) || !liveSet.has(nCE)) { reject('the two edges at the extraordinary vertex are not both shared with another uncovered region'); continue; }
     plans.push({ fi, E, a, b, c, nAB, nBC, nEA, nCE, rot });
   }
+  return { plans, refused };
+}
+
+export function capStarRegions(cage, ctx, live, emitted) {
+  const { plans, refused } = planStarCaps(cage, ctx, live, emitted);
 
   // Boundary rows first, straight out of the neighbors' own nets.
   for (const p of plans) {

@@ -26,11 +26,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { subdivideCatmullClark, buildTopology } from '../kernel/subd.mjs';
-import { superbBoxCage, superbEllipsoidCage, superbTorusCage } from '../kernel/subdprimitives.mjs';
+import { superbBoxCage, superbEllipsoidCage, superbTorusCage, superbPlaneCage, superbCylinderCage } from '../kernel/subdprimitives.mjs';
 import { extrudeFaces } from '../kernel/subdedit.mjs';
 import { surfacePoint, surfacePointAndPartials } from '../kernel/surface.mjs';
 import {
-  isRegularFace, regularFaceToPatch, subdToPatches, vertexLimitPosition,
+  isRegularFace, regularFaceToPatch, subdToPatches, estimateSubdToPatches, vertexLimitPosition,
   patchBoundaryRow, accInteriorPoint,
 } from '../kernel/subdlimit.mjs';
 
@@ -544,4 +544,111 @@ test('capping does not disturb the regular patches — they are the same surface
     checked++;
   }
   assert.equal(checked, plain.patches.length);
+});
+
+// ---------------------------------------------------------------------
+// LOCALIZED ISOLATION. Every face still live after the first pass touches an
+// extraordinary vertex, so the refinement that isolates them is cut down to
+// their own neighborhood plus a margin of rings. The claim is that this
+// changes cost and NOTHING else, and the only oracle that can settle it is the
+// whole-cage computation itself — reachable as `{ localShare: 0 }`.
+//
+// ⚠ THE PREMISE IS ASSERTED FROM THE RESULT, not assumed: the two arms must
+// arrive at DIFFERENT final cages, or the fast arm never localized anything
+// and the agreement below is agreement with itself.
+const LOCALIZING_CAGES = () => [
+  ['box facets 8', superbBoxCage([0, 0, 0], [25, 25, 25], 8)],
+  ['box facets 12', superbBoxCage([0, 0, 0], [25, 25, 25], 12)],
+  ['box facets 8, one vertex pulled off obliquely', (() => {
+    const c = superbBoxCage([0, 0, 0], [25, 25, 25], 8);
+    c.vertices[137] = c.vertices[137].map((x, k) => x + [3.1, -7.4, 2.2][k]);
+    return c;
+  })()],
+  ['box facets 8 with three creases', (() => {
+    const c = superbBoxCage([0, 0, 0], [25, 25, 25], 8);
+    const keys = [...buildTopology(c).edgeMap.keys()];
+    c.creases = { [keys[0]]: 2.5, [keys[3]]: 1, [keys[7]]: 4 };
+    return c;
+  })()],
+  ['a box cage refined three times', (() => {
+    let c = superbBoxCage([0, 0, 0], [25, 25, 25], 1);
+    for (let i = 0; i < 3; i++) c = subdivideCatmullClark(c);
+    return c;
+  })()],
+];
+
+test('localizing the isolation refinement is a COST change: every control point is bit-identical to the whole-cage answer', () => {
+  for (const [name, cage] of LOCALIZING_CAGES()) {
+    for (const cap of [false, true]) {
+      const fast = subdToPatches(cage, { maxIsolation: 3, cap });
+      const whole = subdToPatches(cage, { maxIsolation: 3, cap, localShare: 0 });
+      assert.ok(fast.refinedCage.faces.length < whole.refinedCage.faces.length,
+        `${name}: the fast arm must actually have localized (${fast.refinedCage.faces.length} faces vs ${whole.refinedCage.faces.length})`);
+      assert.equal(fast.patches.length, whole.patches.length, `${name}, cap=${cap}: patch count`);
+      assert.equal(fast.caps.length, whole.caps.length, `${name}, cap=${cap}: cap count`);
+      assert.equal(fast.uncovered.length, whole.uncovered.length, `${name}, cap=${cap}: uncovered count`);
+      assert.equal(fast.uncoveredFraction, whole.uncoveredFraction, `${name}, cap=${cap}: uncovered fraction`);
+      assert.equal(fast.levelsUsed, whole.levelsUsed, `${name}, cap=${cap}: levels used`);
+      // === on every coordinate, not a tolerance: the localized cage does the
+      // identical arithmetic on the part of the cage that is read.
+      for (let i = 0; i < fast.patches.length; i++) {
+        const a = fast.patches[i], b = whole.patches[i];
+        assert.equal(a.kind, b.kind, `${name}, cap=${cap}: patch ${i} kind`);
+        assert.equal(a.level, b.level, `${name}, cap=${cap}: patch ${i} level`);
+        for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) for (let d = 0; d < 4; d++) {
+          assert.equal(a.srf.ctrlNet[r][c][d], b.srf.ctrlNet[r][c][d],
+            `${name}, cap=${cap}: patch ${i} control point (${r},${c}) coord ${d}`);
+        }
+      }
+    }
+  }
+});
+
+// ---------------------------------------------------------------------
+// THE PRE-FLIGHT ESTIMATE. A caller deciding whether to spend the conversion
+// needs the number of surfaces it will emit, and that number is not readable
+// off the cage: a regular cage emits one per face, a 6-face box emits 168.
+// The estimate runs the real isolation walk and skips only the geometry, so
+// the test that matters is that it names the number the conversion goes on to
+// produce — on cages where capping succeeds AND on open ones where hundreds of
+// star regions refuse it and a count that assumed otherwise would be half
+// again too large.
+test('the pre-flight estimate names the exact number of surfaces the conversion emits', () => {
+  const cages = [
+    ['box cage', superbBoxCage([0, 0, 0], [25, 25, 25], 1)],
+    ['box facets 4', superbBoxCage([0, 0, 0], [25, 25, 25], 4)],
+    ['ellipsoid', superbEllipsoidCage([0, 0, 0], [30, 20, 12], 2)],
+    ['torus — regular everywhere', superbTorusCage([0, 0, 0], 30, 10, 8)],
+    ['cylinder — n-gon caps', superbCylinderCage([0, 0, 0], 25, 50, 8)],
+    ['an OPEN plane, whose whole naked border refuses capping', superbPlaneCage([0, 0, 0], 50, 50, 8)],
+    ['an extruded cage', extrudedBoxCage()],
+  ];
+  for (const [name, cage] of cages) {
+    for (const cap of [false, true]) {
+      for (const maxIsolation of [1, 2, 3]) {
+        const est = estimateSubdToPatches(cage, { maxIsolation, cap });
+        const real = subdToPatches(cage, { maxIsolation, cap });
+        assert.equal(est.patches, real.patches.length, `${name}, cap=${cap}, iso=${maxIsolation}: surface count`);
+        assert.equal(est.caps, real.caps.length, `${name}, cap=${cap}, iso=${maxIsolation}: cap count`);
+        assert.equal(est.uncovered, real.uncovered.length, `${name}, cap=${cap}, iso=${maxIsolation}: uncovered count`);
+        assert.equal(est.levelsUsed, real.levelsUsed, `${name}, cap=${cap}, iso=${maxIsolation}: levels used`);
+        assert.equal(est.uncoveredFraction, real.uncoveredFraction, `${name}, cap=${cap}, iso=${maxIsolation}: uncovered fraction`);
+      }
+    }
+  }
+  // The open plane is in that list for a reason, and the reason is a NUMBER:
+  // if refusals were not modelled the estimate would be this much too big.
+  const plane = superbPlaneCage([0, 0, 0], 50, 50, 16);
+  const est = estimateSubdToPatches(plane, { maxIsolation: 3, cap: true });
+  const real = subdToPatches(plane, { maxIsolation: 3, cap: true });
+  assert.equal(est.patches, real.patches.length);
+  assert.ok(real.uncovered.length > 100,
+    `the open-cage fixture must actually produce refusals to be testing anything (got ${real.uncovered.length})`);
+});
+
+test('the estimate never mutates the cage it was given', () => {
+  const cage = extrudedBoxCage();
+  const before = JSON.stringify(cage);
+  estimateSubdToPatches(cage, { maxIsolation: 3, cap: true });
+  assert.equal(JSON.stringify(cage), before);
 });
