@@ -409,8 +409,15 @@ export function filletPolygon(points, radius, planeNormal) {
     const needed = corners[i].trim + corners[(i + 1) % n].trim;
     worstRatio = Math.max(worstRatio, needed / edgeLens[i]);
   }
+  /* ⚠ `maxSafeRadius` IS null, NOT 0, WHEN NOTHING COULD BE MEASURED. A
+     zero-length edge makes `needed / edgeLen` Infinity, and `radius / Infinity`
+     is 0 — which reads back at the call site as "the largest radius these
+     corners allow is 0.0000mm", a measured-sounding figure for a corner spacing
+     that was never measurable. null says there is no retriable radius here at
+     all, which is the honest answer and the one the callers' own `> 1e-6` /
+     `> 0` clamp guards already act on correctly. */
   if (worstRatio >= 1 - 1e-9) {
-    return { ok: false, reason: 'fillet radius is too large for this polygon — neighboring corners would overlap', maxSafeRadius: radius / worstRatio * 0.999 };
+    return { ok: false, reason: 'fillet radius is too large for this polygon — neighboring corners would overlap', maxSafeRadius: Number.isFinite(worstRatio) ? radius / worstRatio * 0.999 : null };
   }
   const segments = [];
   for (let i = 0; i < n; i++) {
@@ -611,10 +618,15 @@ export function filletOpenPolyline(points, radius, opts = {}) {
     worstRatio = Math.max(worstRatio, needed / edgeLen);
   }
   if (worstRatio >= 1 - 1e-9) {
+    /* SAME RULE AS `filletPolygon`'s OWN: a degenerate (zero-length) edge sets
+       worstRatio to Infinity, and 0 handed back for it is a fabricated
+       measurement — "the largest radius these corners allow is 0.0000mm" reads
+       as a number somebody took, not as the absence of one. null is what "no
+       radius fits here" actually looks like. */
     return {
       ok: false,
       reason: 'fillet radius is too large for this rail — neighboring corners would overlap',
-      maxSafeRadius: Number.isFinite(worstRatio) ? radius / worstRatio * 0.999 : 0,
+      maxSafeRadius: Number.isFinite(worstRatio) ? radius / worstRatio * 0.999 : null,
     };
   }
 

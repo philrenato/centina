@@ -699,13 +699,233 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
   bounds.sort((a, b) => a - b);
   if (bounds.length <= 2 || !minSamplesPerSpan) return vSamples; // single span (or explicitly disabled) — byte-identical to plain uniform, the overwhelming common case
   const merged = new Set(vSamples);
+  const uniformStep = (vMax - vMin) / vRes;
   for (let s = 0; s < bounds.length - 1; s++) {
     const lo = bounds[s], hi = bounds[s + 1];
     let inside = 0;
     for (const v of vSamples) if (v > lo + 1e-9 && v < hi - 1e-9) inside++;
-    if (inside < minSamplesPerSpan) {
-      for (let k = 1; k <= minSamplesPerSpan; k++) merged.add(lo + (hi - lo) * k / (minSamplesPerSpan + 1));
+    if (inside >= minSamplesPerSpan) continue;
+    /* ⚠ A FORCED SAMPLE THAT LANDS ALMOST ON TOP OF A UNIFORM ONE IS NOT
+       DENSITY, IT IS A SLIVER. `Set` dedupes on exact equality, so two
+       parameters a millionth of a span apart both survive and the grid gets a
+       row strip that width — triangles whose circumradius-to-inradius ratio
+       runs into the hundreds on a surface that is otherwise evenly meshed, and
+       the worst-shaped triangles in the whole mesh on every closed revolve.
+       The two lists nearly coincide by construction whenever this fires: a span
+       one sample short of the floor is allotted 47 uniform samples at k/48 of
+       the span and then handed 48 forced ones at k/49, which agree to
+       1/(48*49) at the span ends and only separate toward the middle.
+       A forced sample within a quarter of the local spacing of a uniform one is
+       therefore DROPPED, not added: the uniform sample already resolves that
+       part of the span, so the span still clears `minSamplesPerSpan` counting
+       it, and the guarantee this function exists for is untouched. */
+    const gap = Math.min((hi - lo) / (minSamplesPerSpan + 1), uniformStep) * 0.25;
+    for (let k = 1; k <= minSamplesPerSpan; k++) {
+      const v = lo + (hi - lo) * k / (minSamplesPerSpan + 1);
+      if (Math.abs(v - (vMin + Math.round((v - vMin) / uniformStep) * uniformStep)) <= gap) continue;
+      merged.add(v);
     }
   }
   return [...merged].sort((a, b) => a - b);
+}
+
+// ARC-LENGTH GRID RESOLUTION — a declared `uRes x vRes` is a COUNT, and a
+// count says nothing about the SHAPE it is counting across. The same 96x192
+// grid that is well proportioned on a sphere puts 192 divisions along the
+// 7mm straight wall of a disc extrusion whose circumference is 283mm, so its
+// cells measure 1.47 x 0.036 units and its triangles carry interior angles
+// under 3 degrees. A rasteriser hides that; a path tracer draws it.
+//
+// THE MEASUREMENT IS CHORD DEVIATION IN WORLD UNITS, NOT PARAMETER SPAN.
+// A coarse probe grid (`probe` cells per direction, capped by the declared
+// count so a small grid is never probed more finely than it is drawn) is
+// evaluated once, and three deviations are read off it:
+//
+//   devU  the sagitta of an isocurve in U — the perpendicular distance of a
+//         sample from the chord joining its two neighbours along U. Zero on
+//         a straight ruling, largest where the surface turns tightest.
+//   devV  the same one direction over.
+//   devT  the TWIST: the distance of a cell's fourth corner from the plane
+//         of its other three. This is the term a per-direction sagitta
+//         cannot see, and it is the one that matters for a bilinear patch
+//         with a corner lifted — every isocurve of that saddle is a straight
+//         line, devU and devV are both exactly zero, and the patch still
+//         needs subdividing both ways. Planarity of the control net is the
+//         wrong test for the same reason; developability is the right one,
+//         and devT is what measures it.
+//
+// A chord's sagitta scales as the square of the sample spacing and a
+// bilinear cell's twist error scales as the product of its two spacings, so
+// each deviation can be re-evaluated at any division count without
+// re-sampling: dev(n) = devU * (su/n)^2, and devT(nu,nv) = devT * (su/nu) *
+// (sv/nv).
+//
+// THE TOLERANCE IS THE DECLARED GRID'S OWN WORST DEVIATION, not a new
+// constant. Evaluate all three at the declared counts, take the largest, and
+// solve each direction for the count that meets exactly that. Three
+// properties follow, and they are the whole reason this is safe to put under
+// every surface in an application:
+//
+//   1. NOTHING GETS COARSER THAN IT ALREADY WAS. The direction that set the
+//      tolerance solves back to its own declared count; every other
+//      direction was already finer than the tolerance and can only shrink.
+//      The mesh's worst chord deviation is therefore unchanged, by
+//      construction.
+//   2. THE COUNT NEVER RISES. Both results are clamped to the declared
+//      counts, so no surface can cost more triangles than it costs today —
+//      including under the aspect guard below. A ruled wall declared with
+//      one division across stays at one division across, which is exact.
+//   3. IT COMPOSES WITH A GLOBAL DENSITY MULTIPLIER. Applied AFTER that
+//      multiplier has scaled the declared counts, doubling the multiplier
+//      quarters the tolerance and doubles both solved counts — linear
+//      density scaling, preserved exactly.
+//
+// CURVATURE FALLS OUT OF THE SAME MECHANISM RATHER THAN NEEDING A SECOND
+// ONE. Equal deviation in both directions means cell edges in the ratio
+// 1/sqrt(curvature), so a tight fillet gets shorter edges than a slack one
+// of the same arc length, and a flat span collapses to a single division,
+// with no separate curvature term and no second set of constants to tune.
+//
+// THE ASPECT GUARD is the one place arc length itself is read. Equal
+// deviation does not imply a square cell: on a surface that is curved one
+// way and straight the other, the straight direction solves to one division
+// and the cell is as long as the surface. That is geometrically EXACT and
+// shades exactly — a ruled quad is planar and its normal is constant along
+// the ruling — but a cell tens of times longer than it is wide still yields
+// slivers a tracer can find. So a direction is subdivided further, up to but
+// never past its declared count, until no cell edge exceeds `maxCellAspect`
+// times the other. On a ruled wall whose declared count across is already 1
+// the clamp holds it at 1, which is why a ruled extrusion cannot be inflated
+// by this.
+//
+// A SURFACE THAT IS ALREADY EXACT IS LEFT ALONE. When all three deviations
+// sit at the numerical floor the patch is planar (or bilinear-flat) and the
+// declared counts carry information this function does not have — a plane in
+// a modelling application is resolved for the shape it is about to be
+// deformed into, not the flat one it starts as — so the declared counts are
+// returned untouched rather than collapsed to a single quad.
+//
+// Below `minCells` the mechanism is skipped entirely: a grid that small has
+// no waste to reclaim, the probe would cost more than the mesh, and the
+// per-object budgets that produce those grids are deliberate.
+export function tessellationGridResolution(srf, uRes, vRes, opts = {}) {
+  const minCells = opts.minCells == null ? 1024 : opts.minCells;
+  const maxAspect = opts.maxCellAspect == null ? 3 : opts.maxCellAspect;
+  const probeCells = opts.probe == null ? 16 : opts.probe;
+  const out = (u, v, engaged, note) => ({ uRes: u, vRes: v, engaged, note });
+  if (!Number.isFinite(uRes) || !Number.isFinite(vRes) || uRes < 1 || vRes < 1) return out(uRes, vRes, false, 'no declared grid to reallocate');
+  if (uRes * vRes < minCells) return out(uRes, vRes, false, 'declared grid is below the reallocation floor');
+  const uMin = srf.knotsU[srf.degU], uMax = srf.knotsU[srf.knotsU.length - 1 - srf.degU];
+  const vMin = srf.knotsV[srf.degV], vMax = srf.knotsV[srf.knotsV.length - 1 - srf.degV];
+  const su = Math.max(2, Math.min(probeCells, Math.floor(uRes)));
+  const sv = Math.max(2, Math.min(probeCells, Math.floor(vRes)));
+  const P = [];
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i <= su; i++) {
+    const u = uMin + (i / su) * (uMax - uMin);
+    const row = [];
+    for (let j = 0; j <= sv; j++) {
+      const p = surfacePoint(srf, u, vMin + (j / sv) * (vMax - vMin));
+      if (!Number.isFinite(p[0]) || !Number.isFinite(p[1]) || !Number.isFinite(p[2])) return out(uRes, vRes, false, 'probe hit a non-finite surface point');
+      for (let k = 0; k < 3; k++) { if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k]; }
+      row.push(p);
+    }
+    P.push(row);
+  }
+  const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  if (!(diag > 0)) return out(uRes, vRes, false, 'the probe collapsed to a point');
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+  // The perpendicular distance of p1 from the chord p0->p2 — the sagitta the
+  // mesh would carry if p1 were skipped and that chord drawn instead. That
+  // chord spans TWO probe steps, and a sagitta scales as the square of its
+  // chord, so the reading is divided by four to express it at ONE probe step —
+  // the same unit the twist term below is already measured in, and the unit
+  // every scaling here assumes.
+  const sagitta = (p0, p1, p2) => {
+    const c = sub(p2, p0), L = len(c);
+    if (L < 1e-15) return len(sub(p1, p0)) / 4; // a closed or collapsed triple — the whole excursion is the error
+    return len(cross(sub(p1, p0), c)) / L / 4;
+  };
+  // The distance of d from the plane through a, b, c — zero exactly when the
+  // cell is planar, which is what makes a ruled direction free.
+  const planeDev = (a, b, c, d) => {
+    const n = cross(sub(b, a), sub(c, a)), L = len(n);
+    if (L < 1e-15) return 0; // three collinear corners carry no plane to measure against
+    const e = sub(d, a);
+    return Math.abs((e[0] * n[0] + e[1] * n[1] + e[2] * n[2]) / L);
+  };
+  let devU = 0, devV = 0, devT = 0, lenU = 0, lenV = 0;
+  for (let j = 0; j <= sv; j++) {
+    let L = 0;
+    for (let i = 0; i < su; i++) L += len(sub(P[i + 1][j], P[i][j]));
+    if (L > lenU) lenU = L;
+    for (let i = 1; i < su; i++) { const d = sagitta(P[i - 1][j], P[i][j], P[i + 1][j]); if (d > devU) devU = d; }
+  }
+  for (let i = 0; i <= su; i++) {
+    let L = 0;
+    for (let j = 0; j < sv; j++) L += len(sub(P[i][j + 1], P[i][j]));
+    if (L > lenV) lenV = L;
+    for (let j = 1; j < sv; j++) { const d = sagitta(P[i][j - 1], P[i][j], P[i][j + 1]); if (d > devV) devV = d; }
+  }
+  for (let i = 0; i < su; i++) for (let j = 0; j < sv; j++) {
+    const d = planeDev(P[i][j], P[i + 1][j], P[i][j + 1], P[i + 1][j + 1]);
+    if (d > devT) devT = d;
+  }
+  const flatEps = 1e-9 * diag;
+  if (devU <= flatEps && devV <= flatEps && devT <= flatEps) return out(uRes, vRes, false, 'planar within tolerance — the declared grid carries the intent');
+
+  /* THE TARGET DEVIATION, and why there are two ways to set it.
+     ==================================================================
+     By default the target is the DECLARED grid's own worst chord deviation, so
+     this function only ever REDISTRIBUTES density between the two directions
+     and can never call a grid finer than it needs to be. That is right when the
+     declared grid means something -- the untrimmed path derives it from the
+     surface, so it carries the caller's intent and is worth preserving.
+
+     It is wrong when the declared grid is a CONSTANT. The trimmed path hands
+     every piece a flat 64x64 with no relation to its size, and a self-
+     referential target can only ever agree with it: a 5mm fillet band on a 90mm
+     box edge solved back to 64x64 and cost 8192 triangles, of which the arc
+     needed about 15. Measured on a filleted box, that was 110,592 of its
+     116,320 triangles, and the cells came out 11,145:1 -- needles, which is
+     what makes a fillet show its own tessellation under a shiny material.
+
+     `relTolerance` sets the target instead as a fraction of arc length, PER
+     DIRECTION. Per direction is the load-bearing part: a band's bounding box is
+     dominated by its 90mm length while the curvature a viewer can see is the
+     5mm arc, so one tolerance taken from the diagonal is set by the direction
+     that is already straight. Each direction is allowed a sagitta proportional
+     to its own extent, which is what makes the result scale-invariant.
+
+     Neither mode may return a count HIGHER than the one handed in, so this
+     stays a reduction in both. */
+  const relTol = opts.relTolerance == null ? 0 : opts.relTolerance;
+  const relative = relTol > 0 && lenU > 0 && lenV > 0;
+  const tolU = relative ? lenU * relTol : Math.max(devU * (su / uRes) ** 2, devV * (sv / vRes) ** 2, devT * (su / uRes) * (sv / vRes));
+  const tolV = relative ? lenV * relTol : tolU;
+  const tolT = Math.min(tolU, tolV);
+  const tol = tolU;
+  if (!(tolU > 0 && tolV > 0)) return out(uRes, vRes, false, 'the declared grid already meets the surface exactly');
+  let nu = devU > flatEps ? su * Math.sqrt(devU / tolU) : 1;
+  let nv = devV > flatEps ? sv * Math.sqrt(devV / tolV) : 1;
+  if (devT > flatEps) {
+    const at = devT * (su / nu) * (sv / nv);
+    if (at > tolT) { const s = Math.sqrt(at / tolT); nu *= s; nv *= s; }
+  }
+  nu = Math.max(1, Math.min(Math.round(uRes), Math.ceil(nu - 1e-9)));
+  nv = Math.max(1, Math.min(Math.round(vRes), Math.ceil(nv - 1e-9)));
+  // THE ASPECT GUARD, and the clamp is load-bearing: it is what keeps a ruled
+  // wall declared at one division across from being inflated back up.
+  if (maxAspect > 0 && lenU > 0 && lenV > 0) {
+    const hu = lenU / nu, hv = lenV / nv;
+    if (hu > maxAspect * hv) nu = Math.min(Math.round(uRes), Math.ceil(lenU / (maxAspect * hv)));
+    else if (hv > maxAspect * hu) nv = Math.min(Math.round(vRes), Math.ceil(lenV / (maxAspect * hu)));
+  }
+  return { uRes: nu, vRes: nv, engaged: true,
+    note: relative
+      ? `solved for a chord deviation of ${relTol} of each direction's own arc length`
+      : 'solved for equal chord deviation at the declared grid\'s own worst',
+    devU, devV, devT, lenU, lenV, tol, probeU: su, probeV: sv };
 }

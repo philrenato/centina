@@ -67,10 +67,28 @@ export function insertKnot(crv, u, r = 1) {
   return c;
 }
 
+// The knot already in the vector that `u` means, when there is one within `tol`.
+function knotValueAt(knots, u, tol = 1e-9) {
+  for (const k of knots) if (Math.abs(k - u) < tol) return k;
+  return u;
+}
+/* ⚠⚠ SNAP TO THE KNOT THAT IS ALREADY THERE, then insert copies of THAT value.
+   `knotMultiplicity` counts within `tol`, so a `u` a floating-point hair away
+   from an existing knot is counted as already present at that knot's
+   multiplicity — and the copies were then inserted at `u` itself, leaving a span
+   of width 1e-16 between the two values. That span's control points are
+   coincident: speed 0, curvature 7e+25, and every consumer downstream reads it
+   (a comb draws a quill to infinity, tessellation divides by it, Extrude and
+   Revolve carry it into a surface).
+   Measured on `extractSubCurve` slicing a closed 40-point interpolation, whose
+   own [uStart,uEnd] lands 1.1e-16 from a knot: the sliced curve deviated 0.686mm
+   from a circle its unsliced self tracked to 0.009mm. Counting and inserting now
+   agree about which knot they mean, which is the whole defect. */
 function insertKnotToMultiplicity(crv, u, targetMult, tol = 1e-9) {
   let c = crv;
-  let s = knotMultiplicity(c.knots, u, tol);
-  while (s < targetMult) { c = insertKnotOnce(c, u); s++; }
+  const at = knotValueAt(c.knots, u, tol);
+  let s = knotMultiplicity(c.knots, at, tol);
+  while (s < targetMult) { c = insertKnotOnce(c, at); s++; }
   return c;
 }
 

@@ -1334,6 +1334,98 @@ function puffSolveRung(pre, n, subdivide) {
  *
  * Refusals name what a reader would change and none of them throws.
  */
+/**
+ * LIFT A FLAT CAGE ONTO AN OUTLINE THAT WAS NOT DRAWN FLAT.
+ *
+ * The solve is two-dimensional and stays that way — every silhouette promise
+ * this module makes is a statement about the SHADOW, and the shadow is what the
+ * solve owns. What was missing is the third dimension afterwards: an outline
+ * drawn with height carried a real `N·d` component that was measured only to
+ * name it in a status line and then dropped, so a saddle drawn 25mm out of
+ * plane reported its silhouette "within 1.0%" while sitting 18.1mm off the
+ * surface built from it. True about the wrong quantity.
+ *
+ * The height is extended from the rim over the interior by MEAN VALUE
+ * COORDINATES: positive-weighted on a convex outline, defined on any simple
+ * polygon, and exact on the rim by construction. It is linear in the rim
+ * heights, which is what makes the gain below a scalar rather than a solve.
+ *
+ * ⚠ MVC HAS NO MAXIMUM PRINCIPLE ON A CONCAVE OUTLINE. Its weights can go
+ * negative there, so an interior point can rise ABOVE the highest rim point —
+ * on a crescent with one horn lifted, a bulge appears in the middle where
+ * nothing was dragged. Measured here: nil on a fish, 0.6% for a single point
+ * lifted 20mm, and the sibling project that hit it first measured 8.1% on a
+ * crescent. `overshoot` is returned so a caller can say so rather than ship a
+ * shape nobody asked for.
+ *
+ * ⚠ AND THE LIMIT SURFACE IS NOT THE CAGE. Catmull-Clark smooths a coarsely
+ * sampled height field, so the rim of the limit surface undershoots the drawn
+ * height by a fixed factor — measured at 0.924, flat across amplitude. The gain
+ * divides it out, which is exact because the limit rim is linear in the cage z.
+ */
+export function liftCageToOutline(cage, ring, lift, opts = {}) {
+  const gain = opts.gain ?? 1 / 0.924;
+  const n = ring.length / 2;
+  if (!cage || !cage.vertices || !n || lift.length !== n) {
+    return { ok: false, reason: 'shape', why: 'the outline and its height list are different lengths' };
+  }
+  let flat = true;
+  for (let i = 0; i < n; i += 1) if (Math.abs(lift[i]) > 1e-12) { flat = false; break; }
+  /* ⚠ AN UNLIFTED OUTLINE LEAVES THE CAGE ALONE, BY IDENTITY. Every existing
+     puff is this case, and a lift that perturbed a flat one — even at 1e-16 —
+     would move every gate that measures a flat puff's silhouette. */
+  if (flat) return { ok: true, lifted: 0, overshoot: 0, peak: 0, flat: true };
+
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < n; i += 1) { if (lift[i] < lo) lo = lift[i]; if (lift[i] > hi) hi = lift[i]; }
+  const span = hi - lo;
+  let worst = 0, moved = 0;
+  for (const v of cage.vertices) {
+    const h = mvcInterpolate(ring, lift, v[0], v[1]);
+    if (!Number.isFinite(h)) continue;
+    if (h > hi) worst = Math.max(worst, h - hi);
+    if (h < lo) worst = Math.max(worst, lo - h);
+    v[2] += gain * h;
+    moved += 1;
+  }
+  return { ok: true, lifted: moved, overshoot: span > 0 ? worst / span : 0, peak: gain * hi, flat: false };
+}
+
+/* MEAN VALUE COORDINATES at (x, y) over a closed polygon, returning the value
+   interpolated from `values`. On a vertex it is that vertex's value; on an edge
+   it is the linear blend along it — both handled explicitly, because the
+   general formula divides by a distance that is zero there. */
+export function mvcInterpolate(ring, values, x, y) {
+  const n = ring.length / 2;
+  const EPS = 1e-9;
+  const dx = new Array(n), dy = new Array(n), r = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    dx[i] = ring[i * 2] - x; dy[i] = ring[i * 2 + 1] - y;
+    r[i] = Math.hypot(dx[i], dy[i]);
+    if (r[i] < EPS) return values[i];
+  }
+  let wsum = 0, vsum = 0;
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n;
+    const cross = dx[i] * dy[j] - dy[i] * dx[j];
+    const dot = dx[i] * dx[j] + dy[i] * dy[j];
+    if (Math.abs(cross) < EPS && dot < 0) {
+      // On the edge between i and j: the general weight is singular, and the
+      // answer is the straight blend along it.
+      const t = r[i] / (r[i] + r[j]);
+      return values[i] * (1 - t) + values[j] * t;
+    }
+    const tanHalf = cross / (r[i] * r[j] + dot);
+    const wPrev = i === 0 ? null : undefined;
+    void wPrev;
+    // tan(a_i / 2) accumulated onto both endpoints of the edge.
+    const c = tanHalf;
+    const wi = c / r[i], wj = c / r[j];
+    wsum += wi + wj; vsum += wi * values[i] + wj * values[j];
+  }
+  return wsum === 0 ? 0 : vsum / wsum;
+}
+
 export function puffCage(outline, opts = {}) {
   const { subdivide, cache } = opts;
   if (typeof subdivide !== 'function') {

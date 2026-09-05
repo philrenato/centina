@@ -32,6 +32,7 @@
 import { marchingSquares } from './marchingsquares.mjs';
 import { fitCurveToPoints } from './fitcurve.mjs';
 import { joinCurvesC0 } from './knots.mjs';
+import { curveSelfIntersects } from './selfintersect.mjs';
 
 // ----------------------------------------------------------------
 // CONTOUR EXTRACTION
@@ -325,15 +326,53 @@ export function polylineCurve(points, closed) {
 // the closed branch, and joinCurvesC0's degree elevation is not weight-aware.
 // A cornerless contour takes the closed branch instead and keeps that exact
 // circle when the glyph really is one.
-export function contourToCurve(points3, corners, opts = {}) {
-  const tolerance = opts.tolerance ?? 1e-3;
-  const degree = opts.degree ?? 3;
+/* ⚠⚠ A GLYPH THAT CROSSES ITSELF IS NOT A GLYPH, AND THE FIT IS WHERE IT HAPPENS.
+   Measured over 50,660 contours: the traced polygon self-crossed ZERO times and
+   the simplified polygon zero times, while this function turned 1,405 of those
+   simple polygons into crossing curves. It reproduces at the shipped defaults —
+   Serif `$` and Serif Bold `D` at Quality 220, Corner Angle 32 — so "Design" in
+   Serif Bold came out corrupt and the report said it was fine.
+   Two mechanisms, and neither is fixable by clamping a parameter. 64% contain a
+   span the fitter returned as ok while it had left its own corridor (one
+   reported a deviation of 0.089 under a 0.097 tolerance while wandering 2.28mm
+   off its data — 23.6x). The other 36% were legally inside their corridors: the
+   corridor is per-span and cannot see that the glyph's own clearance at a
+   junction is only 0.85-1.4x the tolerance. The one parameter clamp that reaches
+   zero crossings is Corner Angle <= 12 degrees, which degenerates every glyph
+   toward a polyline.
+   So the answer is to CHECK, here, where both the polygon and the curve are in
+   hand, and descend until the curve is as simple as the polygon it came from.
+   Measured over all 1,405: halving the tolerance once clears 34.4%, twice 55.1%,
+   three times 68.8%, four times 74.2%, and the degree-1 floor this module
+   already falls back to elsewhere clears the rest — 0 still crossing. It costs
+   15ms on the 120-character maximum string against a 471ms build, 3.2%. */
+const SIMPLICITY_DESCENT = 4; // halvings before the polyline floor
+function contourScale(points3) {
+  let lo = Infinity, hi = -Infinity;
+  for (const p of points3) { if (p[0] < lo) lo = p[0]; if (p[0] > hi) hi = p[0]; }
+  return Math.max(hi - lo, 1e-9);
+}
+
+/* ⚠ ONE NAMED TEST, CALLED FROM BOTH COPIES. The app carries its own
+   hand-maintained copy of this function with no twin gate, which is exactly how
+   the fix for this defect could land in one and not the other — it already did
+   once. Both sides call `curveSelfIntersects` so a difference in the ANSWER can
+   only come from a difference in the curve, never from two spellings of the
+   question. A curve that cannot be judged is not treated as clean: the module's
+   own rule is that `tested: false` is never a pass. */
+function curveIsSimple(crv, scale) {
+  if (!crv || !Array.isArray(crv.knots) || !crv.knots.length) return true;
+  const v = curveSelfIntersects(crv, { tolerance: Math.max(scale * 5e-4, 1e-9) });
+  if (!v.tested) return false;
+  return !v.selfIntersects;
+}
+
+function buildContourCurve(points3, corners, tolerance, degree) {
   const n = points3.length;
-  if (n < 4) return { crv: polylineCurve(points3, true), kind: 'polyline', maxDeviation: 0 };
   if (!corners || corners.length === 0) {
     const fit = fitCurveToPoints(points3, { tolerance, degree, closed: true });
     if (fit && fit.ok) return { crv: fit.curve, kind: fit.kind, maxDeviation: fit.maxDeviation };
-    return { crv: polylineCurve(points3, true), kind: 'polyline', maxDeviation: 0 };
+    return null;
   }
   const sorted = [...corners].sort((a, b) => a - b);
   const spans = [];
@@ -345,14 +384,11 @@ export function contourToCurve(points3, corners, opts = {}) {
     // before it can stop for that to be expressible. With a single detected
     // corner `a === b`, so a loop that tests its stop condition first breaks
     // on its own first vertex: the run comes back length 1, every span is
-    // skipped, and the whole contour falls out to a degree-1 polyline —
-    // measured on a smooth 20-gon with one corner, `kind='polyline' degree=1`
-    // where two corners give `kind='spans' degree=3`.
+    // skipped, and the whole contour falls out to a degree-1 polyline.
     // A detected corner must survive, so the answer is a span, not the
     // cornerless closed fit: fitting the loop closed would round the one
     // corner away by the tolerance, which is the thing the corner split
-    // exists to prevent. The run therefore ends where it began, and the open
-    // fit's exact endpoints make that seam the sharp corner it was detected as.
+    // exists to prevent.
     const run = [points3[a]];
     for (let i = (a + 1) % n; ; i = (i + 1) % n) {
       run.push(points3[i]);
@@ -364,13 +400,45 @@ export function contourToCurve(points3, corners, opts = {}) {
     if (fit && fit.ok) { spans.push(fit.curve); worst = Math.max(worst, fit.maxDeviation); }
     else { spans.push(polylineCurve(run, false)); anyPolyline = true; }
   }
-  if (!spans.length) return { crv: polylineCurve(points3, true), kind: 'polyline', maxDeviation: 0 };
+  if (!spans.length) return null;
   return {
     crv: joinCurvesC0(spans),
     kind: anyPolyline ? 'mixed' : 'spans',
     maxDeviation: worst,
     spanCount: spans.length,
     cornerCount: sorted.length,
+  };
+}
+
+export function contourToCurve(points3, corners, opts = {}) {
+  const tolerance = opts.tolerance ?? 1e-3;
+  const degree = opts.degree ?? 3;
+  const n = points3.length;
+  if (n < 4) return { crv: polylineCurve(points3, true), kind: 'polyline', maxDeviation: 0 };
+
+  let tol = tolerance;
+  let last = null;
+  for (let attempt = 0; attempt <= SIMPLICITY_DESCENT; attempt += 1) {
+    const built = buildContourCurve(points3, corners, tol, degree);
+    if (built) {
+      last = built;
+      if (curveIsSimple(built.crv, contourScale(points3))) {
+        return attempt === 0 ? built : { ...built, tightenedBy: attempt, toleranceUsed: tol };
+      }
+    }
+    tol /= 2;
+  }
+  /* THE FLOOR, and it is reached honestly rather than by giving up. The traced
+     polygon is measurably simple — zero crossings in 50,660 contours — so a
+     degree-1 curve through it cannot cross. A glyph a shade more faceted is a
+     far better answer than one whose outline passes through itself, and
+     `polylineFallback` is reported so the caller can say so. */
+  return {
+    crv: polylineCurve(points3, true),
+    kind: 'polyline',
+    maxDeviation: 0,
+    polylineFallback: true,
+    lastCrossingKind: last ? last.kind : null,
   };
 }
 

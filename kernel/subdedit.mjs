@@ -1359,6 +1359,22 @@ export function orderedBoundaryLoopOfFaceSet(cage, faceIndices) {
     cur = next;
     if (loop.length > cage.vertices.length) throw new Error('orderedBoundaryLoopOfFaceSet: the rim walk failed to close within a reasonable number of steps');
   }
+  /* ⚠⚠ CLOSING IS NOT THE SAME AS BEING THE WHOLE RIM. Every check above is
+     LOCAL — each rim vertex has exactly one continuation, so the walk closes
+     cleanly even when the patch has SEVERAL separate boundaries, and the walk
+     then returns whichever one its arbitrary start vertex happened to sit on
+     and drops the others without a word. A band of faces wrapped right around
+     a tube is exactly that shape: an annulus, two rim loops, no single face
+     that can stand for it. Every caller treats this loop as THE outline of the
+     patch — mergeFaces replaces the patch with one n-gon over it, bridgeFaces
+     builds a tunnel from it — so a dropped second loop is left with no face on
+     it at all: a hole, silently, out of a command whose whole promise was to
+     close one. `nextOf` holds one entry per rim edge, and a single cycle of
+     length L consumes exactly L of them, so comparing the two is an exact
+     count of whether this rim is one loop or several. */
+  if (loop.length !== nextOf.size) {
+    throw new Error(`orderedBoundaryLoopOfFaceSet: this patch has ${nextOf.size} rim edges but its outline closes after ${loop.length} — it has more than one boundary (a band around the body rather than a disc), so no single face can stand in for it`);
+  }
   return loop;
 }
 

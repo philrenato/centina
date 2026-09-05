@@ -23,6 +23,11 @@ import { insertKnot, degreeElevateCurve, rescaleCurveDomain } from './knots.mjs'
 const KNOT_TOL = 1e-9;
 
 // The rows (dir 'v') or columns (dir 'u') of a surface, as curves.
+// Exported under qualified names (`surfaceDirCurves`/`surfaceFromDirCurves`)
+// below, because flipseam.mjs runs a per-direction curve operation over a
+// surface exactly the way surfaceInsertKnot does and re-deriving this
+// bookkeeping there would be a second, independently-drifting copy of the one
+// net<->curves conversion the whole kernel already agrees on.
 function asCurves(srf, dir) {
   if (dir === 'v') {
     return srf.ctrlNet.map((row) => ({ degree: srf.degV, knots: srf.knotsV.slice(), ctrlPts: row.map((p) => p.slice()) }));
@@ -44,6 +49,9 @@ function fromCurves(srf, dir, curves) {
   for (let i = 0; i < nu; i++) net.push(curves.map((c) => c.ctrlPts[i].slice()));
   return { ...srf, degU: curves[0].degree, knotsU: curves[0].knots.slice(), ctrlNet: net };
 }
+
+export function surfaceDirCurves(srf, dir) { return asCurves(srf, dir); }
+export function surfaceFromDirCurves(srf, dir, curves) { return fromCurves(srf, dir, curves); }
 
 export function surfaceInsertKnot(srf, dir, u, r = 1) {
   return fromCurves(srf, dir, asCurves(srf, dir).map((c) => insertKnot(c, u, r)));

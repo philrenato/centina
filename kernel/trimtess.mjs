@@ -549,6 +549,182 @@ export function triangulatePolygon2D(poly) {
   return triangles;
 }
 
+/**
+ * TRIANGLE SHAPE, NOT TRIANGLE AREA — a centroid fan for a CONVEX loop.
+ *
+ * `triangulatePolygon2D` is an ear-clipper, and on a convex loop every ear it
+ * can find shares ONE apex vertex: the result is a fan of n-2 needles rather
+ * than a triangulation of any quality. Measured on a 96-gon disc of radius 45,
+ * every triangle carries a 1.875-degree angle — exactly half the 3.75 degrees
+ * one edge of a 96-gon subtends, which is the arithmetic signature of a
+ * single-apex fan. Area is conserved exactly (ratio 0.9993 against the true
+ * disc, the whole shortfall being the polygon-vs-circle difference), so this is
+ * purely a question of SHAPE.
+ *
+ * Shape is invisible to a rasteriser and expensive to a path tracer. A needle
+ * is a poor BVH leaf — its bounding box is mostly empty — and ray-triangle
+ * intersection loses precision as a triangle degenerates, so rays leaving the
+ * surface near the shared apex re-hit it. On a flat cap that reads as radial
+ * streaking and a dark wedge converging on one point of the rim. The same
+ * shared apex also carries every cap triangle's normal-interpolation weight.
+ *
+ * Adding ONE interior vertex at the area centroid and fanning from it gives n
+ * triangles whose minimum angle is bounded by the loop's own angular sampling
+ * (near 88 degrees on that same 96-gon) instead of 1.875.
+ *
+ * ⚠ THE CENTROID IS A NEW POINT ON THE SURFACE, not a new point in space. It is
+ * produced in (u,v) and evaluated through the surface like every boundary
+ * vertex, so on a curved patch it lands ON the surface — strictly better than
+ * the chord the fan's long edges already cut. On a planar patch it is exact.
+ *
+ * ⚠ CONVEXITY IS TESTED, NEVER ASSUMED. On a non-convex loop the centroid can
+ * fall outside the polygon, or outside the wedge of some edge, and a fan
+ * triangle would then cover ground the polygon excludes. Returns `null` for
+ * anything that is not convex within tolerance, or degenerate, so the caller
+ * keeps the ear-clipper. Callers should still area-check the result: a fan's
+ * SIGNED areas sum to the polygon's area whatever its shape, so only the
+ * absolute-area comparison the callers already make can see a flipped triangle.
+ *
+ * Returns `{ points, tris }` — `points` is `poly` with the centroid appended as
+ * its last entry, and `tris` indexes into `points`, wound CCW to match
+ * `triangulatePolygon2D`'s own normalization.
+ */
+export function triangulateConvexFanFromCentroid(poly, opts = {}) {
+  const n = poly.length;
+  if (n < 4) return null; // a triangle is already its own best triangulation
+  for (const p of poly) {
+    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null;
+  }
+  const signed = polygonSignedArea(poly);
+  if (!Number.isFinite(signed)) return null;
+  // Scale the degeneracy floor to the loop, so a cap in millimetres and one in
+  // metres are judged the same way.
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (const [u, v] of poly) {
+    if (u < minU) minU = u; if (u > maxU) maxU = u;
+    if (v < minV) minV = v; if (v > maxV) maxV = v;
+  }
+  const span = Math.max(maxU - minU, maxV - minV);
+  if (!(span > 0)) return null;
+  if (Math.abs(signed) < span * span * 1e-12) return null; // collinear or slit-like — no interior to fan from
+  const idx = poly.map((_, i) => i);
+  if (signed < 0) idx.reverse(); // work CCW, as the ear-clipper does
+  // Convex within tolerance: every turn the same way. The tolerance is relative
+  // to the two edge lengths, so it reads as an ANGLE and a densified loop's
+  // floating-point wobble at a near-straight vertex does not read as reflex.
+  for (let i = 0; i < n; i++) {
+    const a = poly[idx[i]], b = poly[idx[(i + 1) % n]], c = poly[idx[(i + 2) % n]];
+    const e1u = b[0] - a[0], e1v = b[1] - a[1];
+    const e2u = c[0] - b[0], e2v = c[1] - b[1];
+    const l1 = Math.hypot(e1u, e1v), l2 = Math.hypot(e2u, e2v);
+    if (l1 === 0 || l2 === 0) continue; // a duplicated vertex turns nowhere
+    if (cross2(e1u, e1v, e2u, e2v) < -1e-9 * l1 * l2) return null; // reflex — ear-clip it instead
+  }
+  // The AREA centroid, not the vertex average: the vertex average is pulled
+  // toward whichever arc of the loop happens to be sampled more densely, and a
+  // trim loop's sampling is never uniform.
+  let cu = 0, cv = 0;
+  for (let i = 0; i < n; i++) {
+    const [u0, v0] = poly[i], [u1, v1] = poly[(i + 1) % n];
+    const w = u0 * v1 - u1 * v0;
+    cu += (u0 + u1) * w;
+    cv += (v0 + v1) * w;
+  }
+  cu /= 6 * signed;
+  cv /= 6 * signed;
+  if (!Number.isFinite(cu) || !Number.isFinite(cv)) return null;
+  const points = poly.slice();
+  const c = points.push([cu, cv]) - 1;
+  const tris = [];
+
+  /* ⭐ CONCENTRIC RINGS, NOT ONE FAN, AND THE REASON IS A PICTURE.
+     A single fan spans the whole radius in one triangle, so a cap sampled at
+     192 boundary points is 192 needles ~30:1, all meeting at one vertex. They
+     tile the plane exactly and every normal is identical, so every geometric
+     check passes -- and a path tracer still draws dark wedges radiating from
+     the centre, because rays graze along the sliver edges. Disabling the fan
+     entirely and letting the grid take the cap removes them completely, which
+     is what identifies the fan rather than the shading, the normals or the
+     material.
+     Rings keep the fan's cost profile without its shape: the boundary is
+     scaled toward the centroid in steps chosen so a cell is no longer than
+     `maxCellAspect` times its own width, so the radius is crossed in several
+     short triangles instead of one long one. The apex still exists and is
+     still a fan, but its triangles are now a ring-width across instead of a
+     radius long.
+     ⚠ SAFE ONLY BECAUSE THE LOOP IS CONVEX, which is already established above
+     -- scaling a convex loop toward its own interior point cannot leave the
+     polygon or cross itself. A reflex loop returned null long before here. */
+  const maxAspect = opts.maxCellAspect == null ? 3 : opts.maxCellAspect;
+  let perim = 0, radial = 0;
+  for (let i = 0; i < n; i++) {
+    const a = poly[idx[i]], b = poly[idx[(i + 1) % n]];
+    perim += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    radial += Math.hypot(a[0] - cu, a[1] - cv);
+  }
+  const meanEdge = perim / n, meanR = radial / n;
+  // A ceiling of 32 keeps a pathologically dense loop from turning one flat
+  // face into a five-figure mesh; at that point the cap is not the problem.
+  const rings = (maxAspect > 0 && meanEdge > 0 && Number.isFinite(meanR))
+    ? Math.max(1, Math.min(32, Math.ceil(meanR / (maxAspect * meanEdge))))
+    : 1;
+
+  if (rings <= 1) {
+    for (let i = 0; i < n; i++) tris.push([c, idx[i], idx[(i + 1) % n]]);
+    return { points, tris };
+  }
+
+  /* ⚠ AND THE RINGS ARE DECIMATED AS THEY SHRINK, which is the difference
+     between "mostly fixed" and fixed. Rings of equal point count leave the
+     apex exactly as it was -- n triangles still meet at the centre, just
+     shorter ones -- and the traced picture keeps a small star there. A ring at
+     a third of the radius has a third of the circumference and wants a third
+     of the points, so each ring is resampled along the boundary and the
+     innermost one carries six. The apex becomes six ordinary triangles.
+     It is also cheaper than equal rings, not dearer. */
+  const countFor = (r) => Math.max(6, Math.min(n, Math.round(n * r / rings)));
+  // A point at normalized position `s` around the boundary, interpolated in
+  // index space, then pulled toward the centroid by `t`.
+  const at = (s, t) => {
+    const x = ((s % 1) + 1) % 1 * n;
+    const i0 = Math.floor(x) % n, f = x - Math.floor(x);
+    const a = poly[idx[i0]], b = poly[idx[(i0 + 1) % n]];
+    const u = a[0] + (b[0] - a[0]) * f, v = a[1] + (b[1] - a[1]) * f;
+    return [cu + (u - cu) * t, cv + (v - cv) * t];
+  };
+  const ringRows = [];
+  for (let r = 1; r < rings; r++) {
+    const cnt = countFor(r), t = r / rings, row = [];
+    for (let i = 0; i < cnt; i++) row.push(points.push(at(i / cnt, t)) - 1);
+    ringRows.push(row);
+  }
+  ringRows.push(idx.slice()); // the boundary is the outermost ring, as given
+
+  // centre fan to the innermost ring -- now six-ish triangles, not n
+  const first = ringRows[0];
+  for (let i = 0; i < first.length; i++) tris.push([c, first[i], first[(i + 1) % first.length]]);
+
+  /* Stitch two closed rings of DIFFERENT lengths by advancing whichever side's
+     next vertex comes first in normalized position -- the standard merge, and
+     the reason no T-junction appears between rings of unequal count. */
+  for (let r = 0; r + 1 < ringRows.length; r++) {
+    const A = ringRows[r], B = ringRows[r + 1];
+    const na = A.length, nb = B.length;
+    let i = 0, j = 0;
+    while (i < na || j < nb) {
+      const sa = (i + 1) / na, sb = (j + 1) / nb;
+      if (j >= nb || (i < na && sa <= sb)) {
+        tris.push([A[i % na], B[j % nb], A[(i + 1) % na]]);
+        i++;
+      } else {
+        tris.push([A[i % na], B[j % nb], B[(j + 1) % nb]]);
+        j++;
+      }
+    }
+  }
+  return { points, tris };
+}
+
 function surfaceNormalAt(srf, u, v) {
   const { su, sv } = surfacePointAndPartials(srf, u, v);
   const nx = su[1] * sv[2] - su[2] * sv[1];
@@ -931,22 +1107,45 @@ export function tessellateTrimmedSurface(srf, loop, uRes, vRes, holes = []) {
       && surfaceIsPlanarPatch(srf)) {
     const poly = surfaceIsAffinePatch(srf) ? mergedLoop
       : densifyUVLoop(mergedLoop, (uMax - uMin) / uRes, (vMax - vMin) / vRes);
-    const tris = triangulatePolygon2D(poly);
+    /* ⭐ A CONVEX FACE FANS FROM ITS CENTROID, not from a boundary vertex. This
+       is the path a flat CAP takes — a circle's cap is one convex loop of a few
+       hundred points with no grid at all — and the ear-clipper's answer for it
+       is n-2 needles sharing one rim vertex. See
+       `triangulateConvexFanFromCentroid` for the measurement and for why a
+       tracer cares where a rasteriser does not. `null` means "not convex", and
+       the ear-clipper is still the general answer. */
+    const fan = triangulateConvexFanFromCentroid(poly);
     /* ⚠ THE FAST PATH CHECKS ITSELF AND FALLS BACK, rather than warning. The
        ear-clipper can leave a residual on a polygon the grid path would have
        cut into easy pieces first, and a residual here is lost area on a face
        somebody is looking at. Comparing the triangulated area against the
        polygon's own shoelace area is exact and costs one pass, so the choice is
-       "provably the same surface" or "take the grid" — never "probably fine". */
+       "provably the same surface" or "take the grid" — never "probably fine".
+       It is also the centroid fan's own safety net: a fan's SIGNED areas sum to
+       the polygon's area whatever its shape, so a triangle that flipped because
+       the centroid was not visible from some edge shows up HERE, in the
+       absolute-area sum, and nowhere else. */
     const want = Math.abs(polygonSignedArea(poly));
-    let got = 0;
-    for (const [ti, tj, tk] of tris) {
-      const p = poly[ti], q = poly[tj], r = poly[tk];
-      got += Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1])) / 2;
-    }
-    if (Math.abs(got - want) <= want * 1e-9 + 1e-15) {
+    const covers = (pts, tris) => {
+      let got = 0;
       for (const [ti, tj, tk] of tris) {
-        const [pu, pv] = poly[ti], [qu, qv] = poly[tj], [ru, rv] = poly[tk];
+        const p = pts[ti], q = pts[tj], r = pts[tk];
+        got += Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1])) / 2;
+      }
+      return Math.abs(got - want) <= want * 1e-9 + 1e-15;
+    };
+    // The fan first when it applies; the ear-clip is tried too rather than
+    // conceding the whole fast path, since a fan that fails its area check says
+    // nothing about whether the ear-clip would have covered the polygon.
+    let pts = null, tris = null;
+    if (fan && covers(fan.points, fan.tris)) { pts = fan.points; tris = fan.tris; }
+    else {
+      const ear = triangulatePolygon2D(poly);
+      if (covers(poly, ear)) { pts = poly; tris = ear; }
+    }
+    if (tris) {
+      for (const [ti, tj, tk] of tris) {
+        const [pu, pv] = pts[ti], [qu, qv] = pts[tj], [ru, rv] = pts[tk];
         triangles.push([makeVertex(srf, pu, pv), makeVertex(srf, qu, qv), makeVertex(srf, ru, rv)]);
       }
       return repairTJunctions(dropSpuriousTriangles(triangles, outerLoop, holes || []), srf);

@@ -1461,6 +1461,40 @@ test('mergeFaces: refuses when the merged region\'s rim touches an already-open 
   assert.throws(() => mergeFaces(plane, [0, 1]), /already-open cage edge/);
 });
 
+test('orderedBoundaryLoopOfFaceSet / mergeFaces: a BAND of faces right around a body is refused — it is an annulus, and no single face can stand for it', () => {
+  // A closed square tube with a middle ring: two caps, eight side quads. The
+  // eight side quads together wrap right around it, so their rim is TWO loops
+  // of four rather than one.
+  //
+  // ⚠ EVERY CHECK INSIDE THE RIM WALK IS LOCAL — each rim vertex has exactly
+  // one continuation — so the walk closes cleanly on whichever loop its
+  // arbitrary start vertex sits on and returns it, dropping the other without
+  // a word. mergeFaces then removes all eight faces and puts one n-gon back
+  // over one loop only, leaving the second loop with no face on it: a hole,
+  // out of a command whose whole promise was to close one. The comparison that
+  // catches it is the rim EDGE COUNT against the closed loop's length.
+  const ring = (z) => [[-10, -10, z], [10, -10, z], [10, 10, z], [-10, 10, z]];
+  const vertices = [...ring(-10), ...ring(0), ...ring(10)];
+  const faces = [];
+  for (let r = 0; r < 2; r++) {
+    for (let i = 0; i < 4; i++) {
+      const a = r * 4 + i, b = r * 4 + ((i + 1) % 4);
+      faces.push([a, b, b + 4, a + 4]);
+    }
+  }
+  faces.push([3, 2, 1, 0]);
+  faces.push([8, 9, 10, 11]);
+  const cage = { vertices, faces, creases: {} };
+  const band = [0, 1, 2, 3, 4, 5, 6, 7];
+  assert.throws(() => orderedBoundaryLoopOfFaceSet(cage, band), /more than one boundary/);
+  assert.throws(() => mergeFaces(cage, band), /more than one boundary/);
+  // AND THE ORDINARY CASE STILL PASSES, so the new comparison is not simply
+  // refusing everything: two adjacent side quads are a disc and merge.
+  const merged = mergeFaces(cage, [0, 1]);
+  assert.equal(merged.cage.faces.length, cage.faces.length - 1);
+  assert.equal(merged.ngonSize, 6);
+});
+
 test('mergeFaces: a merge that would collapse the cage to a single face is refused (deleteFaces cannot remove every face)', () => {
   // A facets=1 SuperBPlane is a single quad; there is no valid 2-face merge.
   // Use a facets=2 plane and try to merge all 4 — its rim is entirely open

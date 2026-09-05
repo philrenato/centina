@@ -623,11 +623,28 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
     const arc = envelopeSectionArc(e);
     return arc ? { ok: true, arc } : { ok: false, reason: 'a section produced no arc' };
   };
+  /* ⭐⭐ A CLOSED RUN IS SAMPLED ON A CYCLE, NOT ON AN INTERVAL.
+     `i / (n - 1)` walks 0 to 1 inclusive, which is right for an edge that has
+     two ends and wrong for one that has none: on a loop, t=0 and t=1 name the
+     SAME station, so the run either duplicates a section there or leaves the
+     wrap unsampled — and the band cannot close.
+     Measured on a filleted extruded circle before this existed: the band spanned
+     about 1,237mm of a 1,257mm circumference and THREE small filler faces
+     bridged the remaining 20mm at the seam, every one of them lying flat in the
+     seam plane with all its control columns at the same angle. That trio is what
+     a reader sees as a dart in the round, reported four times, and it is a B-rep
+     defect rather than a shading one — which is why it survived every change of
+     material, environment, mesh density and build.
+     On a cycle the stations are `i / n`, so no station is repeated, and the
+     FIRST section is appended again as the last so the skin closes on itself
+     exactly rather than nearly. `closed` is the caller's to declare: only the
+     caller knows whether the edge it is walking comes back to where it began. */
+  const closedRun = !!opts.closed;
   const attempt = (n) => {
     const arcs = [], centres = [];
     let radius = null;
     for (let i = 0; i < n; i++) {
-      const spec = sectionAt(i / (n - 1));
+      const spec = sectionAt(closedRun ? i / n : i / (n - 1));
       if (!spec) return null;
       const made = arcFor(spec);
       if (!made || !made.ok) return { failed: (made && made.reason) || 'a section produced no arc' };
@@ -645,11 +662,21 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
         return { failed: `this builder measures against ONE radius and the sections vary (${radius} then ${spec.radius}) — a variable-radius blend needs its own deviation measure` };
       }
     }
+    /* THE WRAP SECTION, on a closed run only: the first station again, so the
+       skin's last column IS its first and the band closes exactly rather than
+       within a tolerance. Appended rather than sampled, because sampling t=1
+       would re-solve the same ball and could land a hair off it — and a hair is
+       the whole defect this exists to remove. */
+    if (closedRun && arcs.length) { arcs.push(arcs[0]); centres.push(centres[0]); }
     const built = blendSurfaceFromSections(arcs, degV);
     if (!built.ok) return { failed: built.reason };
     if (measure) {
       const m = measure(built.srf, n);
-      if (!m || !Number.isFinite(m.worst)) return { failed: 'the supplied deviation measure returned no number' };
+      /* A MEASURE THAT COULD NOT MEASURE SAYS SO, AND ITS REASON IS THE ONE
+         WORTH REPORTING. Flattening every such case to "returned no number"
+         loses the distinction between a measure that is absent and a surface
+         that could not be sampled at all. */
+      if (!m || !Number.isFinite(m.worst)) return { failed: (m && m.reason) || 'the supplied deviation measure returned no number' };
       return fold({ built, dev: m.worst, n, instrumentBound: !!m.instrumentBound, measureFloor: m.floor, deviationSigned: m.signed });
     }
     /* MEASURED AGAINST A SPINE SAMPLED FAR FINER THAN THE SECTIONS. Using the
@@ -685,6 +712,13 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
         sections: a.n, deviation: a.dev, tolerance, metTolerance: true, rounds: round + 1, trace,
         instrumentBound: !!a.instrumentBound, spineSagitta: a.spineSagitta, measureFloor: a.measureFloor,
         deviationSigned: a.deviationSigned,
+        /* ⚠ A CLOSED RUN HAS NO ENDS, AND A CALLER CANNOT SEE THAT FROM THE
+           SURFACE. The two boundary rows of a closed band are the same row, so
+           a caller that treats them as two open ends caps a hole that is not
+           there. Reported rather than re-derived, because the caller would have
+           to compare rows against a tolerance nobody chose to get back the
+           answer this function was handed. */
+        closed: closedRun,
         /* ⚠ WHAT THE CERTIFICATE ACTUALLY COVERS. The deviation is sampled over
            the middle of the run, because the nearest point on a FINITE spine
            polyline clamps at its ends and would report an end effect as a
@@ -709,6 +743,7 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
     sections: best.n, deviation: best.dev, tolerance, trace,
     instrumentBound: !!best.instrumentBound, measureFloor: best.measureFloor,
     deviationSigned: best.deviationSigned,
+    closed: closedRun,
     // NOT A FAILURE, AND NOT A SILENT PASS EITHER. The surface is real and
     // usable; it simply is not as close as was asked for, and the caller is
     // handed the number so it can say so rather than imply otherwise.
@@ -1168,7 +1203,7 @@ export function smoothProfileDeviation(srf, evalSrf, alpha, uSteps = 9, vSteps =
   const uLo = ku[0], uHi = ku[ku.length - 1];
   const vLo = kv[0], vHi = kv[kv.length - 1];
   const hU = (uHi - uLo) * 1e-4;
-  let worst = 0, worstAt = null;
+  let worst = 0, worstAt = null, measured = 0;
   for (let j = 0; j < vSteps; j++) {
     const f = vFrom + (vTo - vFrom) * (vSteps === 1 ? 0.5 : j / (vSteps - 1));
     const v = vLo + (vHi - vLo) * f;
@@ -1209,10 +1244,20 @@ export function smoothProfileDeviation(srf, evalSrf, alpha, uSteps = 9, vSteps =
         const dd = len(sub(p, q));
         if (dd < best) best = dd;
       }
+      measured++;
       if (best > worst) { worst = best; worstAt = { u, v }; }
     }
   }
-  return { ok: true, worst, worstAt };
+  /* ⚠ SAME RULE AS `chamferFlatnessDeviation`'s OWN: an unmeasured surface must
+     not certify as an exact one. Every station here can `continue` too — a
+     tangent that will not normalise, two end tangents too nearly parallel to
+     locate a corner, a corner behind the start — and `worst` left at its initial
+     0 would report a smooth blend that matches its exact profile perfectly, off
+     no samples at all, which stops refinement dead. */
+  if (measured === 0) {
+    return { ok: false, reason: 'no station on this surface could be measured — no isocurve yielded a usable pair of end tangents, so its departure from the exact profile is UNKNOWN rather than zero' };
+  }
+  return { ok: true, worst, worstAt, stations: measured };
 }
 
 function bezierPoint5(P, t) {
@@ -1283,7 +1328,7 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
   const ku = srf.knotsU, kv = srf.knotsV;
   const uLo = ku[0], uHi = ku[ku.length - 1];
   const vLo = kv[0], vHi = kv[kv.length - 1];
-  let worst = 0;
+  let worst = 0, measured = 0;
   for (let j = 0; j < vSteps; j++) {
     const f = vFrom + (vTo - vFrom) * (vSteps === 1 ? 0.5 : j / (vSteps - 1));
     const v = vLo + (vHi - vLo) * f;
@@ -1304,10 +1349,21 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
       let sPar = dot(sub(q, a), ab) / abLen2;
       sPar = sPar < 0 ? 0 : sPar > 1 ? 1 : sPar;
       const d = len(sub(q, add(a, mul(ab, sPar))));
+      measured++;
       if (d > worst) worst = d;
     }
   }
-  return { ok: true, worst, instrumentBound: false, floor: 0 };
+  /* ⚠ A SURFACE NOBODY COULD MEASURE IS NOT A FLAT ONE. Every station above can
+     `continue` — an evaluator that returns nothing, a chord that degenerates —
+     and with `worst` still sitting at its initial 0 the loop then falls out and
+     reports `ok: true, worst: 0`: a PERFECTLY flat chamfer, certified, from zero
+     samples. `blendSurfaceToTolerance` reads that as tolerance met on the first
+     attempt and stops refining, so the one surface that most needed another look
+     is the only one that gets none. Unknown must not read as perfect. */
+  if (measured === 0) {
+    return { ok: false, reason: 'no station on this surface could be measured — every sample either failed to evaluate or had a degenerate chord, so its flatness is UNKNOWN rather than perfect' };
+  }
+  return { ok: true, worst, instrumentBound: false, floor: 0, stations: measured };
 }
 
 /**

@@ -321,21 +321,33 @@ export function profileEnclosedArea(profile, points) {
 // at min(R, H/2); for a Cone of base radius R, height H and slant L it comes
 // out at R*H/(R+L) — both checked against those closed forms in test/, so the
 // bisection is verified against analysis rather than against itself.
+//
+// ⚠ RETURNS null WHEN NOTHING COULD BE MEASURED, NOT 0. The bisection starts at
+// lo = 0, so a profile on which EVERY probed thickness fails leaves lo at its
+// starting bound — and 0 read back as a measurement says "this shape can hold a
+// wall of exactly zero", which a caller then clamps to and builds. It is not a
+// measurement at all; it is the absence of one. null says that, and every caller
+// has to decide what to do about it instead of multiplying it by a safety factor.
+// The floor is the coarser of an absolute 1e-6mm — the same length below which
+// `offsetMeridianProfile` already declares an offset edge collapsed — and a
+// billionth of the profile's own extent, which takes over on a very large shape.
+// Under it the bisection is reporting its own arithmetic rather than a wall.
 export function safeInwardOffset(profileIn, opts = {}) {
   const profile = normalizeMeridianProfile(profileIn);
-  let hi = 0;
+  let extent = 0;
   for (const p of profile.points) {
     const [r, z] = profileRZ(profile, p);
-    hi = Math.max(hi, Math.abs(r), Math.abs(z));
+    extent = Math.max(extent, Math.abs(r), Math.abs(z));
   }
-  hi = Math.max(hi, 1) * 2;
+  extent = Math.max(extent, 1);
+  let hi = extent * 2;
   if (offsetMeridianProfile(profile, hi, opts).ok) return hi; // nothing constrains it
   let lo = 0;
   for (let it = 0; it < 80; it++) {
     const mid = 0.5 * (lo + hi);
     if (offsetMeridianProfile(profile, mid, opts).ok) lo = mid; else hi = mid;
   }
-  return lo;
+  return lo > Math.max(1e-6, extent * 1e-9) ? lo : null;
 }
 
 // Revolve a meridian chain into panels — one full-circle revolved surface per
@@ -503,10 +515,18 @@ export function shellRevolvedSolid(profileIn, thickness, opts = {}) {
   const requested = Math.abs(thickness);
   const safety = opts.clampSafety ?? 0.98;
   let safeMaxDistance = safeInwardOffset(profile, opts);
-  if ((openStart || openEnd) && !buildInner(safeMaxDistance * safety)) {
+  if (safeMaxDistance !== null && (openStart || openEnd) && !buildInner(safeMaxDistance * safety)) {
+    /* SAME NORMALIZATION AS `safeInwardOffset`'s OWN, AND FOR THE SAME REASON:
+       this second bisection also starts at lo = 0, so a profile where no
+       thickness at all reaches the opened face leaves it there, and 0 carried
+       forward is a fabricated measurement rather than a refusal. */
+    const ceiling = safeMaxDistance;
     let lo = 0, hi = safeMaxDistance;
     for (let it = 0; it < 60; it++) { const mid = 0.5 * (lo + hi); if (buildInner(mid)) lo = mid; else hi = mid; }
-    safeMaxDistance = lo;
+    safeMaxDistance = lo > Math.max(1e-6, ceiling * 1e-9) ? lo : null;
+  }
+  if (safeMaxDistance === null) {
+    throw new Error('shellRevolvedSolid: the largest safe wall thickness for this shape could not be measured — nothing thicker than a millionth of a millimetre leaves a real cavity inside it, which is not a wall but a second copy of the outer skin. Refused rather than reporting a safe maximum of zero and building it anyway.');
   }
   let applied = requested, clamped = false;
   if (requested > safeMaxDistance * safety) { applied = safeMaxDistance * safety; clamped = true; }

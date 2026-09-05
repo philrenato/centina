@@ -89,6 +89,148 @@ export function curveFromRhino(rhinoCrv) {
   return { degree, knots, ctrlPts };
 }
 
+// ---- ANALYTIC CURVE KINDS ----
+//
+// A Circle, an Arc, a Line and a Polyline are four different objects in this
+// app, and every one of them used to leave as a plain NurbsCurve. The geometry
+// was exact either way; what was lost was the KIND — a circle came back with no
+// center and no radius anywhere, as a freeform curve that happens to close, and
+// Rhino read it the same way.
+//
+// WHAT OPENNURBS CAN AND CANNOT CARRY, measured against 8.17.0 rather than read
+// off the .d.ts (which is wrong in both directions here):
+//   · ON_LineCurve and ON_PolylineCurve author directly and survive the file.
+//   · ON_ArcCurve carries a circle AND an arc — one class, the sweep is the
+//     only difference, which is exactly how this app models the pair. Its
+//     factories `ArcCurve.createFromArc` / `createFromCircle` are REAL and are
+//     absent from the .d.ts entirely; the only ArcCurve constructor the
+//     bindings expose is a copy constructor, so without those two statics an
+//     arc genuinely could not be authored.
+//   · `objects().addCircle` / `addArc` do NOT keep the kind — both convert to
+//     an ON_NurbsCurve on the way in, verified by reading the written bytes
+//     back. They are the obvious call and they are the wrong one; every
+//     analytic kind here is therefore built as geometry and added with
+//     `addCurve`, which is one route rather than two.
+//   · AN ELLIPSE CANNOT MAKE THIS TRIP. `addEllipse` exists, but the binding
+//     exposes `isEllipse()` and no tryGetEllipse at all, so an ellipse's own
+//     center and two radii cannot be recovered from a curve — ours or Rhino's.
+//     An Ellipse and a Squircle stay plain NURBS curves, and are reported as
+//     such (curveKind null) rather than being passed off as circles.
+//
+// ⚠ AN ARC IS A CIRCLE WITH A SWEEP, and getting that backwards writes closed
+// circles where arcs belong. The sweep is the ONLY test: a full turn is a
+// circle, anything else is an arc. It is asked of the angle domain the arc
+// itself declares, never of whether the two ends happen to meet — no tolerance
+// on the endpoints separates a small arc from a circle drawn imprecisely.
+const FULL_TURN_TOLERANCE = 1e-9; // radians; the same bound the app's own circleSweepIsFullTurn uses
+
+/* ⚠ NANOMETRES, NOT THE DOCUMENT TOLERANCE. The obvious tolerance to hand
+   OpenNURBS's own IsArc/IsCircle is the model tolerance, and it is the wrong
+   one: at 0.001 mm a hand-drawn curve that passes near a circle is REWRITTEN as
+   that circle, moving the geometry by up to the tolerance and handing the
+   modeler back a center and a radius nobody drew. A curve within 1e-9 mm of a
+   circle is a circle for every purpose, and nothing reaches that by accident. */
+const ANALYTIC_TOLERANCE = 1e-9;
+
+// WHAT KIND OF CURVE IS THIS, ASKED OF OPENNURBS. Takes any rhino Curve
+// (an ON_ArcCurve straight out of a Rhino file, or the NurbsCurve this module
+// built from our own control points — the answer is the same either way,
+// because it is a question about the geometry and not about the object class
+// the file happened to store).
+//
+// Returns null for anything that is not one of the four, plus, for the ones
+// that are, both the OpenNURBS analytic object (so the export side can write it
+// without re-deriving a plane from numbers, which is where a tilted frame gets
+// silently flattened) and the plain-data fields the import side reports.
+//
+// The field names mirror the app's own object fields one for one —
+// circleCenter/circleAxes/circleRadius/circleStart/circleEnd, lineStart/
+// lineEnd, polylinePoints/polylineClosed — so nothing has to translate a
+// second vocabulary on the way in.
+function analyticCurveOf(crv, tolerance = ANALYTIC_TOLERANCE) {
+  if (!crv || typeof crv.tryGetArc !== 'function') return null;
+  try {
+    const arc = crv.tryGetArc(tolerance);
+    if (arc) {
+      const [a0, a1] = arc.angleDomain;
+      const sweep = a1 - a0;
+      const fullTurn = Math.abs(Math.abs(sweep) - Math.PI * 2) <= FULL_TURN_TOLERANCE;
+      const plane = arc.plane;
+      return {
+        curveKind: fullTurn ? 'circle' : 'arc',
+        arc,
+        fields: {
+          circleCenter: [arc.center[0], arc.center[1], arc.center[2]],
+          circleAxes: { xAxis: plane.xAxis.slice(0, 3), yAxis: plane.yAxis.slice(0, 3) },
+          circleRadius: arc.radius,
+          circleStart: a0,
+          circleEnd: a1,
+        },
+      };
+    }
+    const pl = crv.tryGetPolyline();
+    if (pl && pl.count >= 2) {
+      const points = [];
+      for (let i = 0; i < pl.count; i++) { const p = pl.get(i); points.push([p[0], p[1], p[2]]); }
+      /* A closed polyline's control polygon repeats its first point at the end;
+         the app's own `polylinePoints` stores each vertex once. Handing the
+         repeat back would grow one duplicate vertex per save/open cycle. Three
+         distinct vertices is the floor for a closed loop — below that a
+         first-equals-last chain is a degenerate there-and-back, not a polygon. */
+      const closed = points.length >= 4 && samePoint3(points[0], points[points.length - 1]);
+      if (closed) points.pop();
+      return {
+        curveKind: points.length === 2 && !closed ? 'line' : 'polyline',
+        polyline: pl,
+        fields: points.length === 2 && !closed
+          ? { lineStart: points[0], lineEnd: points[1] }
+          : { polylinePoints: points, polylineClosed: closed },
+      };
+    }
+  } catch {
+    /* A detector that throws must not cost the curve — the caller falls back
+       to the plain NURBS path, which every curve can always take. */
+    return null;
+  }
+  return null;
+}
+
+// The analytic kind as real OpenNURBS geometry, ready for objects().addCurve.
+// A circle, an arc and a polyline are built from the analytic object the
+// detector already holds rather than from its plain fields: rebuilding a plane
+// out of a center and two axes is exactly where a tilted frame turns into a
+// world-XY one. A line has no frame to lose — two endpoints ARE the line.
+function analyticCurveToRhino(rhino, analytic) {
+  if (!analytic) return null;
+  if (analytic.curveKind === 'circle' || analytic.curveKind === 'arc') {
+    // ONE call for both. A full-turn ON_Arc makes an ON_ArcCurve that reports
+    // isCompleteCircle, so the circle/arc distinction lives in the sweep and
+    // nowhere else — the same single object the app models them as.
+    return rhino.ArcCurve.createFromArc(analytic.arc);
+  }
+  if (analytic.curveKind === 'line') {
+    return new rhino.LineCurve(analytic.fields.lineStart, analytic.fields.lineEnd);
+  }
+  if (analytic.curveKind === 'polyline') {
+    return new rhino.PolylineCurve(analytic.polyline);
+  }
+  return null;
+}
+
+/* THE PARAMETERIZATION IS PART OF WHAT WAS SENT. Each analytic form has its own
+   natural domain — a line and an arc by arc LENGTH, a polyline by vertex index
+   — so writing one re-bases the curve's knots even though its shape and its
+   analytic parameters are untouched. That is a silent change to a field the
+   caller can read back, so the source curve's own domain is restored: adding
+   the kind takes nothing away. */
+function curveDomain(crv) {
+  const knots = crv && crv.knots;
+  const d = crv && crv.degree;
+  if (!Array.isArray(knots) || !Number.isFinite(d)) return null;
+  const u0 = knots[d], u1 = knots[knots.length - 1 - d];
+  return Number.isFinite(u0) && Number.isFinite(u1) && u1 > u0 ? [u0, u1] : null;
+}
+
 // ---- SURFACE ----
 
 // Our surface: { degU, degV, knotsU, knotsV, ctrlNet: [i][j] = [x,y,z,w] }
@@ -655,6 +797,13 @@ export function exportDocument(rhino, payload) {
        ours was 138,141,144,0. */
     const lc = layer.color || { r: 140, g: 141, b: 144 };
     rlayer.color = { r: lc.r, g: lc.g, b: lc.b, a: lc.a == null ? 255 : lc.a };
+    /* A HIDDEN LAYER STAYS HIDDEN, AND A LOCKED ONE STAYS LOCKED. Neither was
+       written, so a document whose construction layers were switched off opened
+       in Rhino with everything showing — the reader's own organisation silently
+       discarded by a file that reported success. Both default to the visible,
+       unlocked state a layer has when the caller says nothing. */
+    if (layer.visible != null) rlayer.visible = !!layer.visible;
+    if (layer.locked != null) rlayer.locked = !!layer.locked;
     if (layer.parentId != null && layerIdToGuid.has(layer.parentId)) {
       rlayer.parentLayerId = layerIdToGuid.get(layer.parentId);
     }
@@ -670,11 +819,37 @@ export function exportDocument(rhino, payload) {
     if (obj.layerId != null && layerIdToIndex.has(obj.layerId)) {
       attrs.layerIndex = layerIdToIndex.get(obj.layerId);
     }
+    /* ⚠ AND THE COLOUR NEEDS ITS SOURCE SET, not just its value. An
+       ObjectAttributes carries both an objectColor and a colorSource saying
+       whether to USE it; writing the colour alone leaves the source at
+       "by layer" and Rhino draws the layer's colour, so the object's own
+       colour is present in the file and invisible in the viewport. */
+    if (obj.color) {
+      const oc = obj.color;
+      attrs.objectColor = { r: oc.r, g: oc.g, b: oc.b, a: oc.a == null ? 255 : oc.a };
+      if (rhino.ObjectColorSource && rhino.ObjectColorSource.ColorFromObject != null) {
+        attrs.colorSource = rhino.ObjectColorSource.ColorFromObject;
+      }
+    }
     if (obj.kind === 'point') {
       doc.objects().addPoint(pointToRhino(obj.point), attrs);
     } else if (obj.kind === 'curve') {
       const nc = curveToRhino(rhino, obj);
-      doc.objects().addCurve(nc, attrs);
+      /* THE KIND IS DERIVED FROM THE GEOMETRY, NOT DECLARED BY THE CALLER. A
+         declared kind would have to be trusted, and a payload saying "circle"
+         over control points that are not one writes a file whose analytic
+         parameters and whose curve disagree. Asking OpenNURBS makes the two
+         ends of this module symmetric — export and import ask the same
+         question of the same evaluator — and it costs the caller nothing. */
+      const analytic = analyticCurveOf(nc);
+      const analyticGeo = analytic ? analyticCurveToRhino(rhino, analytic) : null;
+      if (analyticGeo) {
+        const domain = curveDomain(obj);
+        if (domain) analyticGeo.domain = domain;
+        doc.objects().addCurve(analyticGeo, attrs);
+      } else {
+        doc.objects().addCurve(nc, attrs);
+      }
     } else if (obj.kind === 'surface') {
       const ns = surfaceToRhino(rhino, obj);
       doc.objects().addSurface(ns, attrs);
@@ -757,7 +932,9 @@ export function importDocument(rhino, bytes) {
     const parentId = l.parentLayerId && l.parentLayerId !== NIL_GUID && layerGuidToId.has(l.parentLayerId)
       ? layerGuidToId.get(l.parentLayerId)
       : null;
-    layers.push({ id: i, name: l.name || `Layer${i}`, color: l.color, parentId });
+    // visible/locked ride back too — see the export side for why they matter.
+    layers.push({ id: i, name: l.name || `Layer${i}`, color: l.color, parentId,
+      visible: l.visible !== false, locked: !!l.locked });
   }
 
   let brepGroupSeq = 0;
@@ -773,6 +950,19 @@ export function importDocument(rhino, bytes) {
     // id, no GUID lookup needed here (layerGuidToId above is only for
     // resolving PARENT relationships between layers, a different question).
     const layerId = attrs.layerIndex >= 0 && attrs.layerIndex < layers.length ? attrs.layerIndex : (layers.length ? 0 : null);
+    /* The object's OWN colour, and only when the file says to use it. An
+       ObjectAttributes always carries an objectColor; what decides whether it
+       means anything is colorSource, so reporting the value unconditionally
+       would hand every by-layer object a spurious black. */
+    const objColor = (() => {
+      const c = attrs.objectColor;
+      if (!c) return null;
+      const fromObject = rhino.ObjectColorSource && rhino.ObjectColorSource.ColorFromObject != null
+        ? attrs.colorSource === rhino.ObjectColorSource.ColorFromObject
+        : (c.r || c.g || c.b);
+      if (!fromObject) return null;
+      return { r: c.r, g: c.g, b: c.b, a: c.a == null ? 255 : c.a };
+    })();
     /* ⚠⚠ AN EXTRUSION IS A BREP RHINO HAS NOT BOTHERED TO EXPAND. ON_Extrusion is
        the lightweight form Rhino stores a great many ordinary solids in — most
        of what a box, a boss or a rib actually is — and it fell to the skip list
@@ -790,13 +980,23 @@ export function importDocument(rhino, bytes) {
     }
     const name = attrs.name || null;
     if (geo.objectType === rhino.ObjectType.Point) {
-      objects.push({ kind: 'point', layerId, name, point: pointFromRhino(geo.location) });
+      objects.push({ kind: 'point', layerId, name, color: objColor, point: pointFromRhino(geo.location) });
     } else if (geo.objectType === rhino.ObjectType.Curve) {
       const nc = geo.toNurbsCurve();
-      objects.push({ kind: 'curve', layerId, name, ...curveFromRhino(nc) });
+      /* A CURVE ARRIVES WITH ITS KIND, and the plain NURBS form arrives with
+         it — `kind` stays 'curve' for all four, so a caller that reads only
+         degree/knots/ctrlPts keeps working unchanged and one that reads
+         `curveKind` rebuilds the Circle, Arc, Line or Polyline it was.
+         Reported for EVERY curve, explicitly null for a freeform one: an
+         absent field cannot be told apart from a build that does not report
+         kinds at all. */
+      const analytic = analyticCurveOf(geo);
+      objects.push({ kind: 'curve', layerId, name, color: objColor, ...curveFromRhino(nc),
+        curveKind: analytic ? analytic.curveKind : null,
+        ...(analytic ? analytic.fields : {}) });
     } else if (geo.objectType === rhino.ObjectType.Surface) {
       const ns = geo.toNurbsSurface();
-      objects.push({ kind: 'surface', layerId, name, ...surfaceFromRhino(ns) });
+      objects.push({ kind: 'surface', layerId, name, color: objColor, ...surfaceFromRhino(ns) });
     } else if (geo.objectType === rhino.ObjectType.Brep) {
       // A single-face Brep with trivial trimming IS its own untrimmed
       // surface — imports as one plain editable surface, no naming
@@ -820,7 +1020,7 @@ export function importDocument(rhino, bytes) {
       if (faceCount === 1 && geo.isSurface) {
         const face = faces.get(0);
         const ns = face.underlyingSurface().toNurbsSurface();
-        objects.push({ kind: 'surface', layerId, name, ...surfaceFromRhino(ns) });
+        objects.push({ kind: 'surface', layerId, name, color: objColor, ...surfaceFromRhino(ns) });
       } else {
         /* ⚠ A MULTI-FACE BREP IS ONE OBJECT, AND IT CAME IN AS N LOOSE ONES.
            Every face was pushed as its own surface with nothing saying they
@@ -841,7 +1041,7 @@ export function importDocument(rhino, bytes) {
             const ns = face.underlyingSurface().toNurbsSurface();
             const panelName = name ? `${name} face ${f + 1}` : null;
             const trimEdges3d = faceTrimLoopsFromRhino(geo, face, tolerance);
-            objects.push({ kind: 'surface', layerId, name: panelName, ...surfaceFromRhino(ns), trimEdges3d,
+            objects.push({ kind: 'surface', layerId, name: panelName, color: objColor, ...surfaceFromRhino(ns), trimEdges3d,
               brepGroup, brepName: name || null, brepIsSolid: !!geo.isSolid, brepFaceCount: faceCount });
           } catch (err) {
             anyFaceFailed = true;
@@ -857,7 +1057,7 @@ export function importDocument(rhino, bytes) {
       // before anything else.
       try {
         const { cage, creasesLost } = subdCageFromRhino(rhino, geo);
-        objects.push({ kind: 'subd', layerId, name, cage, creasesLost });
+        objects.push({ kind: 'subd', layerId, name, color: objColor, cage, creasesLost });
       } catch (err) {
         skipped.push({ name, objectType: `SubD (${err && err.message ? err.message : 'control net unreadable'})` });
       }
@@ -871,5 +1071,26 @@ export function importDocument(rhino, bytes) {
     }
   }
 
-  return { tolerance, layers, objects, skipped };
+  /* ⚠ AND WHAT UNITS THE FILE CLAIMS. Only the tolerance was read, so a file
+     authored in inches arrived as raw numbers in a millimetre-only app — a
+     silent 25.4x mis-scale with nothing in the result to notice it by. The name
+     is reported rather than acted on: converting behind the caller's back would
+     be the same class of mistake in the other direction. */
+  const units = (() => {
+    const us = doc.settings().modelUnitSystem;
+    const table = rhino.UnitSystem;
+    if (us == null || !table) return null;
+    /* ⚠ rhino3dm's enums are emscripten OBJECTS, not numbers — `UnitSystem` is a
+       function whose properties are singleton instances carrying a `.value`.
+       A `typeof v === 'number'` match therefore never fires, which is how this
+       first shipped returning null for every file. Identity works because the
+       binding hands back the same singleton; `.value` is the fallback. */
+    for (const k of Object.keys(table)) {
+      if (k === 'values') continue;
+      const v = table[k];
+      if (v === us || (v && us && v.value != null && v.value === us.value)) return String(k).toLowerCase();
+    }
+    return null;
+  })();
+  return { tolerance, units, layers, objects, skipped };
 }

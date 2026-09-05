@@ -336,3 +336,331 @@ export function packBVHForGPU(bvh) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// CLOSEST POINT ON THE MESH, AND ITS SIGN
+// ---------------------------------------------------------------------------
+//
+// The same tree, a different descent. A ray walk prunes on a t-interval; a
+// closest-point walk prunes on the squared distance from the query point to a
+// node's box, and descends into the nearer child first so the running best
+// shrinks as early as possible and the far subtree is usually rejected without
+// being opened.
+//
+// ⚠ A FACE NORMAL GIVES THE WRONG SIGN WHENEVER THE CLOSEST POINT IS NOT IN A
+// FACE'S INTERIOR, which on any tessellated surface is most of the time: the
+// closest feature is an edge or a vertex over a large part of space, and there
+// the "nearest triangle" is whichever of several tied triangles the loop
+// happened to keep. The published fix is the ANGLE-WEIGHTED PSEUDONORMAL
+// (Bærentzen & Aanæs, "Signed Distance Computation Using the Angle Weighted
+// Pseudonormal", IEEE TVCG 11(3), 2005): a vertex carries the sum of its
+// incident face normals weighted by the incident ANGLE, an edge carries the sum
+// of its two face normals, and the sign of the dot product with (p - q) is then
+// correct everywhere for a closed, consistently-oriented mesh.
+//
+// ⚠⚠ AND THE THEOREM WANTS A CLOSED, CONSISTENTLY ORIENTED MANIFOLD. On an open
+// or non-manifold mesh there is no inside, so `buildMeshPseudonormals` reports
+// `closed` and a query against a mesh that is not closed returns `signed: false`
+// rather than a confident sign nothing supports.
+
+// Distance from a point to a node's box, squared. Zero inside the box.
+function boxDist2(nodes, b, x, y, z) {
+  let dx = 0, dy = 0, dz = 0;
+  if (x < nodes[b]) dx = nodes[b] - x; else if (x > nodes[b + 4]) dx = x - nodes[b + 4];
+  if (y < nodes[b + 1]) dy = nodes[b + 1] - y; else if (y > nodes[b + 5]) dy = y - nodes[b + 5];
+  if (z < nodes[b + 2]) dz = nodes[b + 2] - z; else if (z > nodes[b + 6]) dz = z - nodes[b + 6];
+  return dx * dx + dy * dy + dz * dz;
+}
+
+/**
+ * Closest point on one triangle, with the barycentric coordinates that say
+ * WHICH FEATURE it landed on — Ericson, *Real-Time Collision Detection* (2005),
+ * section 5.1.5, by Voronoi region rather than by projecting and clamping.
+ *
+ * The barycentric triple is what the pseudonormal lookup needs: the region
+ * branches return an exact zero in the coordinates that are off, so "two zeros
+ * is a vertex, one zero is an edge, none is the face interior" reads straight
+ * off the numbers instead of being tracked separately.
+ *
+ * `out` is a 3-array filled with the closest point; the return value is the
+ * barycentric triple [wa, wb, wc].
+ */
+export function closestPointOnTriangle(p, a, b, c, out) {
+  const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
+  const acx = c[0] - a[0], acy = c[1] - a[1], acz = c[2] - a[2];
+  const apx = p[0] - a[0], apy = p[1] - a[1], apz = p[2] - a[2];
+  const d1 = abx * apx + aby * apy + abz * apz;
+  const d2 = acx * apx + acy * apy + acz * apz;
+  if (d1 <= 0 && d2 <= 0) { out[0] = a[0]; out[1] = a[1]; out[2] = a[2]; return [1, 0, 0]; }
+
+  const bpx = p[0] - b[0], bpy = p[1] - b[1], bpz = p[2] - b[2];
+  const d3 = abx * bpx + aby * bpy + abz * bpz;
+  const d4 = acx * bpx + acy * bpy + acz * bpz;
+  if (d3 >= 0 && d4 <= d3) { out[0] = b[0]; out[1] = b[1]; out[2] = b[2]; return [0, 1, 0]; }
+
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+    const v = d1 / (d1 - d3);
+    out[0] = a[0] + abx * v; out[1] = a[1] + aby * v; out[2] = a[2] + abz * v;
+    return [1 - v, v, 0];
+  }
+
+  const cpx = p[0] - c[0], cpy = p[1] - c[1], cpz = p[2] - c[2];
+  const d5 = abx * cpx + aby * cpy + abz * cpz;
+  const d6 = acx * cpx + acy * cpy + acz * cpz;
+  if (d6 >= 0 && d5 <= d6) { out[0] = c[0]; out[1] = c[1]; out[2] = c[2]; return [0, 0, 1]; }
+
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+    const w = d2 / (d2 - d6);
+    out[0] = a[0] + acx * w; out[1] = a[1] + acy * w; out[2] = a[2] + acz * w;
+    return [1 - w, 0, w];
+  }
+
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+    const w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    out[0] = b[0] + (c[0] - b[0]) * w; out[1] = b[1] + (c[1] - b[1]) * w; out[2] = b[2] + (c[2] - b[2]) * w;
+    return [0, 1 - w, w];
+  }
+
+  /* A DEGENERATE TRIANGLE MAKES THE INTERIOR DENOMINATOR ZERO. The Voronoi
+     branches above cover a zero-area triangle in every direction that matters,
+     but a sliver can reach here with va+vb+vc underflowed; returning NaN from a
+     distance query poisons every comparison downstream silently, so the corner
+     answer is taken instead. */
+  const denom = va + vb + vc;
+  if (!(denom > 0)) { out[0] = a[0]; out[1] = a[1]; out[2] = a[2]; return [1, 0, 0]; }
+  const inv = 1 / denom;
+  const v = vb * inv, w = vc * inv;
+  out[0] = a[0] + abx * v + acx * w;
+  out[1] = a[1] + aby * v + acy * w;
+  out[2] = a[2] + abz * v + acz * w;
+  return [1 - v - w, v, w];
+}
+
+// Weld key for the connectivity a pseudonormal needs. Rounded to a fixed
+// decimal count as a NUMBER first and with -0 canonicalized to +0, because
+// `(-1e-15).toFixed(6)` is the string "-0.000000" and would split a seam pair
+// that agrees to twelve more digits than the key claims to resolve.
+function weldKey(x, y, z, mul) {
+  let rx = Math.round(x * mul) / mul; if (rx === 0) rx = 0;
+  let ry = Math.round(y * mul) / mul; if (ry === 0) ry = 0;
+  let rz = Math.round(z * mul) / mul; if (rz === 0) rz = 0;
+  return `${rx}_${ry}_${rz}`;
+}
+
+/**
+ * The connectivity and the three tiers of pseudonormal, for a triangle soup.
+ *
+ * `positions` is the same flat array `buildBVH` takes, so a mesh does not have
+ * to be re-packed to be queried. Triangle soup has no shared vertices, so the
+ * corners are WELDED by rounded position first — that weld is what makes an
+ * edge or a vertex a thing at all here.
+ *
+ * Returns `{ triangleCount, vertexCount, corner, faceNormals, vertexNormals,
+ * edgeNormals, boundaryEdges, nonManifoldEdges, degenerate, closed }`.
+ * `corner[t*3+k]` is the welded id of triangle t's k-th corner; `edgeNormals`
+ * is keyed by `min*vertexCount + max` of the two welded ids.
+ */
+export function buildMeshPseudonormals(positions, opts = {}) {
+  const mul = 10 ** (opts.weldDecimals ?? 6);
+  const triangleCount = Math.floor(positions.length / 9);
+  const ids = new Map();
+  const corner = new Uint32Array(triangleCount * 3);
+  let vertexCount = 0;
+  for (let t = 0; t < triangleCount; t += 1) {
+    for (let k = 0; k < 3; k += 1) {
+      const p = t * 9 + k * 3;
+      const key = weldKey(positions[p], positions[p + 1], positions[p + 2], mul);
+      let id = ids.get(key);
+      if (id === undefined) { id = vertexCount; vertexCount += 1; ids.set(key, id); }
+      corner[t * 3 + k] = id;
+    }
+  }
+
+  const faceNormals = new Float64Array(triangleCount * 3);
+  const vertexNormals = new Float64Array(vertexCount * 3);
+  const edgeNormals = new Map();
+  const edgeFaces = new Map();
+  let degenerate = 0;
+
+  for (let t = 0; t < triangleCount; t += 1) {
+    const p = t * 9;
+    const ax = positions[p], ay = positions[p + 1], az = positions[p + 2];
+    const bx = positions[p + 3], by = positions[p + 4], bz = positions[p + 5];
+    const cx = positions[p + 6], cy = positions[p + 7], cz = positions[p + 8];
+    const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+    const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+    let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+    const len = Math.hypot(nx, ny, nz);
+    if (len > 0) { nx /= len; ny /= len; nz /= len; } else { degenerate += 1; }
+    faceNormals[t * 3] = nx; faceNormals[t * 3 + 1] = ny; faceNormals[t * 3 + 2] = nz;
+
+    // THE ANGLE IS THE WEIGHT, and it is the whole content of the theorem: an
+    // equal-weight vertex normal is biased by however finely the tessellator
+    // happened to fan that corner, and a biased normal is a wrong SIGN, not a
+    // slightly wrong shade.
+    const vx = [ax, bx, cx], vy = [ay, by, cy], vz = [az, bz, cz];
+    for (let k = 0; k < 3; k += 1) {
+      const i1 = (k + 1) % 3, i2 = (k + 2) % 3;
+      const ux = vx[i1] - vx[k], uy = vy[i1] - vy[k], uz = vz[i1] - vz[k];
+      const wx = vx[i2] - vx[k], wy = vy[i2] - vy[k], wz = vz[i2] - vz[k];
+      const lu = Math.hypot(ux, uy, uz), lw = Math.hypot(wx, wy, wz);
+      if (!(lu > 0) || !(lw > 0)) continue;
+      let cosA = (ux * wx + uy * wy + uz * wz) / (lu * lw);
+      if (cosA < -1) cosA = -1; else if (cosA > 1) cosA = 1;
+      const angle = Math.acos(cosA);
+      const v = corner[t * 3 + k];
+      vertexNormals[v * 3] += nx * angle;
+      vertexNormals[v * 3 + 1] += ny * angle;
+      vertexNormals[v * 3 + 2] += nz * angle;
+    }
+
+    for (let k = 0; k < 3; k += 1) {
+      const a = corner[t * 3 + k], b = corner[t * 3 + (k + 1) % 3];
+      if (a === b) continue;
+      const key = (a < b ? a : b) * vertexCount + (a < b ? b : a);
+      const acc = edgeNormals.get(key);
+      if (acc) { acc[0] += nx; acc[1] += ny; acc[2] += nz; } else { edgeNormals.set(key, [nx, ny, nz]); }
+      edgeFaces.set(key, (edgeFaces.get(key) || 0) + 1);
+    }
+  }
+
+  let boundaryEdges = 0, nonManifoldEdges = 0;
+  for (const count of edgeFaces.values()) {
+    if (count < 2) boundaryEdges += 1;
+    else if (count > 2) nonManifoldEdges += 1;
+  }
+
+  return {
+    triangleCount,
+    vertexCount,
+    corner,
+    faceNormals,
+    vertexNormals,
+    edgeNormals,
+    boundaryEdges,
+    nonManifoldEdges,
+    degenerate,
+    closed: triangleCount > 0 && boundaryEdges === 0 && nonManifoldEdges === 0,
+  };
+}
+
+// Which feature the barycentric triple landed on, and the normal that speaks
+// for it. An exact zero is what the Voronoi branches produce for an edge or a
+// vertex; the epsilon only catches an interior answer that rounded onto the
+// boundary, where both normals agree in sign anyway because (p - q) is
+// perpendicular to the face there.
+const BARY_EPS = 1e-10;
+function pseudonormalAt(pn, tri, bary) {
+  const zeros = (bary[0] <= BARY_EPS ? 1 : 0) + (bary[1] <= BARY_EPS ? 1 : 0) + (bary[2] <= BARY_EPS ? 1 : 0);
+  if (zeros >= 2) {
+    const k = bary[0] > BARY_EPS ? 0 : (bary[1] > BARY_EPS ? 1 : 2);
+    const v = pn.corner[tri * 3 + k];
+    return { region: 'vertex', n: [pn.vertexNormals[v * 3], pn.vertexNormals[v * 3 + 1], pn.vertexNormals[v * 3 + 2]] };
+  }
+  if (zeros === 1) {
+    const k = bary[0] <= BARY_EPS ? 0 : (bary[1] <= BARY_EPS ? 1 : 2);
+    const a = pn.corner[tri * 3 + (k + 1) % 3], b = pn.corner[tri * 3 + (k + 2) % 3];
+    const key = (a < b ? a : b) * pn.vertexCount + (a < b ? b : a);
+    const acc = pn.edgeNormals.get(key);
+    if (acc) return { region: 'edge', n: acc };
+  }
+  return { region: 'face', n: [pn.faceNormals[tri * 3], pn.faceNormals[tri * 3 + 1], pn.faceNormals[tri * 3 + 2]] };
+}
+
+/**
+ * Nearest point on the mesh to `point`, walking the same tree `bvhIntersect`
+ * walks.
+ *
+ * `opts.pseudonormals` — the record from `buildMeshPseudonormals`. Supplying it
+ * is what makes the answer SIGNED; without it the result is an unsigned
+ * distance and `signed` is false.
+ * `opts.maxDistance` — give up beyond this radius and return null. A caller
+ * with a reach already knows it does not care past that, and the bound prunes
+ * the whole tree in one comparison at the root.
+ *
+ * Returns `{ distance, signedDistance, signed, point, tri, bary, region,
+ * normal, inside }` or null.
+ */
+export function bvhClosestPoint(bvh, positions, point, opts = {}) {
+  if (!bvh.nodeCount) return null;
+  const { nodes, order } = bvh;
+  const px = point[0], py = point[1], pz = point[2];
+  const maxDistance = opts.maxDistance ?? Infinity;
+  let bestD2 = Number.isFinite(maxDistance) ? maxDistance * maxDistance : Infinity;
+  let bestTri = -1;
+  const bestQ = [0, 0, 0];
+  let bestBary = null;
+
+  const q = [0, 0, 0];
+  const a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0];
+  const stack = [0];
+  const dstack = [0];
+  while (stack.length) {
+    const node = stack.pop();
+    const enter = dstack.pop();
+    if (enter >= bestD2) continue;
+    const nb = node * 8;
+    const count = nodes[nb + 7];
+    if (count > 0) {
+      const first = nodes[nb + 3];
+      for (let i = first; i < first + count; i += 1) {
+        const t = order[i], p = t * 9;
+        a[0] = positions[p]; a[1] = positions[p + 1]; a[2] = positions[p + 2];
+        b[0] = positions[p + 3]; b[1] = positions[p + 4]; b[2] = positions[p + 5];
+        c[0] = positions[p + 6]; c[1] = positions[p + 7]; c[2] = positions[p + 8];
+        const bary = closestPointOnTriangle(point, a, b, c, q);
+        const dx = q[0] - px, dy = q[1] - py, dz = q[2] - pz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < bestD2) {
+          bestD2 = d2; bestTri = t; bestBary = bary;
+          bestQ[0] = q[0]; bestQ[1] = q[1]; bestQ[2] = q[2];
+        }
+      }
+    } else {
+      /* NEARER CHILD FIRST, which is the whole reason this is cheaper than
+         brute force: the far subtree is tested against a best that has already
+         shrunk, so it is usually rejected at its own root. A stack pops last
+         first, so the FARTHER child is pushed first. */
+      const left = nodes[nb + 3];
+      const dl = boxDist2(nodes, left * 8, px, py, pz);
+      const dr = boxDist2(nodes, (left + 1) * 8, px, py, pz);
+      if (dl <= dr) {
+        if (dr < bestD2) { stack.push(left + 1); dstack.push(dr); }
+        if (dl < bestD2) { stack.push(left); dstack.push(dl); }
+      } else {
+        if (dl < bestD2) { stack.push(left); dstack.push(dl); }
+        if (dr < bestD2) { stack.push(left + 1); dstack.push(dr); }
+      }
+    }
+  }
+  if (bestTri < 0) return null;
+
+  const distance = Math.sqrt(bestD2);
+  const pn = opts.pseudonormals;
+  if (!pn) {
+    return {
+      distance, signedDistance: distance, signed: false,
+      point: bestQ, tri: bestTri, bary: bestBary, region: 'face',
+      normal: null, inside: false,
+    };
+  }
+  const { region, n } = pseudonormalAt(pn, bestTri, bestBary);
+  const nlen = Math.hypot(n[0], n[1], n[2]);
+  const normal = nlen > 0 ? [n[0] / nlen, n[1] / nlen, n[2] / nlen] : [0, 0, 0];
+  const s = (px - bestQ[0]) * normal[0] + (py - bestQ[1]) * normal[1] + (pz - bestQ[2]) * normal[2];
+  const inside = pn.closed && s < 0;
+  return {
+    distance,
+    signedDistance: pn.closed ? (inside ? -distance : distance) : distance,
+    signed: pn.closed,
+    point: bestQ,
+    tri: bestTri,
+    bary: bestBary,
+    region,
+    normal,
+    inside,
+  };
+}

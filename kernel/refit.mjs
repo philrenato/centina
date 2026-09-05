@@ -212,7 +212,10 @@ function matvec3(A, v) {
 // Chosen over a closed-form cubic specifically because Jacobi stays
 // accurate for a nearly-degenerate spectrum, which is exactly the case a
 // near-planar or near-collinear point set produces.
-function jacobiEigenSym3(Ain) {
+// Exported because it is the only symmetric eigensolver in the kernel and the
+// principal-axis frames built elsewhere need it; duplicating a solver is how two
+// copies drift.
+export function jacobiEigenSym3(Ain) {
   const A = [Ain[0].slice(), Ain[1].slice(), Ain[2].slice()];
   const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const pairs = [[0, 1], [0, 2], [1, 2]];

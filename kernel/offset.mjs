@@ -217,7 +217,7 @@ export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
 //  regenerates this block from this file and requires the app to contain it)
 // ============================================================================
 //
-// SHELL (Rhino: Shell).
+// SHELL (Rhino: Shell — 19_ADDENDA_RECONCILED.txt "SHELL — SCOPE DOWN").
 // Hollows a solid into a shell of ONE UNIFORM wall thickness, optionally
 // OPENING one or more of its own faces so the interior is reachable.
 //
@@ -788,7 +788,32 @@ export function shellSolid(panels, removedIndices, distance) {
       if (shellWallFits(welded.pts, loops, cornerNormals, kept, mid, maxMove)) safeLo = mid; else safeHi = mid;
     }
   }
-  const safeMaxDistance = safeLo;
+  /* AN UNMEASURABLE SAFE MAXIMUM IS NOT A SAFE MAXIMUM OF ZERO. `shellWallFits`
+     succeeds TRIVIALLY at t = 0: the inner surface is then the outer surface,
+     every edge still runs the same way, nothing has moved. So a bisection that
+     fails at every probed thickness leaves safeLo at its STARTING BOUND of 0,
+     the clamp below takes the wall to 0, the confirmation call gets that trivial
+     success back, and a ZERO-THICKNESS shell — two coincident skins, no volume,
+     not a solid — is built and committed, announced as "auto-clamped to 0.00mm".
+     Shipping a degenerate body silently is worse than refusing. An unmeasured
+     bisection is therefore normalized to null ("no thickness is known to fit")
+     and refuses BY NAME.
+
+     THE FLOOR IS SHELL_WELD_TOL, NOT AN ARBITRARY EPSILON, and it is what makes
+     this reachable rather than theoretical. Two ANTI-PARALLEL incident planes at
+     one welded corner (opposite faces of a sliver that met) put contradictory
+     demands on `shellSolveInner`, which refuses them once their residual passes
+     1e-6 — so the bisection converges on 5e-7mm, an absolute constant carrying no
+     information about the solid, and the panel then reports "auto-clamped to
+     0.00mm (the computed safe maximum for this solid is 0.00mm)" while committing
+     a shell half a millionth of a millimetre thick. A wall thinner than the
+     tolerance at which this same module calls two points THE SAME CORNER is not a
+     wall: its two skins are, by this kernel's own measure, one surface. Scaled up
+     for a very large solid, where a billionth of the diagonal is the coarser of
+     the two. */
+  const shellFloor = Math.max(SHELL_WELD_TOL, diag * 1e-9);
+  const safeMaxDistance = safeLo > shellFloor ? safeLo : null;
+  if (safeMaxDistance === null) throw new Error(`shellSolid: the largest safe wall thickness for this solid could not be measured — nothing thicker than ${shellFloor.toExponential(1)}mm, which is this kernel's own corner-weld tolerance, leaves an inner surface distinguishable from the outer one. Refused rather than building a shell with no thickness in it.`);
   let applied = requested, clamped = false;
   if (requested > safeMaxDistance * SHELL_CLAMP_SAFETY) { applied = safeMaxDistance * SHELL_CLAMP_SAFETY; clamped = true; }
   const solvedInner = shellWallFits(welded.pts, loops, cornerNormals, kept, applied, maxMove);

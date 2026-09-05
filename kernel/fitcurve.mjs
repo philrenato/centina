@@ -206,7 +206,7 @@ function corridorExcess(points, crv, closed, tolerance) {
 // case: it damps the ratio between the longest and the shortest leg without
 // throwing the spacing information away, which is what uniform parametrization
 // would do.
-function centripetalParams(points) {
+export function centripetalParams(points) {
   const n = points.length - 1;
   const ubar = new Array(points.length).fill(0);
   ubar[n] = 1;
@@ -322,7 +322,7 @@ function approximationKnotVector(ubar, p, n) {
 // its neighbors exactly at the corners the topology already agreed on —
 // which matters more here than a marginally lower residual, because a gap at
 // a shared corner is a naked edge.
-function leastSquaresFit(points, p, n, ubar) {
+export function leastSquaresFit(points, p, n, ubar) {
   const m = points.length - 1;
   const U = approximationKnotVector(ubar, p, n);
   const Q0 = points[0], Qm = points[m];
