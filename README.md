@@ -1,3 +1,10 @@
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/centina_mark_white.svg">
+    <img src="assets/centina_mark.svg" alt="Centina" width="72">
+  </picture>
+</p>
+
 # Centina
 
 A NURBS kernel in plain JavaScript. No dependencies, no build step, no renderer,
