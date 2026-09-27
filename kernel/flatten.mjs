@@ -463,6 +463,11 @@ export function solveSparseLeastSquares(triplets, rhs, nCols, opts = {}) {
 
 // Metrics
 
+// Extremes of a per-triangle array by a loop: spreading it into Math.min
+// overflows the call stack once the mesh has tens of thousands of triangles.
+function arrayMin(a) { let m = Infinity; for (const x of a) { if (x !== x) return NaN; if (x < m) m = x; } return m; }
+function arrayMax(a) { let m = -Infinity; for (const x of a) { if (x !== x) return NaN; if (x > m) m = x; } return m; }
+
 // Measure the flattening. Computed from the 3D mesh and the 2D layout
 // independently of how that layout was produced, so it is a measurement
 // rather than a self-consistency check on the solver.
@@ -574,8 +579,8 @@ export function flatteningDistortion(positions, faces, uv) {
     area: {
       total3d: area3dTotal, total2d: area2dTotal,
       totalRatio: area3dTotal > 0 ? area2dTotal / area3dTotal : 0,
-      minRatio: areaRatios.length ? Math.min(...areaRatios) : 0,
-      maxRatio: areaRatios.length ? Math.max(...areaRatios) : 0,
+      minRatio: areaRatios.length ? arrayMin(areaRatios) : 0,
+      maxRatio: areaRatios.length ? arrayMax(areaRatios) : 0,
       maxRelErr: raStat.max, rmsRelErr: raStat.rms,
     },
     intrinsic: {

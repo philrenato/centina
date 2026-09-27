@@ -13,7 +13,7 @@ no DOM — just math over plain serializable data.
 Centina is the geometry kernel of [Unreason3D](#the-app), a NURBS modeler built
 to teach CAD to design students.
 
-> **Pre-alpha.** `0.1.0-alpha.1`. The API is not frozen and the
+> **Pre-alpha.** `0.1.0-alpha.2`. The API is not frozen and the
 > [capability map](#what-it-does-not-do) is not short. Read it before you build
 > on this.
 

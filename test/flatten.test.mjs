@@ -494,3 +494,16 @@ test('a full cone with its apex is reported as not developable — the apex is a
   // Flattening it anyway costs more than half the area at the apex.
   assert.ok(r.distortion.area.maxRelErr > 0.5, `apex area error ${r.distortion.area.maxRelErr}`);
 });
+
+test('flatteningDistortion measures a mesh with more triangles than a call can take as arguments', () => {
+  // 320 x 320 quads = 204,800 triangles, flat, laid out as itself.
+  const n = 320, positions = [], uv = [], faces = [];
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { positions.push([i, j, 0]); uv.push([i, j]); }
+  const at = (i, j) => j * (n + 1) + i;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    faces.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)], [at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+  }
+  const d = flatteningDistortion(positions, faces, uv);
+  assert.ok(Math.abs(d.area.minRatio - 1) < 1e-12 && Math.abs(d.area.maxRatio - 1) < 1e-12,
+    `a mesh laid out as itself has area ratio 1 everywhere (min ${d.area.minRatio}, max ${d.area.maxRatio})`);
+});
