@@ -47,7 +47,7 @@ test('a point ON a face is BOUNDARY, not silently forced to one side — the cas
 test('a point DELIBERATELY NEAR a face still classifies correctly — the named hard case', () => {
   const tris = cube();
   // Far closer to the face than anything a tessellation would blur, but
-  // genuinely off it: these must be inside and outside respectively, not
+  // off it: these must be inside and outside respectively, not
   // collapsed to 'boundary' by an over-wide tolerance.
   assert.equal(classifyPointInSolid(tris, [5, 5, 0.001]).region, 'inside');
   assert.equal(classifyPointInSolid(tris, [5, 5, -0.001]).region, 'outside');
@@ -67,7 +67,7 @@ test('a ray aimed exactly along an EDGE is rejected as degenerate rather than co
 
 test('a ray lying IN a face plane is rejected too, not counted as zero crossings', () => {
   const tris = cube();
-  // The point must be genuinely OFF the boundary or the boundary check
+  // The point must be OFF the boundary or the boundary check
   // (correctly) answers first: sit well outside the cube but exactly coplanar
   // with its z=0 face, then fire straight at it. The ray travels through the
   // plane of two triangles without ever crossing them transversally.
@@ -80,7 +80,7 @@ test('a ray lying IN a face plane is rejected too, not counted as zero crossings
 
 test('a mesh that is NOT closed refuses by name instead of returning the more popular answer', () => {
   // A cube with one face removed: rays through the hole and rays through the
-  // remaining walls genuinely disagree, and that disagreement is the signal.
+  // remaining walls disagree, and that disagreement is the signal.
   const open = cube().slice(0, 10); // drop the two x=hi triangles
   const r = classifyPointInSolid(open, [5, 5, 5], { rayCount: 12 });
   assert.equal(r.region, null);
@@ -97,7 +97,7 @@ test('the classifier is DETERMINISTIC — the same point and solid answer identi
   }
 });
 
-test('SCALE INDEPENDENCE: a cube 1000x larger classifies the same points the same way', () => {
+test('scale independence: a cube 1000x larger classifies the same points the same way', () => {
   const big = cube(0, 10000);
   assert.equal(classifyPointInSolid(big, [5000, 5000, 5000]).region, 'inside');
   assert.equal(classifyPointInSolid(big, [50000, 5000, 5000]).region, 'outside');
@@ -160,12 +160,10 @@ test('the keep-rules are the ONLY difference between the three operators', () =>
   assert.equal(keepRuleFor('nonsense'), null);
 });
 
-// ---------------------------------------------------------------------------
-// PHASE 6 -> PHASE 7 COMPOSITION. The fragments a real face split produces,
-// classified against a real solid — the shape Phase 8 actually consumes.
+// Phase 6 -> phase 7 composition. The fragments a real face split produces,
+// classified against a real solid — the shape Phase 8 consumes.
 // Deliberately end-to-end through splitFaceByCurves rather than hand-built
-// fragments: the whole point is that the two phases genuinely compose.
-// ---------------------------------------------------------------------------
+// fragments: the point is that the two phases compose.
 
 // A flat bilinear plane at z=5, spanning x,y in [-20,20], parametrized so
 // (u,v) in [0,1]^2 maps linearly onto it. Degree 1 in both directions, so the
@@ -196,11 +194,11 @@ test('a split face\'s own fragments classify inside vs outside the other solid',
   const sorted = regions.map((r) => r.region).sort();
   assert.deepEqual(sorted, ['inside', 'outside'], 'exactly one fragment lies within the cube');
 
-  // The probe point is genuinely ON the surface, not an approximation of it —
+  // The probe point is ON the surface, not an approximation of it —
   // z is exactly the plane's own height for both fragments.
   for (const r of regions) assert.ok(Math.abs(r.point[2] - 5) < 1e-9);
 
-  // And the INSIDE one's own probe really does sit within the cube's bounds,
+  // And the INSIDE one's own probe sits within the cube's bounds,
   // checked independently of the classifier's own answer.
   const insideProbe = regions.find((r) => r.region === 'inside').point;
   assert.ok(insideProbe[0] > 0 && insideProbe[0] < 10, 'probe x within the cube');
@@ -215,31 +213,27 @@ test('a fragment with no findable interior point refuses rather than guessing', 
   assert.match(r.reason, /interior point/i);
 });
 
-// ---------------------------------------------------------------------------
-// COLLAPSED TRIANGLES — a mesh degeneracy that used to poison EVERY ray.
+// Collapsed triangles — a mesh degeneracy that can poison every ray.
 //
 // A revolve collapses its whole pole row, so the tessellator emits triangles
 // with two coincident corners. Their cross product is not exactly zero (the
 // two "identical" corners are separate float evaluations of the same pole),
 // so it is a direction made entirely of roundoff — and any ray is parallel to
-// noise. One such triangle anywhere in a mesh made every cast report itself
-// untrustworthy, leaving NO point classifiable against ANY solid of
-// revolution: a point 100 units clear of the object refused just as flatly as
-// a genuinely ambiguous one.
+// noise. Unguarded, one such triangle anywhere in a mesh makes every cast
+// report itself untrustworthy, leaving no point classifiable against any
+// solid of revolution: a point 100 units clear of the object refuses as
+// flatly as an ambiguous one.
 //
-// THE FIXTURE IS A REAL REVOLVE, DELIBERATELY, and that is the whole lesson
-// of how this test was written. A first version hand-built slivers with
-// near-coincident corners, and a negative control proved it VACUOUS — it
-// passed just as happily with the guard switched off. The real failure needs
-// the exact roundoff a genuine pole evaluation produces: only there does the
-// noise normal land near-perpendicular to the ray, which is what drives the
-// in-plane distance to zero and trips the degeneracy report. Reproduce it
-// with real geometry or not at all.
-// ---------------------------------------------------------------------------
+// The fixture is a real revolve, deliberately. Hand-built slivers with
+// near-coincident corners do not reproduce the failure: a test built on them
+// passes with the guard switched off. The failure needs the exact roundoff a
+// pole evaluation produces: only there does the noise normal land
+// near-perpendicular to the ray, which is what drives the in-plane distance
+// to zero and trips the degeneracy report.
 
-// A genuinely irregular silhouette — not a sphere or a cone. The profile
+// An irregular silhouette — not a sphere or a cone. The profile
 // touches the axis at both ends, so the revolve is a closed solid with a
-// collapsed pole row at each end: the shape the bug actually lives in.
+// collapsed pole row at each end: the shape the degeneracy occurs in.
 function wavyBlob() {
   const profile = globalCurveInterp(
     [[0, 0, 0], [12, 0, 6], [8, 0, 14], [15, 0, 24], [6, 0, 34], [0, 0, 40]], 3);
@@ -252,7 +246,7 @@ function blobTriangles(res) {
 }
 
 test('a real solid of revolution classifies at all — the collapsed pole row must not poison every ray', () => {
-  // Every resolution: the bug is not a sampling artifact, one collapsed
+  // Every resolution: the degeneracy is not a sampling artifact, one collapsed
   // triangle anywhere is enough. res=8 (128 triangles) already reproduces it.
   for (const res of [8, 16, 40]) {
     const tris = blobTriangles(res);
@@ -285,11 +279,11 @@ test('the degeneracy threshold sits in a real GAP — it is not tuned against th
   // from a number a test happens to still hold.
   const collapsed = ratios.filter((r) => r < DEGENERATE_TRIANGLE_AREA_RATIO);
   const healthy = ratios.filter((r) => r >= DEGENERATE_TRIANGLE_AREA_RATIO);
-  assert.ok(collapsed.length > 0, 'the fixture genuinely contains collapsed pole triangles');
+  assert.ok(collapsed.length > 0, 'the fixture contains collapsed pole triangles');
   assert.ok(healthy.length > collapsed.length, 'and is mostly real geometry');
   // The two populations are separated by many orders of magnitude, with the
   // threshold sitting in empty space between them — asserted as real clearance
-  // ON EITHER SIDE of wherever the constant currently is, so a change that
+  // on either side of wherever the constant is, so a change that
   // moved it toward either population would fail here rather than pass.
   assert.ok(Math.max(...collapsed) < DEGENERATE_TRIANGLE_AREA_RATIO * 1e-3,
     `worst collapsed ratio ${Math.max(...collapsed)} should sit orders below the threshold`);

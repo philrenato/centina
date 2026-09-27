@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fairControlNet, fairParamsFromAmount } from '../kernel/fair.mjs';
 
-// A 5x5 flat, planar net (Z=0 everywhere) with ONE deliberately-perturbed
+// A 5x5 flat, planar net (Z=0 everywhere) with one deliberately-perturbed
 // interior point (a real "bump" to smooth away) and real, non-uniform
 // rational weights (so a test can confirm weight is left untouched).
 function bumpyNet() {
@@ -32,7 +32,7 @@ test('fairControlNet(srf, 0) is a byte-identical passthrough', () => {
   assert.deepEqual(out.ctrlNet, srf.ctrlNet);
 });
 
-test('fairControlNet genuinely relaxes the bumped interior point toward its own neighbor average, one real step at a time', () => {
+test('fairControlNet relaxes the bumped interior point toward its own neighbor average, one real step at a time', () => {
   const srf = bumpyNet();
   const before = srf.ctrlNet[2][2][2]; // 40
   const oneIterAmount = 1 / 20; // maps to exactly 1 iteration via fairParamsFromAmount
@@ -42,7 +42,7 @@ test('fairControlNet genuinely relaxes the bumped interior point toward its own 
   assert.ok(Math.abs(oneIter.ctrlNet[2][2][2] - expectedAfterOne) < 1e-9, `expected ${expectedAfterOne}, got ${oneIter.ctrlNet[2][2][2]}`);
 });
 
-test('fairControlNet NEVER moves the boundary rows/columns — surface edges/corners stay pinned exactly', () => {
+test('fairControlNet never moves the boundary rows/columns — surface edges/corners stay pinned exactly', () => {
   const srf = bumpyNet();
   const out = fairControlNet(srf, 1);
   for (let j = 0; j < 5; j++) {
@@ -75,7 +75,7 @@ test('a higher Smoothness amount relaxes the bump further than a lower one (mono
   assert.ok(bumpHigh >= 0, 'never overshoots past the true equilibrium (0) into a negative bump');
 });
 
-test('a surface with fewer than 3 rows or columns has no interior point to relax — an honest no-op, not a crash', () => {
+test('a surface with fewer than 3 rows or columns has no interior point to relax — a no-op, not a crash', () => {
   const twoByN = { degU: 1, degV: 3, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 0, 0, 1, 1, 1, 1], ctrlNet: [[[0, 0, 0, 1], [0, 10, 0, 1], [0, 20, 0, 1], [0, 30, 0, 1]], [[10, 0, 0, 1], [10, 10, 5, 1], [10, 20, 0, 1], [10, 30, 0, 1]]] };
   const out = fairControlNet(twoByN, 1);
   assert.deepEqual(out.ctrlNet, twoByN.ctrlNet);

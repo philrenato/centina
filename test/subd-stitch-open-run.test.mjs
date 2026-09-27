@@ -1,10 +1,10 @@
-// STITCH's own open-run preconditions — the same three the bridges check,
-// plus the closed-rim refusal, now shared through checkOpenRunChain.
+// Stitch's open-run preconditions — the same three the bridges check,
+// plus the closed-rim refusal, shared through checkOpenRunChain.
 //
-// The closed-rim fixtures are REAL subdPipeCage tubes rather than hand-typed
+// The closed-rim fixtures are real subdPipeCage tubes rather than hand-typed
 // rings, for the same reason the closed-rim hub's own tests are: a rim built
 // by the construction that would actually produce one carries whatever ring
-// orientation and vertex ordering that construction genuinely gives, and a
+// orientation and vertex ordering that construction gives, and a
 // loop typed to be convenient carries whatever the author assumed. The
 // rotational mismatch these tests are about only exists because two real tubes
 // do not agree on where vertex 0 sits.
@@ -57,13 +57,13 @@ function facingTubes({ facets = 6, radius = 5 } = {}) {
   };
 }
 
-// Two independent flat quads SIDE BY SIDE with a small gap, both wound
+// Two independent flat quads side by side with a small gap, both wound
 // counter-clockwise about +Z. The legitimate Stitch case, kept alongside every
 // refusal so a guard that refuses everything cannot pass these tests.
 //
 // Side by side rather than stacked, deliberately: welding A's right edge
 // [1,2] to B's left edge [4,7] is the one pairing that leaves the shared edge
-// traversed in OPPOSITE directions by its two faces, so the result is a
+// traversed in opposite directions by its two faces, so the result is a
 // consistently wound sheet. Two same-wound quads stacked face to face and
 // welded along the same edge of each would not be — stitchEdgeRuns has no
 // winding check, and cannot get one by searching, since a merge builds no new
@@ -79,24 +79,24 @@ function twoQuads() {
   };
 }
 
-test('stitchEdgeRuns: the fixture really is two open tube rims — 12 naked edges, nothing non-manifold', () => {
+test('stitchEdgeRuns: the fixture is two open tube rims — 12 naked edges, nothing non-manifold', () => {
   const { cage, rimA, rimB } = facingTubes();
   assert.equal(rimA.length, 6);
   assert.equal(rimB.length, 6);
   assert.equal(nakedEdgeCount(cage), 12, 'six naked edges per open rim');
   assert.equal(nonManifoldEdgeCount(cage), 0);
   assert.equal(directedEdgeReuse(cage), 0, 'each tube is consistently wound on its own');
-  // The two rims genuinely disagree about where vertex 0 sits: this is the
+  // The two rims disagree about where vertex 0 sits: this is the
   // rotational mismatch the refusal exists for, and it is a property of two
   // real tubes, not something arranged for the test.
   const worstPairXY = Math.max(...rimA.map((a, i) => {
     const p = cage.vertices[a], q = cage.vertices[rimB[i]];
     return Math.hypot(p[0] - q[0], p[1] - q[1]);
   }));
-  assert.ok(worstPairXY > 1, `index-for-index pairing is genuinely misaligned in plan (worst ${worstPairXY.toFixed(2)}mm)`);
+  assert.ok(worstPairXY > 1, `index-for-index pairing is misaligned in plan (worst ${worstPairXY.toFixed(2)}mm)`);
 });
 
-test('stitchEdgeRuns: refuses a CLOSED rim by name, naming the offending closing edge and the right function', () => {
+test('stitchEdgeRuns: refuses a closed rim by name, naming the offending closing edge and the right function', () => {
   const { cage, rimA, rimB } = facingTubes();
   assert.throws(() => stitchEdgeRuns(cage, rimA, rimB, 'average'), (err) => {
     assert.match(err.message, /^stitchEdgeRuns: runA is a CLOSED rim, not an open run/);
@@ -117,7 +117,7 @@ test('stitchEdgeRuns: refuses a closed rim however it is written — reversed, r
   assert.throws(() => stitchEdgeRuns(cage, [...rimA, rimA[0]], [...rimB, rimB[0]]), /repeats a vertex/);
 });
 
-test('stitchEdgeRuns: the refused closed-rim merge is what the OLD code produced — a crushed, inconsistently wound weld', () => {
+test('stitchEdgeRuns: the refused closed-rim merge, done unguarded, is a crushed, inconsistently wound weld', () => {
   // Reproduces the unguarded behavior directly, so the refusal is proven to
   // protect against something real rather than being merely conservative.
   // This is stitchEdgeRuns' own arithmetic — pair by index (forward or
@@ -137,11 +137,11 @@ test('stitchEdgeRuns: the refused closed-rim merge is what the OLD code produced
   });
   const radii = merged.map((p) => Math.hypot(p[0], p[1]));
   const worstRadiusError = Math.max(...radii.map((r) => Math.abs(r - 5)));
-  assert.ok(worstRadiusError > 0.5, `the index-paired weld genuinely crushes the ring off its own 5mm radius (worst error ${worstRadiusError.toFixed(3)}mm)`);
+  assert.ok(worstRadiusError > 0.5, `the index-paired weld crushes the ring off its own 5mm radius (worst error ${worstRadiusError.toFixed(3)}mm)`);
   assert.ok(Math.min(...radii) < 0.001, 'diametrically opposite vertices average onto the tube axis');
 
   // And the topology it would have produced: every rim edge welded (no slit —
-  // the bridges' failure mode is NOT this one), but every welded edge
+  // the bridges' failure mode is not this one), but every welded edge
   // traversed twice in the same direction.
   const remap = new Map(aligned.map((b, i) => [b, rimA[i]]));
   const welded = { vertices: cage.vertices, faces: cage.faces.map((f) => f.map((i) => (remap.has(i) ? remap.get(i) : i))), creases: {} };
@@ -158,7 +158,7 @@ test('stitchEdgeRuns: refuses a run whose vertices are not joined by real cage e
   );
 });
 
-test('stitchEdgeRuns: refuses a run of INTERIOR (2-face) edges, which welding turns non-manifold', () => {
+test('stitchEdgeRuns: refuses a run of interior (2-face) edges, which welding turns non-manifold', () => {
   const { cage } = facingTubes();
   const counts = edgeFaceCounts(cage);
   const interiorRun = (() => {
@@ -170,7 +170,7 @@ test('stitchEdgeRuns: refuses a run of INTERIOR (2-face) edges, which welding tu
   assert.equal(interiorRun.length, 3);
   for (let i = 0; i + 1 < interiorRun.length; i++) {
     const a = interiorRun[i], b = interiorRun[i + 1];
-    assert.equal(counts.get(a < b ? `${a}_${b}` : `${b}_${a}`), 2, 'the fixture run really is interior');
+    assert.equal(counts.get(a < b ? `${a}_${b}` : `${b}_${a}`), 2, 'the fixture run is interior');
   }
   const other = cage.vertices.map((_, i) => i).filter((i) => Math.abs(cage.vertices[i][2] - 50) < 1e-9).slice(0, 3);
   assert.throws(
@@ -179,7 +179,7 @@ test('stitchEdgeRuns: refuses a run of INTERIOR (2-face) edges, which welding tu
   );
 });
 
-test('stitchEdgeRuns: a genuinely open, connected, naked run still welds — the guard refuses nothing legitimate', () => {
+test('stitchEdgeRuns: an open, connected, naked run still welds — the guard refuses nothing legitimate', () => {
   const cage = twoQuads();
   assert.equal(nakedEdgeCount(cage), 8);
   const { cage: out, mergedVertexIndices, collapsedFaceCount } = stitchEdgeRuns(cage, [1, 2], [4, 7], 'average');
@@ -200,7 +200,7 @@ test('stitchEdgeRuns: a 2-vertex run is exempt from the closing-edge rule — it
   assert.doesNotThrow(() => stitchEdgeRuns(cage, [1, 2], [4, 7]));
 });
 
-test('stitchEdgeRuns: an OPEN 3-vertex run whose ends happen to be joined is a closed triangle, and is refused', () => {
+test('stitchEdgeRuns: an open 3-vertex run whose ends happen to be joined is a closed triangle, and is refused', () => {
   // The one place the closing-edge rule is deliberately strict rather than
   // over-strict: a run that already spans its whole rim bar one edge is the
   // same loop under another name.

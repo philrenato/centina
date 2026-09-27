@@ -1,110 +1,99 @@
-// REFIT — recover a canonical shape's PARAMETERS from a point set, and
-// report how well that shape actually fits.
+// Refit — recover a canonical shape's parameters from a point set, and
+// report how well that shape fits.
 //
-// WHY THIS EXISTS (POLYTOOLS + HONEST DEGRADATION). Reading that
-// reframe collapses two abilities into one mechanism: switching an
-// Ellipse from center-radius to two-point, and an edited Ellipse becoming
-// something else, are "the same operation at different distances: both
-// RE-DERIVE a recipe's params from the object's current geometry, then
-// swap which recipe drives it." This module is that re-derivation — and,
-// just as load-bearing, the MEASURED evidence a caller needs to decide
-// whether the swap is honest at all.
+// Switching an Ellipse from center-radius to two-point, and an edited
+// Ellipse becoming something else, are the same operation: both re-derive
+// a recipe's params from the object's current geometry, then swap which
+// recipe drives it. This module is that re-derivation, plus the measured
+// evidence a caller needs to decide whether the swap is valid.
 //
-// WHAT THIS RETURNS, AND WHAT IT DELIBERATELY DOES NOT. Every fit returns
-// the recovered params as PLAIN DATA in exactly the shape the app's own
-// operator entries already use (`center`/`xAxis`/`yAxis`/`radiusX`/`radiusY`
+// What this returns. Every fit returns the recovered params as plain data
+// in the shape the app's operator entries use (`center`/`xAxis`/`yAxis`/`radiusX`/`radiusY`
 // for Ellipse; `center`/`xAxis`/`yAxis`/`radius` for Circle) — plain
 // number arrays, never a THREE.Vector3, so a recovered param bag can be
 // handed straight to `evaluate()` or to a param editor with no
-// translation step. It also returns a REAL, MEASURED deviation in model
-// units (worst and RMS), and NOT a normalized 0-1 "confidence": a caller
-// deciding what to CALL an object in front of a student needs a distance
-// it can put on screen and compare against its own modeling tolerance, not
-// a manufactured score whose scale means nothing. `segments` is never
+// translation step. It also returns a measured deviation in model
+// units (worst and RMS), not a normalized 0-1 "confidence": a caller
+// deciding what to call an object needs a distance it can display and
+// compare against its own modeling tolerance. `segments` is never
 // returned by any fit — that is a representation choice (how many exact
 // rational arc spans the app chose to build the curve from), not a
-// property of the shape, and guessing it would be inventing data.
+// property of the shape.
 //
-// REFUSALS ARE RETURN VALUES, NOT THROWS — a deliberate divergence from
-// this kernel's usual `throw`-on-refusal convention (offsetCurve2D,
-// mergeLoopsKeyhole). Those functions are asked to BUILD something and a
-// refusal is exceptional. A fitter is asked a QUESTION ("is this still an
+// Refusals are return values, not throws — unlike this kernel's usual
+// `throw`-on-refusal convention (offsetCurve2D, mergeLoopsKeyhole). Those
+// functions are asked to build something and a refusal is exceptional. A
+// fitter is asked a question ("is this still an
 // ellipse?") whose answer is routinely no; making the ordinary negative
 // answer an exception would push every caller into a try/catch around a
 // non-exceptional case. Every result therefore carries `ok`, and a
 // refusal carries a named `reason` (see FIT_REFUSAL) plus a plain-language
-// `detail`. A confident WRONG answer is far worse here than a refusal.
+// `detail`.
 //
-// INPUT CONVENTION — points are CARTESIAN [x, y, z] (or {x, y, z}), never
+// Input convention — points are Cartesian [x, y, z] (or {x, y, z}), never
 // a NURBS control point's own homogeneous [x, y, z, w]. A rational curve's
 // raw control points are not on the curve at all (a circle's own
 // tangent-corner control points sit radius*sqrt(2) out), so a caller
-// fitting a curve should pass SAMPLED points (curvePoint / the app's own
-// cached sample chains), or de-homogenized control points if it genuinely
+// fitting a curve should pass sampled points (curvePoint / the app's own
+// cached sample chains), or de-homogenized control points if it
 // wants the control polygon. A 4th array element is ignored, not divided
 // out — passing homogeneous points is a caller error this module cannot
 // detect, and this comment is the warning.
 //
-// CITED METHODS
-// - ELLIPSE: the direct least-squares ELLIPSE-SPECIFIC fit of Fitzgibbon,
+// Cited methods
+// - Ellipse: the direct least-squares ellipse-specific fit of Fitzgibbon,
 //   Pilu & Fisher, "Direct Least Square Fitting of Ellipses," IEEE TPAMI
 //   21(5), 1999, 476-480 — implemented in the numerically stable
 //   reformulation of Halir & Flusser, "Numerically Stable Direct Least
 //   Squares Fitting of Ellipses," Proc. WSCG'98, 125-132. Halir & Flusser
-//   is the better implementation choice and is what this module actually
-//   does: Fitzgibbon's original solves a 6x6 generalized eigenproblem
+//   is what this module implements: Fitzgibbon's original solves a 6x6 generalized eigenproblem
 //   whose scatter matrix is close to singular for real data, while the
 //   Halir-Flusser block decomposition reduces it to a 3x3 problem on a
-//   better-conditioned system. WHY AN ELLIPSE-SPECIFIC METHOD AT ALL:
-//   a naive algebraic conic fit minimizing the same residual will happily
-//   return a HYPERBOLA or PARABOLA for points that are nearly-but-not-
-//   quite an ellipse — exactly the near-miss input this module exists to
+//   better-conditioned system. An ellipse-specific method is needed because
+//   a plain algebraic conic fit minimizing the same residual can
+//   return a hyperbola or parabola for points that are nearly-but-not-
+//   quite an ellipse — the near-miss input this module exists to
 //   judge. Fitzgibbon's constraint (4ac - b^2 = 1) makes an ellipse the
-//   only reachable answer, by construction rather than by hoping.
-// - CIRCLE: Kasa's algebraic circle fit (I. Kasa, "A circle fitting
+//   only reachable answer, by construction.
+// - Circle: Kasa's algebraic circle fit (I. Kasa, "A circle fitting
 //   procedure and its error analysis," IEEE Trans. Instrum. Meas. 25,
-//   1976) as an initial guess, refined by Gauss-Newton on the TRUE
-//   orthogonal distance residual (r_i - R) so the shipped answer is a
-//   genuine geometric least-squares circle, not the algebraically-biased
+//   1976) as an initial guess, refined by Gauss-Newton on the true
+//   orthogonal distance residual (r_i - R) so the returned answer is a
+//   geometric least-squares circle, not the algebraically-biased
 //   Kasa estimate (which is known to pull the radius short on partial
 //   arcs).
-// - PLANE / LINE: principal component analysis of the point set's own
+// - Plane / line: principal component analysis of the point set's own
 //   covariance matrix, eigen-decomposed by the classical cyclic Jacobi
 //   rotation method for symmetric matrices. The best-fit plane's normal
-//   is the eigenvector of the SMALLEST eigenvalue; the best-fit line's
-//   direction is the eigenvector of the LARGEST. Both are the exact
+//   is the eigenvector of the smallest eigenvalue; the best-fit line's
+//   direction is the eigenvector of the largest. Both are the exact
 //   orthogonal-distance least-squares answers, not approximations.
-// - POINT-TO-ELLIPSE DISTANCE: D. Eberly, "Distance from a Point to an
+// - Point-to-ellipse distance: D. Eberly, "Distance from a Point to an
 //   Ellipse, an Ellipsoid, or a Hyperellipsoid" (Geometric Tools) — a
 //   bracketed bisection on a scalar whose bracketing function is provably
 //   monotone, so it converges unconditionally with no derivative and no
-//   starting guess. There is NO closed form for this distance; the
-//   reported ellipse deviation is therefore exact to the stated bisection
-//   tolerance, not exact in closed form, and this module says so rather
-//   than quietly substituting an algebraic proxy.
+//   starting guess. There is no closed form for this distance; the
+//   reported ellipse deviation is exact to the stated bisection
+//   tolerance, not in closed form.
 //
-// HONEST LIMIT OF THE ELLIPSE FIT, STATED PLAINLY. Fitzgibbon/Halir-
-// Flusser minimizes an ALGEBRAIC residual, not the geometric one — the
+// Limit of the ellipse fit. Fitzgibbon/Halir-
+// Flusser minimizes an algebraic residual, not the geometric one — the
 // returned ellipse is not guaranteed to be the orthogonal-distance
 // optimum, and on a short arc the algebraic bias is well documented in
 // the literature. What this module guarantees instead is that the
-// REPORTED deviation is the true geometric distance to the ellipse it
-// actually returned. The number is honest about the fit you got, never
-// about a better fit that was not computed. (The circle fit does not
-// share this limit — its Gauss-Newton refinement converges on the
-// geometric optimum directly, which is cheap for 3 unknowns and was worth
-// doing; the equivalent for an ellipse is 5 coupled unknowns whose
-// residual has no closed-form derivative, real separate work, deliberately
-// not attempted here rather than shipped unverified.)
+// reported deviation is the true geometric distance to the ellipse it
+// returned. (The circle fit does not share this limit — its Gauss-Newton
+// refinement converges on the geometric optimum directly, which is cheap
+// for 3 unknowns; the equivalent for an ellipse is 5 coupled unknowns
+// whose residual has no closed-form derivative, and is not attempted
+// here.)
 
-// ---------------------------------------------------------------------
-// REFUSAL VOCABULARY
-// ---------------------------------------------------------------------
+// Refusal vocabulary
 export const FIT_REFUSAL = Object.freeze({
   // Fewer points than the fit structurally needs (line 2, plane 3,
   // circle 3, ellipse 5 — a conic has 5 degrees of freedom).
   TOO_FEW_POINTS: 'TOO_FEW_POINTS',
-  // Enough points were passed, but too few DISTINCT ones survive a
+  // Enough points were passed, but too few distinct ones survive a
   // coincidence check — three copies of the same point do not determine
   // a plane no matter how they are counted.
   COINCIDENT_POINTS: 'COINCIDENT_POINTS',
@@ -114,26 +103,22 @@ export const FIT_REFUSAL = Object.freeze({
   // through a line is ambiguous; a circle or ellipse through one is not
   // determined at all.
   COLLINEAR: 'COLLINEAR',
-  // The point set is genuinely non-planar beyond the caller's tolerance,
+  // The point set is non-planar beyond the caller's tolerance,
   // so no planar shape describes it. The measured planar deviation is
   // reported alongside, so a caller can loosen its own tolerance with a
-  // real number in hand rather than guessing.
+  // number in hand.
   NOT_PLANAR: 'NOT_PLANAR',
   // The conic system came back without a usable ellipse solution (a
   // singular scatter matrix, or recovered semi-axes that are not real and
   // positive). Structurally rare, because the ellipse-specific constraint
   // is what rules out the hyperbola/parabola branches in the first place
-  // — this is the last-resort guard for a numerically dead system, and it
-  // refuses rather than returning whatever fell out.
+  // — this is the last-resort guard for a numerically singular system.
   DEGENERATE_CONIC: 'DEGENERATE_CONIC',
 });
 
-// ---------------------------------------------------------------------
-// SMALL VECTOR / MATRIX HELPERS (local, so this module stays dependency-
-// free per this kernel's own dependency rule — deliberately NOT importing
-// vec3.mjs, since these operate on the plain [x,y,z] arrays the fitters
-// normalize their input into and nothing else here needs vec3's surface).
-// ---------------------------------------------------------------------
+// Small vector / matrix helpers (local, so this module has no imports;
+// they operate only on the plain [x,y,z] arrays the fitters normalize
+// their input into).
 function sub3(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 function cross3(a, b) {
@@ -182,7 +167,7 @@ function invert3(M) {
     if (!x) return null;
     cols.push(x);
   }
-  // cols[c] is the c-th COLUMN of the inverse.
+  // cols[c] is the c-th column of the inverse.
   return [
     [cols[0][0], cols[1][0], cols[2][0]],
     [cols[0][1], cols[1][1], cols[2][1]],
@@ -207,14 +192,13 @@ function matvec3(A, v) {
   ];
 }
 
-// Classical cyclic Jacobi eigen-decomposition of a SYMMETRIC 3x3 matrix.
+// Classical cyclic Jacobi eigen-decomposition of a symmetric 3x3 matrix.
 // Returns eigenvalues ascending with their matching (unit) eigenvectors.
-// Chosen over a closed-form cubic specifically because Jacobi stays
-// accurate for a nearly-degenerate spectrum, which is exactly the case a
+// Chosen over a closed-form cubic because Jacobi stays
+// accurate for a nearly-degenerate spectrum, which is the case a
 // near-planar or near-collinear point set produces.
 // Exported because it is the only symmetric eigensolver in the kernel and the
-// principal-axis frames built elsewhere need it; duplicating a solver is how two
-// copies drift.
+// principal-axis frames built elsewhere need it.
 export function jacobiEigenSym3(Ain) {
   const A = [Ain[0].slice(), Ain[1].slice(), Ain[2].slice()];
   const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -252,7 +236,7 @@ export function jacobiEigenSym3(Ain) {
     value: A[i][i],
     vector: [V[0][i], V[1][i], V[2][i]],
   }));
-  // Ascending by eigenvalue, with the ORIGINAL column index as a
+  // Ascending by eigenvalue, with the original column index as a
   // deterministic tie-break so an exactly-degenerate spectrum (a sphere-
   // like covariance) cannot reorder between calls.
   out.forEach((e, i) => { e._i = i; });
@@ -260,27 +244,24 @@ export function jacobiEigenSym3(Ain) {
   return out.map((e) => ({ value: e.value, vector: e.vector }));
 }
 
-// ---------------------------------------------------------------------
-// DETERMINISTIC ORIENTATION
+// Deterministic orientation
 //
-// An eigenvector's SIGN is mathematically arbitrary, and a plane's own
+// An eigenvector's sign is mathematically arbitrary, and a plane's own
 // in-plane basis is arbitrary too. A caller is going to put these numbers
 // in a Properties panel, where an arbitrary flip between two calls reads
 // as a bug. Both are therefore canonicalized here rather than left to
 // whatever the solver happened to produce:
 //
-//   * a direction's sign is fixed so its LARGEST-MAGNITUDE component is
+//   * a direction's sign is fixed so its largest-magnitude component is
 //     positive, with the lowest index winning an exact tie;
-//   * a plane's in-plane X axis is derived from the plane NORMAL alone
-//     (cross the normal with whichever world axis it is LEAST aligned
+//   * a plane's in-plane X axis is derived from the plane normal alone
+//     (cross the normal with whichever world axis it is least aligned
 //     with), never from the data's own in-plane spread — a data-derived
-//     in-plane axis is exactly what flips arbitrarily on a near-circular
-//     point set, which is the flicker case worth designing against.
+//     in-plane axis flips arbitrarily on a near-circular point set.
 //
 // Both rules still have a measure-zero flip surface (a direction whose
 // largest component crosses zero); that is unavoidable for any sign
-// convention and is named here rather than claimed away.
-// ---------------------------------------------------------------------
+// convention.
 function canonicalizeDirection(v) {
   const n = normalize3(v);
   if (!n) return null;
@@ -308,9 +289,7 @@ function deterministicPlaneBasis(normalRaw) {
   return { normal, xAxis, yAxis };
 }
 
-// ---------------------------------------------------------------------
-// INPUT NORMALIZATION + SHARED STATS
-// ---------------------------------------------------------------------
+// Input normalization and shared stats
 function toPoint(p) {
   if (Array.isArray(p)) {
     const x = p[0], y = p[1], z = p[2] ?? 0;
@@ -331,7 +310,7 @@ function refuse(reason, detail, extra) {
 
 // Normalize the input point list once, and compute the scale-setting
 // statistics every fit's tolerances key off. `extent` is the bounding-box
-// DIAGONAL — a single honest "how big is this thing" number that a
+// diagonal — a single "how big is this thing" number that a
 // relative tolerance can multiply without caring which axis the shape
 // happens to lie along.
 function prepare(pointsIn, minCount, opts) {
@@ -362,7 +341,7 @@ function prepare(pointsIn, minCount, opts) {
   const extent = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
 
   // Distinct-point count, so "5 points" that are really 2 points and
-  // three duplicates refuses honestly instead of fitting noise. O(n^2),
+  // three duplicates refuses instead of fitting noise. O(n^2),
   // which is fine at the scale a recipe re-derivation ever runs at (a
   // curve's control points or a few hundred samples).
   const coincidentTol = Number.isFinite(opts.coincidentTol)
@@ -406,15 +385,13 @@ function worstAndRms(devs) {
   return { worst, rms: Math.sqrt(sum / devs.length) };
 }
 
-// ---------------------------------------------------------------------
-// LINE
-// ---------------------------------------------------------------------
+// Line
 // fitLine(points, opts) -> {
 //   ok, point, direction, start, end, length, worst, rms, count
 // }
-// `point` is the centroid (a point genuinely ON the fitted line);
+// `point` is the centroid (a point on the fitted line);
 // `start`/`end` are the two extreme projections along the direction, so a
-// caller re-deriving a Line RECIPE (which is start+end, not
+// caller re-deriving a Line recipe (which is start+end, not
 // point+direction) has them without re-projecting.
 export function fitLine(pointsIn, opts = {}) {
   const prep = prepare(pointsIn, 2, opts);
@@ -452,16 +429,13 @@ export function fitLine(pointsIn, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------------
-// PLANE
-// ---------------------------------------------------------------------
+// Plane
 // fitPlane(points, opts) -> {
 //   ok, origin, normal, xAxis, yAxis, worst, rms, count
 // }
 // Refuses COLLINEAR: infinitely many planes contain a straight line, so
-// "the best-fit plane" of a collinear point set is not a thing, and
-// returning whichever one the solver landed on would be a confident wrong
-// answer of exactly the kind this module exists to avoid.
+// a collinear point set has no best-fit plane, and returning whichever one
+// the solver landed on would be a confident wrong answer.
 export function fitPlane(pointsIn, opts = {}) {
   const prep = prepare(pointsIn, 3, opts);
   if (prep.bad) return prep.bad;
@@ -469,7 +443,7 @@ export function fitPlane(pointsIn, opts = {}) {
 
   const eig = jacobiEigenSym3(covariance3(pts, centroid));
   const n = pts.length;
-  // RMS distance of the points from their own best-fit LINE. If that is
+  // RMS distance of the points from their own best-fit line. If that is
   // ~0 the set is a line, not a plane.
   const lineRms = Math.sqrt(Math.max(0, eig[0].value + eig[1].value) / n);
   const collinearTol = Number.isFinite(opts.collinearTol)
@@ -502,7 +476,7 @@ export function fitPlane(pointsIn, opts = {}) {
   };
 }
 
-// Shared front half of every PLANAR fit: fit the plane, check the caller's
+// Shared front half of every planar fit: fit the plane, check the caller's
 // planarity tolerance, and project into the plane's own deterministic 2D
 // frame. Returns either a refusal or {plane, uv}.
 function planarFrame(pointsIn, minCount, opts) {
@@ -530,19 +504,17 @@ function planarFrame(pointsIn, minCount, opts) {
   return { prep, plane, uv, planarTol };
 }
 
-// ---------------------------------------------------------------------
-// CIRCLE
-// ---------------------------------------------------------------------
+// Circle
 // fitCircle(points, opts) -> {
 //   ok, center, normal, xAxis, yAxis, radius,
 //   worst, rms, planeWorst, planeRms, count
 // }
 // `center`/`xAxis`/`yAxis`/`radius` are exactly the Circle operator's own
 // param shape, so the result feeds `makeCircle(center, xAxis, yAxis,
-// radius)` directly. Deviation is the TRUE 3D distance from each point to
-// the circle CURVE — hypot(in-plane radial miss, out-of-plane miss) — not
+// radius)` directly. Deviation is the true 3D distance from each point to
+// the circle curve — hypot(in-plane radial miss, out-of-plane miss) — not
 // the in-plane radial miss alone, so a point floating above the plane is
-// counted honestly.
+// counted.
 export function fitCircle(pointsIn, opts = {}) {
   const framed = planarFrame(pointsIn, 3, opts);
   if (framed.bad) return framed.bad;
@@ -569,8 +541,8 @@ export function fitCircle(pointsIn, opts = {}) {
   }
   let R = Math.sqrt(r2);
 
-  // Gauss-Newton on the TRUE orthogonal residual f_i = r_i - R. Cheap for
-  // 3 unknowns, and it is what makes the shipped answer a genuine
+  // Gauss-Newton on the true orthogonal residual f_i = r_i - R. Cheap for
+  // 3 unknowns, and it makes the returned answer a
   // geometric least-squares circle rather than Kasa's biased estimate.
   for (let iter = 0; iter < 30; iter++) {
     let JtJ = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -620,9 +592,7 @@ export function fitCircle(pointsIn, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------------
-// ELLIPSE — Halir & Flusser (1998) / Fitzgibbon, Pilu & Fisher (1999)
-// ---------------------------------------------------------------------
+// Ellipse — Halir & Flusser (1998) / Fitzgibbon, Pilu & Fisher (1999)
 
 // Real eigenvalues of a general (non-symmetric) 3x3 via its characteristic
 // cubic, solved with the trigonometric form for three real roots and
@@ -736,34 +706,33 @@ function distancePointToEllipse2D(a, b, px, py) {
 // the Ellipse operator's own param shape, so the result feeds
 // `makeEllipse(center, xAxis, yAxis, radiusX, radiusY)` directly.
 //
-// AXIS ASSIGNMENT IS DETERMINISTIC BY RULE, NOT BY SOLVER ACCIDENT:
-//   * radiusX is ALWAYS the semi-MAJOR (larger) axis and radiusY the
+// Axis assignment is deterministic by rule, not by solver accident:
+//   * radiusX is always the semi-major (larger) axis and radiusY the
 //     semi-minor, so a caller never sees the two swap places between two
 //     fits of nearly-identical input;
 //   * xAxis's sign is canonicalized (largest component positive), and
-//     yAxis is then DERIVED as cross(normal, xAxis) rather than fitted
+//     yAxis is then derived as cross(normal, xAxis) rather than fitted
 //     independently, so the returned frame is always right-handed and
 //     yAxis can never disagree with xAxis about orientation.
 //
-// THE PERFECT-CIRCLE CASE, decided rather than left to chance: when the
+// The perfect-circle case: when the
 // two recovered radii agree to within `circularTol` (relative, default
-// 1e-6) the ellipse's axis DIRECTIONS are genuinely arbitrary — every
+// 1e-6) the ellipse's axis directions are arbitrary — every
 // direction is a principal axis of a circle — and the conic eigen-solve
-// will return whatever floating-point noise happens to break the tie,
-// which is precisely the flicker a Properties panel must not show. In
+// returns whatever floating-point noise breaks the tie, which would
+// flicker in a Properties panel. In
 // that case this returns `circular: true`, both radii set to their mean,
-// and the axes SNAPPED to the plane's own canonical basis. The recovered
-// shape is unchanged (a circle is a circle in any frame); what is removed
-// is a meaningless, unstable number.
+// and the axes snapped to the plane's own canonical basis. The recovered
+// shape is unchanged (a circle is a circle in any frame).
 export function fitEllipse(pointsIn, opts = {}) {
   const framed = planarFrame(pointsIn, 5, opts);
   if (framed.bad) return framed.bad;
   const { prep, plane, uv } = framed;
 
   // Collinearity is fatal for a conic and is checked in the plane's own
-  // 2D frame (fitPlane's own COLLINEAR check already covers the fully-3D
-  // case; this catches a set that is planar but degenerate WITHIN the
-  // plane). `collinearTol: 0` deliberately disables it, which is how the
+  // 2D frame (fitPlane's own COLLINEAR check covers the fully-3D
+  // case; this catches a set that is planar but degenerate within the
+  // plane). `collinearTol: 0` disables it, which is how the
   // deeper DEGENERATE_CONIC guard below can be exercised directly.
   const collinearTol = Number.isFinite(opts.collinearTol)
     ? opts.collinearTol
@@ -790,10 +759,10 @@ export function fitEllipse(pointsIn, opts = {}) {
     }
   }
 
-  // NORMALIZE before the conic solve — Halir & Flusser's own stated
-  // reason for existing is conditioning, and the single largest
-  // conditioning win available is not solving a quartic-scaled system in
-  // raw model coordinates. Translation + a UNIFORM scale, so directions
+  // Normalize before the conic solve — Halir & Flusser's stated
+  // motivation is conditioning, and the largest
+  // conditioning gain available is not solving a quartic-scaled system in
+  // raw model coordinates. Translation + a uniform scale, so directions
   // survive untouched and only the center and radii need mapping back.
   let mx = 0, my = 0;
   for (const [x, y] of uv) { mx += x; my += y; }
@@ -855,7 +824,7 @@ export function fitEllipse(pointsIn, opts = {}) {
 
   // Geometric params from the conic, via the 2x2 quadratic form rather
   // than the closed-form semi-axis expressions: the eigen-decomposition of
-  // [[A, B/2], [B/2, C]] gives the axis DIRECTIONS directly and stays
+  // [[A, B/2], [B/2, C]] gives the axis directions directly and stays
   // well-behaved as the ellipse approaches a circle, where the closed-form
   // rotation-angle expressions become a 0/0.
   const Mq = [[A, B / 2], [B / 2, C]];
@@ -871,8 +840,8 @@ export function fitEllipse(pointsIn, opts = {}) {
   // Centered form: [u v] Mq [u; v] = -fPrime.
   const tr2 = Mq[0][0] + Mq[1][1];
   const gap2 = Math.hypot((Mq[0][0] - Mq[1][1]) / 2, Mq[0][1]);
-  const lam1 = tr2 / 2 + gap2; // larger  -> SHORTER semi-axis
-  const lam2 = tr2 / 2 - gap2; // smaller -> LONGER  semi-axis
+  const lam1 = tr2 / 2 + gap2; // larger  -> shorter semi-axis
+  const lam2 = tr2 / 2 - gap2; // smaller -> longer  semi-axis
   const k = -fPrime;
   if (!(k / lam1 > 0) || !(k / lam2 > 0)) {
     return refuse(
@@ -882,25 +851,19 @@ export function fitEllipse(pointsIn, opts = {}) {
   }
   const rMinorN = Math.sqrt(k / lam1);
   const rMajorN = Math.sqrt(k / lam2);
-  // Eigenvector for lam2 (the semi-MAJOR direction), taken from whichever
-  // ROW of (Mq - lam2*I) is LARGER in magnitude — the same "use the best-
-  // conditioned row" technique eigenvectorFor3 just above uses for the 3x3
-  // case. Reading one FIXED row instead is wrong for a very ordinary input:
-  // an ellipse that is axis-aligned within its own fitted plane. There B is
-  // not exactly zero but float dust, so a `|B| > 1e-300` guard passes, and
-  // lam2 equals the matching diagonal entry to rounding — so BOTH components
-  // of that one row are dust of comparable size and the normalized direction
-  // is noise. Measured on a plain 40x20 ellipse sampled on-curve: rowB read
-  // [-2.66e-17, -2.78e-17] (a 46-degree garbage direction) while rowA read
-  // [0.7276, -2.66e-17] and was perfectly conditioned; the fit recovered the
-  // radii exactly (40 and 20) yet reported the major axis 43 degrees off and
-  // therefore a 14-19 mm deviation for an EXACT ellipse. A fitter returning a
-  // large, confident, wrong number is precisely what this module's own header
-  // says it exists to avoid. For a symmetric Mq the larger-row branch reduces
-  // ALGEBRAICALLY to the fixed-row expression, so this changes nothing
-  // wherever the old code was already right; it only replaces the degenerate
-  // branch (B exactly 0 included — then the non-degenerate row is the larger
-  // one and still yields the correct axis, so no special case is needed).
+  // Eigenvector for lam2 (the semi-major direction), taken from whichever
+  // row of (Mq - lam2*I) is larger in magnitude — the same "use the best-
+  // conditioned row" technique eigenvectorFor3 above uses for the 3x3
+  // case. A fixed row is wrong for an ordinary input: an ellipse that is
+  // axis-aligned within its own fitted plane. There B is not exactly zero
+  // but float dust, and lam2 equals the matching diagonal entry to
+  // rounding, so both components of that one row are dust of comparable
+  // size and the normalized direction is noise (on a 40x20 ellipse sampled
+  // on-curve, a fixed row gives a major axis 43 degrees off and a 14-19 mm
+  // deviation for an exact ellipse). For a symmetric Mq the larger-row
+  // choice agrees with either row wherever that row is well conditioned,
+  // and B exactly 0 needs no special case: the non-degenerate row is then
+  // the larger one.
   const rowA = [Mq[0][0] - lam2, Mq[0][1]];
   const rowB = [Mq[1][0], Mq[1][1] - lam2];
   let ax2 = Math.hypot(rowA[0], rowA[1]) >= Math.hypot(rowB[0], rowB[1])
@@ -938,7 +901,7 @@ export function fitEllipse(pointsIn, opts = {}) {
   }
   const yAxis = cross3(plane.normal, xAxis);
 
-  // Deviations: the TRUE 3D distance to the ellipse curve — the exact
+  // Deviations: the true 3D distance to the ellipse curve — the exact
   // in-plane point-to-ellipse distance (Eberly) combined with the
   // out-of-plane miss.
   const devs = uv.map(([x, y, w]) => {
@@ -967,8 +930,8 @@ export function fitEllipse(pointsIn, opts = {}) {
     count: prep.pts.length,
     extent: prep.extent,
   };
-  // Last-resort finiteness gate, in the same spirit as the kernel's own
-  // isFiniteNet: a NaN must never leave this module wearing an `ok: true`.
+  // Last-resort finiteness check, like the kernel's isFiniteNet: a NaN
+  // must never leave this module with `ok: true`.
   const allFinite = [
     ...out.center, ...out.normal, ...out.xAxis, ...out.yAxis,
     out.radiusX, out.radiusY, out.worst, out.rms,
@@ -979,15 +942,11 @@ export function fitEllipse(pointsIn, opts = {}) {
   return out;
 }
 
-// ---------------------------------------------------------------------
 // fitAll — every candidate at once, for a caller comparing recipes.
 //
-// Deliberately thin: it runs the four fits and hands back all four
-// results, refusals included, WITHOUT ranking them. Ranking needs the
-// caller's own modeling tolerance and its own sense of which recipe a
-// student would rather see named, and inventing a ranking here would be
-// the module quietly making a product decision on a caller's behalf.
-// ---------------------------------------------------------------------
+// It runs the four fits and hands back all four results, refusals
+// included, without ranking them. Ranking needs the caller's own modeling
+// tolerance and its own preference for which recipe to name.
 export function fitAll(pointsIn, opts = {}) {
   return {
     line: fitLine(pointsIn, opts),

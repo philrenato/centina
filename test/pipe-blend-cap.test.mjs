@@ -1,14 +1,13 @@
-// PIPE BLENDED INNER/OUTER RIM CAP — the banked
-// addendum, picked up now that a plain Thick pipe with flat/round annular
-// caps already exists. Verified several ways: (1) the two true rim points
-// (the outer/inner tube's own real end rings) are reproduced EXACTLY at
-// the cap surface's own two domain extremes — the "starts exactly at the
-// real rim, never overlaps the existing wall panels" claim; (2) the
-// fillet arcs stay within the pipe's own outer silhouette (never exceed
-// outerRadius, never dip back into the tube) — a real shape-sanity proof,
-// not just "some surface got built"; (3) the auto-clamp scales BOTH
-// requested radii down proportionally (ratio preserved) once they'd
-// together exceed the real wall thickness; (4) a requested radius of 0 on
+// Pipe blended inner/outer rim cap, beside the flat/round annular caps of a
+// plain Thick pipe. Verified several ways: (1) the two true rim points
+// (the outer/inner tube's own end rings) are reproduced exactly at the cap
+// surface's own two domain extremes — the cap starts exactly at the rim
+// and never overlaps the wall panels; (2) the fillet arcs stay within the
+// pipe's own outer silhouette (never exceed outerRadius, never dip back
+// into the tube), a shape check rather than "some surface got built";
+// (3) the auto-clamp scales both requested radii down proportionally
+// (ratio preserved) once they would together exceed the wall thickness;
+// (4) a requested radius of 0 on
 // either rim degenerates that corner to a plain sharp, unfilleted point
 // (the "editable independently, a rolled lip on one side only" case).
 
@@ -26,7 +25,7 @@ const frame = {
   xAxis: [1, 0, 0],
   zAxis: [0, 0, 1],
 };
-const axisDir = frame.zAxis; // the tube's own real "outward, past the true end" direction
+const axisDir = frame.zAxis; // the tube's own "outward, past the true end" direction
 
 test('pipeBlendCapSurface: the outer rim (u=uMin) reproduces the tube\'s own true outer end ring exactly', () => {
   const outerRadius = 10, innerRadius = 8;
@@ -86,7 +85,7 @@ test('pipeBlendCapSurface: independent radii are honored exactly when their sum 
   assert.ok(Math.abs(appliedInnerFilletRadius - 1.2) < 1e-9, `inner fillet radius should be unclamped at 1.2, got ${appliedInnerFilletRadius}`);
 });
 
-test('pipeBlendCapSurface: auto-clamps both radii PROPORTIONALLY (never independently) once their sum exceeds the real wall thickness', () => {
+test('pipeBlendCapSurface: auto-clamps both radii proportionally (never independently) once their sum exceeds the wall thickness', () => {
   const outerRadius = 10, innerRadius = 8; // wall = 2
   const requestedOuter = 3, requestedInner = 1; // sum=4, 2x the wall
   const { appliedOuterFilletRadius, appliedInnerFilletRadius } = pipeBlendCapSurface(frame, outerRadius, innerRadius, axisDir, requestedOuter, requestedInner);
@@ -96,25 +95,25 @@ test('pipeBlendCapSurface: auto-clamps both radii PROPORTIONALLY (never independ
   assert.ok(Math.abs(sum - wall * 0.999) < 1e-6, `the clamp should land right at the wall's own boundary (with the standard 0.999 safety margin), got sum=${sum}`);
   const requestedRatio = requestedOuter / requestedInner;
   const appliedRatio = appliedOuterFilletRadius / appliedInnerFilletRadius;
-  assert.ok(Math.abs(requestedRatio - appliedRatio) < 1e-6, `the requested RATIO (${requestedRatio}) should survive the clamp exactly, got ${appliedRatio}`);
+  assert.ok(Math.abs(requestedRatio - appliedRatio) < 1e-6, `the requested ratio (${requestedRatio}) should survive the clamp exactly, got ${appliedRatio}`);
 });
 
-test('pipeBlendCapSurface: a requested radius of exactly 0 on the OUTER rim leaves it sharp while the inner rim still fillets — "a rolled lip on one side only"', () => {
+test('pipeBlendCapSurface: a requested radius of exactly 0 on the outer rim leaves it sharp while the inner rim still fillets — "a rolled lip on one side only"', () => {
   const outerRadius = 10, innerRadius = 8;
   const { srf, appliedOuterFilletRadius, appliedInnerFilletRadius } = pipeBlendCapSurface(frame, outerRadius, innerRadius, axisDir, 0, 0.5);
   assert.equal(appliedOuterFilletRadius, 0);
   assert.ok(Math.abs(appliedInnerFilletRadius - 0.5) < 1e-9);
-  // With no outer fillet, the profile runs STRAIGHT from the true outer
+  // With no outer fillet, the profile runs straight from the true outer
   // rim toward the inner corner's own trim point (no arc bulge at all near
   // u=uMin) — sampled a tiny fraction past uMin, where a straight,
   // linearly-parametrized segment (this composed curve's own leading
   // degree-1 line, per joinCurvesC0's sequential-domain-slot convention)
   // should deviate from the true rim radius by an amount proportional to
-  // that tiny fraction — a genuine arc, by contrast, would immediately
+  // that tiny fraction — an arc, by contrast, would immediately
   // curve away with zero first-order deviation right at its own start
   // (tangent to the wall), a qualitatively different signature this small
   // fraction is intentionally too coarse to distinguish on its own — the
-  // real, load-bearing proof is the exact u=uMin/u=uMax matches above;
+  // decisive check is the exact u=uMin/u=uMax matches above;
   // this just confirms no NaN/blow-up on the unfilleted path.
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const uNearStart = uMin + (uMax - uMin) * 1e-4;

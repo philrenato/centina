@@ -4,11 +4,9 @@ import { revolve } from '../kernel/primitives.mjs';
 import { surfacePoint, isFiniteNet } from '../kernel/surface.mjs';
 import { refitSurfaceUV } from '../kernel/loft.mjs';
 
-// A real, non-trivial source surface — a revolve of an open, gently curved
+// A non-trivial source surface — a revolve of an open, gently curved
 // profile (rational in V from the arc-span construction), not a flat/ruled
-// toy — so an exactness proof against it is a genuine test, not a case
-// that would pass by algebraic accident (matching this kernel's own
-// repeated "avoid too-simple test geometry" lesson).
+// toy — so an exactness check against it cannot pass by algebraic accident.
 function stressRevolve() {
   const profile = { degree: 2, knots: [0, 0, 0, 1, 1, 1], ctrlPts: [[10, 0, 0, 1], [14, 0, 20, 1], [8, 0, 40, 1]] };
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI * 1.4);
@@ -32,7 +30,7 @@ test('refitSurfaceUV reproduces the source surface exactly at every uCount x vCo
   }
 });
 
-test('refitSurfaceUV genuinely changes control point count/degree to the requested values', () => {
+test('refitSurfaceUV changes control point count/degree to the requested values', () => {
   const srf = stressRevolve();
   const refit = refitSurfaceUV(srf, 8, 6, 3, 2);
   assert.equal(refit.ctrlNet.length, 8);
@@ -41,7 +39,7 @@ test('refitSurfaceUV genuinely changes control point count/degree to the request
   assert.equal(refit.degV, 2);
 });
 
-test('refitSurfaceUV clamps degree down when the requested count is too small for it (same honest clamp every other kernel builder uses)', () => {
+test('refitSurfaceUV clamps degree down when the requested count is too small for it (the same clamp every other kernel builder uses)', () => {
   const srf = stressRevolve();
   const refit = refitSurfaceUV(srf, 3, 3, 5, 5);
   assert.equal(refit.degU, 2, 'degU clamps to uCount-1');
@@ -54,7 +52,7 @@ test('refitSurfaceUV refuses fewer than 2 points in either direction', () => {
   assert.throws(() => refitSurfaceUV(srf, 5, 1, 3, 3));
 });
 
-test('a coarser refit is a genuinely different (fewer-control-point) surface than a finer one, both still exact at their own stations', () => {
+test('a coarser refit is a different (fewer-control-point) surface than a finer one, both still exact at their own stations', () => {
   const srf = stressRevolve();
   const coarse = refitSurfaceUV(srf, 4, 4, 3, 3);
   const fine = refitSurfaceUV(srf, 12, 10, 3, 3);

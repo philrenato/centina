@@ -8,19 +8,17 @@ import { trivialTrimLoop } from '../kernel/trim.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 import { surfacePoint } from '../kernel/surface.mjs';
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE: a WAVY REVOLVE — a blob, not a primitive on a primitive. Its
+// The fixture: a wavy revolve — a blob, not a primitive on a primitive. Its
 // profile is a real interpolated curve that bulges in and out, revolved a
-// full turn, so the resulting surface is closed in its sweep direction AND
-// carries a POLE at each end where the profile touches the axis.
+// full turn, so the resulting surface is closed in its sweep direction and
+// carries a pole at each end where the profile touches the axis.
 //
 // That combination is what this file exists for. A box fixture cannot reach
-// it: a pole collapses an entire (u,v) row to ONE point, and a closed sweep
+// it: a pole collapses an entire (u,v) row to one point, and a closed sweep
 // makes the domain's two v-ends the same seam — so the face's own domain
 // rectangle evaluates to as few as two distinct points in 3D. Its boundary
 // carries no length, no area, and nothing for a welder to sew, while the
-// only REAL boundary the cut leaves is the intersection curve itself.
-// ---------------------------------------------------------------------------
+// only real boundary the cut leaves is the intersection curve itself.
 
 function quadSurface(p00, p10, p11, p01) {
   const w = (p) => [p[0], p[1], p[2], 1];
@@ -53,7 +51,7 @@ function tessellate(faces, res) {
   return tris;
 }
 
-// The curves come from a REAL face-pair SSI sweep, not hand-derived — on a
+// The curves come from a real face-pair SSI sweep, not hand-derived — on a
 // wavy revolve there is no closed form to hand-derive them from, which is
 // exactly why this fixture is worth having.
 function buildFixture() {
@@ -75,13 +73,13 @@ function buildFixture() {
   return { blob, slab, curves };
 }
 
-test('the fixture really is the hard case: a closed revolve with poles at both ends', () => {
+test('the fixture is the hard case: a closed revolve with poles at both ends', () => {
   const { blob, curves } = buildFixture();
   const srf = blob.faces[0].srf;
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
 
-  // Asserted on EVALUATION, not on control-net indexing, because evaluation
+  // Asserted on evaluation, not on control-net indexing, because evaluation
   // is what the sew actually reads — a face's boundary is its trim loop put
   // through `surfacePoint`, so "does this domain edge carry any length" is
   // the real question, and asking the control net instead would be testing
@@ -96,15 +94,15 @@ test('the fixture really is the hard case: a closed revolve with poles at both e
     }
   }
 
-  // And the sweep is genuinely closed: the two v-ends are the same seam.
+  // And the sweep is closed: the two v-ends are the same seam.
   const uMid = (uMin + uMax) / 2;
   const a = surfacePoint(srf, uMid, vMin), b = surfacePoint(srf, uMid, vMax);
   assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9, 'v-ends are the same seam');
 
-  assert.ok(curves.length > 0, 'the slab genuinely cuts the blob');
+  assert.ok(curves.length > 0, 'the slab cuts the blob');
 });
 
-test('an organic blob cut by a slab INTERSECTS into one closed solid', () => {
+test('an organic blob cut by a slab intersects into one closed solid', () => {
   const { blob, slab, curves } = buildFixture();
   const res = booleanSolids(blob, slab, curves, 'intersect');
   assert.ok(res.ok, res.reason || res.verdict);
@@ -113,7 +111,7 @@ test('an organic blob cut by a slab INTERSECTS into one closed solid', () => {
   assert.equal(res.stats.shellCount, 1);
 });
 
-test('the same pair UNIONS into one closed solid — the pole/seam case', () => {
+test('the same pair unions into one closed solid — the pole/seam case', () => {
   // This is the operation the degenerate-outer-loop handling exists for: the
   // blob's own kept fragment is the whole surface minus the cut region, whose
   // outer loop is the collapsed domain rectangle and whose only real edge is
@@ -126,7 +124,7 @@ test('the same pair UNIONS into one closed solid — the pole/seam case', () => 
   assert.equal(res.stats.shellCount, 1);
 });
 
-test('the same pair DIFFERENCES into one closed solid', () => {
+test('the same pair differences into one closed solid', () => {
   // The slab cuts a bite out of one side rather than passing clean through,
   // so the result stays a single connected solid — unlike the star prism,
   // where a slab through the middle correctly leaves two.

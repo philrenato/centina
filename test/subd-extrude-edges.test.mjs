@@ -1,6 +1,6 @@
-// EXTRUDING AN OPEN EDGE. The claim worth testing is not "new faces appear"
+// Extruding an open edge. The claim worth testing is not "new faces appear"
 // — that is bookkeeping. It is that the result is still one manifold
-// surface: a chain of selected edges has to grow ONE strip sharing its
+// surface: a chain of selected edges has to grow one strip sharing its
 // rungs, wound consistently with the faces already there, and an edge with
 // no free side has to be refused rather than silently torn.
 import test from 'node:test';
@@ -18,7 +18,7 @@ function manifoldReport(cage) {
   }
   return { boundary, nonManifold };
 }
-// Does every pair of faces sharing an edge traverse it in OPPOSITE
+// Does every pair of faces sharing an edge traverse it in opposite
 // directions? That is the definition of a consistently oriented surface —
 // the thing a wrongly-wound new face breaks, invisibly, until the next
 // subdivision or normal calculation.
@@ -51,7 +51,7 @@ test('one naked edge grows exactly one face and two vertices, wound with its own
   assert.deepEqual(manifoldReport(r.cage), { boundary: 6, nonManifold: 0 });
 });
 
-test('THE POINT: a chain of naked edges grows ONE strip — the shared endpoint is duplicated once, not twice', () => {
+test('a chain of naked edges grows one strip — the shared endpoint is duplicated once, not twice', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2); // 8 naked edges around the rim
   const ctx = buildTopology(cage);
   const naked = [...ctx.edgeMap.values()].filter((e) => e.faces.length === 1);
@@ -88,7 +88,7 @@ test('extruding a whole closed boundary loop makes a collar, still closed and st
   assert.equal(after.boundary, 8); // the collar's own new rim, and only that
 });
 
-test('and the grown cage really subdivides afterwards — the actual downstream risk', () => {
+test('and the grown cage subdivides afterwards — the downstream risk', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const { cage: out } = extrudeEdges(cage, nakedEdgesOf(cage), [0, 0, 1], 10);
   const refined = subdivideCatmullClark(out);
@@ -97,14 +97,14 @@ test('and the grown cage really subdivides afterwards — the actual downstream 
   assert.equal(windingConsistent(refined), true);
 });
 
-test('an INTERIOR edge is refused by name — it has no free side to grow into', () => {
+test('an interior edge is refused by name — it has no free side to grow into', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1); // closed: every edge interior
   const ctx = buildTopology(cage);
   const anyEdge = edgeKey([...ctx.edgeMap.values()][0].v0, [...ctx.edgeMap.values()][0].v1);
   assert.throws(() => extrudeEdges(cage, [anyEdge], [0, 0, 1], 5), /INTERIOR edge/);
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals by name, and the input cage is never mutated', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const before = JSON.stringify(cage);
   const naked = nakedEdgesOf(cage);
@@ -119,7 +119,7 @@ test('honest refusals, and the input cage is never mutated', () => {
   assert.equal(JSON.stringify(cage), before);
 });
 
-test('THE DEFAULT DIRECTION: a whole boundary loop with no direction given grows OUTWARD in the sheet, each edge its own way — one shared vector could not do this', () => {
+test('default direction: a whole boundary loop with no direction given grows outward in the sheet, each edge its own way — one shared vector could not do this', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const naked = nakedEdgesOf(cage);
   const r = extrudeEdges(cage, naked, null, 10);
@@ -138,7 +138,7 @@ test('THE DEFAULT DIRECTION: a whole boundary loop with no direction given grows
 
 test('a vertex whose own selected edges point exactly opposite is refused rather than collapsed', () => {
   // Two colinear naked edges meeting at a shared vertex, each owned by a face
-  // on the OPPOSITE side — their outward directions cancel exactly there.
+  // on the opposite side — their outward directions cancel exactly there.
   const cage = {
     vertices: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [0, 1, 0], [1, 1, 0], [1, -1, 0], [2, -1, 0]],
     faces: [[0, 1, 4, 3], [1, 2, 6, 5]],

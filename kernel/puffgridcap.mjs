@@ -1,45 +1,44 @@
-// GRIDCAP — a POLE-FREE quad cage for Puff: rings to a hole, then a grid patch.
+// Gridcap — a pole-free quad cage for Puff: rings to a hole, then a grid patch.
 //
-// WHY. The shipped cage converges M rings of constant N onto a single apex, and both measured
+// The apex cage converges M rings of constant N onto a single apex, and both of its measured
 // defects are structural consequences of that: the apex fan puts near-coplanar cap faces back to
-// back (worst 178.3 degrees on a C, 58.3 on a hand-drawn loop, measured beside this file's own
-// output), and constant-N rings converging on a point MUST
-// produce vanishing edges (min edge 0.0050 against a rim edge of 0.0654 — edge-length CV 0.957 on
+// back (worst 178.3 degrees on a C, 58.3 on a hand-drawn loop), and constant-N rings converging
+// on a point must produce vanishing edges (min edge 0.0050 against a rim edge of 0.0654 — edge-length CV 0.957 on
 // a disc). No relaxation fixes either, because the topology is the cause.
 //
-// WHAT. Rings are kept only to a HOLE at plan fraction `capFrac` of each spoke, ring depths spaced
-// by equal 3D ARC LENGTH along the profile (the same surface, sampled evenly instead of evenly-in-
-// plan). The hole — an N-edge loop — is closed by an (a x b) grid patch whose boundary IS the hole
+// Rings are kept only to a hole at plan fraction `capFrac` of each spoke, ring depths spaced
+// by equal 3D arc length along the profile (the same surface, sampled evenly instead of evenly-in-
+// plan). The hole — an N-edge loop — is closed by an (a x b) grid patch whose boundary is the hole
 // loop: 2(a-1) + 2(b-1) = N. For a disc the patch is square and the cage is a quad-sphere; for a
-// spined shape the patch is long and thin — the RIDGE — and at b = 2 it degenerates to exactly the
-// slit ladder ("a slit traversed out and back"). Interior vertices take z from the SAME distance-
+// spined shape the patch is long and thin — the ridge — and at b = 2 it degenerates to exactly the
+// slit ladder ("a slit traversed out and back"). Interior vertices take z from the same distance-
 // field law as every ring, so the surface the tool produces is unchanged; only the lattice
 // sampling of it changes. Grid interior vertices are valence 4, the four patch corners valence 3 —
 // the cube-sphere's corner, not a pole. Euler stays 2 for every (a, b); the guard asserts it.
 //
-// HOW THE PATCH INTERIOR IS PLACED, and the two dead ends that preceded it, both measured:
-//   - Coons transfinite blend alone FOLDS on any bent or non-convex hole: 19 negative-plan-area
+// Placement of the patch interior. The two simpler constructions both fold, measured:
+//   - Coons transfinite blend alone folds on any bent or non-convex hole: 19 negative-plan-area
 //     patch quads on a hand-drawn loop, 32 on a comma.
 //   - A plain Laplacian (harmonic) relax untangles the convex cases and leaves folds hugging every
 //     concave boundary run (10 on the C, 33 on the comma) — the textbook failure of harmonic maps
 //     into a non-convex domain.
-//   So the interior is relaxed by WINSLOW/TTM elliptic smoothing — the structured-grid generator
+//   So the interior is relaxed by Winslow/TTM elliptic smoothing — the structured-grid generator
 //   built for bent C-shaped channels — and the fold count is the stop condition, not a pass count.
 //
-// HOW (a, b) AND THE CORNERS ARE CHOSEN: BY MEASUREMENT, NOT BY FORMULA. A tensor patch forces
+// (a, b) and the corners are chosen by measurement, not by formula. A tensor patch forces
 // opposite arcs equal, and a comma's two tips sit 33/63 edges apart around its hole loop — no
-// corner placement can center both. An aspect-ratio formula picked b = 5 there and the columns
-// crossed near the wrapped tip (worst dihedral 136 degrees, 5 residual folds Winslow could not
+// corner placement can center both. An aspect-ratio formula picks b = 5 there and the columns
+// cross near the wrapped tip (worst dihedral 136 degrees, 5 residual folds Winslow cannot
 // remove). So the builder enumerates a small candidate set of (rows, corner) placements, builds
-// each cheap patch, and scores it on the thing that actually matters — fold count, then worst 3D
-// dihedral inside the patch — keeping the winner.
+// each cheap patch, and scores it on fold count, then worst 3D dihedral inside the patch —
+// keeping the winner.
 //
-// ⚠ THE SILHOUETTE IS SACRED AND THE PATCH CANNOT REACH IT. Ring 0 is byte-identical to the
+// The silhouette is fixed and the patch cannot reach it. Ring 0 is byte-identical to the
 // prepared outline, the patch boundary is ring M0 (deep inside), and every relaxed ring vertex is
-// rejected rather than moved if the move would leave the polygon. Containment is MEASURED in the
+// rejected rather than moved if the move would leave the polygon. Containment is measured in the
 // guard (no vertex outside the outline beyond rounding), not argued here.
 //
-// ⚠ NOTHING HERE IS A TUNED WORLD-UNIT CONSTANT. capFrac is a fraction of the spoke, M0 comes
+// No constant here is a tuned world-unit value. capFrac is a fraction of the spoke, M0 comes
 // from the rim edge length, rows from a measured search — every bound scales with the shape.
 
 import { distanceToBoundary, pointInPolygon } from './puffoutline.mjs';
@@ -131,9 +130,9 @@ function buildPatchGrid(hole, i0, am, bm) {
         t[0] += dx; t[1] += dy;
         const m2 = dx * dx + dy * dy; if (m2 > moved) moved = m2;
       }
-      // The fold scan every pass was 60% of the build (266 ms a comma under the profiler); every
-      // 8th pass converges to the same grids — the folds question only changes on that timescale —
-      // and a converged pass (max move under 1e-6 of the span) ends the tail early.
+      // The fold scan dominates a pass's cost, so it runs every 8th pass, which converges to the
+      // same grids — the folds question only changes on that timescale — and a converged pass
+      // (max move under 1e-6 of the span) ends the tail early.
       if (it % 8 === 7 || moved < conv) {
         folds = foldCount();
         if (folds === 0) tail = Math.min(tail, moved < conv ? 0 : tail - 8);
@@ -144,9 +143,9 @@ function buildPatchGrid(hole, i0, am, bm) {
   return { interiorXY, folds, bnd, gxy };
 }
 
-// Worst dihedral across patch-internal edges AND the seam to the last band, with z sampled by
-// `zAt`. The candidate score. ⚠ THE SEAM IS IN THE SCORE BECAUSE ITS ABSENCE WAS EXPLOITED: with
-// patch-internal edges alone, a 1-row slit across a whole DISC scored best — every slit cell lies
+// Worst dihedral across patch-internal edges and the seam to the last band, with z sampled by
+// `zAt`. The candidate score. The seam is in the score because with patch-internal edges alone,
+// a 1-row slit across a whole disc scores best — every slit cell lies
 // in the flat top, so their normals agree with each other perfectly while disagreeing with every
 // band face they meet (max cage edge 0.9995 on a unit disc, CV 1.21). The score must see the join.
 function patchWorstDihedral(gxy, zAt, am, bm, N, bnd, hole, zHole, ringIn, zIn) {
@@ -213,10 +212,10 @@ export function buildGridCage(pts, targets, sigma, o) {
   }, 0);
   const e0 = perim / N;                          // rim edge — the length everything is sized to
 
-  // ---- rings, arc-length spaced along each spoke down to the hole ------------------------------
+  // Rings, arc-length spaced along each spoke down to the hole
   // The spoke from pts[i] to targets[i] carries the surface curve (xy(f), z(xy(f))). Rings sit at
   // equal 3D arc steps of that curve, not equal plan steps — a hemisphere's rim band is near
-  // vertical, and equal-plan spacing is what stretched it 4:1 in the shipped cage.
+  // vertical, and equal-plan spacing stretches it 4:1.
   const S = 24;
   const arc = new Array(N);
   let meanArc = 0;
@@ -251,16 +250,16 @@ export function buildGridCage(pts, targets, sigma, o) {
     ringXY.push(ring);
   }
 
-  // ---- per-ring loop smoothing, depth-weighted, guarded ----------------------------------------
+  // Per-ring loop smoothing, depth-weighted, guarded
   // At a concave dent the spokes converge and the ring polylines kink — measured 64 degrees across
-  // a spoke between bands 3 and 4 of a hand-drawn loop with no smoothing at all. Each ring LOOP is
+  // a spoke between bands 3 and 4 of a hand-drawn loop with no smoothing at all. Each ring loop is
   // smoothed independently (a damped 1D Laplacian around the loop), weighted by depth: ring 1
   // barely moves and stays true to the drawn shape, the hole rounds the most — which is also what
-  // the patch wants for a boundary. Smoothing each ring separately, rather than the 2D lattice, is
-  // deliberate and paid for: a full lattice Laplacian was tried first and REDISTRIBUTED the rings
-  // toward uniform plan spacing, undoing the arc-length placement (disc subdivided worst 4.2 -> 16.5
-  // degrees). A move that would leave the polygon is REJECTED, not clamped: the silhouette bound is
-  // not negotiable and a clamp is a second algorithm to verify.
+  // the patch wants for a boundary. Each ring is smoothed separately, rather than the 2D lattice,
+  // because a full lattice Laplacian redistributes the rings toward uniform plan spacing, undoing
+  // the arc-length placement (disc subdivided worst 4.2 -> 16.5 degrees). A move that would leave
+  // the polygon is rejected, not clamped: the silhouette bound is fixed and a clamp is a second
+  // algorithm to verify.
   const relaxPasses = o.capRelax != null ? Math.max(0, o.capRelax | 0) : 24;
   for (let it = 0; it < relaxPasses; it++) {
     for (let k = 1; k <= M0; k++) {
@@ -276,17 +275,17 @@ export function buildGridCage(pts, targets, sigma, o) {
     }
   }
 
-  // ---- the field on the ring lattice, smoothed exactly as the shipped S6 does ------------------
+  // The field on the ring lattice, smoothed exactly as buildPuff's S6 does
   const d = [];
   for (let k = 0; k <= M0; k++) {
     const row = new Float64Array(N);
     for (let i = 0; i < N; i++) row[i] = k === 0 ? 0 : distanceToBoundary(pts, ringXY[k][i][0], ringXY[k][i][1]);
     d.push(row);
   }
-  // ⚠ THE HOLE RING (k = M0) IS LOCKED, LIKE RING 0, AND THE PICTURE FOUND IT. The shipped S6
+  // The hole ring (k = M0) is locked, like ring 0. The S6
   // stencil clamps its inward neighbor at the last ring, so the one-sided average drags the field
-  // down exactly there — on a disc the hole ring sagged to 0.9938 of the sphere radius, a visible
-  // circular dimple at the patch seam in the render. The hole's raw distance is exact, and the
+  // down exactly there — on a disc an unlocked hole ring sags to 0.9938 of the sphere radius, a
+  // visible circular dimple at the patch seam. The hole's raw distance is exact, and the
   // patch interior samples the raw field too, so locking it removes both the sag and the seam
   // mismatch in one move.
   const passes = Math.max(0, smoothing | 0);
@@ -308,10 +307,10 @@ export function buildGridCage(pts, targets, sigma, o) {
     zRing.push(row);
   }
 
-  // ---- the patch: candidates measured, winner kept ---------------------------------------------
+  // The patch: candidates measured, winner kept
   const hole = ringXY[M0];
   const half = N / 2;
-  // sigma over the HOLE: the spine coordinate when there is one, the long-PCA projection when not.
+  // sigma over the hole: the spine coordinate when there is one, the long-PCA projection when not.
   let sg = sigma, L, W;
   if (sg) {
     let mn = Infinity, mx = -Infinity;
@@ -356,10 +355,10 @@ export function buildGridCage(pts, targets, sigma, o) {
   rowCand.add(clampRows(half >> 1));                         // the square split — a disc's answer
   rowCand.add(clampRows(Math.round((arRows + (half >> 1)) / 2)));
   if (o.capRows != null) { rowCand.clear(); rowCand.add(clampRows(o.capRows | 0)); }
-  // Mean 3D band edge — the length every cap edge is asked to match. Uniformity is IN the score
-  // because its absence was exploited too: scored on dihedrals alone, a 47x1 slit won on a DISC
-  // whose profile has a conical peak (the slit's cells agree with each other about the cone), and
-  // its cross edges were 20x the band edge (cage CV 1.43). U is the RMS of log(len/eBand) over
+  // Mean 3D band edge — the length every cap edge is asked to match. Uniformity is in the score
+  // because, scored on dihedrals alone, a 47x1 slit wins on a disc
+  // whose profile has a conical peak (the slit's cells agree with each other about the cone), with
+  // cross edges 20x the band edge (cage CV 1.43). U is the RMS of log(len/eBand) over
   // patch and seam edges; the weight makes a 10% deviation cost 3 degrees.
   let eBand = 0, nBand = 0;
   for (let k = 0; k < M0; k++) for (let i = 0; i < N; i++) {
@@ -381,7 +380,7 @@ export function buildGridCage(pts, targets, sigma, o) {
       const i0 = ((ci0 + off) % N + N) % N;
       const g = buildPatchGrid(hole, i0, am, bm);
       // Exact distance is O(N) per query and the score asks for each grid point several times —
-      // cached per candidate, keyed by the point ARRAY, which is stable within one.
+      // cached per candidate, keyed by the point array, which is stable within one.
       const zC = new Map();
       const zAt = (p) => { let v = zC.get(p); if (v === undefined) { v = zAtP(p); zC.set(p, v); } return v; };
       const worst = patchWorstDihedral(g.gxy, zAt, am, bm, N, g.bnd,
@@ -397,13 +396,13 @@ export function buildGridCage(pts, targets, sigma, o) {
       const U = Math.sqrt(u / ne);
       const score = g.folds * 1e6 + worst + 30 * U;
       if (!best || score < best.score) best = { score, i0, am, bm, ...g };
-      if (o.capRows != null && off === 0) break;             // explicit rows: honour it exactly
+      if (o.capRows != null && off === 0) break;             // explicit rows: honor it exactly
     }
   }
   const { i0, am, bm, interiorXY, bnd } = best;
   const nI = interiorXY.length;                              // (bm-1)*(am-1) interior vertices
 
-  // ---- assembly: one shared equator, two independent halves — the shipped structure ------------
+  // Assembly: one shared equator, two independent halves, as in buildPuff
   const V = N * (2 * M0 + 1) + 2 * nI;
   const positions = new Float32Array(V * 3);
   const put = (idx, x, y, z) => { positions[idx * 3] = x; positions[idx * 3 + 1] = y; positions[idx * 3 + 2] = z; };

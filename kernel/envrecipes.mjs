@@ -1,39 +1,39 @@
-// THE PARAMETRIC ENVIRONMENT LIBRARY, PORTED VERBATIM FROM THE RENDERER.
+// The parametric environment library, ported verbatim from the renderer.
 //
 // Ported piece by piece: HDRI_STUDIO_RECIPES, the four strobe constructors
 // _hSb/_hDc/_hRg/_hWs, the ambient bed _hdriAmbientImage, the direction
-// convention _hdriDirFromUV, and the rasteriser rtHdriStrobeRaster. The
+// convention _hdriDirFromUV, and the rasterizer rtHdriStrobeRaster. The
 // renderer in turn took these from the offline environment generator's own
-// BUILDERS dict, so these are the TRUE lights that generated the shipped
+// BUILDERS dict, so these are the true lights that generated the shipped
 // .hdr files, not a fit.
 //
-// PURE MODULE. No DOM, no window, no three.js, no fetch, no imports. Numbers and
-// typed arrays in, typed arrays out.
+// Pure module: no DOM, no window, no three.js, no fetch, no imports. Numbers
+// and typed arrays in, typed arrays out.
 //
-// ---- traps this file deliberately preserves ----
+// Conventions this file preserves:
 //
-// 1. sizeU / sizeV ARE DEGREES OF ANGULAR HALF-WIDTH, not UV fractions
+// 1. sizeU / sizeV are degrees of angular half-width, not UV fractions.
 //    For 'wash' they mean something else again: sizeU is the
-//    azimuthal HALF-span in degrees and sizeV the elevation HALF-height about
+//    azimuthal half-span in degrees and sizeV the elevation half-height about
 //    `elevation`. The generator's wash() takes el_lo/el_hi instead, so the
 //    conversion is elevation=(lo+hi)/2, sizeV=(hi-lo)/2.
 //
-// 2. THE DIRECTION CONVENTION IS EQUIRECT, Y-UP, AZIMUTH 0 = +X, AZIMUTH +90 = +Z.
-//    u=0 is azimuth -180deg, u=1 is +180deg; v=0 is the ZENITH (el=+90), v=1 the
+// 2. The direction convention is equirect, Y-up, azimuth 0 = +X, azimuth +90 = +Z.
+//    u=0 is azimuth -180deg, u=1 is +180deg; v=0 is the zenith (el=+90), v=1 the
 //    nadir. A transposed or half-turn-offset convention produces a plausible
-//    wrong picture that nobody ever reports as a bug — it just lights the model
-//    from the wrong side. Do not "simplify" _hdriDirFromUV.
+//    wrong picture that lights the model from the wrong side. Do not
+//    "simplify" _hdriDirFromUV.
 //
-// 3. THE EXTRA `falloff` EXPONENT is the renderer's own addition;
+// 3. The extra `falloff` exponent is the renderer's own addition;
 //    the generator has no such term. Every cataloged recipe below sets falloff:1,
 //    which makes it a no-op, so the two agree exactly. rtHdriDefaultStrobe
-//    (a HAND-ADDED strobe, not a cataloged one) defaults it to 1.5 instead.
+//    (a hand-added strobe, not a cataloged one) defaults it to 1.5 instead.
 //
-// 4. THE COMPOSITOR SKIPS A STROBE WITH A FALSY `enabled` (in
-//    rtHdriComposite). The cataloged table below carries NO `enabled` field at
+// 4. The compositor skips a strobe with a falsy `enabled` (in
+//    rtHdriComposite). The cataloged table below carries no `enabled` field at
 //    all — Rendre stamps enabled:true onto each strobe when it instantiates a
-//    recipe into an edit session (rtHdriInstantiateRecipe). So the
-//    rasteriser here treats "field absent" as enabled and only an EXPLICIT false
+//    recipe for editing (rtHdriInstantiateRecipe). So the
+//    rasterizer here treats "field absent" as enabled and only an explicit false
 //    as off; feeding the raw table straight into Rendre's own compositor instead
 //    would silently render a black dome.
 //
@@ -44,19 +44,15 @@
 //
 // 6. The generator's panel() has a `tilt` argument that the strobe schema has
 //    no field for. None of the 29 cataloged recipes uses it, so nothing is lost
-//    here — but a NEW recipe that wants a rolled softbox cannot be expressed.
+//    here, but a new recipe that wants a rolled softbox cannot be expressed.
 
-/* ---------------------------------------------------------------------------
-   Color constants.
-   --------------------------------------------------------------------------- */
+// Color constants.
 const HDRI_WARM = [1.0, 0.93, 0.82], HDRI_COOL = [0.82, 0.90, 1.0], HDRI_WHITE = [1, 1, 1];
 const HDRI_CINNABAR = [1.0, 0.22, 0.10], HDRI_SODIUM = [1.0, 0.72, 0.18];
 const HDRI_TYRIAN = [0.62, 0.12, 0.72], HDRI_VERDIGRIS = [0.16, 0.85, 0.62];
 
-/* ---------------------------------------------------------------------------
-   The four strobe constructors.
-   Argument ORDER differs per kind and is not guessable; keep the signatures.
-   --------------------------------------------------------------------------- */
+/* The four strobe constructors.
+   Argument order differs per kind and is not guessable; keep the signatures. */
 
 // softbox — mirrors the generator's panel(). su/sv = angular half-widths in degrees.
 const _hSb = (az, el, su, sv, i, c, soft, name) => ({
@@ -64,7 +60,7 @@ const _hSb = (az, el, su, sv, i, c, soft, name) => ({
   intensity: i, color: c.slice(), edgeSoftness: soft != null ? soft : 0.18, falloff: 1, name,
 });
 // disc / pinhole — mirrors the generator's pinhole(). r = angular radius in degrees,
-// written into BOTH sizeU and sizeV.
+// written into both sizeU and sizeV.
 const _hDc = (az, el, r, i, c) => ({
   kind: 'disc', azimuth: az, elevation: el, sizeU: r, sizeV: r,
   intensity: i, color: c.slice(), edgeSoftness: 0.18, falloff: 1,
@@ -77,14 +73,14 @@ const _hRg = (az, el, r, w, i, c) => ({
 });
 // wash — mirrors the generator's wash(). span = azimuthal half-span, elC = band
 // center elevation, elHalf = band half-height. Default softness is 0.35 here,
-// NOT the 0.18 the other three use.
+// not the 0.18 the other three use.
 const _hWs = (az, span, elC, elHalf, i, c, soft) => ({
   kind: 'wash', azimuth: az, elevation: elC, sizeU: span, sizeV: elHalf,
   intensity: i, color: c.slice(), edgeSoftness: soft != null ? soft : 0.35, falloff: 1,
 });
 
 /* Three-point key/fill/rim group.
-   The fill is always 0.10 SOFTER than whatever hardness is asked for. */
+   The fill is always 0.10 softer than whatever hardness is asked for. */
 function _hThreeSb(key, fill, rim, hard) {
   const h = hard != null ? hard : 0.18;
   const arr = [
@@ -97,7 +93,7 @@ function _hThreeSb(key, fill, rim, hard) {
 }
 
 /* N-light studio. The size shrinks as lights are added
-   (su = 22-n, sv = 15-floor(n/2)), so three-/four-/five-light are NOT the same
+   (su = 22-n, sv = 15-floor(n/2)), so three-/four-/five-light are not the same
    lights with entries removed. */
 function _hNLight(n) {
   const az = [-40, 60, 165, -130, 5].slice(0, n),
@@ -108,10 +104,8 @@ function _hNLight(n) {
   return az.map((a, idx) => _hSb(a, el[idx], su, sv, br[idx], co[idx]));
 }
 
-/* ---------------------------------------------------------------------------
-   HDRI_STUDIO_RECIPES — transcribed 1:1 from the renderer's own table.
-   Keyed by the same slug the .hdr file and RENDRE_ENV_INDEX use.
-   --------------------------------------------------------------------------- */
+/* HDRI_STUDIO_RECIPES — transcribed 1:1 from the renderer's own table.
+   Keyed by the same slug the .hdr file and RENDRE_ENV_INDEX use. */
 const RENDRE_ENV_RECIPES_BY_SLUG = {
   'studio': { ambient: { kind: 'bay', lvl: 0.014 }, strobes: [..._hThreeSb(10.5, 3.6, 5.0), _hSb(8, 75, 50, 15, 4.0, HDRI_WHITE, 0.35, 'Overhead')] },
   'rendre-studio': { ambient: { kind: 'bay', lvl: 0.012 }, strobes: [..._hThreeSb(11, 3.5, 6), _hSb(10, 78, 55, 16, 4.5, HDRI_WHITE, 0.3, 'Overhead')] },
@@ -187,14 +181,12 @@ export function rendreEnvRecipe(slug) {
   return RENDRE_ENV_RECIPES.find((r) => r.slug === slug);
 }
 
-/* ---------------------------------------------------------------------------
-   Ambient bed (== the generator's base()).
-   'bay'  = dark floor with a faint COOL glow BELOW the horizon (the blue tint is
+/* Ambient bed (== the generator's base()).
+   'bay'  = dark floor with a faint cool glow below the horizon (the blue tint is
             in the multipliers 0.98 / 1.06, not in a color constant).
    'gray' = an even dome brightening toward the top.
    Note the exponents 1.4 and 2.2, and that only 'gray' scales by lvl a second
-   time (lvl + lvl*2.2*s^1.4); 'bay' adds a FIXED 0.05*s^2.2 regardless of lvl.
-   --------------------------------------------------------------------------- */
+   time (lvl + lvl*2.2*s^1.4); 'bay' adds a fixed 0.05*s^2.2 regardless of lvl. */
 export function rendreHdriAmbientImage(kind, lvl, W, H) {
   const rgb = new Float32Array(W * H * 3);
   for (let y = 0; y < H; y++) {
@@ -213,11 +205,9 @@ export function rendreHdriAmbientImage(kind, lvl, W, H) {
   return rgb;
 }
 
-/* ---------------------------------------------------------------------------
-   Direction convention. Equirect, Y-up, az 0 = +X.
+/* Direction convention. Equirect, Y-up, az 0 = +X.
    Same mapping as the trace shader's dirToUV, so a recipe translated either way
-   lands in the same place. See trap 2 at the top of this file.
-   --------------------------------------------------------------------------- */
+   lands in the same place. See convention 2 at the top of this file. */
 function _hdriDirFromUV(u, v) {
   const az = (u * 2 - 1) * Math.PI, el = (0.5 - v) * Math.PI, ce = Math.cos(el);
   return [ce * Math.cos(az), Math.sin(el), ce * Math.sin(az)];
@@ -230,7 +220,7 @@ function _hdriDirFromAzEl(azDeg, elDeg) {
    to +X near the poles (|d.y| >= 0.93) so the cross product never degenerates;
    this is why a softbox at elevation 90 does not spin its own axes to zero. The
    branch is written as two 0/1 scalars rather than a vector on purpose — that is
-   what fixes WHICH tangent the frame picks, and therefore which way sizeU points. */
+   what fixes which tangent the frame picks, and therefore which way sizeU points. */
 function _hdriFrame(d) {
   const upX = Math.abs(d[1]) < 0.93 ? 0 : 1, upY = Math.abs(d[1]) < 0.93 ? 1 : 0;
   let tx = upY * d[2], ty = -upX * d[2], tz = upX * d[1] - upY * d[0];
@@ -239,23 +229,21 @@ function _hdriFrame(d) {
   return [[tx, ty, tz], [bx, by, bz]];
 }
 
-/* ---------------------------------------------------------------------------
-   The rasteriser. Returns an intensity MULTIPLIER for
+/* The rasterizer. Returns an intensity multiplier for
    one strobe at one (u,v); 0 means no contribution.
 
    'wash' is evaluated directly in (u,v) because it is not a localized emitter;
    the other three are evaluated in real 3D direction space, not a UV-plane
    approximation, so nothing warps near the poles. Every clamp, exponent and
    epsilon below is load-bearing:
-     - disc:  (rad-ang)/(rad*0.45+0.15) clamped then SQUARED. The +0.15 is what
+     - disc:  (rad-ang)/(rad*0.45+0.15) clamped then squared. The +0.15 is what
               keeps a sub-degree pinhole from having a zero-width edge.
-     - ring:  (1-|ang-rad|/width) clamped then SQUARED.
+     - ring:  (1-|ang-rad|/width) clamped then squared.
      - softbox: atan2 against max(dot,1e-6), a smoothstep g*g*(3-2g) per axis,
-              and a MINIMUM edge width of 1.0 degree (max(w*soft,1.0)) — so a
+              and a minimum edge width of 1.0 degree (max(w*soft,1.0)) — so a
               1.1-degree-wide cage-room slat is almost entirely edge.
      - wash: ga^1.6 times an elevation band gate whose height is
-              max((elHi-elLo)*soft, 1) degrees.
-   --------------------------------------------------------------------------- */
+              max((elHi-elLo)*soft, 1) degrees. */
 export function rendreHdriStrobeRaster(u, v, s) {
   if (s.kind === 'wash') {
     const azDeg = (u * 2 - 1) * 180; let da = azDeg - (s.azimuth || 0); da = ((da + 180) % 360 + 360) % 360 - 180;
@@ -295,14 +283,12 @@ export function rendreHdriStrobeRaster(u, v, s) {
   return Math.pow(m, Math.max(0.1, s.falloff || 1)) * (s.intensity || 0);
 }
 
-/* ---------------------------------------------------------------------------
-   Recipe -> equirect radiance map. Mirrors rtHdriComposite,
+/* Recipe -> equirect radiance map. Mirrors rtHdriComposite,
    with the ambient bed standing in for its baseLayer, which is exactly what
    rtHdriEditOpen builds for a cataloged studio.
 
-   Output is LINEAR radiance, RGB, 3 floats per pixel, row 0 = the ZENITH.
-   Pixel centers: u=(x+0.5)/W, v=(y+0.5)/H — half-texel offsets, not (x/W).
-   --------------------------------------------------------------------------- */
+   Output is linear radiance, RGB, 3 floats per pixel, row 0 = the zenith.
+   Pixel centers: u=(x+0.5)/W, v=(y+0.5)/H — half-texel offsets, not (x/W). */
 export function rendreRasterEnvRecipe(recipe, W, H) {
   W = W | 0; H = H | 0;
   if (!(W > 0) || !(H > 0)) throw new Error('rendreRasterEnvRecipe: W and H must be positive integers');
@@ -311,7 +297,7 @@ export function rendreRasterEnvRecipe(recipe, W, H) {
     ? rendreHdriAmbientImage(amb.kind, amb.lvl, W, H)
     : new Float32Array(W * H * 3);
   for (const s of (recipe && recipe.strobes) || []) {
-    if (s.enabled === false) continue;   // absent === enabled; see trap 4
+    if (s.enabled === false) continue;   // absent === enabled; see convention 4
     const c = s.color || [1, 1, 1];
     for (let y = 0; y < H; y++) {
       const v = (y + 0.5) / H;

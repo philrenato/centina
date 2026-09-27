@@ -1,41 +1,29 @@
-// A CUT THAT STRADDLES A SEAM IS HANDLED FOR REAL — IT NO LONGER REFUSES.
+// A cut that straddles a seam is split and handled, not refused.
 //
-// THIS FILE ONCE ASSERTED THE OPPOSITE, DELIBERATELY, AND THAT IS WORTH
-// SAYING OUT LOUD. Its own header used to end: "The refusal is a placeholder
-// for a capability, not a resting place. Handling an even-crossing loop for
-// real means splitting it at its crossings and closing each subchain through
-// the domain boundary." That capability is now built (seamStraddleChains),
-// so the refusal this file was written to pin is genuinely gone. The test
-// below is rewritten to the invariant the refusal was standing in for, not
-// deleted — a straddling cut must produce the RIGHT answer, and "refuses by
-// name" was only ever the honest interim version of that.
-//
-// A loop crossing a closed direction's seam an EVEN number of times is not a
+// A loop crossing a closed direction's seam an even number of times is not a
 // wrap — it goes over and comes back. It has no once-around spine, and
-// seamCrossingSpine still says so by name (TEST 1, unchanged). What changed
-// is what the boolean does NEXT: rather than refuse, it splits the loop at
-// its crossings and closes each subchain along the domain edge it ends on,
-// yielding one UV piece per side of the seam. The pieces weld in the ordinary
+// seamCrossingSpine says so by name. The boolean then splits the loop at
+// its crossings (seamStraddleChains) and closes each subchain along the
+// domain edge it ends on, yielding one UV piece per side of the seam. The pieces weld in the ordinary
 // sew because a seam's two UV copies, (aMin,o) and (aMax,o), are the same 3D
 // point.
 //
-// WHY THIS IS GENERIC AND NOT AN EXOTIC FIXTURE. For two solids of revolution
+// Why this is generic and not an exotic fixture. For two solids of revolution
 // each operand's seam meridian generally points straight through the other
-// body, so the cut lands across it. Whether any given pair "worked" used to be
-// decided by which way its seams happened to face. THAT is the real invariant
-// this file now pins: the SAME pair must produce the SAME solid regardless of
-// where its seams sit. TEST 2 asserts the straddling pair closes; TEST 2b
-// asserts it closes to the same measured solid as the seams-rotated-off
-// control; TEST 3 keeps that control as an independent check.
+// body, so the cut lands across it. The invariant pinned here: the same pair
+// must produce the same solid regardless of where its seams sit. One test
+// asserts the straddling pair closes; another asserts it closes to the same
+// measured solid as the seams-rotated-off control; the control is also
+// checked on its own.
 //
-// NOT ASSERTED HERE, NAMED HONESTLY: absolute volume against the analytic
+// Not asserted here: absolute volume against the analytic
 // two-sphere lens. Measuring it means tessellating each kept fragment
 // independently, which is not watertight at the shared edges (and trips
 // trimtess's own known ear-clip residual on this fixture), so the numbers it
 // produces are not an oracle. Both the straddle and the control read ~2.7%
-// under analytic THE SAME WAY — a pre-existing property of that measurement
+// under analytic the same way — a property of that measurement
 // on this fixture, not something the straddle handling introduces, which is
-// exactly what TEST 2b's straddle-equals-control comparison establishes
+// what the straddle-equals-control comparison below establishes
 // without needing to trust either number on its own.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -58,10 +46,10 @@ function tess(faces, res) {
   return tris;
 }
 
-// A sphere built the way the organic probe builds its blobs: an interpolated
-// pole-to-pole half arc, revolved. `seamSign` puts the profile meridian (and
-// therefore the seam) at +x or -x, which is the only thing that differs
-// between the failing fixture and the passing control.
+// A sphere built from an interpolated pole-to-pole half arc, revolved.
+// `seamSign` puts the profile meridian (and therefore the seam) at +x or -x,
+// which is the only thing that differs between the straddling fixture and
+// the control.
 const PROFILE_POINTS = 7;
 function sphere(cx, seamSign) {
   const pts = [];
@@ -70,13 +58,12 @@ function sphere(cx, seamSign) {
     pts.push([seamSign * 20 * Math.cos(th), 0, 20 * Math.sin(th)]);
   }
   const srf = revolve(globalCurveInterp(pts, 3), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
-  // TRANSLATE IN EUCLIDEAN COORDINATES, NOT HOMOGENEOUS ONES. This net stores
+  // Translate in Euclidean coordinates, not homogeneous ones. This net stores
   // the dehomogenized position plus a separate weight, so the shift is `x + cx`.
   // Writing `x + cx * w` is the homogeneous form, and a revolve's own rational
-  // circle carries w = sqrt(2)/2 on its off-axis columns — so those points moved
-  // only 0.707 as far as the rest and the "radius 20 ball" came out spanning
-  // 17.29 to 22.91, a 28% deformation. Every assertion below still passed on it,
-  // which is the point: a fixture nobody measures can be any shape at all.
+  // circle carries w = sqrt(2)/2 on its off-axis columns — those points would
+  // move only 0.707 as far as the rest and the "radius 20 ball" would span
+  // 17.29 to 22.91, a 28% deformation.
   const shifted = cx === 0
     ? srf
     : { ...srf, ctrlNet: srf.ctrlNet.map((row) => row.map(([x, y, z, w]) => [x + cx, y, z, w])) };
@@ -100,16 +87,13 @@ function cutCurves(A, B) {
   return out;
 }
 
-// MEASURE THE FIXTURE BEFORE REASONING ABOUT IT. Every test below is a claim
+// Measure the fixture before reasoning about it. Every test below is a claim
 // about two radius-20 balls one radius apart; none of them notices if the balls
-// are some other shape. They did not notice for a long time — a homogeneous
-// translate on a euclidean control net left one of them spanning 17.29 to 22.91
-// while every assertion still passed. A fixture that is never measured is a
-// free variable in every result that rests on it.
-test('SEAM STRADDLE fixture: both operands really are radius-20 spheres at the centers claimed', () => {
-  // Exactly the three operands the tests below actually build — measuring some
-  // other sphere would leave the ones under test unmeasured, which is the very
-  // gap this closes.
+// are some other shape. A fixture that is never measured is a free variable in
+// every result that rests on it.
+test('seam straddle fixture: both operands are radius-20 spheres at the centers claimed', () => {
+  // Exactly the three operands the tests below build — measuring some
+  // other sphere would leave the ones under test unmeasured.
   for (const [label, cx, seamSign] of [['A +seam', 0, 1], ['A -seam (control)', 0, -1], ['B', 25, 1]]) {
     const s = sphere(cx, seamSign).faces[0].srf;
     const uK = s.knotsU, vK = s.knotsV;
@@ -124,13 +108,13 @@ test('SEAM STRADDLE fixture: both operands really are radius-20 spheres at the c
       }
     }
     // Tolerance is for the degree-3 interpolation of a half arc through 7
-    // points, which is a real and expected approximation; 28% is not.
+    // points, which is an expected approximation; 28% is not.
     assert.ok(hi - lo < 0.2 && Math.abs((hi + lo) / 2 - 20) < 0.2,
       `operand ${label} (cx=${cx}) spans radius ${lo.toFixed(2)}..${hi.toFixed(2)} about (${cx},0,0), wanted ~20`);
   }
 });
 
-test('SEAM STRADDLE: the fixture genuinely straddles — an even number of seam crossings, which is NOT a wrap', () => {
+test('seam straddle: the fixture straddles — an even number of seam crossings, which is not a wrap', () => {
   const A = sphere(0, 1), B = sphere(25, 1);
   const curves = cutCurves(A, B);
   assert.equal(curves.length, 1, 'one intersection circle');
@@ -139,20 +123,20 @@ test('SEAM STRADDLE: the fixture genuinely straddles — an even number of seam 
   assert.ok(proj.ok, 'the cut projects onto A');
   const spine = seamCrossingSpine(proj.uv, A.faces[0].srf);
 
-  // The load-bearing distinction: it is refused, and refused for STRADDLING
+  // The load-bearing distinction: it is refused, and refused for straddling
   // specifically — not for the benign "never touches a seam" reason, which is
   // what the control below gets and what must still pass through untouched.
   assert.equal(spine.ok, false, 'a straddling loop has no once-around spine');
   assert.equal(spine.code, 'seam-straddle', `refused as a straddle, got ${spine.code}`);
   assert.match(spine.reason, /crosses the seam 2 times and returns/);
 
-  // And B, the other operand, is NOT entangled with its own seam — proving
+  // And B, the other operand, is not entangled with its own seam — proving
   // the failure belongs to one face rather than to the pair being spheres.
   const projB = projectPointsToSurfaceUV(curves[0].samples, B.faces[0].srf);
   assert.equal(seamCrossingSpine(projB.uv, B.faces[0].srf).code, 'no-seam-crossing');
 });
 
-test('SEAM STRADDLE: all three operators now CLOSE — the straddle is handled, not refused', () => {
+test('seam straddle: all three operators close — the straddle is handled, not refused', () => {
   const A = sphere(0, 1), B = sphere(25, 1);
   const curves = cutCurves(A, B);
 
@@ -165,23 +149,23 @@ test('SEAM STRADDLE: all three operators now CLOSE — the straddle is handled, 
     assert.equal(r.stats.shellCount, 1);
     assert.equal(r.stats.genus, 0, `${op} of two overlapping balls is genus 0`);
 
-    // ...and the seam is genuinely gone as a REPORTED CAUSE, not merely
-    // survived: no face may still be coming back with the straddle refusal.
+    // ...and the seam is gone as a reported cause, not merely
+    // survived: no face may come back with the straddle refusal.
     assert.equal(r.faceReports.some((f) => f.code === 'seam-straddle'), false,
-      `${op} no longer reports a seam straddle`);
+      `${op} reports no seam straddle`);
   }
 });
 
-test('SEAM STRADDLE: the straddling pair produces the SAME solid as the seams-rotated-off control', () => {
-  // THE LOAD-BEARING CLAIM OF THE WHOLE FEATURE. These two pairs are the same
-  // geometry — same radii, same offset, same poles — differing ONLY in where
+test('seam straddle: the straddling pair produces the same solid as the seams-rotated-off control', () => {
+  // The load-bearing claim. These two pairs are the same
+  // geometry — same radii, same offset, same poles — differing only in where
   // each profile meridian (and therefore the seam) sits. A boolean whose
   // answer depends on that is wrong even when it closes, so agreeing with the
   // control is a stronger statement than closing.
   //
   // Measured by tessellating each kept fragment and taking area + |volume|.
   // Neither number is trusted as an absolute (see the header) — they are
-  // compared against EACH OTHER, where the shared measurement bias cancels.
+  // compared against each other, where the shared measurement bias cancels.
   const straddle = { A: sphere(0, 1), B: sphere(25, 1) };
   const control = { A: sphere(0, -1), B: sphere(25, 1) };
 
@@ -211,10 +195,10 @@ test('SEAM STRADDLE: the straddling pair produces the SAME solid as the seams-ro
       `${op} area matches the control (${s.area} vs ${c.area})`);
   }
 
-  // The one thing that legitimately DIFFERS: intersect keeps A's cap, and on
+  // The one thing that legitimately differs: intersect keeps A's cap, and on
   // the straddling pair that cap is cut in two by the domain rectangle, so it
   // arrives as two UV pieces where the control's is one. Same surface, one
-  // more seam — asserted so a future change that quietly stopped splitting
+  // more seam — asserted so a change that quietly stopped splitting
   // (or started splitting the control) is caught rather than absorbed.
   const sFrags = booleanSolids(straddle.A, straddle.B, cutCurves(straddle.A, straddle.B), 'intersect').fragments.length;
   const cFrags = booleanSolids(control.A, control.B, cutCurves(control.A, control.B), 'intersect').fragments.length;
@@ -222,10 +206,10 @@ test('SEAM STRADDLE: the straddling pair produces the SAME solid as the seams-ro
   assert.equal(sFrags, 3, 'the straddling pair splits A’s cap into two UV pieces');
 });
 
-test('SEAM STRADDLE CONTROL: the SAME pair with its seams rotated off the cut still closes on all three operators', () => {
+test('seam straddle control: the same pair with its seams rotated off the cut still closes on all three operators', () => {
   // Identical construction, identical poles, identical wrapped single-face
-  // solids. The ONLY difference is where each profile meridian sits. If the
-  // fix had over-refused — treating any seam-adjacent loop as unusable — this
+  // solids. The only difference is where each profile meridian sits. If the
+  // straddle handling over-refused — treating any seam-adjacent loop as unusable — this
   // would refuse too, and the refusal above would prove nothing.
   const A = sphere(0, -1), B = sphere(25, 1);
   const curves = cutCurves(A, B);
@@ -233,7 +217,7 @@ test('SEAM STRADDLE CONTROL: the SAME pair with its seams rotated off the cut st
 
   const projA = projectPointsToSurfaceUV(curves[0].samples, A.faces[0].srf);
   assert.equal(seamCrossingSpine(projA.uv, A.faces[0].srf).code, 'no-seam-crossing',
-    'the control genuinely avoids the seam — otherwise it is not a control');
+    'the control avoids the seam — otherwise it is not a control');
 
   for (const op of ['union', 'intersect', 'difference']) {
     const r = booleanSolids(A, B, curves, op);
@@ -244,8 +228,8 @@ test('SEAM STRADDLE CONTROL: the SAME pair with its seams rotated off the cut st
   }
 });
 
-test('SEAM STRADDLE: a benign refusal still passes the raw curve through — the ordinary interior cut is untouched', () => {
-  // unwrapSeamCut sees a refusal on EVERY ordinary boolean, because a cut that
+test('seam straddle: a benign refusal still passes the raw curve through — the ordinary interior cut is untouched', () => {
+  // unwrapSeamCut sees a refusal on every ordinary boolean, because a cut that
   // never approaches a seam refuses with 'no-seam-crossing'. Treating a refusal
   // as failure without reading the code would refuse every boolean in the app.
   // This pins the two codes that must remain benign.
@@ -260,7 +244,7 @@ test('SEAM STRADDLE: a benign refusal still passes the raw curve through — the
   const tooFew = seamCrossingSpine([[0.1, 0.1], [0.2, 0.2]], A.faces[0].srf);
   assert.equal(tooFew.code, 'too-few-points');
 
-  // ...and the boolean built on top of that benign refusal genuinely closes,
+  // ...and the boolean built on top of that benign refusal closes,
   // which is the property the passthrough exists to preserve.
   assert.equal(booleanSolids(A, B, curves, 'union').ok, true);
 });

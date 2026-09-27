@@ -1,5 +1,5 @@
-// Tests for kernel/transform.mjs — the
-// AFFINE-vs-SPACE-MORPH classification, proved numerically, not asserted.
+// Tests for kernel/transform.mjs — the affine vs space-morph
+// classification, proved numerically, not asserted.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -12,8 +12,8 @@ import { dot, sub, length, normalize } from '../kernel/vec3.mjs';
 import { smoothstep } from '../kernel/cage.mjs';
 import { DEFAULT_FALLOFF_RAMP } from '../kernel/falloff.mjs';
 
-// A deliberately NON-symmetric, non-planar point set (this project's own
-// standing rule against trivial/symmetric test fixtures hiding real bugs).
+// A deliberately NON-symmetric, non-planar point set: a symmetric fixture can
+// hide a defect.
 const RAW_PTS = [
   [-13, 4, 2], [-6, 11, 7], [1, 3, 15], [9, -5, 8], [17, 6, -3], [23, 14, 5],
 ];
@@ -36,19 +36,17 @@ test('TRANSFORM_TYPES/TRANSFORM_CLASS: all 7 real types are classified, exactly 
   assert.deepEqual(morph.sort(), ['bend', 'charybdis', 'taper', 'twist']);
 });
 
-// ============================================================
-// AFFINE — EXACT. The real proof: T(sum(R_i P_i)) === sum(R_i T(P_i)).
+// Affine — exact. The proof: T(sum(R_i P_i)) === sum(R_i T(P_i)).
 // Apply the map to every control point, then confirm the MAPPED CURVE's own
 // value at an arbitrary interior parameter equals the map applied directly
 // to the ORIGINAL curve's value there — never a self-consistency tautology
-// (both sides are computed via genuinely different paths: one evaluates a
+// (both sides are computed via different paths: one evaluates a
 // freshly-rebuilt curve, the other transforms an independently-evaluated
 // point).
-// ============================================================
 test('ROTATE is exact affine: transforming control points reproduces the true rotated curve at every sampled parameter', () => {
   const crv = buildTestCurve();
   const center = [3, -2, 5];
-  const axis = normalize([1, 2, 3]); // a genuinely oblique axis, not a world axis
+  const axis = normalize([1, 2, 3]); // an oblique axis, not a world axis
   const angle = 1.13; // radians, an arbitrary non-multiple-of-90deg value
   const rotated = mapCurveControlPoints(crv, (p) => rotatePoint(p, center, axis, angle));
   for (const u of [crv.knots[3], 0.13, 0.37, 0.5, 0.71, 0.93 * (crv.knots[crv.knots.length - 1] - crv.knots[0]) + crv.knots[0]]) {
@@ -99,15 +97,13 @@ test('AFFINE identity: rotate/scale/shear by a no-op value reproduce the exact o
   assert.ok(length(sub(shearPoint(p, center, axis, normalize([1, -1, 0]), 0), p)) < 1e-12);
 });
 
-// ============================================================
-// SPACE MORPH — APPROXIMATE, proved to be genuinely NOT affine (a real
+// Space morph — approximate, proved NOT affine (a
 // contrast, not just an absence of an exactness test): the SAME per-control-
 // point map applied to a mapped curve's own control net does NOT reproduce
 // the true value at an interior parameter the way rotate/scale/shear do —
-// confirming these really are a different mathematical class, not merely
+// confirming these are a different mathematical class, not merely
 // unproven.
-// ============================================================
-test('TWIST is genuinely NOT exact (contrast case): the control-point nudge diverges from a hypothetical "true value" proxy', () => {
+test('TWIST is NOT exact (contrast case): the control-point nudge diverges from a hypothetical "true value" proxy', () => {
   const crv = buildTestCurve();
   const center = [0, 0, -10];
   const axis = normalize([0, 0, 1]);
@@ -118,7 +114,7 @@ test('TWIST is genuinely NOT exact (contrast case): the control-point nudge dive
   // than the point the interpolated curve actually passes through at a
   // given u (true only in the degenerate degree-1 case) — so the nudged
   // curve's sampled point differs measurably from directly twisting the
-  // ORIGINAL curve's own sampled point. A nonzero gap here is the actual
+  // ORIGINAL curve's own sampled point. A nonzero gap here is the
   // proof this is an approximation, not a missing exactness guarantee.
   let worstGap = 0;
   for (const u of [0.2, 0.5, 0.8]) {
@@ -158,7 +154,7 @@ test('BEND: reduces to the true identity at angleRad=0, and to the spine\'s own 
   assert.ok(length(sub(bendPoint(p1, p1, axis, span, planeNormal, 0.9), p1)) < 1e-9);
 });
 
-test('BEND: the spine itself traces a true circular arc of radius span/angle (a real geometric proof, not just an endpoint check)', () => {
+test('BEND: the spine itself traces a true circular arc of radius span/angle (a geometric proof, not just an endpoint check)', () => {
   const p1 = [0, 0, 0];
   const axis = normalize([1, 0, 0]);
   const planeNormal = normalize([0, 1, 0]);
@@ -177,7 +173,7 @@ test('BEND: the spine itself traces a true circular arc of radius span/angle (a 
   }
 });
 
-test('BEND: is genuinely NOT exact affine (contrast case) — the control-point nudge on a curve diverges from directly bending the true curve value', () => {
+test('BEND: is NOT exact affine (contrast case) — the control-point nudge on a curve diverges from directly bending the true curve value', () => {
   const crv = buildTestCurve([[-10, 0, 0], [-4, 2, 1], [3, -1, 4], [11, 3, -2], [18, 0, 5], [25, 4, 0]]);
   const p1 = [0, 0, 0];
   const axis = normalize([1, 0, 0]);
@@ -195,11 +191,9 @@ test('BEND: is genuinely NOT exact affine (contrast case) — the control-point 
   assert.ok(worstGap > 1e-3, `expected a real, measurable gap proving BEND is not affine, got ${worstGap}`);
 });
 
-// ============================================================
-// CHARYBDIS (Rhino: Maelstrom) — the falloff MUST reuse cageSmoothstep,
+// Charybdis (Rhino: Maelstrom) — the falloff must reuse cageSmoothstep,
 // verified directly (not just by import) by cross-checking the exact
 // falloff weight this module computes against a direct smoothstep() call.
-// ============================================================
 test('CHARYBDIS: full rotation strictly inside innerRadius, zero strictly outside outerRadius', () => {
   const center = [0, 0, 0];
   const axis = normalize([0, 0, 1]);
@@ -260,13 +254,11 @@ test('CHARYBDIS: axial component (height along the rotation axis) is always pres
   assert.ok(Math.abs(before - after) < 1e-9);
 });
 
-// ============================================================
-// CHARYBDIS FALLOFF RAMP (kernel/falloff.mjs) — the falloff is data now,
-// and the default is BIT-IDENTICAL to the expression it replaced. Proven
+// Charybdis falloff ramp (kernel/falloff.mjs) — the falloff is data, and
+// the default ramp is bit-identical to the plain smoothstep falloff. Proven
 // against real deformed POINTS here, not just against the ramp evaluator
 // in isolation: a scalar test in falloff.test.mjs cannot catch a wrong
 // argument order or a dropped end-branch inside this function.
-// ============================================================
 test('CHARYBDIS: an omitted / null / explicit-default ramp all give BIT-IDENTICAL points', () => {
   const center = [1, -2, 4];
   const axis = normalize([0.3, 1, 0.2]);
@@ -287,7 +279,7 @@ test('CHARYBDIS: an omitted / null / explicit-default ramp all give BIT-IDENTICA
   }
 });
 
-test('CHARYBDIS: a REVERSED ramp genuinely inverts the falloff — the knob does real work', () => {
+test('CHARYBDIS: a REVERSED ramp inverts the falloff — the knob does real work', () => {
   const center = [0, 0, 0];
   const axis = normalize([0, 0, 1]);
   const angle = Math.PI / 2;
@@ -309,11 +301,11 @@ test('CHARYBDIS: a REVERSED ramp genuinely inverts the falloff — the knob does
   assert.ok(length(sub(charybdisPoint(nearOuter, center, axis, inner, outer, angle), nearOuter)) < 1e-2);
 });
 
-test('CHARYBDIS: an edited ramp is honoured at BOTH end radii, not overridden by a leftover hardcoded 1/0', () => {
-  // The specific defect the three-branch form would have hidden: with the
-  // old `if (r <= inner) weight = 1; else if (r >= outer) weight = 0;`
-  // structure, a ramp that says otherwise at its own ends would be
-  // silently ignored outside the band. Here the ramp holds a real 0.5
+test('CHARYBDIS: an edited ramp is honored at BOTH end radii, not overridden by a leftover hardcoded 1/0', () => {
+  // A three-branch form,
+  // `if (r <= inner) weight = 1; else if (r >= outer) weight = 0;`,
+  // would silently ignore a ramp that says otherwise at its own ends,
+  // outside the band. Here the ramp holds a real 0.5
   // everywhere, so EVERY point — deep inside, between, far outside —
   // must sweep exactly half the angle.
   const center = [0, 0, 0];
@@ -324,7 +316,7 @@ test('CHARYBDIS: an edited ramp is honoured at BOTH end radii, not overridden by
   for (const p of [[1, 0, 0], [5, 0, 0], [10, 0, 2], [15, 0, 0], [40, 0, -3]]) {
     const got = charybdisPoint(p, center, axis, inner, outer, angle, half);
     const expected = rotatePoint(p, center, axis, angle * 0.5);
-    assert.ok(length(sub(got, expected)) < 1e-9, `half-strength ramp not honoured at ${p}`);
+    assert.ok(length(sub(got, expected)) < 1e-9, `half-strength ramp not honored at ${p}`);
   }
 });
 
@@ -353,7 +345,7 @@ test('transformPoint dispatcher carries a frame.falloff ramp through to charybdi
     transformPoint('charybdis', frame, 0.9, p),
     charybdisPoint(p, frame.center, frame.axisDir, frame.innerRadius, frame.outerRadius, 0.9, frame.falloff),
   );
-  // And it is genuinely a DIFFERENT result from the default ramp, so the
+  // And it is a DIFFERENT result from the default ramp, so the
   // dispatcher is provably passing it rather than dropping it silently.
   assert.notDeepEqual(
     transformPoint('charybdis', frame, 0.9, p),

@@ -1,29 +1,26 @@
-// SECOND PARTIALS, AND THE CURVATURES THEY GIVE.
+// Second partials, and the curvatures they give.
 //
-// This is the quantity the app has been missing at both ends: it is the DISPLAY
-// half of curvature analysis, and it is the
-// prerequisite for G2 continuity, which constrains a third control row through a
-// relation between second derivatives. One piece of maths, two features.
+// This is the display half of curvature analysis, and the prerequisite for G2
+// continuity, which constrains a third control row through a relation between
+// second derivatives.
 //
-// ⚠ RATIONAL SURFACES NEED THE QUOTIENT RULE, and skipping it is the classic
-// way to get curvature that looks plausible and is wrong. A NURBS surface is
+// Rational surfaces need the quotient rule. A NURBS surface is
 // A(u,v) / w(u,v), and the second derivative of a quotient is not the quotient
 // of second derivatives. Every primitive sphere and cylinder in this app is
-// rational, so a version that ignored weights would be wrong on exactly the
-// surfaces whose curvature is best known — which is why the test asserts
-// against the closed forms rather than against itself.
+// rational, so ignoring weights would be wrong on exactly the surfaces whose
+// curvature is best known — which is why the test asserts against the closed
+// forms.
 //
 // The rational derivative recurrence is Piegl & Tiller's (The NURBS Book, A4.4),
 // specialized to order 2 rather than written generally — the general form needs
 // binomial tables and there are only six terms.
 import { findSpan, dersBasisFuns } from './basis.mjs';
 
-// ⚠ THE CONVENTION IS THE KERNEL'S, NOT THE TEXTBOOK'S. `ctrlNet` stores PLAIN
+// The convention is the kernel's, not the textbook's. `ctrlNet` stores plain
 // Euclidean positions with the weight alongside — `toHomogeneousNet` in
-// surface.mjs is what multiplies through. Assuming the positions were already
-// pre-multiplied gives curvature that varies smoothly, plots convincingly, and
-// is wrong on every rational surface, which is every primitive sphere and
-// cylinder in this app.
+// surface.mjs is what multiplies through. Treating the positions as
+// pre-multiplied gives smooth, plausible curvature that is wrong on every
+// rational surface.
 function toHomogeneous(cp) {
   const w = cp[3] === undefined ? 1 : cp[3];
   return [cp[0] * w, cp[1] * w, cp[2] * w, w];
@@ -68,7 +65,7 @@ const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const len3 = (a) => Math.hypot(a[0], a[1], a[2]);
 
-// S, Su, Sv, Suu, Suv, Svv — the real, de-homogenised derivatives.
+// S, Su, Sv, Suu, Suv, Svv — the de-homogenized derivatives.
 export function surfaceDerivs2(srf, u, v) {
   const H = homogeneousDerivs2(srf, u, v);
   const w = H.A[3], wu = H.Au[3], wv = H.Av[3], wuu = H.Auu[3], wuv = H.Auv[3], wvv = H.Avv[3];
@@ -88,18 +85,18 @@ export function surfaceDerivs2(srf, u, v) {
   return { S, Su, Sv, Suu, Suv, Svv };
 }
 
-// GAUSSIAN AND MEAN CURVATURE, from the two fundamental forms.
+// Gaussian and mean curvature, from the two fundamental forms.
 //
-// Sign convention, stated because it is otherwise a coin toss: the normal is
-// Su x Sv normalized, so a sphere built by revolving outward reads POSITIVE
-// mean curvature. Gaussian curvature has no such ambiguity — it is positive on
-// a dome or a bowl alike, zero on anything developable, negative on a saddle,
-// which is exactly what makes it the honest one to color by.
+// Sign convention: the normal is Su x Sv normalized, so a sphere built by
+// revolving outward reads positive mean curvature. Gaussian curvature has no
+// such ambiguity — it is positive on a dome or a bowl alike, zero on anything
+// developable, negative on a saddle — which is why it is the one to color
+// by.
 export function surfaceCurvature(srf, u, v) {
   const d = surfaceDerivs2(srf, u, v);
   const n = cross3(d.Su, d.Sv);
   const nl = len3(n);
-  // A POLE HAS NO TANGENT PLANE. Su x Sv vanishes where the surface degenerates
+  // A pole has no tangent plane. Su x Sv vanishes where the surface degenerates
   // to a point (the top of a sphere, the apex of a cone), and every quantity
   // below divides by it. Reported as null rather than as Infinity or a large
   // number that would dominate any color scale built from it.
@@ -120,8 +117,8 @@ export function surfaceCurvature(srf, u, v) {
 }
 
 // The tightest bend anywhere on the surface, and where. This is the "minimum
-// radius of curvature" check — the number that says whether a
-// shape can be cut with a given tool, or molded at all.
+// radius of curvature" check — the number that says whether a shape can be
+// cut with a given tool, or molded at all.
 export function minimumRadiusOfCurvature(srf, samplesU = 24, samplesV = 24) {
   const dom = (knots, deg) => [knots[deg], knots[knots.length - 1 - deg]];
   const [uMin, uMax] = dom(srf.knotsU, srf.degU);
@@ -139,5 +136,5 @@ export function minimumRadiusOfCurvature(srf, samplesU = 24, samplesV = 24) {
       if (!worst || r < worst.radius) worst = { radius: r, u, v };
     }
   }
-  return worst; // null when the surface is flat everywhere, which is the honest answer
+  return worst; // null when the surface is flat everywhere
 }

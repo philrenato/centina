@@ -1,72 +1,59 @@
-// CATMULL-CLARK SUBDIVISION-SURFACE MATH — the shared kernel underlying our
-// own SuperB object type (Rhino calls the analogous feature
-// "SubD"). KERNEL ONLY: this module has no notion of an app-layer object,
-// a display/render tessellation policy, or UI — it is pure cage-in,
-// finer-cage-out math, exactly like every other kernel/*.mjs module in this
-// project.
+// Catmull-Clark subdivision-surface math: the kernel under the SuperB
+// object type (Rhino calls the analogous feature "SubD"). Kernel only: this
+// module has no notion of an app-layer object, a display/render
+// tessellation policy, or UI — it is pure cage-in, finer-cage-out math.
 //
-// A CAGE (the control net — NOT the geometry; the limit surface this
-// defines is the real object, same relationship a NURBS control polygon has
+// A cage (the control net — not the geometry; the limit surface this
+// defines is the object, the same relationship a NURBS control polygon has
 // to its curve) is plain data:
 //   { vertices: [[x,y,z], ...],
 //     faces:    [[i0,i1,...], ...],   // >=3 indices per face, quads preferred, ngons legal
 //     creases:  { "i_j": weight, ... } }  // sparse — an absent key means weight 0 (smooth)
 // A crease weight is a soft-crease value (Rhino 8's SubDCrease scale, 0-100)
-// stored on an EDGE, keyed by `edgeKey(i,j)` (order-independent). Boundary
-// edges (used by exactly one face) are ALWAYS fully sharp regardless of any
-// stored weight — there is no "smooth" alternative to blend a boundary edge
-// against, since there's no second adjacent face to build one from.
+// stored on an edge, keyed by `edgeKey(i,j)` (order-independent). Boundary
+// edges (used by exactly one face) are always fully sharp regardless of any
+// stored weight — there is no second adjacent face to build a smooth
+// alternative from.
 //
-// THE REFINEMENT STEP (subdivideCatmullClark) implements the classic
-// Catmull-Clark rules (Catmull & Clark 1978; the face/edge/vertex point
-// formulas as commonly restated, e.g. the Wikipedia "Catmull–Clark
-// subdivision surface" summary, cross-checked here against the DeRose 1998
-// boundary rule and hand-verified against a known worked cube example — see
-// this file's own function comments and test/subd.test.mjs's own derivations
-// for the actual arithmetic, not just an appeal to authority):
-//   - FACE POINT: the centroid of a face's own vertices (any n-gon).
-//   - EDGE POINT: (v0 + v1 + f0 + f1) / 4 for a smooth interior edge (f0/f1
+// The refinement step (subdivideCatmullClark) implements the Catmull-Clark
+// rules (Catmull & Clark 1978; the face/edge/vertex point formulas as
+// commonly restated, e.g. the Wikipedia "Catmull–Clark subdivision surface"
+// summary, cross-checked against the DeRose 1998 boundary rule and a worked
+// cube example — see the function comments below and test/subd.test.mjs
+// for the arithmetic):
+//   - Face point: the centroid of a face's own vertices (any n-gon).
+//   - Edge point: (v0 + v1 + f0 + f1) / 4 for a smooth interior edge (f0/f1
 //     its two adjacent face points); the plain midpoint (v0+v1)/2 for a
 //     boundary edge or a fully-sharp crease.
-//   - VERTEX POINT: (F + 2R + (n-3)P) / n for a smooth interior vertex of
+//   - Vertex point: (F + 2R + (n-3)P) / n for a smooth interior vertex of
 //     valence n (F = average of adjacent face points, R = average of
-//     adjacent EDGE MIDPOINTS — the original edges, not the edge points
-//     above); the standard boundary/crease curve rule (A + 6P + B) / 8 for a
-//     vertex sitting on exactly one crease/boundary LINE (A, B its two
-//     crease-neighbor vertices); the vertex's own unmoved position for a
-//     "corner" (0, 1, or 3+ sharp edges meeting there, per the standard
-//     Catmull-Clark corner treatment).
+//     adjacent edge midpoints — the original edges, not the edge points
+//     above); the boundary/crease curve rule (A + 6P + B) / 8 for a vertex
+//     on exactly one crease/boundary line (A, B its two crease-neighbor
+//     vertices); the vertex's own unmoved position for a corner (3+ sharp
+//     edges meeting there, per the standard Catmull-Clark corner
+//     treatment). A dart (1 sharp edge) takes the smooth rule; see
+//     computeVertexPoint.
 //
-// SEMI-SHARP CREASES (DeRose/Kobbelt-style, the actual mechanism behind
-// Rhino 8's SoftCrease): a crease weight above 0 linearly BLENDS the smooth
+// Semi-sharp creases (DeRose, Kass & Truong 1998, the mechanism behind
+// Rhino 8's SoftCrease): a crease weight above 0 linearly blends the smooth
 // and fully-sharp edge/vertex rules above (blend fraction = the weight
-// clamped to [0,1]), and DECREMENTS BY EXACTLY 1.0 every time
-// subdivideCatmullClark is called — the returned cage's own creases map
+// clamped to [0,1]), and decrements by exactly 1.0 every time
+// subdivideCatmullClark is called — the returned cage's creases map
 // already carries the decremented weight on each edge's two children, so a
-// caller just calls this function repeatedly with no separate "current
-// level" bookkeeping of its own. A weight that has decayed to 0 is dropped
-// from the map entirely (an absent key IS weight 0), so the edge behaves as
-// an ordinary smooth edge forever after, with no further special-casing.
+// caller calls this function repeatedly with no separate "current level"
+// bookkeeping. A weight that has decayed to 0 is dropped from the map (an
+// absent key is weight 0), so the edge is an ordinary smooth edge after.
 //
-// V1 SCOPE, stated honestly, matching the milestone's own explicit
-// boundaries: no Stam eigen-basis limit-surface evaluation (this module
-// only ever produces a FINER CAGE, never the true smooth limit position —
-// display is a fixed 2-3 refinement levels, adaptive, not
-// exact evaluation); no non-manifold-edge REPAIR (this module makes no
-// attempt to fix up genuinely non-manifold input — an edge used by 3+
-// faces is simply FORCED fully sharp, same as a real boundary edge, since
-// there's no well-defined "average of N face points" smooth alternative
-// for it either — a defensible, stated fallback, not a claim of
-// correctness for genuinely non-manifold input);
-// no ToNURBS, no display tessellation, no object type, no UI — all
-// explicitly out of scope for THIS (the refinement-math) milestone.
-//
-// STATUS RECONCILED: the NEXT milestone (SuperB object type +
-// display + primitive creation commands, hand-pasted into the app)
-// extends this file with the display-mesh/refinement-level functions near
-// the bottom (chooseSuperBRefinementLevel/triangulateFace/
-// superbDisplayMesh) — still kernel-only, no THREE.js/app-layer object
-// here either; ToNURBS remains genuinely untouched and deferred.
+// Scope: no Stam eigen-basis limit-surface evaluation (this module only
+// produces a finer cage, never the exact limit position — display is a
+// fixed 2-3 refinement levels); no non-manifold-edge repair — an edge used
+// by 3+ faces is forced fully sharp, like a boundary edge, since there is
+// no well-defined "average of N face points" smooth alternative for it.
+// That is a stated fallback, not a claim of correctness for non-manifold
+// input. No ToNURBS, no object type, no UI. The display-mesh functions at
+// the bottom (chooseSuperBRefinementLevel/triangulateFace/superbDisplayMesh)
+// are kernel-only as well: no THREE.js here.
 
 import { add, scale } from './vec3.mjs';
 
@@ -74,26 +61,18 @@ function midpoint(a, b) { return scale(add(a, b), 0.5); }
 function lerp(a, b, t) { return add(scale(a, 1 - t), scale(b, t)); }
 function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 
-// MARKED-CORNER WEIGHT FLOOR — see computeVertexPoint's own MARKED-CORNER
-// EXTENSION comment below for the full derivation of WHY a boundary edge's
-// stored weight is reused as a corner marker at all. This threshold must
-// NOT fire on any
-// nonzero stored weight — that would collide with this app's own real,
-// shipped Crease/SoftCrease commands — the app's SUPERB_CREASE_
-// LEVEL_SCALE (the highest weight either command can ever store, a plain
-// "full harden" edge) is exactly 3, so an entirely ordinary "harden both
-// boundary edges at a plain SuperBPlane corner" gesture through the
-// existing, shipped UI would otherwise silently pin that corner at P instead
-// of the correct boundary-curve smoothing. The stored
-// weight must clear a floor no ordinary Crease/SoftCrease action can ever
-// reach (their own combined reachable range is a closed [0, 3]) — only a
-// caller that deliberately stores a weight this high on purpose (TOSUBD's
-// own DEFAULT_CORNER_CREASE_WEIGHT, kernel/subdconvert.mjs, set well above
-// this floor) can ever trigger the marker. Kept as a plain kernel-local
-// constant (not an import of the app's own SUPERB_CREASE_LEVEL_SCALE) —
-// this module stays app-independent, matching every other kernel module's
-// own "no app-layer constant imports" discipline; the floor is simply
-// chosen generously above ANY plausible real-world semi-sharp weight.
+// Marked-corner weight floor — see computeVertexPoint's marked-corner
+// comment for why a boundary edge's stored weight is reused as a corner
+// marker. The threshold must not fire on an ordinary stored weight: the
+// app's SUPERB_CREASE_LEVEL_SCALE (the highest weight Crease/SoftCrease can
+// store, a "full harden" edge) is 3, so hardening both boundary edges at a
+// SuperBPlane corner would otherwise pin that corner at P instead of
+// smoothing it along the boundary curve. The floor sits above the closed
+// [0, 3] those commands can reach; only a caller that stores a weight this
+// high on purpose (TOSUBD's DEFAULT_CORNER_CREASE_WEIGHT,
+// kernel/subdconvert.mjs) triggers the marker. A kernel-local constant, not
+// an import of the app's SUPERB_CREASE_LEVEL_SCALE: kernel modules import no
+// app-layer constants.
 export const MARKED_CORNER_WEIGHT_FLOOR = 100;
 
 function validateCage(cage) {
@@ -120,27 +99,22 @@ function validateCage(cage) {
 // function, so a differently-ordered pair always resolves to the same slot.
 export function edgeKey(a, b) { return a < b ? `${a}_${b}` : `${b}_${a}`; }
 
-// The raw, UNCLAMPED stored crease weight for an edge (0 if absent — the
-// sparse-map default). Callers wanting the CURRENT step's effective
-// blend fraction (accounting for boundary-forcing and the [0,1] clamp)
-// should go through the internal edgeSharpness() below instead; this
-// function is the plain "what did the cage's own creases map say" read.
+// The raw, unclamped stored crease weight for an edge (0 if absent — the
+// sparse-map default). The current step's effective blend fraction
+// (boundary-forcing and the [0,1] clamp applied) is edgeSharpness() below.
 export function creaseWeight(cage, v0, v1) {
   const w = cage.creases && cage.creases[edgeKey(v0, v1)];
   return typeof w === 'number' ? w : 0;
 }
 
-// A boundary edge (used by exactly one face) is ALWAYS fully sharp,
+// A boundary edge (used by exactly one face) is always fully sharp,
 // regardless of any stored crease weight — there is no second adjacent
-// face to build a "smooth" alternative from. A NON-MANIFOLD edge (used by
-// 3+ faces) is ALSO forced fully sharp, for the identical reason — the
-// ordinary smooth rule's "average of exactly 2 adjacent face points" has
-// no well-defined generalization to 3+, so treating it as boundary-like
-// is the same honest fallback, not a claim of correctness for genuinely
-// non-manifold input (see this file's own header comment). An ORDINARY
-// interior edge (used by exactly 2 faces) is the only case that ever
-// reads its own stored crease weight — its effective sharpness THIS
-// subdivision step is that weight clamped to [0,1] (the semi-sharp blend
+// face to build a smooth alternative from. A non-manifold edge (used by
+// 3+ faces) is also forced fully sharp: the smooth rule's "average of
+// exactly 2 adjacent face points" has no well-defined generalization to
+// 3+ (see the header). An interior edge (used by exactly 2 faces) is the
+// only case that reads its stored crease weight — its effective sharpness
+// this step is that weight clamped to [0,1] (the semi-sharp blend
 // fraction).
 function edgeSharpness(cage, edge) {
   if (edge.faces.length !== 2) return 1;
@@ -148,7 +122,7 @@ function edgeSharpness(cage, edge) {
 }
 
 // Centroid of a face's own vertices — works for any n-gon (n>=3), quad or
-// otherwise; the FACE POINT rule is identical regardless of face size.
+// otherwise; the face-point rule is identical regardless of face size.
 export function computeFacePoint(cage, faceIdx) {
   const face = cage.faces[faceIdx];
   let c = [0, 0, 0];
@@ -157,11 +131,10 @@ export function computeFacePoint(cage, faceIdx) {
 }
 
 // Builds the adjacency structures a single subdivision pass needs, derived
-// FRESH from the cage's own faces every time (never carried as separate
-// persistent state) — the same "boundary-ness is always structural, never
-// hand-tracked" discipline this module relies on throughout, so a caller
-// re-deriving topology from a freshly-subdivided cage always gets the
-// correct new boundary/interior classification for free.
+// from the cage's faces every time (never carried as persistent state):
+// boundary-ness is always structural, never hand-tracked, so topology
+// re-derived from a freshly subdivided cage has the correct
+// boundary/interior classification.
 export function buildTopology(cage) {
   const edgeMap = new Map(); // edgeKey -> { v0, v1, faces: [faceIdx, ...] }
   const vertexFacesRaw = cage.vertices.map(() => []);
@@ -190,11 +163,10 @@ export function buildTopology(cage) {
   return { edgeMap, vertexFaces, vertexEdges, faceCentroids };
 }
 
-// EDGE POINT — smooth interior rule (v0+v1+f0+f1)/4, generalized to
-// however many faces genuinely touch the edge (2 for an ordinary manifold
-// interior edge; the boundary/fully-sharp case never reaches this branch,
-// see below), blended toward the plain midpoint by the edge's own current
-// sharpness.
+// Edge point — smooth interior rule (v0+v1+f0+f1)/4, generalized to
+// however many faces touch the edge (2 for a manifold interior edge; the
+// boundary/fully-sharp case returns the midpoint first), blended toward
+// the plain midpoint by the edge's current sharpness.
 export function computeEdgePoint(cage, ctx, edge) {
   const v0 = cage.vertices[edge.v0];
   const v1 = cage.vertices[edge.v1];
@@ -209,12 +181,11 @@ export function computeEdgePoint(cage, ctx, edge) {
 }
 
 // The ordinary smooth Catmull-Clark vertex rule, (F + 2R + (n-3)P) / n —
-// F the average of adjacent face points, R the average of adjacent EDGE
-// MIDPOINTS (the original edges — not the edge points above, a real and
-// easy point of confusion this project's own header comment calls out
-// directly). Never called for a vertex whose own blend has already
-// resolved to fully-sharp (computeVertexPoint short-circuits before this),
-// so the valence-1/2 degenerate cases below are purely defensive.
+// F the average of adjacent face points, R the average of adjacent edge
+// midpoints (the original edges — not the edge points above). Never
+// called for a vertex whose blend has resolved to fully sharp
+// (computeVertexPoint short-circuits before this), so the valence-1/2
+// degenerate cases below are defensive.
 function smoothVertexRule(cage, ctx, vIdx) {
   const P = cage.vertices[vIdx];
   const faces = ctx.vertexFaces[vIdx];
@@ -234,32 +205,26 @@ function smoothVertexRule(cage, ctx, vIdx) {
   return scale(num, 1 / n);
 }
 
-// VERTEX POINT — classifies the vertex by how many of its incident edges
+// Vertex point — classifies the vertex by how many of its incident edges
 // are currently sharp (boundary edges always count; interior creased
-// edges count whenever their own clamped weight is > 0), matching the
-// standard DeRose/Kass/Truong semi-sharp-crease vertex taxonomy exactly:
+// edges count whenever their clamped weight is > 0), per the
+// DeRose/Kass/Truong semi-sharp-crease vertex taxonomy:
 //   0 sharp edges -> the ordinary smooth interior rule.
-//   exactly 1     -> a DART (the OPEN END of a crease line, dead-ending
+//   exactly 1     -> a dart (the open end of a crease line, dead-ending
 //                    inside the surface rather than closing a loop or
-//                    reaching a boundary/corner) — the standard rule is
-//                    the ORDINARY SMOOTH rule, unconditionally, REGARDLESS
-//                    of that one edge's own sharpness value. This is
-//                    exactly what makes a semi-sharp crease fade OUT
-//                    smoothly at its open end instead of leaving a
-//                    permanent pinch there — a dart is deliberately never
-//                    blended toward any "corner" position the way a true
-//                    3+-crease corner is (see below): there is no crease
-//                    LINE at a dart (that needs exactly 2 sharp edges),
-//                    so there is nothing for a curve-subdivision rule to
-//                    run along, and blending toward the vertex's own
-//                    unmoved position here would just leave a visible
-//                    dimple at the crease's own open end, not a fade-out.
-//   exactly 2     -> a crease/boundary LINE running through this vertex —
+//                    reaching a boundary/corner) — the smooth rule,
+//                    regardless of that edge's sharpness. This is what
+//                    makes a semi-sharp crease fade out at its open end
+//                    instead of leaving a pinch: there is no crease line
+//                    at a dart (that needs exactly 2 sharp edges) for a
+//                    curve rule to run along, and blending toward the
+//                    vertex's unmoved position would leave a dimple.
+//   exactly 2     -> a crease/boundary line running through this vertex —
 //                    the standard (A + 6P + B) / 8 curve-subdivision rule,
 //                    A/B the vertex's two crease-neighbor points, blended
 //                    toward the smooth rule by the (averaged) sharpness of
 //                    those two edges.
-//   3+            -> a CORNER (3+ creases meeting) — the vertex stays at
+//   3+            -> a corner (3+ creases meeting) — the vertex stays at
 //                    its own position P, blended toward the smooth rule
 //                    by the sharpest incident edge.
 export function computeVertexPoint(cage, ctx, vIdx) {
@@ -280,44 +245,23 @@ export function computeVertexPoint(cage, ctx, vIdx) {
     const [a, b] = sharp;
     const A = cage.vertices[a.other];
     const B = cage.vertices[b.other];
-    // MARKED-CORNER EXTENSION (built for TOSUBD's own
-    // Corners=Yes option) — a vertex with EXACTLY two
-    // incident edges, BOTH of them boundary edges (the genuine geometric
-    // signature of a single-face grid corner — e.g. one of a NURBS
-    // surface's own 4 untrimmed corners; there is no third edge for such a
-    // vertex to ever reach the ordinary 3+ CORNER branch below), has no
-    // way to ask for the "hold fixed at P" corner treatment under the
-    // plain sharp-edge-COUNT taxonomy this function otherwise uses —
-    // sharp.length is structurally stuck at 2 for it forever, so it always
-    // falls into the ordinary boundary-CURVE rule just below, which
-    // SMOOTHS through the vertex like any other point along the boundary,
-    // rounding off what may have been a genuinely sharp corner in the
-    // source geometry (the standard, well-known Catmull-Clark "open
-    // corner rounds off" behavior, the same reason an uncreased SuperBBox
-    // converges toward a sphere).
+    // Marked corner (TOSUBD's Corners=Yes option). A vertex with exactly
+    // two incident edges, both boundary edges (a single-face grid corner —
+    // e.g. one of a NURBS surface's 4 untrimmed corners), can never reach
+    // the 3+ corner branch below: sharp.length is structurally 2, so it
+    // takes the boundary-curve rule, which smooths through the vertex and
+    // rounds off a corner that may be sharp in the source geometry (the
+    // standard Catmull-Clark open-corner behavior, the same reason an
+    // uncreased SuperBBox converges toward a sphere).
     //
-    // A boundary edge's own STORED crease weight is otherwise completely
-    // INERT (edgeSharpness above forces a boundary edge's sharpness to
-    // exactly 1 regardless of what the creases map says — see this file's
-    // own header/subdivideCatmullClark comment, which already names this
-    // exact possible extension: "this only matters if a boundary edge was
-    // ALSO given an explicit weight for some future non-boundary
-    // continuation"). This is that continuation: reusing that otherwise-
-    // dead value as a deliberate MARKER — both of this vertex's two
-    // boundary edges carrying a stored weight ABOVE MARKED_CORNER_WEIGHT_
-    // FLOOR (never the case for any cage that has never stored a boundary
-    // crease this high before this, since every primitive/edit command,
-    // and every ordinary Crease/SoftCrease action a person can actually
-    // take through the shipped UI, ships with far less than this floor by
-    // default — see that constant's own header for the exact collision
-    // this floor closes) means the corner was intentionally marked, and it
-    // is held at its own position P (the exact "stays put" treatment the
-    // ordinary 3+ branch below already gives an interior corner) rather
-    // than smoothed along the boundary curve. An ordinary, unmarked
-    // boundary vertex (weight 0, or any ordinary Crease/SoftCrease weight
-    // up to a full harden, on either edge — the ONLY case any existing
-    // cage/test in this app has ever produced, and the ONLY case its own
-    // shipped UI can ever produce) is completely unaffected.
+    // A boundary edge's stored crease weight is otherwise inert
+    // (edgeSharpness forces a boundary edge's sharpness to 1), so it is
+    // reused as a marker: both boundary edges carrying a stored weight
+    // above MARKED_CORNER_WEIGHT_FLOOR means the corner is held at P (the
+    // treatment the 3+ branch gives an interior corner) rather than
+    // smoothed along the boundary curve. No primitive, edit command or
+    // Crease/SoftCrease action stores a weight that high (see the
+    // constant), so an unmarked boundary vertex is unaffected.
     const isMarkedCorner = edges.length === 2
       && a.edge.faces.length === 1 && b.edge.faces.length === 1
       && creaseWeight(cage, vIdx, a.other) > MARKED_CORNER_WEIGHT_FLOOR
@@ -334,19 +278,17 @@ export function computeVertexPoint(cage, ctx, vIdx) {
   return lerp(smoothPoint, creasePoint, blend);
 }
 
-// THE REFINEMENT STEP — one Catmull-Clark subdivision pass. Returns a
-// brand-new cage (the input is never mutated) whose faces are ALWAYS quads
-// (Catmull-Clark's own defining "converges to quads regardless of input
-// face size" property), with crease weights decremented by exactly 1.0
-// on every child of a creased edge (dropped entirely once decayed to 0).
+// One Catmull-Clark subdivision pass. Returns a new cage (the input is
+// never mutated) whose faces are all quads, with crease weights
+// decremented by exactly 1.0 on every child of a creased edge (dropped
+// once decayed to 0).
 //
-// Vertex points keep the SAME index as their originating vertex (indices
-// 0..N-1 of the new cage are the moved originals, in order) — a real,
-// load-bearing convention this module's own tests rely on directly (an
-// extraordinary vertex's index is stable across repeated subdivision,
-// so its position can be tracked call over call with no re-derivation).
-// Edge points are appended next (one per unique edge, in the same order
-// buildTopology's own edgeMap iterates them), then face points last.
+// Vertex points keep the same index as their originating vertex (indices
+// 0..N-1 of the new cage are the moved originals, in order); the tests
+// rely on this — an extraordinary vertex's index is stable across
+// repeated subdivision, so its position can be tracked call over call.
+// Edge points are appended next (one per unique edge, in buildTopology's
+// edgeMap iteration order), then face points last.
 export function subdivideCatmullClark(cage) {
   validateCage(cage);
   const ctx = buildTopology(cage);
@@ -380,17 +322,14 @@ export function subdivideCatmullClark(cage) {
     }
   });
 
-  // Semi-sharp decrement: every creased edge (weight > 0, whether boundary
-  // or interior — a boundary edge's own weight is irrelevant to ITS
-  // sharpness this step, since that's always forced to 1, but its
-  // children still carry forward whatever the stored map said, same as
-  // any other edge; this only matters if a boundary edge was ALSO given
-  // an explicit weight for some future non-boundary continuation) hands
-  // its two children max(0, weight-1); brand-new "spoke" edges (an edge
-  // point or a vertex point to its face point) are never given an entry
-  // at all — always smooth, matching real Catmull-Clark refinement, which
-  // never originates a new crease, only ever carries an existing one
-  // forward along the subdivided original edge.
+  // Semi-sharp decrement: every creased edge (weight > 0, boundary or
+  // interior — a boundary edge's weight does not affect its own sharpness,
+  // which is forced to 1, but its children carry it forward like any
+  // other edge; the marked-corner rule in computeVertexPoint reads it)
+  // hands its two children max(0, weight-1). New spoke edges (an edge
+  // point or a vertex point to its face point) get no entry — always
+  // smooth: Catmull-Clark refinement never originates a crease, only
+  // carries an existing one along the subdivided original edge.
   const newCreases = {};
   for (const [key, edge] of ctx.edgeMap) {
     const w = creaseWeight(cage, edge.v0, edge.v1);
@@ -405,26 +344,17 @@ export function subdivideCatmullClark(cage) {
   return { vertices: newVertices, faces: newFaces, creases: newCreases };
 }
 
-// DISPLAY-MESH MILESTONE — the SuperB object-type/display
-// half of the SubD work, built directly on top of the refinement math above
-// (unchanged by this addition). Still kernel-only: no THREE.js, no app-
-// layer object — a pure cage/mode-in, triangle-soup-out function, plus the
-// one small heuristic that picks HOW MANY refinement levels to run.
+// Display mesh: a cage/mode-in, triangle-soup-out function built on the
+// refinement math above, plus the heuristic that picks how many
+// refinement levels to run. Kernel-only: no THREE.js, no app-layer object.
 //
-// ADAPTIVE REFINEMENT LEVEL — the "2-3 refinement levels,
-// adaptive" rule, and its explicit permission to
-// build "a real, simple, honestly-scoped adaptive heuristic, not a
-// research-grade error-driven refinement scheme." A genuinely PER-FACE
-// adaptive scheme (refining only some faces of one cage more than others)
-// needs T-junction handling between refined and unrefined neighbors — real,
-// separate, harder engineering, correctly out of scope per the milestone's
-// own explicit ruling-out of research-grade adaptive refinement. This
-// heuristic instead adapts at the WHOLE-CAGE granularity: a coarse cage (few
-// faces — display would look faceted at just 2 levels) or a creased cage
-// (a crease line needs one more level to read as a real tangent-continuous
-// feature rather than a visible kink) gets 3 levels; an already-dense,
-// uncreased cage gets 2. This is the real, stated, whole-object heuristic
-// committed to here — not a per-face one.
+// Refinement level, chosen per whole cage. A per-face adaptive scheme
+// (refining some faces of one cage more than others) needs T-junction
+// handling between refined and unrefined neighbors, which this does not
+// do. A coarse cage (few faces — display would look faceted at 2 levels)
+// or a creased cage (a crease line needs one more level to read as a
+// tangent-continuous feature rather than a kink) gets 3 levels; a dense,
+// uncreased cage gets 2.
 export function chooseSuperBRefinementLevel(cage, opts = {}) {
   const coarseFaceThreshold = opts.coarseFaceThreshold ?? 24;
   const hasCreases = !!(cage.creases && Object.values(cage.creases).some((w) => w > 0));
@@ -432,28 +362,22 @@ export function chooseSuperBRefinementLevel(cage, opts = {}) {
   return (hasCreases || coarse) ? 3 : 2;
 }
 
-// Fan triangulation of one face loop (n>=3, any n — a Catmull-Clark cage
-// face can be an ngon before the first refinement pass; after >=1 pass
-// every face is a quad, see subdivideCatmullClark's own "converges to
-// quads regardless of input face size" property) — the plain, standard
-// way to hand any polygon face to a THREE.js BufferGeometry, which only
-// ever wants triangles.
+// Fan triangulation of one face loop (n>=3 — a cage face can be an ngon
+// before the first refinement pass; after one pass every face is a quad),
+// for a THREE.js BufferGeometry, which takes triangles only.
 export function triangulateFace(face) {
   const tris = [];
   for (let i = 1; i < face.length - 1; i++) tris.push([face[0], face[i], face[i + 1]]);
   return tris;
 }
 
-// THE DISPLAY MESH ITSELF — mode 'box' returns the RAW cage, triangulated
-// as-is (the flat/faceted "control net as real geometry" display);
-// mode 'smooth' (default) runs `level` (or the heuristic above)
-// real subdivideCatmullClark passes and triangulates the RESULT — the true
-// limit-surface APPROXIMATION shipped here (display is a finer
-// cage at a fixed few levels, never true eigen-basis limit evaluation, per
-// that having been ruled out explicitly as unneeded engineering).
-// Returns both the triangle soup (for direct THREE.js consumption) and the
-// still-quad `faces` array (useful for a wireframe overlay, or a future
-// milestone's own per-face selection) — never mutates the input cage.
+// Mode 'box' returns the raw cage, triangulated as-is (the faceted
+// control-net display); mode 'smooth' (default) runs `level` (or the
+// heuristic above) subdivideCatmullClark passes and triangulates the
+// result — an approximation of the limit surface by a finer cage, never
+// eigen-basis limit evaluation. Returns the triangle soup (for THREE.js)
+// and the quad `faces` array (for a wireframe overlay or per-face
+// selection); never mutates the input cage.
 export function superbDisplayMesh(cage, mode = 'smooth', opts = {}) {
   if (mode === 'box') {
     const triangles = cage.faces.flatMap(triangulateFace);

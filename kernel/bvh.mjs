@@ -1,4 +1,4 @@
-// A BOUNDING VOLUME HIERARCHY OVER TRIANGLES, BUILT BY BINNED SAH.
+// A bounding volume hierarchy over triangles, built by binned SAH.
 //
 // Binned surface-area-heuristic construction after Wald, "On fast Construction
 // of SAH-based Bounding Volume Hierarchies" (IEEE Symposium on Interactive Ray
@@ -7,34 +7,34 @@
 // sort-based build into a linear pass per level for a tree of nearly the same
 // quality.
 //
-// ⚠ THE OUTPUT IS FLAT TYPED ARRAYS, DELIBERATELY. A tree of objects is pleasant
-// to write and useless to a GPU: the whole point of this structure is that it
-// can be uploaded as a storage buffer and walked by a shader without a pointer
-// anywhere. Every node is a fixed 8 floats, and the triangle order is a separate
-// index array, so a leaf names a contiguous RUN rather than a list.
+// The output is flat typed arrays. A tree of objects is useless to a GPU: this
+// structure is meant to be uploaded as a storage buffer and walked by a shader
+// without a pointer anywhere. Every node is a fixed 8 floats, and the triangle
+// order is a separate index array, so a leaf names a contiguous run rather than
+// a list.
 //
-// NODE LAYOUT, 8 floats (32 bytes), which is what a GPU wants and also what
+// Node layout, 8 floats (32 bytes), which is what a GPU wants and also what
 // keeps a node inside one cache line pair on the CPU:
 //   [0..2] bounds min
-//   [3]    LEFT child index      (interior)  |  first triangle  (leaf)
+//   [3]    left child index      (interior)  |  first triangle  (leaf)
 //   [4..6] bounds max
 //   [7]    0                     (interior)  |  triangle count  (leaf, > 0)
 // A count of 0 marks an interior node, which is why a leaf may never be empty —
 // an empty leaf would read as an interior node pointing at garbage.
 //
-// ⚠⚠ THE TWO CHILDREN ARE ADJACENT, AND THAT IS PART OF THE CONTRACT rather than
+// The two children are adjacent, and that is part of the contract rather than
 // an accident of allocation: a traversal reads the left index and takes the
 // right as `left + 1` without storing it. Building the left subtree entirely
 // before allocating the right — the obvious recursive order — separates them,
 // and every interior node then points a shader at whatever the left subtree
-// happened to end at. Both slots are reserved BEFORE either is filled.
+// happened to end at. Both slots are reserved before either is filled.
 //
-// ⚠ AND THE TWO INDEX SLOTS ARE INTEGERS LIVING IN FLOAT FIELDS. A shader reads
-// them with `bitcast<u32>`, so they must be written as the BITS of a u32 and not
-// as a float that happens to have that value: past 2^24 a float can no longer
-// represent consecutive integers, and the failure begins silently at a scene
-// size nobody tests at. `packBVHForGPU` does that conversion; the plain `nodes`
-// array keeps float indices for CPU use, where they are only ever compared.
+// The two index slots are integers living in float fields. A shader reads them
+// with `bitcast<u32>`, so they must be written as the bits of a u32 and not as
+// a float that happens to have that value: past 2^24 a float cannot represent
+// consecutive integers, and the failure is silent. `packBVHForGPU` does that
+// conversion; the plain `nodes` array keeps float indices for CPU use, where
+// they are only ever compared.
 
 const BINS = 12;
 const LEAF_MAX = 4;
@@ -116,7 +116,7 @@ export function buildBVH(positions, opts = {}) {
     };
     if (count <= leafMax) { makeLeaf(); return self; }
 
-    /* SPLIT ALONG THE WIDEST SPREAD OF CENTROIDS, not of bounds. Long thin
+    /* Split along the widest spread of centroids, not of bounds. Long thin
        triangles make the bounds wide on an axis the centroids barely vary
        along, and splitting there puts everything on one side. */
     let cLo = [Infinity, Infinity, Infinity], cHi = [-Infinity, -Infinity, -Infinity];
@@ -180,7 +180,7 @@ export function buildBVH(positions, opts = {}) {
       if (cost < bestCost) { bestCost = cost; bestSplit = k; }
     }
 
-    /* ⚠ AND A SPLIT MUST BEAT NOT SPLITTING. The SAH compares the cost of
+    /* A split must beat not splitting. The SAH compares the cost of
        tracing both children against the cost of testing every triangle here;
        where no split wins, a leaf larger than the target is the right answer,
        and forcing one anyway builds a deeper tree that is slower to walk. */
@@ -213,22 +213,20 @@ export function buildBVH(positions, opts = {}) {
   return { nodes: nodes.subarray(0, nodeCount * 8), order, nodeCount, triangleCount: n, maxDepth, leaves };
 }
 
-/* THE SLAB TEST, AND THE TWO WAYS IT GOES WRONG ON AN AXIS-ALIGNED RAY.
+/* The slab test, and the two ways it goes wrong on an axis-aligned ray.
    A modeling app produces axis-aligned rays constantly and a random ray
-   generator never does, so both of these hide from exactly the test most likely
-   to be written first.
+   generator almost never does, so a random-ray test exercises neither case.
 
-   ⚠ `1/0` IS INFINITY, and where a box face lies exactly on the ray's origin the
+   `1/0` is Infinity, and where a box face lies exactly on the ray's origin the
    product is `0 * Infinity` = NaN. Comparisons against NaN are all false, so the
-   node is not rejected, it is silently MISSED.
+   node is not rejected, it is silently missed.
 
-   ⚠⚠ AND CLAMPING THE DIRECTION TO A TINY EPSILON DOES NOT FIX IT. With a huge
-   finite reciprocal, a ray lying exactly ON a slab's far face gets the t-range
+   Clamping the direction to a tiny epsilon does not fix it. With a huge
+   finite reciprocal, a ray lying exactly on a slab's far face gets the t-range
    [-huge, 0] — a range the ray is geometrically inside, reported as ending
-   before it begins — and the box is rejected anyway. That reads as a fixed bug
-   and is the same bug with a smaller epsilon.
+   before it begins — and the box is rejected anyway, whatever the epsilon.
 
-   A ray PARALLEL to an axis is not a division at all. Either its origin lies
+   A ray parallel to an axis is not a division at all. Either its origin lies
    within that slab, in which case the slab constrains nothing, or it does not,
    in which case the box is missed outright. Asked as a containment test. */
 const PARALLEL = 1e-12;
@@ -316,13 +314,13 @@ export function bvhCost(bvh, traversalCost = 1, triangleCost = 1) {
 
 /**
  * The tree as a GPU storage buffer: two `vec4` per node, with the two index
- * fields written as the BITS of a u32 so a shader may `bitcast` them.
+ * fields written as the bits of a u32 so a shader may `bitcast` them.
  *
- * ⚠ A FLOAT CANNOT CARRY AN INDEX PAST 2^24. Writing the child index or the
- * first-triangle index as a float works perfectly on every scene small enough to
- * test by hand and begins losing consecutive integers at sixteen million — where
- * the symptom is geometry quietly attaching to the wrong node rather than an
- * error. The conversion belongs here, once, rather than at each write.
+ * A float cannot carry an index past 2^24. Writing the child index or the
+ * first-triangle index as a float loses consecutive integers at sixteen
+ * million, where the symptom is geometry quietly attaching to the wrong node
+ * rather than an error. The conversion belongs here, once, rather than at each
+ * write.
  */
 export function packBVHForGPU(bvh) {
   const out = new Float32Array(bvh.nodeCount * 8);
@@ -337,9 +335,7 @@ export function packBVHForGPU(bvh) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// CLOSEST POINT ON THE MESH, AND ITS SIGN
-// ---------------------------------------------------------------------------
+// Closest point on the mesh, and its sign
 //
 // The same tree, a different descent. A ray walk prunes on a t-interval; a
 // closest-point walk prunes on the squared distance from the query point to a
@@ -347,18 +343,18 @@ export function packBVHForGPU(bvh) {
 // shrinks as early as possible and the far subtree is usually rejected without
 // being opened.
 //
-// ⚠ A FACE NORMAL GIVES THE WRONG SIGN WHENEVER THE CLOSEST POINT IS NOT IN A
-// FACE'S INTERIOR, which on any tessellated surface is most of the time: the
+// A face normal gives the wrong sign whenever the closest point is not in a
+// face's interior, which on any tessellated surface is most of the time: the
 // closest feature is an edge or a vertex over a large part of space, and there
 // the "nearest triangle" is whichever of several tied triangles the loop
-// happened to keep. The published fix is the ANGLE-WEIGHTED PSEUDONORMAL
+// happened to keep. The published fix is the angle-weighted pseudonormal
 // (Bærentzen & Aanæs, "Signed Distance Computation Using the Angle Weighted
 // Pseudonormal", IEEE TVCG 11(3), 2005): a vertex carries the sum of its
-// incident face normals weighted by the incident ANGLE, an edge carries the sum
+// incident face normals weighted by the incident angle, an edge carries the sum
 // of its two face normals, and the sign of the dot product with (p - q) is then
 // correct everywhere for a closed, consistently-oriented mesh.
 //
-// ⚠⚠ AND THE THEOREM WANTS A CLOSED, CONSISTENTLY ORIENTED MANIFOLD. On an open
+// The theorem requires a closed, consistently oriented manifold. On an open
 // or non-manifold mesh there is no inside, so `buildMeshPseudonormals` reports
 // `closed` and a query against a mesh that is not closed returns `signed: false`
 // rather than a confident sign nothing supports.
@@ -374,7 +370,7 @@ function boxDist2(nodes, b, x, y, z) {
 
 /**
  * Closest point on one triangle, with the barycentric coordinates that say
- * WHICH FEATURE it landed on — Ericson, *Real-Time Collision Detection* (2005),
+ * which feature it landed on — Ericson, *Real-Time Collision Detection* (2005),
  * section 5.1.5, by Voronoi region rather than by projecting and clamping.
  *
  * The barycentric triple is what the pseudonormal lookup needs: the region
@@ -424,7 +420,7 @@ export function closestPointOnTriangle(p, a, b, c, out) {
     return [0, 1 - w, w];
   }
 
-  /* A DEGENERATE TRIANGLE MAKES THE INTERIOR DENOMINATOR ZERO. The Voronoi
+  /* A degenerate triangle makes the interior denominator zero. The Voronoi
      branches above cover a zero-area triangle in every direction that matters,
      but a sliver can reach here with va+vb+vc underflowed; returning NaN from a
      distance query poisons every comparison downstream silently, so the corner
@@ -440,7 +436,7 @@ export function closestPointOnTriangle(p, a, b, c, out) {
 }
 
 // Weld key for the connectivity a pseudonormal needs. Rounded to a fixed
-// decimal count as a NUMBER first and with -0 canonicalized to +0, because
+// decimal count as a number first and with -0 canonicalized to +0, because
 // `(-1e-15).toFixed(6)` is the string "-0.000000" and would split a seam pair
 // that agrees to twelve more digits than the key claims to resolve.
 function weldKey(x, y, z, mul) {
@@ -455,7 +451,7 @@ function weldKey(x, y, z, mul) {
  *
  * `positions` is the same flat array `buildBVH` takes, so a mesh does not have
  * to be re-packed to be queried. Triangle soup has no shared vertices, so the
- * corners are WELDED by rounded position first — that weld is what makes an
+ * corners are welded by rounded position first — that weld is what makes an
  * edge or a vertex a thing at all here.
  *
  * Returns `{ triangleCount, vertexCount, corner, faceNormals, vertexNormals,
@@ -497,9 +493,9 @@ export function buildMeshPseudonormals(positions, opts = {}) {
     if (len > 0) { nx /= len; ny /= len; nz /= len; } else { degenerate += 1; }
     faceNormals[t * 3] = nx; faceNormals[t * 3 + 1] = ny; faceNormals[t * 3 + 2] = nz;
 
-    // THE ANGLE IS THE WEIGHT, and it is the whole content of the theorem: an
+    // The angle is the weight, and it is the whole content of the theorem: an
     // equal-weight vertex normal is biased by however finely the tessellator
-    // happened to fan that corner, and a biased normal is a wrong SIGN, not a
+    // happened to fan that corner, and a biased normal is a wrong sign, not a
     // slightly wrong shade.
     const vx = [ax, bx, cx], vy = [ay, by, cy], vz = [az, bz, cz];
     for (let k = 0; k < 3; k += 1) {
@@ -575,7 +571,7 @@ function pseudonormalAt(pn, tri, bary) {
  * walks.
  *
  * `opts.pseudonormals` — the record from `buildMeshPseudonormals`. Supplying it
- * is what makes the answer SIGNED; without it the result is an unsigned
+ * is what makes the answer signed; without it the result is an unsigned
  * distance and `signed` is false.
  * `opts.maxDistance` — give up beyond this radius and return null. A caller
  * with a reach already knows it does not care past that, and the bound prunes
@@ -620,10 +616,10 @@ export function bvhClosestPoint(bvh, positions, point, opts = {}) {
         }
       }
     } else {
-      /* NEARER CHILD FIRST, which is the whole reason this is cheaper than
+      /* Nearer child first, which is what makes this cheaper than
          brute force: the far subtree is tested against a best that has already
          shrunk, so it is usually rejected at its own root. A stack pops last
-         first, so the FARTHER child is pushed first. */
+         first, so the farther child is pushed first. */
       const left = nodes[nb + 3];
       const dl = boxDist2(nodes, left * 8, px, py, pz);
       const dr = boxDist2(nodes, (left + 1) * 8, px, py, pz);

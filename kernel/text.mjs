@@ -1,50 +1,46 @@
-// TEXT OUTLINES AS NURBS CURVES ("TEXT NODE —
-// BUILD. Curves-only output, curated vetted font bank (no arbitrary system
-// fonts), tracking+kerning-with-honest-fallback, internal-corner-fillet via
-// Tier 1.")
-// ================================================================
-// This module is the whole maths half of the Text command: glyph coverage
-// raster -> iso-contours -> corner-split spans -> ONE closed NURBS curve per
-// contour, plus the line/word layout that places those contours in a plane.
-// It is pure: no DOM, no three.js, no font file format. The CALLER supplies
-// glyph outlines already normalized into em units, which is the one thing a
-// browser can produce and this module cannot.
+// Text outlines as NURBS curves: curves-only output from a curated font bank
+// (no arbitrary system fonts), tracking and kerning with a stated fallback, and
+// corners kept sharp for the internal-corner fillet.
 //
-// WHERE THE OUTLINES COME FROM, stated plainly because it bounds the accuracy
-// of everything below. There is no build step and no network at runtime, so
-// the app has no font file to parse and no embedded outline bank. What a
-// browser DOES expose is a rasteriser and real font metrics, so the shipped
-// path renders one glyph at a time into a coverage raster and traces the 0.5
-// coverage iso-line out of it. That is a MEASUREMENT of the typeface, not a
-// copy of its Béziers:
+// This module is the geometry half of the Text command: glyph coverage
+// raster -> iso-contours -> corner-split spans -> one closed NURBS curve per
+// contour, plus the line/word layout that places those contours in a plane.
+// It is pure: no DOM, no three.js, no font file format. The caller supplies
+// glyph outlines already normalized into em units, which a browser can
+// produce and this module cannot.
+//
+// Where the outlines come from, which bounds the accuracy of everything below.
+// There is no build step and no network at runtime, so the app has no font
+// file to parse and no embedded outline bank. A browser does expose a
+// rasterizer and font metrics, so glyphs are rendered one at a time into a
+// coverage raster and the 0.5 coverage iso-line is traced out of it. That is a
+// measurement of the typeface, not a copy of its Béziers:
 //   - accuracy is set by the raster resolution (the Quality param) and by
-//     antialiasing giving genuine sub-pixel coverage, not by the font's own
-//     control points;
+//     antialiasing giving sub-pixel coverage, not by the font's own control
+//     points;
 //   - a corner is recovered by detecting it, not by reading a knot, so a
 //     corner sharper than the corner-angle threshold survives and one flatter
 //     than it is rounded;
 //   - a feature thinner than about one raster pixel (a hairline serif at a low
 //     Quality setting) can close up or break.
-// The curves themselves are ordinary NURBS — control points CARTESIAN with a
-// separate weight, never premultiplied — so extrude, offset and fillet all
-// read them as they read any other curve in this app.
+// The curves themselves are ordinary NURBS — control points Cartesian with a
+// separate weight, never premultiplied — so extrude, offset and fillet read
+// them as they read any other curve in this app.
 
 import { marchingSquares } from './marchingsquares.mjs';
 import { fitCurveToPoints } from './fitcurve.mjs';
 import { joinCurvesC0 } from './knots.mjs';
 import { curveSelfIntersects } from './selfintersect.mjs';
 
-// ----------------------------------------------------------------
-// CONTOUR EXTRACTION
-// ----------------------------------------------------------------
+// Contour extraction
 
-// The coverage raster is ROW-MAJOR (`coverage[y * width + x]`, the layout
+// The coverage raster is row-major (`coverage[y * width + x]`, the layout
 // ImageData hands back), while marchingSquares indexes `values[i * vCount + j]`
 // with i running U. Transposed here rather than asking every caller to hand
 // over a column-major copy of a buffer it just read off a canvas.
 //
 // `opts.transform` maps grid coordinates to the caller's own space as
-// `X = x * sx + tx`, `Y = y * sy + ty`. A raster's y grows DOWNWARD and a
+// `X = x * sx + tx`, `Y = y * sy + ty`. A raster's y grows downward and a
 // glyph's y grows upward, so sy is normally negative — doing the flip here
 // keeps winding, area sign and corner turn direction all consistent with the
 // final coordinates rather than with the raster's.
@@ -59,22 +55,20 @@ export function glyphCoverageToContours(coverage, width, height, opts = {}) {
   const raw = marchingSquares(values, width, height, threshold);
   const out = [];
   for (const poly of raw) {
-    // An OPEN polyline means the iso-line ran off the edge of the raster,
+    // An open polyline means the iso-line ran off the edge of the raster,
     // which only happens when the glyph was drawn without enough margin.
     // Dropped and counted rather than closed with a straight chord across the
     // gap: a fabricated edge through the middle of a letter is worse than a
     // missing contour, because it looks like geometry.
     if (!poly.closed || poly.pts.length < 4) continue;
-    // A CLOSED RING IS STORED WITHOUT REPEATING ITS START. The tracer closes a
+    // A closed ring is stored without repeating its start. The tracer closes a
     // loop by pushing the first point again before marking it closed, so every
-    // contour arrives with `pts[0] === pts[n-1]`; measured across a 28-glyph
-    // bank, 40 contours out of 40. Carried forward, that zero-length edge is a
-    // coincident-point hazard in every chord-length parametrization downstream
-    // (a repeated parameter is what makes a least-squares solve singular), and
-    // `polylineCurve(pts, true)` would append a third copy of the same point.
-    // The contract is stated in two places already — `simplifyClosedContour`'s
-    // own comment and `fitCurveToPoints`' parameter doc — so this is where it
-    // is made true rather than assumed.
+    // contour arrives with `pts[0] === pts[n-1]`. Carried forward, that
+    // zero-length edge is a coincident-point hazard in every chord-length
+    // parametrization downstream (a repeated parameter makes a least-squares
+    // solve singular), and `polylineCurve(pts, true)` would append a third copy
+    // of the same point. `simplifyClosedContour` and `fitCurveToPoints` both
+    // expect a ring without the repeat; this is where it is removed.
     const ring = poly.pts.length > 1
       && poly.pts[0][0] === poly.pts[poly.pts.length - 1][0]
       && poly.pts[0][1] === poly.pts[poly.pts.length - 1][1]
@@ -101,7 +95,7 @@ export function contourSignedArea(pts) {
   return a / 2;
 }
 
-// Standard ray-cast parity test. Used only for NESTING DEPTH, where the query
+// Standard ray-cast parity test. Used only for nesting depth, where the query
 // point is a vertex of a contour that is either wholly inside or wholly
 // outside the one being tested, so the usual on-the-boundary ambiguity cannot
 // arise between two contours of the same glyph.
@@ -116,13 +110,12 @@ export function pointInContour(pt, pts) {
   return inside;
 }
 
-// OUTER LOOPS COUNTER-CLOCKWISE, HOLES CLOCKWISE — the convention every
-// downstream consumer of a closed profile in this app already expects, and the
-// one a later trim/extrude needs in order to know which side is material.
-// Nesting depth is counted rather than assumed from area sign: a glyph like
-// "%" or a stencil "A" can nest more than one level, and marching squares'
-// own output winding depends on which way the coverage gradient happened to
-// run, not on what the contour means.
+// Outer loops counter-clockwise, holes clockwise — the convention every
+// downstream consumer of a closed profile in this app expects, and the one a
+// trim/extrude needs to know which side is material. Nesting depth is counted
+// rather than assumed from area sign: a glyph like "%" or a stencil "A" can
+// nest more than one level, and marching squares' output winding depends on
+// which way the coverage gradient ran, not on what the contour means.
 export function orientContours(contours) {
   return contours.map((c, i) => {
     let depth = 0;
@@ -138,9 +131,7 @@ export function orientContours(contours) {
   });
 }
 
-// ----------------------------------------------------------------
-// SIMPLIFICATION AND CORNERS
-// ----------------------------------------------------------------
+// Simplification and corners
 
 function perpDistance(p, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -162,7 +153,7 @@ function douglasPeucker(pts, eps, first, last, keep) {
   }
 }
 
-// A CLOSED loop has no natural pair of fixed endpoints for Douglas-Peucker to
+// A closed loop has no natural pair of fixed endpoints for Douglas-Peucker to
 // start from, so two anchors are chosen first: an extreme vertex (guaranteed
 // to survive any correct simplification) and the vertex farthest from it. The
 // loop is then simplified as two open runs between them. Anchoring on an
@@ -180,12 +171,12 @@ export function simplifyClosedContour(pts, eps) {
     if (d > far) { far = d; b = i; }
   }
   if (a === b) return pts.slice();
-  // The rotated run is CLOSED by repeating its first point at index n, so the
+  // The rotated run is closed by repeating its first point at index n, so the
   // second Douglas-Peucker half spans bIdx..n and the wrap-around edge is
   // simplified like any other. Forcing index n-1 to survive instead (the
-  // vertex that merely happens to sit just before the wrap) plants a spurious
+  // vertex that happens to sit just before the wrap) plants a spurious
   // near-zero-length edge beside the seam, which the corner detector then
-  // reads as a real corner and the fit turns into a degenerate span.
+  // reads as a corner and the fit turns into a degenerate span.
   const rot = pts.slice(a).concat(pts.slice(0, a));
   rot.push(rot[0]);
   const bIdx = (b - a + n) % n;
@@ -193,13 +184,13 @@ export function simplifyClosedContour(pts, eps) {
   douglasPeucker(rot, eps, 0, bIdx, keep);
   douglasPeucker(rot, eps, bIdx, n, keep);
   // Index n is the repeated first point and is dropped: the loop is stored
-  // WITHOUT repeating its start, which is what fitCurveToPoints' own closed
-  // mode expects.
+  // without repeating its start, which is what fitCurveToPoints' closed mode
+  // expects.
   const out = [...keep].filter((i) => i < n).sort((x, y) => x - y).map((i) => rot[i]);
   return out.length >= 4 ? out : pts.slice();
 }
 
-// A CORNER IS A TURN, MEASURED ON THE SIMPLIFIED POLYGON. Running this on the
+// A corner is a turn, measured on the simplified polygon. Running this on the
 // raw traced contour instead measures antialiasing staircase noise, where
 // every second vertex turns 90 degrees and every letter is all corner.
 // Returns indices into `pts`, ascending.
@@ -214,7 +205,7 @@ export function contourCornerIndices(pts, minAngleDeg) {
     const bx = q[0] - c[0], by = q[1] - c[1];
     const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
     if (la < 1e-12 || lb < 1e-12) continue;
-    // cos of the angle between the two edge DIRECTIONS: +1 is straight
+    // cos of the angle between the two edge directions: +1 is straight
     // through, -1 is a full reversal. A turn of `minAngleDeg` away from
     // straight is cos(minAngleDeg) — anything below that is a corner.
     const cosTurn = (ax * bx + ay * by) / (la * lb);
@@ -223,20 +214,17 @@ export function contourCornerIndices(pts, minAngleDeg) {
   return out;
 }
 
-// ----------------------------------------------------------------
-// LAYOUT
-// ----------------------------------------------------------------
+// Layout
 
-// TRACKING AND KERNING, WITH THE FALLBACK NAMED. Kerning is a PAIR table the
-// caller measured off the real font; a pair the caller could not measure
-// contributes 0, which is the honest fallback (the pair simply sets at its
-// nominal advance) rather than a guessed correction. Tracking is a uniform
-// extra advance applied to every pair alike, expressed as a fraction of the
-// em so it means the same thing at every size.
+// Tracking and kerning, with the fallback named. Kerning is a pair table the
+// caller measured off the font; a pair the caller could not measure
+// contributes 0 (the pair sets at its nominal advance) rather than a guessed
+// correction. Tracking is a uniform extra advance applied to every pair alike,
+// expressed as a fraction of the em so it means the same thing at every size.
 //
 // `\n` (backslash-n, two literal characters) is a line break. A single-line
-// text field cannot carry a real newline, so the escape is what makes multi-
-// line text reachable at all from a Properties row.
+// text field cannot carry a newline, so the escape is what makes multi-line
+// text reachable from a Properties row.
 export function layoutTextGlyphs(text, metrics, opts = {}) {
   const advance = metrics.advance || {};
   const kern = metrics.kern || {};
@@ -278,9 +266,8 @@ export function layoutTextGlyphs(text, metrics, opts = {}) {
   for (let li = 0; li < placements.length; li++) {
     const shift = align === 'center' ? (width - lineWidths[li]) / 2
       : align === 'right' ? width - lineWidths[li] : 0;
-    // The FIRST line sits on y = 0, later lines run DOWNWARD. A student
-    // placing text on the construction plane expects the first line where
-    // they put the object, not the last one. Line 0 is written as a literal 0
+    // The first line sits on y = 0, later lines run downward, so the first
+    // line is where the object was placed. Line 0 is written as a literal 0
     // rather than -0 * spacing, which is negative zero — indistinguishable on
     // screen and not equal to 0 under a strict comparison.
     const y = li ? -li * lineSpacing : 0;
@@ -289,17 +276,14 @@ export function layoutTextGlyphs(text, metrics, opts = {}) {
   return { placements: flat, lineWidths, lineCount: placements.length, width, missing };
 }
 
-// ----------------------------------------------------------------
-// CONTOUR -> CURVE
-// ----------------------------------------------------------------
+// Contour -> curve
 
 // The always-available answer: a degree-1 NURBS curve straight through the
-// points. Exact by construction (a degree-1 curve IS its control polygon), so
-// it can never fail, which is what makes it the right floor under a fit that
-// can. A student who lowers the corner threshold to zero, or who traces a
-// glyph so intricate that the least-squares solve refuses, still gets real
-// closed geometry they can extrude — reported honestly as a polyline rather
-// than presented as a smooth fit.
+// points. Exact by construction (a degree-1 curve is its control polygon), so
+// it cannot fail, which makes it the floor under a fit that can. A corner
+// threshold of zero, or a glyph so intricate that the least-squares solve
+// refuses, still yields closed geometry that can be extruded — reported as a
+// polyline rather than presented as a smooth fit.
 export function polylineCurve(points, closed) {
   const pts = points.map((p) => [p[0], p[1], p[2], 1]);
   if (closed) pts.push([points[0][0], points[0][1], points[0][2], 1]);
@@ -310,42 +294,36 @@ export function polylineCurve(points, closed) {
   return { degree: 1, knots, ctrlPts: pts };
 }
 
-// ONE CLOSED CURVE PER CONTOUR, WITH ITS CORNERS INTACT.
+// One closed curve per contour, with its corners intact.
 //
 // A single closed least-squares fit over a whole letter rounds every corner by
 // roughly the fit tolerance — fine on an "O", wrong on an "L", and it destroys
-// exactly the internal corners Tier 1's corner fillet is pointed at.
-// So a contour carrying corners is split into corner-to-corner SPANS, each
+// the internal corners the corner fillet operates on.
+// So a contour carrying corners is split into corner-to-corner spans, each
 // span fitted on its own (`exactEndpoints`, so the shared vertex is
 // interpolated by both neighbors and the seam is watertight), and the spans
-// chained with joinCurvesC0 into one curve whose knot multiplicity AT each
+// chained with joinCurvesC0 into one curve whose knot multiplicity at each
 // corner is what makes the corner sharp.
 //
-// Every span is fitted OPEN, which also keeps the whole chain non-rational:
-// fitCurveToPoints only ever emits a rational primitive (circle/ellipse) on
-// the closed branch, and joinCurvesC0's degree elevation is not weight-aware.
+// Every span is fitted open, which also keeps the whole chain non-rational:
+// fitCurveToPoints only emits a rational primitive (circle/ellipse) on the
+// closed branch, and joinCurvesC0's degree elevation is not weight-aware.
 // A cornerless contour takes the closed branch instead and keeps that exact
-// circle when the glyph really is one.
-/* ⚠⚠ A GLYPH THAT CROSSES ITSELF IS NOT A GLYPH, AND THE FIT IS WHERE IT HAPPENS.
-   Measured over 50,660 contours: the traced polygon self-crossed ZERO times and
-   the simplified polygon zero times, while this function turned 1,405 of those
-   simple polygons into crossing curves. It reproduces at the shipped defaults —
-   Serif `$` and Serif Bold `D` at Quality 220, Corner Angle 32 — so "Design" in
-   Serif Bold came out corrupt and the report said it was fine.
-   Two mechanisms, and neither is fixable by clamping a parameter. 64% contain a
-   span the fitter returned as ok while it had left its own corridor (one
-   reported a deviation of 0.089 under a 0.097 tolerance while wandering 2.28mm
-   off its data — 23.6x). The other 36% were legally inside their corridors: the
-   corridor is per-span and cannot see that the glyph's own clearance at a
-   junction is only 0.85-1.4x the tolerance. The one parameter clamp that reaches
-   zero crossings is Corner Angle <= 12 degrees, which degenerates every glyph
-   toward a polyline.
-   So the answer is to CHECK, here, where both the polygon and the curve are in
-   hand, and descend until the curve is as simple as the polygon it came from.
-   Measured over all 1,405: halving the tolerance once clears 34.4%, twice 55.1%,
-   three times 68.8%, four times 74.2%, and the degree-1 floor this module
-   already falls back to elsewhere clears the rest — 0 still crossing. It costs
-   15ms on the 120-character maximum string against a 471ms build, 3.2%. */
+// circle when the glyph is one.
+/* A glyph whose curve crosses itself is invalid, and the fit is where the
+   crossing arises: the traced and simplified polygons are simple, but fitted
+   spans can cross (e.g. Serif `$` and Serif Bold `D` at Quality 220, Corner
+   Angle 32). Two mechanisms, neither fixable by clamping a parameter: a span
+   the fitter returns as ok while it has left its own corridor, and spans
+   legally inside their corridors where the glyph's clearance at a junction is
+   only 0.85-1.4x the tolerance (the corridor is per-span and cannot see
+   that). The only parameter clamp that reaches zero crossings is Corner Angle
+   <= 12 degrees, which degenerates every glyph toward a polyline.
+   So the curve is checked here, where both the polygon and the curve are in
+   hand, and the tolerance is halved until the curve is as simple as the
+   polygon it came from. Over a large glyph sample, halving once clears 34.4%
+   of crossing contours, twice 55.1%, three times 68.8%, four times 74.2%, and
+   the degree-1 floor clears the rest. The check costs about 3% of a build. */
 const SIMPLICITY_DESCENT = 4; // halvings before the polyline floor
 function contourScale(points3) {
   let lo = Infinity, hi = -Infinity;
@@ -353,13 +331,10 @@ function contourScale(points3) {
   return Math.max(hi - lo, 1e-9);
 }
 
-/* ⚠ ONE NAMED TEST, CALLED FROM BOTH COPIES. The app carries its own
-   hand-maintained copy of this function with no twin gate, which is exactly how
-   the fix for this defect could land in one and not the other — it already did
-   once. Both sides call `curveSelfIntersects` so a difference in the ANSWER can
-   only come from a difference in the curve, never from two spellings of the
-   question. A curve that cannot be judged is not treated as clean: the module's
-   own rule is that `tested: false` is never a pass. */
+/* One named test, called from both copies. The app carries its own copy of
+   this function; both call `curveSelfIntersects`, so a difference in the
+   answer can only come from a difference in the curve. A curve that cannot be
+   judged is not treated as clean: `tested: false` is never a pass. */
 function curveIsSimple(crv, scale) {
   if (!crv || !Array.isArray(crv.knots) || !crv.knots.length) return true;
   const v = curveSelfIntersects(crv, { tolerance: Math.max(scale * 5e-4, 1e-9) });
@@ -380,15 +355,15 @@ function buildContourCurve(points3, corners, tolerance, degree) {
   let anyPolyline = false;
   for (let k = 0; k < sorted.length; k++) {
     const a = sorted[k], b = sorted[(k + 1) % sorted.length];
-    // ONE CORNER IS ONE SPAN ALL THE WAY ROUND, and the walk has to start
+    // One corner is one span all the way round, and the walk has to start
     // before it can stop for that to be expressible. With a single detected
     // corner `a === b`, so a loop that tests its stop condition first breaks
-    // on its own first vertex: the run comes back length 1, every span is
+    // on its first vertex: the run comes back length 1, every span is
     // skipped, and the whole contour falls out to a degree-1 polyline.
     // A detected corner must survive, so the answer is a span, not the
     // cornerless closed fit: fitting the loop closed would round the one
-    // corner away by the tolerance, which is the thing the corner split
-    // exists to prevent.
+    // corner away by the tolerance, which the corner split exists to
+    // prevent.
     const run = [points3[a]];
     for (let i = (a + 1) % n; ; i = (i + 1) % n) {
       run.push(points3[i]);
@@ -428,11 +403,10 @@ export function contourToCurve(points3, corners, opts = {}) {
     }
     tol /= 2;
   }
-  /* THE FLOOR, and it is reached honestly rather than by giving up. The traced
-     polygon is measurably simple — zero crossings in 50,660 contours — so a
-     degree-1 curve through it cannot cross. A glyph a shade more faceted is a
-     far better answer than one whose outline passes through itself, and
-     `polylineFallback` is reported so the caller can say so. */
+  /* The floor. The traced polygon is simple, so a degree-1 curve through it
+     cannot cross. A slightly more faceted glyph is a better answer than one
+     whose outline passes through itself, and `polylineFallback` is reported
+     so the caller can say so. */
   return {
     crv: polylineCurve(points3, true),
     kind: 'polyline',
@@ -442,19 +416,17 @@ export function contourToCurve(points3, corners, opts = {}) {
   };
 }
 
-// ----------------------------------------------------------------
-// THE ENTRY POINT
-// ----------------------------------------------------------------
+// Entry point
 
-// `glyphs` maps a character to `{contours, advance}`, both in EM units with
-// the glyph origin at (0,0) on the baseline and y running UP. `contours` is
+// `glyphs` maps a character to `{contours, advance}`, both in em units with
+// the glyph origin at (0,0) on the baseline and y running up. `contours` is
 // exactly what glyphCoverageToContours above returns for that glyph — a list
 // of `{pts, outer}` — so the two halves of this module compose without the
 // caller reshaping anything in between.
 //
-// `opts.size` is CAP HEIGHT in model units, not em size: "20mm text" should
-// mean the capitals measure 20mm, which is the dimension a student can put a
-// ruler on. `opts.capHeight` is the font's own measured cap height in em, so
+// `opts.size` is cap height in model units, not em size: "20mm text" should
+// mean the capitals measure 20mm, the dimension that can be measured with a
+// ruler. `opts.capHeight` is the font's own measured cap height in em, so
 // the em-to-model scale is size / capHeight.
 export function buildTextCurves(glyphs, opts = {}) {
   const size = opts.size ?? 20;
@@ -482,7 +454,7 @@ export function buildTextCurves(glyphs, opts = {}) {
       const rec = g.contours[ci];
       const em = rec && rec.pts ? rec.pts : rec;
       if (!em || em.length < 4) continue;
-      // Into model units first, THEN simplified and fitted: eps and tolerance
+      // Into model units first, then simplified and fitted: eps and tolerance
       // are stated as real distances on the finished letter, so the same
       // Quality setting means the same accuracy whatever the size.
       const flat = em.map((p) => [(p[0] + place.x) * scale, (p[1] + place.y) * scale]);

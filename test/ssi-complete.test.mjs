@@ -1,25 +1,23 @@
-// COMPLETE SURFACE-SURFACE INTERSECTION — the boolean pipeline's
-// Phase 0 fixtures and Phase 1 gate.
+// Complete surface-surface intersection — fixtures for the boolean
+// pipeline.
 //
 // Every truth here is closed-form geometry written down independently of
 // what the kernel returns: a cylinder of radius R about an axis is
 // x^2+y^2=R^2, and where two of them cross is solvable by hand. Nothing is
 // compared against "what it did last time".
 //
-// TWO THINGS THESE FIXTURES FOUND, in the order they surfaced:
+// Two properties are checked:
 //
-// 1. THE MARCH BUDGET WAS SCALE-BLIND. `stepLen = 0.25` with
+// 1. The march budget scales with the pair. A fixed `stepLen = 0.25` with
 //    `maxSteps = 400` is 100 units of arc length total, at any scale, so the
 //    simplest possible case — one plane cutting one cylinder into one circle
-//    of circumference 188.5 — refused outright. The marching math was never
-//    wrong: the same pair at a larger step closed with radius 30.0000. This
-//    had to be fixed before completeness could even be MEASURED, which is
-//    why it lands ahead of the seeding work otherwise sequenced first.
+//    of circumference 188.5 — would be refused, although the same pair at a
+//    larger step closes with radius 30.0000.
 //
-// 2. SEEDING FOUND ONE COMPONENT. Boundary seeding plus interior local
-//    minima now find every component in these fixtures. That is complete BY
-//    CONSTRUCTION for branches reaching a boundary, and an honest best
-//    effort for interior loops — see `loopSearchProven` below.
+// 2. Seeding finds every component. Boundary seeding plus interior local
+//    minima find every component in these fixtures. That is complete by
+//    construction for branches reaching a boundary, and a best effort for
+//    interior loops — see `loopSearchProven` below.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,9 +42,9 @@ function planeAtZ(half, z) {
   return s;
 }
 
-// ------------------------------------------------ THE SCALE-BLIND BUDGET
+// March budget and scale
 
-test('a plane cutting a cylinder closes into one exact circle — the case the old fixed step refused', () => {
+test('a plane cutting a cylinder closes into one exact circle — a case a fixed step budget refuses', () => {
   const r = intersectSurfaces(planeAtZ(100, 10), cylinder(30, 'z', -50, 50));
   assert.equal(r.ok, true, r.ok ? '' : r.reason);
   assert.equal(r.closed, true, 'the intersection of a plane and a full cylinder is a closed circle');
@@ -57,16 +55,13 @@ test('a plane cutting a cylinder closes into one exact circle — the case the o
   }
 });
 
-test('an explicit stepLen is honoured, absent a corrector failure at it', () => {
-  // THE CONTRACT THIS ENCODES CHANGED, so it is rewritten to the surviving
-  // invariant rather than left asserting something no longer true. It used to
-  // read "honoured verbatim... existing callers unchanged". A step where the
-  // corrector genuinely fails to converge is now retried shorter, so the
-  // guarantee is narrower and exact: the turn-based adaptation stays disabled,
-  // the supplied value is genuinely used rather than overridden by the
-  // size-derived default, the run stays deterministic — and the shortening,
-  // where it happens at all, applies to that one step only and does not
-  // ratchet the rest of the march down.
+test('an explicit stepLen is honored, absent a corrector failure at it', () => {
+  // A step where the corrector fails to converge is retried shorter, so the
+  // guarantee is: the turn-based adaptation stays disabled, the supplied
+  // value is used rather than overridden by the size-derived default, the
+  // run stays deterministic — and the shortening, where it happens at all,
+  // applies to that one step only and does not ratchet the rest of the
+  // march down.
   //
   // This fixture never triggers a retry, so it tests the ordinary path; the
   // retry path has its own test below.
@@ -79,16 +74,16 @@ test('an explicit stepLen is honoured, absent a corrector failure at it', () => 
 });
 
 test('an intersection longer than the arc budget refuses by naming the budget, not a step count', () => {
-  // A deliberately tiny budget on a pair that genuinely intersects: the
-  // refusal must say what actually ran out.
+  // A deliberately tiny budget on a pair that intersects: the refusal must
+  // say what ran out.
   const r = intersectSurfaces(planeAtZ(100, 10), cylinder(30, 'z', -50, 50), { arcBudget: 5 });
   assert.equal(r.ok, false);
   assert.match(r.reason, /arc length/);
 });
 
-// -------------------------------------------- CURVE / SURFACE INTERSECTION
+// Curve/surface intersection
 
-test('a line through a cylinder finds BOTH crossings, exactly', () => {
+test('a line through a cylinder finds both crossings, exactly', () => {
   const hits = curveSurfaceIntersections(makeLine([-100, 0, 10], [100, 0, 10]), cylinder(30, 'z', -50, 50));
   assert.equal(hits.length, 2, 'a line through a cylinder crosses its wall twice');
   const xs = hits.map((h) => h.point[0]).sort((a, b) => a - b);
@@ -103,10 +98,10 @@ test('a line that misses reports nothing, and one that starts inside reports one
 });
 
 test('a closed direction\'s seam is not treated as an edge', () => {
-  // The regression: a full-revolve cylinder's closest point to a line lands
-  // ON the v seam either side of the far crossing (v=0 and v=vMax being the
-  // same place). Treating that as a patch boundary discarded the sign there
-  // and lost the crossing entirely — one hit instead of two.
+  // A full-revolve cylinder's closest point to a line lands on the v seam
+  // either side of the far crossing (v=0 and v=vMax being the same place).
+  // Treating that as a patch boundary would discard the sign there and lose
+  // the crossing entirely — one hit instead of two.
   const cyl = cylinder(30, 'z', -50, 50);
   const hits = curveSurfaceIntersections(makeLine([-100, 0, 0], [100, 0, 0]), cyl);
   assert.equal(hits.length, 2);
@@ -126,14 +121,14 @@ test('a patch border against the opposing surface gives the boundary seeds', () 
   }
 });
 
-// -------------------------------------------------- THE COMPLETENESS GATE
+// Completeness
 
-test('FIXTURE B: two open components, both reaching a boundary', () => {
+test('fixture B: two open components, both reaching a boundary', () => {
   // plane z=0 X cylinder R=30 about Y. Truth: the two straight lines
   // x = +/-30, z = 0, running the cylinder's full y extent.
   const r = intersectSurfacesComplete(planeAtZ(100, 0), cylinder(30, 'y', -50, 50));
   assert.equal(r.ok, true);
-  assert.equal(r.components.length, 2, 'TWO components — one seed found only one');
+  assert.equal(r.components.length, 2, 'two components — a single seed finds only one');
   for (const c of r.components) {
     assert.equal(c.closed, false);
     for (const s of c.samples) {
@@ -145,12 +140,12 @@ test('FIXTURE B: two open components, both reaching a boundary', () => {
   assert.ok(Math.min(...meanX) < 0 && Math.max(...meanX) > 0, 'the two components are on opposite sides, not the same one twice');
 });
 
-test('FIXTURE A: two interior loops, neither touching any boundary', () => {
+test('fixture A: two interior loops, neither touching any boundary', () => {
   // cyl R1=30 about Z X cyl R2=20 about X, both long enough that neither
-  // loop is cut. Truth: two closed loops satisfying BOTH implicit equations.
+  // loop is cut. Truth: two closed loops satisfying both implicit equations.
   const r = intersectSurfacesComplete(cylinder(30, 'z', -50, 50), cylinder(20, 'x', -200, 200));
   assert.equal(r.ok, true);
-  assert.equal(r.components.length, 2, 'TWO closed loops');
+  assert.equal(r.components.length, 2, 'two closed loops');
   for (const c of r.components) {
     assert.equal(c.closed, true);
     for (const s of c.samples) {
@@ -163,10 +158,10 @@ test('FIXTURE A: two interior loops, neither touching any boundary', () => {
   assert.ok(Math.min(...meanX) < 0 && Math.max(...meanX) > 0, 'one loop each side of the axis');
 });
 
-test('FIXTURE C: a loop and open branches in the same patch pair', () => {
+test('fixture C: a loop and open branches in the same patch pair', () => {
   // The same pair, but srf2 clipped at x=-25. On the x<0 loop,
   // x = -sqrt(900 - 400 sin^2 phi), so x >= -25 needs |sin phi| >= 0.829 —
-  // TWO disjoint phi ranges, so that loop is cut into TWO open arcs while
+  // two disjoint phi ranges, so that loop is cut into two open arcs while
   // the x>0 loop (x in [22.36,30]) is untouched and stays closed. Three
   // components, and the count is derived here rather than observed.
   const r = intersectSurfacesComplete(cylinder(30, 'z', -50, 50), cylinder(20, 'x', -25, 200));
@@ -181,7 +176,7 @@ test('FIXTURE C: a loop and open branches in the same patch pair', () => {
   }
 });
 
-test('FIXTURE E: swapping the arguments returns the same component set', () => {
+test('fixture E: swapping the arguments returns the same component set', () => {
   const s1 = planeAtZ(100, 0), s2 = cylinder(30, 'y', -50, 50);
   const ab = intersectSurfacesComplete(s1, s2);
   const ba = intersectSurfacesComplete(s2, s1);
@@ -192,7 +187,7 @@ test('FIXTURE E: swapping the arguments returns the same component set', () => {
   assert.equal(key(ab), key(ba), 'the same curves, not merely the same count');
 });
 
-test('completeness is reported honestly: interior loops are searched, not proven', () => {
+test('completeness is reported: interior loops are searched, not proven', () => {
   const r = intersectSurfacesComplete(planeAtZ(100, 10), cylinder(30, 'z', -50, 50));
   assert.equal(r.ok, true);
   assert.equal(r.loopSearchProven, false,
@@ -205,21 +200,20 @@ test('two surfaces that do not meet refuse, rather than inventing a component', 
   assert.match(r.reason, /no intersection/);
 });
 
-// ------------------------------------- THE SEAM, THE MIDPOINT, THE RETRY
+// Seam, midpoint and retry
 
-// EVERY MARCHED SAMPLE MUST SATISFY THE EQUATION IT WAS SOLVED FOR.
+// Every marched sample must satisfy the equation it was solved for.
 //
 // The corrector's whole job is |S1(u1,v1) - S2(u2,v2)| = 0, and it reports a
-// residual it is happy with. But nothing downstream re-checked that the
-// parameters actually STORED on the sample still satisfy it — and they did
-// not: a step crossing a CLOSED direction's seam converged with the
-// parameter outside the domain (where a clamped B-spline extrapolates along
-// its first span's polynomial rather than continuing around the seam), and
-// the caller then wrapped it back in, silently moving the sample to a
-// different real point. Measured before the fix: exactly one sample per
-// component, always the seam-crossing one, sat ~1e-2 off BOTH surfaces while
-// every neighbor was at machine precision. Asserting the residual at the
-// stored parameters is what catches that class outright.
+// residual it accepts. The parameters stored on the sample must still
+// satisfy it too: a step crossing a closed direction's seam can converge
+// with the parameter outside the domain (where a clamped B-spline
+// extrapolates along its first span's polynomial rather than continuing
+// around the seam), and wrapping it back in afterwards moves the sample to
+// a different point — one sample per component, the seam-crossing one,
+// ~1e-2 off both surfaces while every neighbor is at machine precision.
+// Asserting the residual at the stored parameters catches that class
+// outright.
 function worstSampleResidual(srf1, srf2, components) {
   let worst = 0;
   for (const c of components) {
@@ -232,7 +226,7 @@ function worstSampleResidual(srf1, srf2, components) {
   return worst;
 }
 
-test('every marched sample still satisfies S1=S2 at its own STORED parameters, seam crossings included', () => {
+test('every marched sample still satisfies S1=S2 at its own stored parameters, seam crossings included', () => {
   // A cylinder is closed in its sweep direction, so any loop around it
   // crosses that seam — this is the ordinary case, not a contrived one.
   const pairs = [
@@ -248,13 +242,13 @@ test('every marched sample still satisfies S1=S2 at its own STORED parameters, s
   }
 });
 
-test('an emitted sample point IS the midpoint of both surfaces\' own evaluations', () => {
-  // THE DIRECT TEST, and the reason it has to be direct. The obvious version
-  // — measure the emitted point against both surfaces and require it close to
-  // each — is VACUOUS on any well-conditioned pair: the corrector drives the
-  // residual to ~1e-9 there, so srf1's own evaluation already sits far inside
-  // any tolerance loose enough to be worth asserting, and reverting to
-  // srf1-only passes it unchanged. The decision under test is which POINT is
+test('an emitted sample point is the midpoint of both surfaces\' own evaluations', () => {
+  // This has to be a direct test. The obvious version — measure the emitted
+  // point against both surfaces and require it close to each — is vacuous
+  // on any well-conditioned pair: the corrector drives the residual to
+  // ~1e-9 there, so srf1's own evaluation already sits far inside any
+  // tolerance loose enough to be worth asserting, and emitting srf1's point
+  // alone passes it unchanged. The decision under test is which point is
   // emitted, so the assertion has to be on that decision, at machine
   // precision, where no amount of corrector convergence can hide it.
   const cyl = cylinder(30, 'z', -50, 50);
@@ -276,12 +270,12 @@ test('an emitted sample point IS the midpoint of both surfaces\' own evaluations
   assert.ok(checked > 0, 'no samples were checked, so this test proved nothing');
 });
 
-test('an emitted sample point is on BOTH surfaces, not exact on the first and off the second', () => {
-  // The point emitted per sample used to be srf1's own evaluation, which is
-  // exact there by construction and off srf2 by the full corrector residual
-  // — so which surface carried the error depended entirely on argument
-  // order. The midpoint splits it, and swapping the arguments must not move
-  // the answer. Measured against BOTH surfaces so a one-sided result fails.
+test('an emitted sample point is on both surfaces, not exact on the first and off the second', () => {
+  // Emitting srf1's own evaluation per sample would be exact there by
+  // construction and off srf2 by the full corrector residual — so which
+  // surface carried the error would depend on argument order. The midpoint
+  // splits it, and swapping the arguments must not move the answer.
+  // Measured against both surfaces so a one-sided result fails.
   const cyl = cylinder(30, 'z', -50, 50);
   const pln = planeAtZ(100, 10);
   const forward = intersectSurfacesComplete(cyl, pln);
@@ -296,7 +290,7 @@ test('an emitted sample point is on BOTH surfaces, not exact on the first and of
       }
     }
     // Both are analytic truths of the fixture itself, not of the marcher:
-    // the loop lies on the cylinder (radius 30) AND on the plane (z=10).
+    // the loop lies on the cylinder (radius 30) and on the plane (z=10).
     assert.ok(worstRadial < 1e-6, `${label}: off the cylinder by ${worstRadial.toExponential(3)}`);
     assert.ok(worstZ < 1e-6, `${label}: off the plane by ${worstZ.toExponential(3)}`);
   }
@@ -305,9 +299,9 @@ test('an emitted sample point is on BOTH surfaces, not exact on the first and of
 test('a correction that fails at the offered step is retried shorter before the march refuses', () => {
   // A predictor throwing its guess a full step along the tangent can land
   // outside Newton's basin where the curve turns hard. Refusing there loses
-  // a genuinely findable component. A deliberately oversized explicit step
-  // on a tightly-curved pair is the reachable version of that: it must
-  // still return a real curve rather than an honest-but-needless refusal.
+  // a findable component. A deliberately oversized explicit step on a
+  // tightly-curved pair is the reachable version of that: it must still
+  // return a curve rather than a needless refusal.
   const big = intersectSurfaces(cylinder(30, 'z', -50, 50), cylinder(18, 'x', -60, 60), { stepLen: 40, maxSteps: 400 });
   assert.equal(big.ok, true, big.ok ? '' : `oversized step refused: ${big.reason}`);
   let worst = 0;

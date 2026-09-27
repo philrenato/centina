@@ -1,11 +1,11 @@
-// END BULGE — the claim is not "the surface changed", it is "the surface changed
-// AND the edge did not move AND the surface did not tilt there".
+// End bulge — the claim is not "the surface changed", it is "the surface changed
+// and the edge did not move and the surface did not tilt there".
 //
-// ⚠ THE SECOND HALF OF THAT IS CONDITIONAL, AND THESE TESTS SAY SO. The boundary
+// The second half of that is conditional, and these tests say so. The boundary
 // row is never written, so G0 is exact on every net. The tangent plane is exact
-// on POLYNOMIAL nets and on rational nets whose second-row weights are
-// PROPORTIONAL to the boundary row's — which is every surface this kernel builds
-// — and NOT on a rational net with non-proportional rows, where the edge stays
+// on polynomial nets and on rational nets whose second-row weights are
+// proportional to the boundary row's — which is every surface this kernel builds
+// — and not on a rational net with non-proportional rows, where the edge stays
 // put and the plane still tilts (measured: 1.73 degrees mid-edge, 0 at both
 // corners, i.e. exactly between the stations a control-point check can see).
 // The last three tests pin which regime is reported, because a guarantee that is
@@ -17,7 +17,7 @@ const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const unit = (a) => { const L = len(a); return [a[0] / L, a[1] / L, a[2] / L]; };
 
-// A 4x4 net with real depth, deliberately NOT flat and NOT axis-aligned in the
+// A 4x4 net with real depth, deliberately not flat and not axis-aligned in the
 // depth direction, so "the direction was preserved" is a claim with content.
 function net4x4() {
   const out = [];
@@ -29,10 +29,9 @@ function net4x4() {
   return out;
 }
 
-let passed = 0, failed = 0;
+const failures = [];
 function t(name, fn) {
-  try { fn(); passed++; console.log(`  PASS: ${name}`); }
-  catch (e) { failed++; console.log(`  FAIL: ${name} — ${e.message}`); }
+  try { fn(); } catch (e) { failures.push(`${name} — ${e.message}`); }
 }
 
 t('the boundary row is bit-identical — G0 is exact by construction, not by tolerance', () => {
@@ -80,8 +79,8 @@ t('a factor of 1 changes nothing at all', () => {
   assert.deepEqual(net, base);
 });
 
-t('it REFUSES a net only two deep, naming why', () => {
-  // Two control points across is a ruled/extruded surface: the "second" row IS
+t('it refuses a net only two deep, naming why', () => {
+  // Two control points across is a ruled/extruded surface: the "second" row is
   // the opposite edge, so bulging would move the far side.
   const ruled = [
     [[0, 0, 0, 1], [0, 10, 0, 1]],
@@ -115,7 +114,7 @@ t('a rational net keeps every weight it had', () => {
 
 t('it leaves a degenerate (pole) column exactly where it was', () => {
   const base = net4x4();
-  base[1][2] = [base[0][2][0], base[0][2][1], base[0][2][2], 1]; // second row sits ON the edge
+  base[1][2] = [base[0][2][0], base[0][2][1], base[0][2][2], 1]; // second row sits on the edge
   const { net } = endBulgeNet(base, 'u0', 3);
   assert.deepEqual(net[1][2], base[1][2]);
 });
@@ -127,21 +126,20 @@ t('the input net is never mutated', () => {
   assert.deepEqual(base, copy);
 });
 
-
-// ── THE GUARANTEE IS REPORTED, NOT ASSUMED ──────────────────────────────────
+// The guarantee is reported, not assumed
 t('a polynomial net reports the exact tangent-plane guarantee', () => {
   const r = endBulgeNet(net4x4(), 'u0', 2);
   assert.equal(r.tangentPlaneExact, true);
 });
 
-t('a rational net with PROPORTIONAL weight rows still reports exact', () => {
+t('a rational net with proportional weight rows still reports exact', () => {
   // w1j = k * w0j — a sphere, a revolve, a pipe, a torus. B collapses to zero.
   const base = net4x4().map((row, i) => row.map((cp, j) => [cp[0], cp[1], cp[2], (1 + j * 0.3) * (i === 1 ? 2 : 1)]));
   const r = endBulgeNet(base, 'u0', 1.5);
   assert.equal(r.tangentPlaneExact, true);
 });
 
-t('a rational net with NON-proportional weight rows reports the weaker guarantee', () => {
+t('a rational net with non-proportional weight rows reports the weaker guarantee', () => {
   // The measured case: edge exact, tangent plane tilts 1.73 deg mid-edge and 0
   // at both corners — between the stations a control-point check can see.
   const base = net4x4();
@@ -151,12 +149,11 @@ t('a rational net with NON-proportional weight rows reports the weaker guarantee
   assert.equal(r.tangentPlaneExact, false);
 });
 
-
 t('it reports how far it can go before the net folds', () => {
   const base = net4x4();
   const r = endBulgeNet(base, 'u0', 1.2);
   assert.ok(Number.isFinite(r.maxSafeFactor), `expected a finite fold limit, got ${r.maxSafeFactor}`);
-  assert.ok(r.maxSafeFactor > 1, 'a net that is not already folded must allow SOME growth');
+  assert.ok(r.maxSafeFactor > 1, 'a net that is not already folded must allow some growth');
   assert.equal(r.folds, false);
 });
 
@@ -167,5 +164,4 @@ t('and it says so when the request would fold it', () => {
   assert.equal(tooFar.folds, true, 'a request past the fold limit must be flagged');
 });
 
-console.log(`\n${passed}/${passed + failed} checks passed.`);
-if (failed) process.exit(1);
+assert.equal(failures.length, 0, `${failures.length} failed:\n${failures.join('\n')}`);

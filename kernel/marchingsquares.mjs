@@ -1,38 +1,35 @@
-// MARCHING SQUARES (the PAINT tool's contour extractor)
-// ================================================================
+// Marching squares (the Paint tool's contour extractor).
 // Trace iso-contour(s) of a scalar field sampled on a regular grid, at a
-// chosen threshold — the standard, textbook 2D marching-squares algorithm
-// (the doc's own "genuinely tractable, cheap marching-squares-in-UV math").
+// chosen threshold — the standard 2D marching-squares algorithm.
 //
 // The field is `values`, a flat array of length uCount*vCount, indexed
 // `values[i * vCount + j]` where i ∈ [0,uCount) runs the U direction and
 // j ∈ [0,vCount) runs the V direction. Each entry is the scalar value at a
-// grid NODE. A CELL spans four adjacent nodes; the contour crosses a cell
+// grid node. A cell spans four adjacent nodes; the contour crosses a cell
 // edge wherever the two endpoint values straddle the threshold, linearly
 // interpolated to the exact crossing.
 //
 // Output: an array of polylines, each `{ closed, pts }`, where `pts` is an
-// array of `[ci, cj]` CONTINUOUS grid-index coordinates (ci ∈ [0,uCount] in
-// the wrapU case, else [0,uCount-1]; cj likewise). The CALLER maps each
-// [ci,cj] to a real surface (u,v) parameter and then to a 3D point — this
-// module knows nothing about NURBS, only the scalar grid, exactly so it
-// stays a small, node-testable, geometry-agnostic primitive.
+// array of `[ci, cj]` continuous grid-index coordinates (ci ∈ [0,uCount] in
+// the wrapU case, else [0,uCount-1]; cj likewise). The caller maps each
+// [ci,cj] to a surface (u,v) parameter and then to a 3D point — this module
+// knows nothing about NURBS, only the scalar grid, so it stays a small,
+// node-testable, geometry-agnostic primitive.
 //
-// SEAM WRAP (a real PAINT build requirement, not an afterthought): a surface
-// closed in a direction (a Revolve/Cylinder closed in U or V — an entirely
-// ordinary single-face case, not a polysurface edge) has its two domain
-// ends be the SAME physical location. `opts.wrapU`/`opts.wrapV` add the ring
-// of cells that bridge node (N-1) back to node 0, so a contour crossing the
-// seam traces as ONE continuous curve rather than two disconnected halves.
+// Seam wrap: a surface closed in a direction (a Revolve/Cylinder closed in U
+// or V — an ordinary single-face case, not a polysurface edge) has its two
+// domain ends at the same physical location. `opts.wrapU`/`opts.wrapV` add the
+// ring of cells that bridge node (N-1) back to node 0, so a contour crossing
+// the seam traces as one continuous curve rather than two disconnected halves.
 // The wrap cell's far edge is emitted at continuous index uCount (not 0), so
 // the caller's index→param map lands it correctly in the seam region; the
-// endpoint-chaining fold (folding index uCount ≡ 0) is what actually stitches
-// the two halves into one polyline — see `foldKey` below.
+// endpoint-chaining fold (folding index uCount ≡ 0) is what stitches the two
+// halves into one polyline — see `foldKey` below.
 
 // Corner order per cell (i,j): c0 = (i,j), c1 = (i+1,j), c2 = (i+1,j+1),
 // c3 = (i,j+1). Case bit k is set when corner k's value >= threshold.
 // Edge A joins c0-c1 (bottom), B joins c1-c2 (right), C joins c2-c3 (top),
-// D joins c3-c0 (left). Each non-ambiguous case emits ONE segment between
+// D joins c3-c0 (left). Each non-ambiguous case emits one segment between
 // two edge crossings; the two saddle cases (5, 10) emit two, disambiguated
 // by the cell-center average (the standard resolution).
 const SEG_TABLE = {
@@ -101,7 +98,7 @@ export function marchingSquares(values, uCount, vCount, threshold, opts = {}) {
 // a shared cell edge carry identical coordinates (same edge, same interpolant
 // from the same node values), so a quantized key matches them. The seam fold
 // (index uCount ≡ 0 when wrapU) is what lets the two halves of a seam-crossing
-// contour join into ONE polyline.
+// contour join into one polyline.
 function chainSegments(segments, uCount, vCount, wrapU, wrapV) {
   const Q = 1e6;
   const foldKey = (p) => {
@@ -121,9 +118,9 @@ function chainSegments(segments, uCount, vCount, wrapU, wrapV) {
   const usedSeg = new Set();
   const segId = (a, b) => { const ka = foldKey(a), kb = foldKey(b); return ka < kb ? ka + '|' + kb : kb + '|' + ka; };
   const polylines = [];
-  // Prefer to START chains at OPEN ends (a key with an odd/single incidence),
+  // Prefer to start chains at open ends (a key with an odd/single incidence),
   // so an open contour is walked end-to-end before any closed loops are
-  // picked up — matters for the honest open-vs-closed classification.
+  // picked up, which the open-vs-closed classification depends on.
   const startKeys = [...adj.keys()].sort((ka, kb) => adj.get(ka).length - adj.get(kb).length);
   for (const startK of startKeys) {
     const startList = adj.get(startK);

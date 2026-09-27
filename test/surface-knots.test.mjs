@@ -1,8 +1,8 @@
-// KNOT SURGERY ON A SURFACE, and the harmonisation Match Edge needs before a
+// Knot surgery on a surface, and the harmonization Match Edge needs before a
 // row edit means anything.
 //
-// The claim that carries everything: these operations add control points
-// WITHOUT MOVING THE SURFACE. So every test measures the surface by evaluation,
+// The central claim: these operations add control points
+// without moving the surface. So every test measures the surface by evaluation,
 // before and after, rather than inspecting the net — a net that gained the
 // right number of points and moved the shape is the exact failure this must
 // catch, and it is invisible to a count.
@@ -19,7 +19,7 @@ import { matchEdge, tangentDeviationAcross, edgeGap } from '../kernel/matchedge.
 import { insertKnot } from '../kernel/knots.mjs';
 
 const dom = (knots, degree) => [knots[degree], knots[knots.length - 1 - degree]];
-// Sample a surface over its own domain, so two DIFFERENT parametrizations of
+// Sample a surface over its own domain, so two different parametrizations of
 // the same shape can be compared fairly.
 function grid(srf, n = 11) {
   const [uMin, uMax] = dom(srf.knotsU, srf.degU);
@@ -96,19 +96,19 @@ test('interior multiplicities ignore the clamped ends and count repeats', () => 
   assert.deepEqual(m.map((e) => [e.value, e.count]), [[0.25, 1], [0.5, 2], [0.75, 1]]);
 });
 
-test('seamDirectionFor names the direction that RUNS ALONG the edge', () => {
+test('seamDirectionFor names the direction that runs along the edge', () => {
   assert.equal(seamDirectionFor('u0'), 'v');
   assert.equal(seamDirectionFor('u1'), 'v');
   assert.equal(seamDirectionFor('v0'), 'u');
   assert.equal(seamDirectionFor('v1'), 'u');
 });
 
-test('⭐ harmonising two mismatched surfaces leaves both shapes untouched', () => {
-  // Genuinely different along the seam: 4 vs 6 control points, degree 3 vs 2,
+test('harmonizing two mismatched surfaces leaves both shapes untouched', () => {
+  // Different along the seam: 4 vs 6 control points, degree 3 vs 2,
   // and different domains.
   const a = curvedPatch(-30, 0, 4, 4, 3, 3);
   const b = surfaceRescaleDomain(curvedPatch(0, 30, 4, 6, 3, 2), 'v', 0, 4);
-  assert.notEqual(countIn(a, 'v'), countIn(b, 'v'), 'the fixture really is mismatched');
+  assert.notEqual(countIn(a, 'v'), countIn(b, 'v'), 'the fixture is mismatched');
   assert.notEqual(degreeIn(a, 'v'), degreeIn(b, 'v'), 'and mismatched in degree too');
 
   const beforeA = grid(a), beforeB = grid(b);
@@ -118,21 +118,21 @@ test('⭐ harmonising two mismatched surfaces leaves both shapes untouched', () 
   assert.equal(degreeIn(res.a, 'v'), degreeIn(res.b, 'v'), 'and the same degree');
   assert.deepEqual(knotsIn(res.a, 'v'), knotsIn(res.b, 'v'), 'and the same knot vector');
 
-  assert.ok(worstBetween(beforeA, grid(res.a)) < 1e-9, 'surface A is unmoved by harmonisation');
-  assert.ok(worstBetween(beforeB, grid(res.b)) < 1e-9, 'surface B is unmoved by harmonisation');
+  assert.ok(worstBetween(beforeA, grid(res.a)) < 1e-9, 'surface A is unmoved by harmonization');
+  assert.ok(worstBetween(beforeB, grid(res.b)) < 1e-9, 'surface B is unmoved by harmonization');
 });
 
-test('⭐ a pair Match Edge REFUSED before now matches, and the break closes', () => {
-  // The base is creased against the target AND described differently — the
-  // ordinary case: two surfaces that genuinely meet but were not built as a
+test('a pair that Match Edge refuses before harmonization matches after it, and the break closes', () => {
+  // The base is creased against the target and described differently — the
+  // ordinary case: two surfaces that meet but were not built as a
   // pair.
   //
-  // ⚠ THE SHARED EDGE IS BUILT BY KNOT INSERTION, not by evaluating the same
+  // The shared edge is built by knot insertion, not by evaluating the same
   // formula into two different control nets. Two B-spline nets whose points
-  // follow the same rule are NOT the same curve — control points are not
+  // follow the same rule are not the same curve — control points are not
   // interpolated — so a fixture built that way has edges that miss each other
   // by millimeters while looking identical on paper, and every match measured
-  // on it would be measuring the gap instead.
+  // on it would measure the gap instead.
   const rows = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
@@ -148,9 +148,9 @@ test('⭐ a pair Match Edge REFUSED before now matches, and the break closes', (
   const edge = { degree: base.degV, knots: base.knotsV.slice(), ctrlPts: base.ctrlNet[3].map((p) => p.slice()) };
   let refined = insertKnot(edge, 0.3, 1);
   refined = insertKnot(refined, 0.7, 1);
-  assert.equal(refined.ctrlPts.length, 6, 'the refined edge really does carry more control points');
+  assert.equal(refined.ctrlPts.length, 6, 'the refined edge carries more control points');
 
-  // A target that OWNS that edge as its u0 and curves away in +x.
+  // A target that owns that edge as its u0 and curves away in +x.
   const tRows = [refined.ctrlPts.map((p) => p.slice())];
   for (let i = 1; i < 4; i++) {
     const x = (30 * i) / 3;
@@ -164,20 +164,20 @@ test('⭐ a pair Match Edge REFUSED before now matches, and the break closes', (
   };
   // The premise, asserted rather than assumed.
   assert.ok(edgeGap(base.ctrlNet, 'u1', target.ctrlNet, 'u0', 'aligned') === Infinity,
-    'the counts differ, so a direct gap cannot even be computed — which is exactly why harmonisation is needed');
+    'the counts differ, so a direct gap cannot even be computed — which is why harmonization is needed');
 
   const refused = matchEdge(base, 'u1', target, 'u0', { order: 1 });
-  assert.equal(refused.ok, false, 'the fixture must genuinely refuse before harmonisation');
+  assert.equal(refused.ok, false, 'the fixture must refuse before harmonization');
   assert.match(refused.reason, /shared knot vector|control counts/i);
 
   const h = harmonizeDirections(base, seamDirectionFor('u1'), target, seamDirectionFor('u0'));
   assert.equal(h.ok, true, h.reason);
 
-  // The edges meet after harmonisation — it changed description, not position.
+  // The edges meet after harmonization — it changed description, not position.
   assert.ok(edgeGap(h.a.ctrlNet, 'u1', h.b.ctrlNet, 'u0', 'aligned') < 1e-9, 'the edges coincide once both are described the same way');
 
   const before = tangentDeviationAcross(h.a, 'u1', h.b, 'u0');
-  assert.ok(before > 20, `the harmonised pair is still creased (${before.toFixed(2)} degrees)`);
+  assert.ok(before > 20, `the harmonized pair is still creased (${before.toFixed(2)} degrees)`);
 
   const res = matchEdge(h.a, 'u1', h.b, 'u0', { order: 1 });
   assert.equal(res.ok, true, res.reason);
@@ -185,8 +185,8 @@ test('⭐ a pair Match Edge REFUSED before now matches, and the break closes', (
   assert.ok(after < 0.05, `and the break closes (${before.toFixed(2)} -> ${after.toFixed(4)} degrees)`);
 });
 
-test('a revolve\'s own sweep direction harmonises against a hand-built patch', () => {
-  // The real domain mismatch this exists for: a revolve runs 0..4 in its sweep
+test('a revolve\'s own sweep direction harmonizes against a hand-built patch', () => {
+  // The domain mismatch this exists for: a revolve runs 0..4 in its sweep
   // direction while a hand-built patch runs 0..1. Taking a union of two knot
   // vectors on different intervals produces a superset of neither.
   const profile = makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], 50, -Math.PI / 2, Math.PI);

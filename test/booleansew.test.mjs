@@ -36,13 +36,13 @@ function cubeFaces(lo = 0, hi = 10) {
   ];
 }
 
-test('six independent trimmed faces sew into one genuinely closed solid', () => {
+test('six independent trimmed faces sew into one closed solid', () => {
   const res = sewFragments(cubeFaces());
   assert.ok(res.ok, res.verdict);
   // Euler characteristic of a sphere, from the welder's own count — the
   // check that actually distinguishes a closed solid from a bag of faces.
   assert.equal(res.stats.chi, 2);
-  assert.equal(res.stats.V, 8, 'the 24 corner points weld down to the cube\'s real 8');
+  assert.equal(res.stats.V, 8, 'the 24 corner points weld down to the cube\'s 8');
   assert.equal(res.stats.E, 12);
   assert.equal(res.stats.F, 6);
   assert.equal(res.stats.nakedEdgeCount, 0);
@@ -51,7 +51,7 @@ test('six independent trimmed faces sew into one genuinely closed solid', () => 
   assert.match(res.verdict, /CLOSED SOLID/);
 });
 
-test('a missing fragment comes back as an OPEN SHELL by name, never a silent success', () => {
+test('a missing fragment comes back as an open shell by name, never a silent success', () => {
   const faces = cubeFaces();
   faces.pop(); // drop x = hi
   const res = sewFragments(faces);
@@ -61,7 +61,7 @@ test('a missing fragment comes back as an OPEN SHELL by name, never a silent suc
   assert.match(res.verdict, /OPEN SHELL/);
 });
 
-test('THE RESIDUAL CASE: faces that only ALMOST meet still weld, and the gap is reported', () => {
+test('the residual case: faces that only almost meet still weld, and the gap is reported', () => {
   // Two surfaces agreeing along a shared edge only to within a marcher's own
   // residual is the normal state of affairs across an intersection curve —
   // this is the mechanism that closes the shell there, so it is measured
@@ -75,12 +75,12 @@ test('THE RESIDUAL CASE: faces that only ALMOST meet still weld, and the gap is 
   const res = sewFragments(faces);
   assert.ok(res.ok, res.verdict);
   assert.equal(res.stats.chi, 2, 'still a closed solid despite the mismatch');
-  assert.ok(res.worstSharedGap > 0, 'the weld genuinely had a gap to close');
-  assert.ok(Math.abs(res.worstSharedGap - eps) < 1e-9, `reports the real gap, got ${res.worstSharedGap}`);
+  assert.ok(res.worstSharedGap > 0, 'the weld had a gap to close');
+  assert.ok(Math.abs(res.worstSharedGap - eps) < 1e-9, `reports the actual gap, got ${res.worstSharedGap}`);
   assert.ok(res.worstSharedGap < res.tolerance, 'and it sat inside the tolerance');
 });
 
-test('a residual LARGER than the tolerance leaves a crack, honestly, instead of a wrong solid', () => {
+test('a residual larger than the tolerance leaves a crack instead of a wrong solid', () => {
   // The same fixture with the mismatch pushed past the tolerance: the right
   // answer is a refusal naming naked edges, not a shell quietly stitched
   // across a gap it should not have crossed.
@@ -94,15 +94,12 @@ test('a residual LARGER than the tolerance leaves a crack, honestly, instead of 
   assert.ok(res.stats.nakedEdgeCount > 0);
 });
 
-// THIS TEST PREVIOUSLY ASSERTED A KEYHOLE MERGE, and that assertion is
-// deliberately reversed rather than deleted. A keyhole bridge is correct
-// for tessellation and wrong for a B-rep face: it visits its own corners
-// twice, and `buildBrepSolid` rejects a repeated vertex in a face loop —
-// correctly. So a holed fragment is now SPLIT into two simple faces
-// sharing both bridge edges. The invariant worth pinning is the same one
-// the old test was reaching for (a hole is handled, not refused), stated
-// against what the sew actually needs.
-test('a fragment WITH a hole splits into two simple faces rather than one slit loop', () => {
+// A keyhole bridge is correct for tessellation and wrong for a B-rep face:
+// it visits its own corners twice, and `buildBrepSolid` rejects a repeated
+// vertex in a face loop. So a holed fragment is split into two simple faces
+// sharing both bridge edges. The invariant: a hole is handled, not refused,
+// in the form the sew needs.
+test('a fragment with a hole splits into two simple faces rather than one slit loop', () => {
   const srf = quadSurface([0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]);
   const withHole = {
     outer: [[0, 0], [1, 0], [1, 1], [0, 1]],
@@ -113,8 +110,8 @@ test('a fragment WITH a hole splits into two simple faces rather than one slit l
   assert.equal(res.loops.length, 2, 'an annulus becomes two faces, not one');
 
   for (const loop of res.loops) {
-    for (const p of loop) assert.ok(Math.abs(p[2]) < 1e-12, 'every point lands on the real surface');
-    // The whole point: no face loop visits the same corner twice.
+    for (const p of loop) assert.ok(Math.abs(p[2]) < 1e-12, 'every point lands on the surface');
+    // No face loop visits the same corner twice.
     const keys = loop.map((p) => p.map((c) => Math.round(c / 1e-9)).join('|'));
     assert.equal(new Set(keys).size, keys.length, 'a face loop traverses each of its own corners once');
   }
@@ -127,18 +124,18 @@ test('a fragment WITH a hole splits into two simple faces rather than one slit l
   for (const [u, v] of [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4]]) assert.ok(has(u * 10, v * 10), `hole corner ${u},${v}`);
 });
 
-test('a fragment whose outer loop collapses in 3D uses its hole as the real boundary', () => {
-  // The real pole/seam case, on a real cone rather than a surface that is
+test('a fragment whose outer loop collapses in 3D uses its hole as the boundary', () => {
+  // The pole/seam case, on a cone rather than a surface that is
   // degenerate everywhere: u=0 is the apex (a whole row collapsed to one
   // point) and the two v-ends are the same seam, so the four corners of the
   // untrimmed domain evaluate to only two distinct places. The cut curve is
-  // then the face's only real edge — while the hole itself sits in genuinely
+  // then the face's only edge — while the hole itself sits in
   // non-degenerate interior, which a fixture collapsed everywhere could not
   // have told apart.
   const cone = revolve(makeLine([0, 0, 0], [10, 0, 20]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const corners = trivialTrimLoop(cone).map(([u, v]) => surfacePoint(cone, u, v));
   const key = (p) => p.map((c) => Math.round(c / 1e-6)).join('|');
-  assert.equal(new Set(corners.map(key)).size, 2, 'the fixture genuinely collapses');
+  assert.equal(new Set(corners.map(key)).size, 2, 'the fixture collapses');
 
   const [vMin, vMax] = [cone.knotsV[0], cone.knotsV[cone.knotsV.length - 1]];
   const hole = [[0.4, vMin + 0.25 * (vMax - vMin)], [0.6, vMin + 0.25 * (vMax - vMin)],
@@ -165,10 +162,10 @@ test('a fragment with two holes refuses by name rather than guessing', () => {
 
 test('closed and unclosed trim-loop forms sew to exactly the same solid', () => {
   // Both forms exist in this kernel, so the sew must not care which it is
-  // handed. Stated honestly: the guarantee here is `weldPoints`' own — it
+  // handed. The guarantee here is `weldPoints`' own — it
   // pops a repeated first point itself — so this pins the invariant a caller
   // depends on, not a mechanism this module provides. Asserting the two are
-  // IDENTICAL rather than each merely valid is what makes it worth having.
+  // identical rather than each merely valid is what makes it worth having.
   const open = sewFragments(cubeFaces());
   const closed = sewFragments(cubeFaces().map((f) => ({ ...f, outer: [...f.outer, [0, 0]] })));
   assert.ok(open.ok && closed.ok, `${open.verdict} / ${closed.verdict}`);
@@ -187,10 +184,8 @@ test('an empty keep-set and a degenerate fragment both refuse by name', () => {
   assert.match(degenerate.reason, /no usable boundary/i);
 });
 
-// ---------------------------------------------------------------------------
-// THE KEEP-RULES, applied to real fragments — the step that makes "all three
+// The keep-rules, applied to fragments — the step that makes "all three
 // operators are the same machine" concrete rather than asserted.
-// ---------------------------------------------------------------------------
 
 // A cube as a triangle soup, to classify against.
 function cubeTris(lo = 0, hi = 10) {
@@ -214,7 +209,7 @@ function planeAndFragments() {
   return { srf, frags: [insideFrag, outsideFrag] };
 }
 
-test('the SAME fragments survive differently under each operator — only the rule changes', () => {
+test('the same fragments survive differently under each operator — only the rule changes', () => {
   const { srf, frags } = planeAndFragments();
   const tris = cubeTris();
 
@@ -222,30 +217,30 @@ test('the SAME fragments survive differently under each operator — only the ru
   assert.ok(union.ok, union.reason);
   assert.equal(union.kept.length, 1);
   assert.deepEqual(union.classifications.map((c) => c.region), ['inside', 'outside']);
-  assert.deepEqual(union.kept[0].outer, frags[1].outer, 'union keeps what is OUTSIDE the other solid');
+  assert.deepEqual(union.kept[0].outer, frags[1].outer, 'union keeps what is outside the other solid');
 
   const intersect = keepFragments(srf, frags, tris, 'intersect');
   assert.ok(intersect.ok, intersect.reason);
   assert.equal(intersect.kept.length, 1);
-  assert.deepEqual(intersect.kept[0].outer, frags[0].outer, 'intersect keeps what is INSIDE it');
+  assert.deepEqual(intersect.kept[0].outer, frags[0].outer, 'intersect keeps what is inside it');
 });
 
-test('DIFFERENCE flips the rule for the second operand, not the first', () => {
+test('difference flips the rule for the second operand, not the first', () => {
   const { srf, frags } = planeAndFragments();
   const tris = cubeTris();
   // A's own faces keep what is outside B, exactly like union.
   const fromA = keepFragments(srf, frags, tris, 'difference', { operand: 'a' });
   assert.ok(fromA.ok, fromA.reason);
   assert.deepEqual(fromA.kept[0].outer, frags[1].outer);
-  // B's faces keep what is INSIDE A — the reversed operand, which is what
+  // B's faces keep what is inside A — the reversed operand, which is what
   // makes difference the same machine as intersect rather than a third one.
   const fromB = keepFragments(srf, frags, tris, 'difference', { operand: 'b' });
   assert.ok(fromB.ok, fromB.reason);
   assert.deepEqual(fromB.kept[0].outer, frags[0].outer);
-  assert.notDeepEqual(fromA.kept[0].outer, fromB.kept[0].outer, 'the two operands genuinely differ');
+  assert.notDeepEqual(fromA.kept[0].outer, fromB.kept[0].outer, 'the two operands differ');
 });
 
-test('a fragment lying ON the other solid refuses by name — the coincident-face case', () => {
+test('a fragment lying on the other solid refuses by name — the coincident-face case', () => {
   // A plane sitting exactly on the cube's own top face: every probe on it is
   // a boundary point, which is precisely what the pipeline puts out of scope.
   const srf = quadSurface([0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]);

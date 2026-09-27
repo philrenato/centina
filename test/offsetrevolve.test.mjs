@@ -1,13 +1,13 @@
-// EXACT OFFSET OF A SURFACE OF REVOLUTION — verified against ANALYTIC ground
+// Exact offset of a surface of revolution — verified against analytic ground
 // truth throughout, never against the construction's own output. Every
 // expected number below is derived on paper from the fixture's own radius,
 // height and wall thickness (and written into the test as that closed form,
 // not as a captured value), so a test passing here means the geometry matches
 // the mathematics, not that the code agrees with itself.
 //
-// The comparison against the OLD method (kernel/offset.mjs's `offsetSurface`)
-// is run on the SAME fixture in the same file, so the improvement is a
-// measured number rather than a claim.
+// The comparison against the Greville-normal offset (kernel/offset.mjs's
+// `offsetSurface`) is run on the same fixture in the same file, so the
+// difference is a measured number rather than a claim.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +28,7 @@ const CL = Math.hypot(CR, CH);                     // cone slant length
 function domU(s) { return [s.knotsU[0], s.knotsU[s.knotsU.length - 1]]; }
 function domV(s) { return [s.knotsV[0], s.knotsV[s.knotsV.length - 1]]; }
 
-// Sample a surface on an (nu+1) x (nv+1) grid spanning its FULL domain, so
+// Sample a surface on an (nu+1) x (nv+1) grid spanning its full domain, so
 // both rational seams (v = vMin and v = vMax, the same physical circle) are
 // hit exactly rather than approached.
 function sampleGrid(srf, nu, nv, fn) {
@@ -50,8 +50,8 @@ function unitNormal(srf, u, v) {
 }
 
 // Every boundary control point of one surface's u = uMax edge against the
-// other's u = uMin edge, and vice versa — a junction that is a genuinely
-// SHARED circle matches control point for control point, which no amount of
+// other's u = uMin edge, and vice versa — a junction that is a
+// shared circle matches control point for control point, which no amount of
 // sampling luck can fake.
 function ringGap(srfA, uA, srfB, uB, samples = 401) {
   const [va0, va1] = domV(srfA), [vb0, vb1] = domV(srfB);
@@ -72,7 +72,7 @@ function ringGap(srfA, uA, srfB, uB, samples = 401) {
 const cylProfile = () => makeCylinderProfile({ center: [0, 0, 0], axis: [0, 0, 1], refDir: [1, 0, 0], radius: R, height: H });
 const coneProfile = () => makeConeProfile({ center: [0, 0, 0], axis: [0, 0, 1], refDir: [1, 0, 0], radius: CR, height: CH });
 
-test('the offset MERIDIAN PROFILE of a cylinder is exactly the inner rectangle — every corner an exact miter, not a blend', () => {
+test('the offset meridian profile of a cylinder is exactly the inner rectangle — every corner an exact miter, not a blend', () => {
   const p = cylProfile();
   assert.deepEqual(p.points.map((q) => profileRZ(p, q).map((n) => Number(n.toFixed(12)))), [[0, 0], [R, 0], [R, H], [0, H]]);
   const off = offsetMeridianProfile(p, T);
@@ -85,25 +85,25 @@ test('the offset MERIDIAN PROFILE of a cylinder is exactly the inner rectangle �
     assert.ok(Math.abs(rz[i][0] - expect[i][0]) < 1e-12, `point ${i} radius ${rz[i][0]} != ${expect[i][0]}`);
     assert.ok(Math.abs(rz[i][1] - expect[i][1]) < 1e-12, `point ${i} height ${rz[i][1]} != ${expect[i][1]}`);
   }
-  // Both ends stay ON the axis, which is what keeps the inner caps full disks
+  // Both ends stay on the axis, which is what keeps the inner caps full disks
   // rather than annuli — the flat-cap alternative would leave them hanging off
   // the axis by T.
   assert.equal(off.clippedAtAxis, false, 'a cylinder needs no axis clip: its end perpendiculars already run along the axis');
 });
 
-test('an inward-offset CYLINDER is EXACTLY a cylinder of radius R - t — including at the rational seam and at the off-curve corner control points, the two places the Greville-normal offset is known to fail', () => {
+test('an inward-offset cylinder is exactly a cylinder of radius R - t — including at the rational seam and at the off-curve corner control points, the two places the Greville-normal offset is known to fail', () => {
   const p = cylProfile();
   const sh = shellRevolvedSolid(p, T);
   assert.equal(sh.clamped, false, `a ${T}mm wall is well inside a ${R}mm radius; it must not be clamped`);
   assert.equal(sh.appliedDistance, T);
   const innerWall = sh.innerPanels[1].srf;
 
-  // (a) the surface itself, sampled densely across the FULL domain
+  // (a) the surface itself, sampled densely across the full domain
   let worst = 0;
   sampleGrid(innerWall, 8, 512, (pt) => { worst = Math.max(worst, Math.abs(Math.hypot(pt[0], pt[1]) - (R - T))); });
   assert.ok(worst < 1e-12, `sampled radius deviates by ${worst.toExponential(3)} from the analytic ${R - T}`);
 
-  // (b) the SEAM specifically: v = vMin and v = vMax are the same physical
+  // (b) the seam specifically: v = vMin and v = vMax are the same physical
   // circle, so they must agree bit-for-bit, not merely closely.
   const [v0, v1] = domV(innerWall);
   for (const u of domU(innerWall)) {
@@ -111,12 +111,12 @@ test('an inward-offset CYLINDER is EXACTLY a cylinder of radius R - t — includ
     assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-12, 'the rational seam does not close');
   }
 
-  // (c) THE OFF-CURVE CORNER CONTROL POINTS. A true parallel circle of radius
+  // (c) The off-curve corner control points. A true parallel circle of radius
   // R-t has its tangent-corner control points at exactly (R-t)*sqrt(2). The
   // Greville-normal offset puts them at R*sqrt(2) - t instead, short by
-  // t*(sqrt(2)-1). This is the exact place the old method breaks, so it is
+  // t*(sqrt(2)-1). This is the exact place the Greville-normal offset breaks, so it is
   // checked directly rather than only through sampling.
-  // (ctrlNet stores PLAIN coordinates plus a weight — surface.mjs's own
+  // (ctrlNet stores plain coordinates plus a weight — surface.mjs's own
   // toHomogeneousNet is what multiplies through — so this reads cp[0]/cp[1]
   // directly, not cp/w.)
   const cornerIdeal = (R - T) * Math.SQRT2;
@@ -135,7 +135,7 @@ test('an inward-offset CYLINDER is EXACTLY a cylinder of radius R - t — includ
         assert.equal(cp[3], 1);
       }
       assert.ok(Math.abs(rad - want) < 1e-12, `control point ${j} sits at radius ${rad}, analytic ${want}`);
-      // The old method's own answer for the same control point, for contrast:
+      // The Greville-normal offset's answer for the same control point, for contrast:
       // it moves radially by t, landing at R*sqrt(2) - t, short by
       // t*(sqrt(2)-1). Asserting the gap is real keeps this from becoming a
       // tolerance that quietly accepts either construction.
@@ -145,7 +145,7 @@ test('an inward-offset CYLINDER is EXACTLY a cylinder of radius R - t — includ
   assert.ok(sawCorner, 'the fixture must actually contain off-curve corner control points');
 });
 
-test("the inner CAPS are full disks in the offset planes — the cavity's own two ends, at z = t and z = H - t", () => {
+test("the inner caps are full disks in the offset planes — the cavity's own two ends, at z = t and z = H - t", () => {
   const p = cylProfile();
   const sh = shellRevolvedSolid(p, T);
   assert.equal(sh.innerPanels.length, 3, 'bottom cap, wall, top cap');
@@ -161,7 +161,7 @@ test("the inner CAPS are full disks in the offset planes — the cavity's own tw
   }
 });
 
-test('THE JUNCTION: the inner wall and the inner cap meet at ONE shared circle, to machine precision — this is the defect being fixed', () => {
+test('the junction: the inner wall and the inner cap meet at one shared circle, to machine precision', () => {
   const p = cylProfile();
   const sh = shellRevolvedSolid(p, T);
   assert.equal(sh.junctions.length, 2);
@@ -175,8 +175,8 @@ test('THE JUNCTION: the inner wall and the inner cap meet at ONE shared circle, 
   const gapTop = ringGap(wall, wu1, topCap, tu0);
   assert.ok(gapBottom < 1e-12, `bottom junction gap ${gapBottom.toExponential(3)}mm`);
   assert.ok(gapTop < 1e-12, `top junction gap ${gapTop.toExponential(3)}mm`);
-  // Same claim at the strongest possible level: the two panels' shared rings
-  // are the SAME control points, not merely coincident samples.
+  // Same claim at the strongest level: the two panels' shared rings
+  // are the same control points, not merely coincident samples.
   const wallRing = wall.ctrlNet[0], capRing = bottomCap.ctrlNet[bottomCap.ctrlNet.length - 1];
   assert.equal(wallRing.length, capRing.length);
   for (let i = 0; i < wallRing.length; i++) {
@@ -186,7 +186,7 @@ test('THE JUNCTION: the inner wall and the inner cap meet at ONE shared circle, 
   }
 });
 
-test('THE OLD METHOD, measured on the SAME fixture: offsetSurface leaves a real 0.51mm radius error and a real 4.24mm junction gap', () => {
+test('offsetSurface, measured on the same fixture, leaves a 0.51mm radius error and a 4.24mm junction gap', () => {
   // The app's own Cylinder builds its wall and its caps as separate revolved
   // panels, so this is exactly what a per-panel Greville-normal offset does to
   // them. Inward is chosen per panel by which sign moves toward the solid's
@@ -207,34 +207,34 @@ test('THE OLD METHOD, measured on the SAME fixture: offsetSurface leaves a real 
   let lo = Infinity, hi = -Infinity;
   sampleGrid(oldWall, 2, 512, (pt) => { const r = Math.hypot(pt[0], pt[1]); lo = Math.min(lo, r); hi = Math.max(hi, r); });
   const oldRadiusError = Math.max(Math.abs(lo - (R - T)), Math.abs(hi - (R - T)));
-  assert.ok(oldRadiusError > 0.5, `expected the old method to visibly miss a true circle; measured only ${oldRadiusError}`);
+  assert.ok(oldRadiusError > 0.5, `expected offsetSurface to visibly miss a true circle; measured only ${oldRadiusError}`);
   // The peak sits at the 45-degree station, between two on-curve control
   // points — the corner control point is short by t*(sqrt(2)-1), which pulls
-  // the mid-span OUT rather than in.
+  // the mid-span out rather than in.
   assert.ok(Math.abs(lo - (R - T)) < 1e-12, 'the on-curve stations do land at R - t; it is the spans between them that bulge');
 
-  // (b) the junction gap, which is the actual reason a curved shell could not
-  // be built: the offset wall does not move axially at all (its normal is
+  // (b) the junction gap, which prevents a curved shell from being built
+  // this way: the offset wall does not move axially at all (its normal is
   // purely radial) while the offset cap moves purely axially, so the two end
-  // up t apart along the axis AND t apart in radius.
+  // up t apart along the axis and t apart in radius.
   const oldGap = ringGap(oldWall, domU(oldWall)[0], oldCap, domU(oldCap)[1], 201);
-  assert.ok(Math.abs(oldGap - T * Math.SQRT2) < 1e-6, `expected the old gap to be exactly t*sqrt(2) = ${T * Math.SQRT2}; measured ${oldGap}`);
+  assert.ok(Math.abs(oldGap - T * Math.SQRT2) < 1e-6, `expected the offsetSurface gap to be exactly t*sqrt(2) = ${T * Math.SQRT2}; measured ${oldGap}`);
 
-  // (c) the same two numbers under the new method, for the record.
+  // (c) the same two numbers under the exact revolve offset.
   const sh = shellRevolvedSolid(cylProfile(), T);
   let nlo = Infinity, nhi = -Infinity;
   sampleGrid(sh.innerPanels[1].srf, 2, 512, (pt) => { const r = Math.hypot(pt[0], pt[1]); nlo = Math.min(nlo, r); nhi = Math.max(nhi, r); });
   const newRadiusError = Math.max(Math.abs(nlo - (R - T)), Math.abs(nhi - (R - T)));
   const newGap = ringGap(sh.innerPanels[0].srf, domU(sh.innerPanels[0].srf)[1], sh.innerPanels[1].srf, domU(sh.innerPanels[1].srf)[0], 201);
   assert.ok(newRadiusError < 1e-12 && newGap < 1e-12);
-  assert.ok(oldRadiusError / Math.max(newRadiusError, Number.EPSILON) > 1e9, 'the improvement must be orders of magnitude, not a tightened tolerance');
+  assert.ok(oldRadiusError / Math.max(newRadiusError, Number.EPSILON) > 1e9, 'the difference must be orders of magnitude, not a tightened tolerance');
 });
 
-test('an inward-offset CONE is EXACTLY a cone of the SAME half-angle — apex, base radius and junction all match their closed forms', () => {
+test('an inward-offset cone is exactly a cone of the same half-angle — apex, base radius and junction all match their closed forms', () => {
   const p = coneProfile();
   const off = offsetMeridianProfile(p, CT);
   assert.equal(off.ok, true);
-  assert.equal(off.clippedAtAxis, true, "the offset apex leaves the axis half-plane and must be TRIMMED back to the axis, not flat-capped where the perpendicular landed");
+  assert.equal(off.clippedAtAxis, true, "the offset apex leaves the axis half-plane and must be trimmed back to the axis, not flat-capped where the perpendicular landed");
   const rz = off.points.map((q) => profileRZ(p, q));
   assert.equal(rz.length, 3);
   // Analytic, from the meridian line R*z + H*r - R*H = 0 offset inward by t:
@@ -244,10 +244,10 @@ test('an inward-offset CONE is EXACTLY a cone of the SAME half-angle — apex, b
   assert.ok(Math.abs(rz[0][0]) < 1e-12 && Math.abs(rz[0][1] - CT) < 1e-12, 'the inner base cap sits on the axis at z = t');
   assert.ok(Math.abs(rz[1][0] - junctionR) < 1e-12, `junction radius ${rz[1][0]}, analytic ${junctionR}`);
   assert.ok(Math.abs(rz[1][1] - CT) < 1e-12);
-  assert.ok(Math.abs(rz[2][0]) < 1e-12, 'the inner apex must land back ON the axis');
+  assert.ok(Math.abs(rz[2][0]) < 1e-12, 'the inner apex must land back on the axis');
   assert.ok(Math.abs(rz[2][1] - apexZ) < 1e-12, `inner apex height ${rz[2][1]}, analytic ${apexZ}`);
 
-  // THE HALF-ANGLE, checked on the built surface rather than on the profile:
+  // The half-angle, checked on the built surface rather than on the profile:
   // every sampled point must satisfy the analytic inner-cone equation.
   const sh = shellRevolvedSolid(p, CT);
   const innerWall = sh.innerPanels[1].srf;
@@ -257,14 +257,14 @@ test('an inward-offset CONE is EXACTLY a cone of the SAME half-angle — apex, b
     worst = Math.max(worst, Math.abs(Math.hypot(pt[0], pt[1]) - want));
   });
   assert.ok(worst < 1e-12, `inner cone deviates by ${worst.toExponential(3)} from the analytic same-half-angle cone`);
-  // Stated as an angle too, since "same half-angle" is the actual claim.
+  // Stated as an angle too, since "same half-angle" is the claim.
   const outerAngle = Math.atan2(CR, CH);
   const a = surfacePoint(innerWall, domU(innerWall)[0], 0), b = surfacePoint(innerWall, domU(innerWall)[1], 0);
   const innerAngle = Math.atan2(Math.abs(Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1])), Math.abs(a[2] - b[2]));
   assert.ok(Math.abs(innerAngle - outerAngle) < 1e-12, `inner half-angle ${innerAngle}, outer ${outerAngle}`);
 });
 
-test("the CONE's wall/cap junction is one shared circle too — a single interior corner, mitered exactly", () => {
+test("the cone's wall/cap junction is one shared circle too — a single interior corner, mitered exactly", () => {
   const sh = shellRevolvedSolid(coneProfile(), CT);
   assert.equal(sh.junctions.length, 1);
   const junctionR = CR - CT * (CR + CL) / CH;
@@ -274,7 +274,7 @@ test("the CONE's wall/cap junction is one shared circle too — a single interio
   assert.ok(gap < 1e-12, `cone junction gap ${gap.toExponential(3)}mm`);
 });
 
-test('SELF-INTERSECTION LIMIT: offsetting inward past what the shape can carry is refused, and the computed safe maximum matches its closed form', () => {
+test('self-intersection limit: offsetting inward past what the shape can carry is refused, and the computed safe maximum matches its closed form', () => {
   // Cylinder: the cavity closes when the wall reaches the axis (t = R) or when
   // the two caps meet (t = H/2), whichever comes first.
   const cyl = cylProfile();
@@ -284,8 +284,8 @@ test('SELF-INTERSECTION LIMIT: offsetting inward past what the shape can carry i
   assert.match(offsetMeridianProfile(cyl, R + 1).reason, /thickness|cavity|crosses/);
   assert.equal(offsetMeridianProfile(cyl, R * 0.9).ok, true, 'a thickness inside the limit must still succeed');
 
-  // A SQUAT cylinder, where the height is the binding constraint instead of
-  // the radius — proves the bound is computed, not a radius shortcut.
+  // A squat cylinder, where the height is the binding constraint instead of
+  // the radius — checks that the bound is computed, not a radius shortcut.
   const squat = makeCylinderProfile({ center: [0, 0, 0], axis: [0, 0, 1], refDir: [1, 0, 0], radius: 40, height: 10 });
   assert.ok(Math.abs(safeInwardOffset(squat) - 5) < 1e-6, 'a 10mm-tall cylinder can carry at most a 5mm wall');
 
@@ -296,15 +296,15 @@ test('SELF-INTERSECTION LIMIT: offsetting inward past what the shape can carry i
   assert.ok(Math.abs(coneSafe - coneAnalytic) < 1e-6, `cone safe max ${coneSafe}, analytic ${coneAnalytic}`);
   assert.equal(offsetMeridianProfile(cone, coneAnalytic + 1).ok, false);
 
-  // And the refusal is honest at the shell level: a request past the limit is
-  // clamped and SAYS SO, never silently returned as if it fitted.
+  // At the shell level, a request past the limit is
+  // clamped and says so, never silently returned as if it fitted.
   const clamped = shellRevolvedSolid(cyl, 100);
   assert.equal(clamped.clamped, true);
   assert.ok(clamped.appliedDistance < cylSafe && clamped.appliedDistance > cylSafe * 0.9);
   assert.throws(() => shellRevolvedSolid(cyl, 0), /nonzero/);
 });
 
-test('the outer and inner skins face AWAY from each other across the wall — a consistently wound closed solid, not two nested surfaces', () => {
+test('the outer and inner skins face away from each other across the wall — a consistently wound closed solid, not two nested surfaces', () => {
   const p = cylProfile();
   const sh = shellRevolvedSolid(p, T);
   const check = (panel, expectSign, label) => {
@@ -324,10 +324,10 @@ test('the outer and inner skins face AWAY from each other across the wall — a 
   check(sh.innerPanels[0], (_r, ax) => ax > 0.999, 'inner bottom cap must face up, into the cavity');
 });
 
-test('an OFF-ORIGIN, TILTED axis with a non-orthonormal reference direction is just as exact — the frame is handled, not assumed', () => {
+test('an off-origin, tilted axis with a non-orthonormal reference direction is just as exact — the frame is handled, not assumed', () => {
   const axis = [1, 2, 2];                             // length 3, not a world axis
   const center = [-17.5, 6.25, 41];
-  const refDir = [3, -1, 1];                          // NOT perpendicular to the axis
+  const refDir = [3, -1, 1];                          // not perpendicular to the axis
   const p = makeCylinderProfile({ center, axis, refDir, radius: R, height: H });
   const frame = meridianFrame(center, axis, refDir);
   assert.ok(Math.abs(frame.refDir[0] * frame.axisDir[0] + frame.refDir[1] * frame.axisDir[1] + frame.refDir[2] * frame.axisDir[2]) < 1e-15, 'the frame must be orthonormalized');
@@ -366,7 +366,7 @@ test('a distance of exactly zero is the identity, and a profile that is not a me
   assert.throws(() => makeCylinderProfile({ center: [0, 0, 0], axis: [0, 0, 1], refDir: [1, 0, 0], radius: 0, height: H }), /radius must be positive/);
 });
 
-test('a segment lying entirely ON the axis revolves to nothing and is dropped rather than emitted as a degenerate panel', () => {
+test('a segment lying entirely on the axis revolves to nothing and is dropped rather than emitted as a degenerate panel', () => {
   const p = normalizeMeridianProfile({
     axisPoint: [0, 0, 0], axisDir: [0, 0, 1], refDir: [1, 0, 0],
     points: [[0, 0, 0], [0, 0, 10], [R, 0, 10], [R, 0, 30]],   // first segment runs up the axis
@@ -375,12 +375,10 @@ test('a segment lying entirely ON the axis revolves to nothing and is dropped ra
   assert.equal(panels.length, 2, 'the on-axis segment contributes no surface');
 });
 
-// ============================================================================
-// ARCS + OPENED FACES + THE RIM LIP. Every expected number below
+// Arcs, opened faces and the rim lip. Every expected number below
 // is again derived on paper from the fixture's own R/H/t, not captured.
-// ============================================================================
 
-test('ARCS: splitting the sweep into four panels is the SAME surface — the four quarter spans a full circle already is, meeting at bit-identical control points', () => {
+test('arcs: splitting the sweep into four panels is the same surface — the four quarter spans a full circle already is, meeting at bit-identical control points', () => {
   const p = cylProfile();
   const one = revolveProfilePanels(p, p.points, { flip: true });
   const four = revolveProfilePanels(p, p.points, { flip: true, arcs: 4 });
@@ -399,7 +397,7 @@ test('ARCS: splitting the sweep into four panels is the SAME surface — the fou
       const b = surfacePoint(whole, domU(whole)[0] + (domU(whole)[1] - domU(whole)[0]) * 0.37, wv0 + (wv1 - wv0) * ((k + f) / 4));
       assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9, `quarter ${k} deviates from the full panel at f=${f}`);
     }
-    // and it JOINS its neighbor exactly: the last control column of one
+    // and it joins its neighbor exactly: the last control column of one
     // quarter is the first of the next, component for component.
     const next = four[4 + ((k + 1) % 4)].srf;
     for (let r = 0; r < q.ctrlNet.length; r++) {
@@ -409,15 +407,15 @@ test('ARCS: splitting the sweep into four panels is the SAME surface — the fou
   }
 });
 
-test('OPENING A CAP: the inner wall stops in the opened face\'s OWN plane, and the rim lip is the annulus between the two exact circles there', () => {
+test('opening a cap: the inner wall stops in the opened face\'s own plane, and the rim lip is the annulus between the two exact circles there', () => {
   const p = cylProfile();
-  const sh = shellRevolvedSolid(p, T, { removedSegments: [2] });   // open the TOP cap
+  const sh = shellRevolvedSolid(p, T, { removedSegments: [2] });   // open the top cap
   assert.equal(sh.openEnd, true);
   assert.equal(sh.openStart, false);
   assert.equal(sh.outerCount, 2, 'bottom cap + wall');
   assert.equal(sh.innerCount, 2);
   assert.equal(sh.rimCount, 1, 'one lip closes the one opening');
-  // the inner wall's own top edge sits at z = H exactly — NOT at H - t
+  // the inner wall's own top edge sits at z = H exactly — not at H - t
   const innerTop = sh.innerProfile[sh.innerProfile.length - 1];
   assert.ok(Math.abs(profileRZ(p, innerTop)[1] - H) < 1e-12, `the inner wall stops at z = ${profileRZ(p, innerTop)[1]}, not the opening plane ${H}`);
   assert.ok(Math.abs(profileRZ(p, innerTop)[0] - (R - T)) < 1e-12, 'and at the inner radius R - t');
@@ -431,12 +429,12 @@ test('OPENING A CAP: the inner wall stops in the opened face\'s OWN plane, and t
   });
   assert.ok(worstZ < 1e-12, `the lip is not flat in the opening's own plane (worst ${worstZ.toExponential(3)})`);
   assert.ok(Math.abs(lo - (R - T)) < 1e-12 && Math.abs(hi - R) < 1e-12, `the lip spans ${lo}..${hi}, analytic ${R - T}..${R}`);
-  // it FACES OUT of the material: +axis at the top opening
+  // it faces out of the material: +axis at the top opening
   const n = unitNormal(lip, (domU(lip)[0] + domU(lip)[1]) / 2, domV(lip)[0] + (domV(lip)[1] - domV(lip)[0]) * 0.41);
   assert.ok(n[2] > 0.999, `the lip faces (${n.map((v) => v.toFixed(4)).join(', ')}), not out of the solid`);
 });
 
-test("A CONE OPENED AT ITS BASE: the inner wall is EXTENDED to the base plane, not left where the perpendicular offset put it (which is BELOW the opening)", () => {
+test("a cone opened at its base: the inner wall is extended to the base plane, not left where the perpendicular offset put it (which is below the opening)", () => {
   const p = coneProfile();
   const sh = shellRevolvedSolid(p, CT, { removedSegments: [0] });  // open the base cap
   assert.equal(sh.openStart, true);
@@ -444,13 +442,13 @@ test("A CONE OPENED AT ITS BASE: the inner wall is EXTENDED to the base plane, n
   const innerBase = sh.innerProfile[0];
   const [r0, z0] = profileRZ(p, innerBase);
   // Analytic: the inner slant line is H*r + R*z - R*H = -t*L; at z = 0 that
-  // is r = R - t*L/H. The NAIVE perpendicular offset of the rim point would
+  // is r = R - t*L/H. The naive perpendicular offset of the rim point would
   // instead land at z = -t*R/L, i.e. below the opening entirely.
   assert.ok(Math.abs(z0) < 1e-12, `the inner wall must stop exactly in the base plane z = 0 (got ${z0})`);
   assert.ok(Math.abs(r0 - (CR - CT * CL / CH)) < 1e-12, `inner base radius ${r0}, analytic ${CR - CT * CL / CH}`);
   const naiveZ = -CT * CR / CL;
-  assert.ok(Math.abs(z0 - naiveZ) > CT * 0.5, 'the naive perpendicular answer is genuinely different — this test discriminates the two');
-  // the lip is flat in the base plane and genuinely WIDER than the wall,
+  assert.ok(Math.abs(z0 - naiveZ) > CT * 0.5, 'the naive perpendicular answer is different — this test discriminates the two');
+  // the lip is flat in the base plane and wider than the wall,
   // because a slanted wall cut by a horizontal plane shows a wider band
   const lip = sh.rimPanels[0].srf;
   let worstZ = 0, lo = Infinity, hi = -Infinity;
@@ -459,16 +457,16 @@ test("A CONE OPENED AT ITS BASE: the inner wall is EXTENDED to the base plane, n
   assert.ok(Math.abs(hi - CR) < 1e-12 && Math.abs(lo - (CR - CT * CL / CH)) < 1e-12, `the cone lip spans ${lo}..${hi}`);
   assert.ok(hi - lo > CT, `the lip (${(hi - lo).toFixed(6)}) is wider than the wall (${CT}) — t*L/H, not t`);
   const n = unitNormal(lip, (domU(lip)[0] + domU(lip)[1]) / 2, domV(lip)[0] + (domV(lip)[1] - domV(lip)[0]) * 0.41);
-  assert.ok(n[2] < -0.999, `the cone's base lip must face DOWN, out of the solid (got ${n.map((v) => v.toFixed(4)).join(', ')})`);
+  assert.ok(n[2] < -0.999, `the cone's base lip must face down, out of the solid (got ${n.map((v) => v.toFixed(4)).join(', ')})`);
 });
 
-test('OPENED-FACE REFUSALS: a non-contiguous opening, every face opened, and a face index this profile does not have are each refused BY NAME', () => {
+test('opened-face refusals: a non-contiguous opening, every face opened, and a face index this profile does not have are each refused by name', () => {
   const p = cylProfile();
-  // the WALL opened while both caps are kept: two disks with nothing joining them
+  // the wall opened while both caps are kept: two disks with nothing joining them
   assert.throws(() => shellRevolvedSolid(p, T, { removedSegments: [1] }), /not next to each other/);
   assert.throws(() => shellRevolvedSolid(p, T, { removedSegments: [0, 1, 2] }), /every face was opened/);
   assert.throws(() => shellRevolvedSolid(p, T, { removedSegments: [7] }), /is not one of this profile's own 3 faces/);
-  // opening BOTH caps is contiguous at neither end — but it IS a legal tube
+  // opening both caps is contiguous at neither end — but it is a legal tube
   const tube = shellRevolvedSolid(p, T, { removedSegments: [0, 2] });
   assert.equal(tube.rimCount, 2, 'a tube open at both ends has two lips');
   assert.equal(tube.outerCount, 1);
@@ -479,14 +477,12 @@ test('OPENED-FACE REFUSALS: a non-contiguous opening, every face opened, and a f
   }
 });
 
-// ============================================================================
-// ARC MERIDIAN PROFILES. CURVED-PROFILE SHELLS — a Torus's
+// Arc meridian profiles: curved-profile shells — a Torus's
 // meridian is a full circle offset from the axis; a Sphere's is a half
-// circle centered ON the axis, pole to pole. Both are proven EXACT here
-// against real analytic ground truth (the true torus/sphere equations),
-// never against the construction's own output — same discipline as every
+// circle centered on the axis, pole to pole. Both are checked exact here
+// against analytic ground truth (the torus/sphere equations),
+// never against the construction's own output, like every
 // other test in this file.
-// ============================================================================
 
 const TR = 25, Tt = 8, Tthk = 2;                   // torus fixture: ring radius, tube radius, wall thickness
 const SR = 20, Sthk = 3;                            // sphere fixture: radius, wall thickness
@@ -499,17 +495,17 @@ function sphereProfile() {
   return makeArcMeridianProfile({ axisPoint, axisDir, refDir, centerR: 0, centerZ: 0, radius: SR, angleStart: -Math.PI / 2, sweep: Math.PI, closed: false });
 }
 
-// Sample a whole surface densely and report the WORST deviation from a
+// Sample a whole surface densely and report the worst deviation from a
 // caller-supplied analytic predicate, plus the worst signed dot of the
 // surface's own analytic normal against a caller-supplied expected
 // direction — one shared harness for both the torus and sphere fixtures.
-// The normal check is skipped at i===0/i===nu (the EXACT domain boundary in
+// The normal check is skipped at i===0/i===nu (the exact domain boundary in
 // U — the true pole for a sphere-like profile touching the axis there): a
-// pole's own Sv (circumferential derivative) is genuinely, mathematically
+// pole's own Sv (circumferential derivative) is mathematically
 // degenerate right at the knot (every rotated copy of an on-axis point
 // coincides), so the naive su x sv / |.| normal formula divides a near-zero
-// vector by a near-zero length there — real numerical noise in the ratio,
-// not a defect in the surface's own POSITION (still checked at every
+// vector by a near-zero length there — numerical noise in the ratio,
+// not a defect in the surface's own position (still checked at every
 // sample, poles included) or in this module's offset math. A torus profile
 // never touches the axis, so this skip is a no-op for it.
 function sampleSurfaceWorst(srf, nu, nv, radialFn, normalFn) {
@@ -530,7 +526,7 @@ function sampleSurfaceWorst(srf, nu, nv, radialFn, normalFn) {
   return { worstRadial, worstDot };
 }
 
-test('TORUS ARC PROFILE: the un-offset profile is exactly the true minor circle at every sampled parameter, both ends coincide (closed)', () => {
+test('torus arc profile: the un-offset profile is exactly the true minor circle at every sampled parameter, both ends coincide (closed)', () => {
   const p = torusProfile();
   const [r0, z0] = profileRZ(p, [TR + Tt, 0, 0]);
   assert.ok(Math.abs(r0 - (TR + Tt)) < 1e-12 && Math.abs(z0) < 1e-12);
@@ -540,7 +536,7 @@ test('TORUS ARC PROFILE: the un-offset profile is exactly the true minor circle 
   assert.ok(Math.hypot(b[0], b[1]) > 0, 'sanity: a real point on the torus wall, not the origin');
 });
 
-test('offsetArcMeridianProfile on a TORUS is an EXACT radius change: same center, same angle range, radius - t', () => {
+test('offsetArcMeridianProfile on a torus is an exact radius change: same center, same angle range, radius - t', () => {
   const p = torusProfile();
   const off = offsetArcMeridianProfile(p, Tthk);
   assert.equal(off.ok, true);
@@ -551,16 +547,16 @@ test('offsetArcMeridianProfile on a TORUS is an EXACT radius change: same center
   assert.equal(off.profile.sweep, p.sweep);
 });
 
-test('an inward-offset TORUS wall is EXACTLY a torus of the same ring radius and a smaller tube radius, sampled densely, poles and seam included', () => {
+test('an inward-offset torus wall is exactly a torus of the same ring radius and a smaller tube radius, sampled densely, poles and seam included', () => {
   const p = torusProfile();
   const off = offsetArcMeridianProfile(p, Tthk);
   assert.equal(off.ok, true);
   const outer = revolveArcMeridianPanel(p, { flip: true });
   const inner = revolveArcMeridianPanel(off.profile, { flip: false });
-  // TRUE torus equation: distance from the ring centerline (radius TR about
+  // Torus equation: distance from the ring centerline (radius TR about
   // the axis) equals the tube radius exactly, at every sampled (u,v).
   const distFromRing = (pt) => Math.hypot(Math.hypot(pt[0], pt[1]) - TR, pt[2]);
-  const outward = (pt) => { // unit direction AWAY from the tube's own local centerline
+  const outward = (pt) => { // unit direction away from the tube's own local centerline
     const rho = Math.hypot(pt[0], pt[1]);
     const radial = rho > 1e-9 ? [pt[0] / rho, pt[1] / rho, 0] : [1, 0, 0];
     const dr = rho - TR, dz = pt[2];
@@ -571,17 +567,17 @@ test('an inward-offset TORUS wall is EXACTLY a torus of the same ring radius and
   const innerRes = sampleSurfaceWorst(inner.srf, 24, 24, (pt) => distFromRing(pt) - (Tt - Tthk), (pt, n) => { const o = outward(pt); return n[0] * o[0] + n[1] * o[1] + n[2] * o[2]; });
   assert.ok(outerRes.worstRadial < 1e-9, `outer torus wall deviates ${outerRes.worstRadial.toExponential(3)} from the true tube radius ${Tt}`);
   assert.ok(innerRes.worstRadial < 1e-9, `inner torus wall deviates ${innerRes.worstRadial.toExponential(3)} from the true tube radius ${Tt - Tthk}`);
-  // ORIENTATION, proven numerically (not just derived): the outer wall's
-  // normal points AWAY from the tube's own local centerline (out of the
-  // solid); the inner wall's points TOWARD it (out of the wall, into the
+  // Orientation, checked numerically (not just derived): the outer wall's
+  // normal points away from the tube's own local centerline (out of the
+  // solid); the inner wall's points toward it (out of the wall, into the
   // cavity) — the two faces away from each other across the wall, the same
-  // property the point-chain shell already proves for a Cylinder.
+  // property the point-chain shell tests check for a Cylinder.
   assert.ok(outerRes.worstDot > 0.999, `outer torus normal doesn't face outward (worst dot ${outerRes.worstDot})`);
   const innerInwardCheck = sampleSurfaceWorst(inner.srf, 24, 24, () => 0, (pt, n) => { const o = outward(pt); return -(n[0] * o[0] + n[1] * o[1] + n[2] * o[2]); });
   assert.ok(innerInwardCheck.worstDot > 0.999, `inner torus normal doesn't face toward the tube centerline (worst dot ${-innerInwardCheck.worstDot})`);
 });
 
-test('SPHERE ARC PROFILE: the un-offset profile is exactly the true meridian, both poles land on the axis', () => {
+test('sphere arc profile: the un-offset profile is exactly the true meridian, both poles land on the axis', () => {
   const p = sphereProfile();
   const startPt = [p.axisPoint[0] + p.refDir[0] * p.radius * Math.cos(p.angleStart), 0, 0]; // sanity only
   assert.ok(Math.abs(p.radius - SR) < 1e-12);
@@ -592,7 +588,7 @@ test('SPHERE ARC PROFILE: the un-offset profile is exactly the true meridian, bo
   assert.ok(Math.abs(southPole[2] - (-SR)) < 1e-9, 'the south pole must sit at z = -R');
 });
 
-test('offsetArcMeridianProfile on a SPHERE is an EXACT radius change, and the poles stay pinned to the axis at ANY radius', () => {
+test('offsetArcMeridianProfile on a sphere is an exact radius change, and the poles stay pinned to the axis at any radius', () => {
   const p = sphereProfile();
   const off = offsetArcMeridianProfile(p, Sthk);
   assert.equal(off.ok, true);
@@ -602,7 +598,7 @@ test('offsetArcMeridianProfile on a SPHERE is an EXACT radius change, and the po
   assert.equal(off.profile.sweep, p.sweep);
 });
 
-test('an inward-offset SPHERE wall is EXACTLY a sphere of a smaller radius, sampled densely, poles included, to near machine precision', () => {
+test('an inward-offset sphere wall is exactly a sphere of a smaller radius, sampled densely, poles included, to near machine precision', () => {
   const p = sphereProfile();
   const off = offsetArcMeridianProfile(p, Sthk);
   assert.equal(off.ok, true);
@@ -619,7 +615,7 @@ test('an inward-offset SPHERE wall is EXACTLY a sphere of a smaller radius, samp
   assert.ok(innerInwardCheck.worstDot > 0.999, `inner sphere normal doesn't point radially inward, into the cavity (worst dot ${-innerInwardCheck.worstDot})`);
 });
 
-test('SAFE MAXIMUM + AUTO-CLAMP for an arc profile: closed-form (the arc\'s own radius), and shellArcRevolvedSolid clamps honestly past it', () => {
+test('safe maximum and auto-clamp for an arc profile: closed-form (the arc\'s own radius), and shellArcRevolvedSolid clamps past it', () => {
   assert.equal(safeArcInwardOffset(torusProfile()), Tt);
   assert.equal(safeArcInwardOffset(sphereProfile()), SR);
   // request far past the safe maximum
@@ -627,13 +623,13 @@ test('SAFE MAXIMUM + AUTO-CLAMP for an arc profile: closed-form (the arc\'s own 
   assert.equal(sh.clamped, true);
   assert.ok(sh.appliedDistance < Tt && sh.appliedDistance > Tt * 0.9, `clamped distance ${sh.appliedDistance} should sit just under the safe max ${Tt}`);
   assert.equal(sh.safeMaxDistance, Tt);
-  // a genuinely safe request is NOT clamped
+  // a safe request is not clamped
   const sh2 = shellArcRevolvedSolid(sphereProfile(), Sthk);
   assert.equal(sh2.clamped, false);
   assert.equal(sh2.appliedDistance, Sthk);
 });
 
-test('offsetArcMeridianProfile refuses honestly once distance reaches or exceeds the radius, never producing a zero/negative radius', () => {
+test('offsetArcMeridianProfile refuses once distance reaches or exceeds the radius, never producing a zero/negative radius', () => {
   const p = torusProfile();
   assert.equal(offsetArcMeridianProfile(p, Tt).ok, false);
   assert.equal(offsetArcMeridianProfile(p, Tt * 2).ok, false);
@@ -643,14 +639,14 @@ test('offsetArcMeridianProfile refuses honestly once distance reaches or exceeds
   assert.equal(offsetArcMeridianProfile(p2, SR * 0.999).ok, true, 'a thickness just inside the radius must still succeed');
 });
 
-test('makeArcMeridianProfile refuses a degenerate/axis-crossing arc BY NAME, and a real one succeeds', () => {
+test('makeArcMeridianProfile refuses a degenerate/axis-crossing arc by name, and a valid one succeeds', () => {
   assert.throws(() => makeArcMeridianProfile({ axisPoint, axisDir, refDir, centerR: 5, centerZ: 0, radius: 10, angleStart: 0, sweep: 2 * Math.PI, closed: true }), /crosses the axis/, 'a "torus" whose tube radius exceeds its ring radius crosses the axis and must be refused');
   assert.throws(() => makeArcMeridianProfile({ axisPoint, axisDir, refDir, centerR: 0, centerZ: 0, radius: 0, angleStart: 0, sweep: Math.PI, closed: false }), /positive radius/);
   assert.throws(() => makeArcMeridianProfile({ axisPoint, axisDir, refDir, centerR: 0, centerZ: 0, radius: 5, angleStart: 0, sweep: 0, closed: false }), /nonzero sweep/);
   assert.ok(makeArcMeridianProfile({ axisPoint, axisDir, refDir, centerR: TR, centerZ: 0, radius: Tt, angleStart: 0, sweep: 2 * Math.PI, closed: true }));
 });
 
-test('shellArcRevolvedSolid assembles a real TORUS shell: exactly 2 panels, no rim, both walls exact, junctions empty (nothing to junction)', () => {
+test('shellArcRevolvedSolid assembles a torus shell: exactly 2 panels, no rim, both walls exact, junctions empty (nothing to junction)', () => {
   const sh = shellArcRevolvedSolid(torusProfile(), Tthk);
   assert.equal(sh.outerCount, 1);
   assert.equal(sh.innerCount, 1);
@@ -667,7 +663,7 @@ test('shellArcRevolvedSolid assembles a real TORUS shell: exactly 2 panels, no r
   assert.ok(wo.v < 1e-9 && wi.v < 1e-9, `torus shell walls deviate ${wo.v}, ${wi.v} from analytic`);
 });
 
-test('shellArcRevolvedSolid assembles a real SPHERE shell: exactly 2 panels, no rim, both walls exact', () => {
+test('shellArcRevolvedSolid assembles a sphere shell: exactly 2 panels, no rim, both walls exact', () => {
   const sh = shellArcRevolvedSolid(sphereProfile(), Sthk);
   assert.equal(sh.outerCount, 1);
   assert.equal(sh.innerCount, 1);

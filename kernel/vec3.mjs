@@ -20,7 +20,7 @@ export function normalize(a) {
   return [a[0]/l, a[1]/l, a[2]/l];
 }
 
-// Any unit vector perpendicular to `t` (t assumed unit length). Used to seed
+// Any unit vector perpendicular to `t` (t assumed unit length). Seeds
 // the first frame of a parallel-transport sweep, where no prior normal exists.
 export function anyPerpendicular(t) {
   const ref = Math.abs(t[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];

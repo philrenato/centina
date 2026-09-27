@@ -15,7 +15,7 @@ test('maxSafeDisplacementScale: an untouched (all-zero) displacement field retur
   assert.equal(maxSafeDisplacementScale(net, field), Infinity);
 });
 
-test('maxSafeDisplacementScale: a UNIFORM (identical everywhere) displacement field returns Infinity — a pure translate can never fold an edge', () => {
+test('maxSafeDisplacementScale: a uniform (identical everywhere) displacement field returns Infinity — a pure translate can never fold an edge', () => {
   const net = twoPointNet();
   const field = [[[3, -2, 5]], [[3, -2, 5]]]; // same vector at every control point
   assert.equal(maxSafeDisplacementScale(net, field), Infinity);
@@ -30,15 +30,15 @@ test('maxSafeDisplacementScale: a single hand-derivable shrinking edge is clampe
   assert.ok(Math.abs(safe - 0.98) < 1e-12, `expected exactly 0.98, got ${safe}`);
 });
 
-test('maxSafeDisplacementScale: an edge that GROWS (a >= 0) is never constrained, even under a large displacement', () => {
+test('maxSafeDisplacementScale: an edge that grows (a >= 0) is never constrained, even under a large displacement', () => {
   const net = twoPointNet(1);
-  // Pb moves AWAY from Pa: dv=(+2,0,0), a = dot(dv,e) = +2 >= 0 -> no crossing possible.
+  // Pb moves away from Pa: dv=(+2,0,0), a = dot(dv,e) = +2 >= 0 -> no crossing possible.
   const field = [[[0, 0, 0]], [[2, 0, 0]]];
   assert.equal(maxSafeDisplacementScale(net, field), Infinity);
 });
 
 test('maxSafeDisplacementScale: a 3-point row with one shrinking edge and one growing edge is bound by the shrinking one alone', () => {
-  // Points at x=0,1,2 (nu=3, nv=1). Middle point pulls toward BOTH neighbors
+  // Points at x=0,1,2 (nu=3, nv=1). Middle point pulls toward both neighbors
   // at unit scale: va=0 (i=0), vb=(-2,0,0) (i=1), vc=0 (i=2).
   //   edge(0,1): Pa=(0,0,0) Pb=(1,0,0), e2=1, dv=vb-va=(-2,0,0), a=-2 -> crit=1/2=0.5
   //   edge(1,2): Pa=(1,0,0) Pb=(2,0,0), e2=1, dv=vc-vb=(2,0,0),  a=+2 -> no constraint
@@ -49,7 +49,7 @@ test('maxSafeDisplacementScale: a 3-point row with one shrinking edge and one gr
   assert.ok(Math.abs(safe - 0.49) < 1e-12, `expected exactly 0.49, got ${safe}`);
 });
 
-test('maxSafeDisplacementScale: a genuine 2D grid considers BOTH U and V adjacent edges, not just one direction', () => {
+test('maxSafeDisplacementScale: a real 2D grid considers both U and V adjacent edges, not just one direction', () => {
   // A 2x2 unit-square grid; only the (0,0)-(0,1) V-edge is made to shrink,
   // every other edge (U-direction and the other V-edge) stays untouched.
   const net = [
@@ -65,7 +65,7 @@ test('maxSafeDisplacementScale: a genuine 2D grid considers BOTH U and V adjacen
   assert.ok(Math.abs(safe - 0.98) < 1e-12, `expected exactly 0.98 (only the one V-edge constrains it), got ${safe}`);
 });
 
-test('maxSafeDisplacementScale: a genuinely coincident control-point edge (e2~0, e.g. a pole row) contributes no constraint', () => {
+test('maxSafeDisplacementScale: a coincident control-point edge (e2~0, e.g. a pole row) contributes no constraint', () => {
   const net = [[[5, 5, 5, 1]], [[5, 5, 5, 1]]]; // both points identical — a pole edge
   const field = [[[0, 0, 0]], [[-100, 0, 0]]]; // even a huge displacement can't "cross" a zero-length edge
   assert.equal(maxSafeDisplacementScale(net, field), Infinity);

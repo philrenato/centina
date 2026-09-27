@@ -9,16 +9,15 @@ import { surfacePointAndPartials } from '../kernel/surface.mjs';
 import { basisFuns, findSpan } from '../kernel/basis.mjs';
 import { buildTopology, subdivideCatmullClark, edgeKey } from '../kernel/subd.mjs';
 
-// INDEPENDENT ground truth #1 — the textbook closed-form uniform CUBIC
-// B-SPLINE blending functions (not tautologically derived from this
-// module's own code): over the single valid span, parameter t in [0,1],
+// Independent ground truth 1 — the textbook closed-form uniform cubic
+// B-spline blending functions (not derived from this module's own code):
+// over the single valid span, parameter t in [0,1],
 //   B0(t) = (1-t)^3 / 6
 //   B1(t) = (3t^3 - 6t^2 + 4) / 6
 //   B2(t) = (-3t^3 + 3t^2 + 3t + 1) / 6
 //   B3(t) = t^3 / 6
-// This proves the module's own knot-vector choice ([-3,-2,-1,0,1,2,3,4])
-// genuinely produces the standard uniform (not clamped) cubic basis, not
-// just "whatever basisFuns happens to compute."
+// This checks that the module's knot vector ([-3,-2,-1,0,1,2,3,4])
+// produces the standard uniform (not clamped) cubic basis.
 function textbookUniformCubicWeights(t) {
   return [
     Math.pow(1 - t, 3) / 6,
@@ -44,14 +43,14 @@ test('the regular-patch knot vector reproduces the textbook uniform cubic B-spli
   }
 });
 
-test('bicubicRegularPatchSurface: a hand-verifiable case — a FLAT grid (all Z=0, X/Y on an evenly-spaced lattice) evaluates to the exact tensor-product bilinear-equivalent position at several (u,v), matching a hand-computed sum', () => {
+test('bicubicRegularPatchSurface: a hand-verifiable case — a flat grid (all Z=0, X/Y on an evenly-spaced lattice) evaluates to the exact tensor-product bilinear-equivalent position at several (u,v), matching a hand-computed sum', () => {
   // A 4x4 grid at integer (x,y) positions 0..3, z=0. The known uniform
-  // cubic tensor-product patch through a PLANAR, EVENLY-SPACED grid of
+  // cubic tensor-product patch through a planar, evenly spaced grid of
   // control points reproduces the plane exactly (the defining "affine
   // precision" property of any B-spline basis: a partition-of-unity
   // basis applied to collinear/coplanar, evenly-spaced control points
-  // reproduces the linear function they sample) — a real, independently
-  // derivable check, not just "the code agrees with itself."
+  // reproduces the linear function they sample) — an independently
+  // derivable check.
   const grid = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
@@ -61,14 +60,14 @@ test('bicubicRegularPatchSurface: a hand-verifiable case — a FLAT grid (all Z=
   const srf = bicubicRegularPatchSurface(grid);
   for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5], [0.2, 0.9], [1, 0.5]]) {
     const { point } = surfacePointAndPartials(srf, u, v);
-    // The grid's own u/v parametrization maps [0,1] to the CENTER span,
+    // The grid's own u/v parametrization maps [0,1] to the center span,
     // i.e. control-point index range [1,2] in each direction (the face's
     // own 4 corners) — so at u=v=0 the exact expected position is (1,1,0)
-    // (grid[1][1]), NOT grid[0][0], since the domain [0,1] corresponds to
+    // (grid[1][1]), not grid[0][0], since the domain [0,1] corresponds to
     // knots[3..4], the span whose de Boor points are grid indices 0..3
     // blended with the uniform cubic weights computed above, which at
     // t=0 peak at index 1 (weight 4/6) — i.e. the true expected value is
-    // the AFFINE-EXACT reproduction of the coordinate function itself:
+    // the affine-exact reproduction of the coordinate function itself:
     // exact x = 1+u, exact y = 1+v (the plane z=0 passes through the
     // grid's own regularly-spaced lattice exactly, and u/v=0 sits at
     // lattice position (1,1) by the same "center 2x2 is the face" layout
@@ -80,11 +79,10 @@ test('bicubicRegularPatchSurface: a hand-verifiable case — a FLAT grid (all Z=
   }
 });
 
-test('regularPatchPointAndPartials: the wrapper reproduces a direct surfacePointAndPartials call bit-for-bit, at several (u,v) including all 4 corners — the actual load-bearing plumbing proof every later step depends on', () => {
-  // A genuinely non-planar, asymmetric grid — real distinct partials in
-  // both directions, not a degenerate flat/symmetric fixture that could
-  // hide a transcription error (this project's own standing "avoid
-  // trivial test geometry" discipline).
+test('regularPatchPointAndPartials: the wrapper reproduces a direct surfacePointAndPartials call bit-for-bit, at several (u,v) including all 4 corners — every later step depends on this wrapper', () => {
+  // A non-planar, asymmetric grid with distinct partials in both
+  // directions; a flat or symmetric fixture could hide a transcription
+  // error.
   const grid = [
     [[0, 0, 0], [1, 0, 0.3], [2, 0, 0.1], [3, 0, 0.6]],
     [[0, 1, 0.4], [1, 1, 1.2], [2, 1, 0.9], [3, 1, 1.5]],
@@ -101,15 +99,13 @@ test('regularPatchPointAndPartials: the wrapper reproduces a direct surfacePoint
   }
 });
 
-test('bicubicRegularPatchSurface: a 4-row grid with a non-4-column row throws honestly rather than silently misreading a malformed stencil', () => {
+test('bicubicRegularPatchSurface: a 4-row grid with a non-4-column row throws rather than silently misreading a malformed stencil', () => {
   assert.throws(() => bicubicRegularPatchSurface([[[0, 0, 0]], [[0, 0, 0]], [[0, 0, 0]], [[0, 0, 0]]]));
   assert.throws(() => bicubicRegularPatchSurface([[[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]]));
 });
 
-// ================================================================
-// STEP 2 — VERTEX-LIMIT-MASK GROUND TRUTH (Halstead/Kass/DeRose 1993),
-// standalone, independent of step 1 and of any eigenbasis machinery.
-// ================================================================
+// Step 2: vertex-limit mask ground truth (Halstead/Kass/DeRose 1993),
+// independent of step 1 and of any eigenbasis machinery.
 
 function add3(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
 function scale3(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
@@ -123,7 +119,7 @@ function closeEnough(a, b, eps = 1e-9) {
 // diagonal corner (index n+1..2n). Face i = [0, spoke_i, far_i,
 // spoke_{i+1}] — every one of the vertex's own n edges (0-spoke_i) is
 // shared by exactly 2 of these n faces, so vertex 0 is an ordinary
-// SMOOTH interior vertex (0 sharp edges) by construction, exactly the
+// smooth interior vertex (0 sharp edges) by construction, exactly the
 // case this whole derivation assumes.
 function buildSymmetricFan(n, center, spokeRadius = 1, farRadius = 1.6) {
   const vertices = [center.slice()];
@@ -143,14 +139,9 @@ function buildSymmetricFan(n, center, spokeRadius = 1, farRadius = 1.6) {
   return { vertices, faces, creases: {} };
 }
 
-// edgePointIndexMap/facePointIndexBase are imported directly from
-// kernel/subdlimit.mjs itself (step 3 promoted these from test-local
-// helpers to real, exported module functions — reused here rather than
-// duplicated a second time).
-
 for (const n of [3, 5]) {
-  test(`n=${n}: one REAL subdivideCatmullClark step on a symmetric fan matches the hand-derived 3x3 DC-mode system exactly — cross-checked against ALREADY-PROVEN kernel code, not just self-consistent algebra`, () => {
-    const center = [2, -1, 4]; // deliberately off-origin, not a degenerate/trivial position
+  test(`n=${n}: one subdivideCatmullClark step on a symmetric fan matches the hand-derived 3x3 DC-mode system exactly`, () => {
+    const center = [2, -1, 4]; // off-origin, not a degenerate position
     const cage = buildSymmetricFan(n, center, 1, 1.7);
     const p = cage.vertices[0];
     const q = scale3(cage.vertices.slice(1, 1 + n).reduce(add3, [0, 0, 0]), 1 / n);
@@ -181,7 +172,7 @@ for (const n of [3, 5]) {
     assert.ok(closeEnough(rPrime, expectedRPrime, 1e-9), `r' mismatch: got ${rPrime}, expected ${expectedRPrime}`);
   });
 
-  test(`n=${n}: vertexLimitPosition of a perfectly symmetric fan equals its own center EXACTLY — a real, non-trivial invariant (rotational symmetry admits no other fixed point), not a coincidence an indexing bug would likely survive`, () => {
+  test(`n=${n}: vertexLimitPosition of a perfectly symmetric fan equals its own center exactly (rotational symmetry admits no other fixed point)`, () => {
     const center = [5, -3, 2];
     const cage = buildSymmetricFan(n, center, 1, 1.7);
     const L = vertexLimitPosition(cage, 0);
@@ -189,7 +180,7 @@ for (const n of [3, 5]) {
   });
 }
 
-test('vertexLimitMaskFromRF: a genuinely asymmetric, hand-computed worked example (valence 3) — real distinguishable numbers, arithmetic checked by hand alongside the code, not a symmetric case where every formula would agree', () => {
+test('vertexLimitMaskFromRF: an asymmetric, hand-computed worked example (valence 3), where a symmetric case would let every formula agree', () => {
   const n = 3;
   const P = [10, 0, 0];
   const R = [4, 2, 1]; // average edge-midpoint, picked arbitrarily
@@ -215,7 +206,7 @@ test('vertexLimitMaskFromRF: a second hand-computed worked example (valence 5), 
   assert.ok(Math.abs(coeffSum - 1) < 1e-12, `partition of unity: (n-3+4+4)/(n+5) = ${coeffSum}, expected exactly 1`);
 });
 
-test('vertexLimitMaskFromRF at n=4 (the regular case) reproduces the widely-published regular-vertex mask "(16V + 4*sum(edge-neighbors) + sum(face-diagonal-corners)) / 36" exactly — two independently-stated formulas, cross-checked, not just internally consistent', () => {
+test('vertexLimitMaskFromRF at n=4 (the regular case) reproduces the widely-published regular-vertex mask "(16V + 4*sum(edge-neighbors) + sum(face-diagonal-corners)) / 36" exactly — two independently stated formulas agree', () => {
   const n = 4;
   const P = [1, 2, 3];
   const Q = [[2, 0, 0], [0, 2, 0], [-2, 0, 4], [0, -2, 4]]; // 4 edge-neighbor vertices
@@ -234,22 +225,16 @@ test('vertexLimitMaskFromRF at n=4 (the regular case) reproduces the widely-publ
   assert.ok(closeEnough(L, published, 1e-9), `got ${L}, published-formula answer ${published}`);
 });
 
-// ================================================================
-// STEP 3 — THE SUBDIVISION-MATRIX BUILDER, A(n). The single highest-
-// value test in the whole build order per this doc's own build order:
-// cross-checks the matrix, built from real unit-basis subdivideCatmullClark
-// calls, against a REAL subdivideCatmullClark call on a genuinely
-// non-trivial (asymmetric) neighborhood — bit-for-bit, not approximately.
-// ================================================================
+// Step 3: the subdivision-matrix builder A(n). The matrix, built from
+// unit-basis subdivideCatmullClark calls, is cross-checked against a direct
+// subdivideCatmullClark call on an asymmetric neighborhood, bit for bit.
 
 for (const n of [3, 4, 5, 6]) {
-  test(`buildSubdivisionMatrix(${n}): A(n) applied to a real, ASYMMETRIC neighborhood reproduces a direct subdivideCatmullClark call bit-for-bit, on all 3 axes`, () => {
+  test(`buildSubdivisionMatrix(${n}): A(n) applied to an asymmetric neighborhood reproduces a direct subdivideCatmullClark call bit-for-bit, on all 3 axes`, () => {
     const template = standardNeighborhoodCage(n);
-    // Genuinely asymmetric, non-trivial coordinates — deliberately not a
-    // regular/symmetric fan (this project's own standing "avoid trivial
-    // test geometry" discipline: a symmetric fixture could hide an
-    // indexing bug that only shows up when values genuinely differ
-    // point to point).
+    // Asymmetric coordinates rather than a regular fan: a symmetric
+    // fixture could hide an indexing bug that only shows up when values
+    // differ point to point.
     const realCage = {
       vertices: template.vertices.map((_, i) => [
         Math.sin(i * 1.7 + 0.3) * 3 + i * 0.4,
@@ -261,7 +246,7 @@ for (const n of [3, 4, 5, 6]) {
     };
     const edgeIdx = edgePointIndexMap(template);
     const faceBase = facePointIndexBase(template);
-    // The OLD neighborhood is just realCage.vertices itself, already in
+    // The old neighborhood is just realCage.vertices itself, already in
     // standardNeighborhoodCage's own index order — read directly.
     const oldX = realCage.vertices.map((p) => p[0]);
     const oldY = realCage.vertices.map((p) => p[1]);
@@ -282,7 +267,7 @@ for (const n of [3, 4, 5, 6]) {
     }
   });
 
-  test(`buildSubdivisionMatrix(${n}): every row is a genuine weighted average (sums to exactly 1) — A(n) can only ever interpolate, never extrapolate/amplify`, () => {
+  test(`buildSubdivisionMatrix(${n}): every row is a weighted average (sums to exactly 1) — A(n) can only ever interpolate, never extrapolate/amplify`, () => {
     const A = buildSubdivisionMatrix(n);
     for (let row = 0; row < A.length; row++) {
       const sum = A[row].reduce((a, b) => a + b, 0);
@@ -290,7 +275,7 @@ for (const n of [3, 4, 5, 6]) {
     }
   });
 
-  test(`buildSubdivisionMatrix(${n}): A(n) has the constant vector as a genuine eigenvector of eigenvalue 1 (the flat-unrefined-patch fixed point) — a real, independent structural check, not assumed from the row-sum property alone`, () => {
+  test(`buildSubdivisionMatrix(${n}): A(n) has the constant vector as an eigenvector of eigenvalue 1 (the flat-unrefined-patch fixed point), checked directly rather than inferred from the row sums`, () => {
     const A = buildSubdivisionMatrix(n);
     const ones = new Array(2 * n + 1).fill(1);
     const result = applyMatrix(A, ones);
@@ -298,20 +283,18 @@ for (const n of [3, 4, 5, 6]) {
   });
 }
 
-// ================================================================
-// STEP 4 — VERTEX-LIMIT WEIGHTS PER INDIVIDUAL NEIGHBOR, cross-checked
-// THREE independent ways (never a self-consistency tautology):
+// Step 4: vertex-limit weights per individual neighbor, cross-checked
+// three independent ways:
 //   (a) at exactly (u,v)=(0,0): matches step 2's own vertexLimitPosition
-//       on a real, ASYMMETRIC cage, for several valences.
+//       on an asymmetric cage, for several valences.
 //   (b) geometric contraction: repeated A(n) application converges
-//       monotonically to that same value, from a real neighborhood.
+//       monotonically to that same value.
 //   (c) n forced to exactly 4: agrees with step 1's own regular fast
 //       path at the shared boundary case (u,v)=(0,0) — the two paths'
 //       one point of overlap.
-// ================================================================
 
 for (const n of [3, 4, 5, 6, 7]) {
-  test(`vertexLimitWeightsGeneral(${n}): dotted directly against a genuinely ASYMMETRIC real neighborhood, reproduces vertexLimitPosition's own independent (n-3,4R,4F)/(n+5) computation exactly — not a symmetric fixture that could hide an indexing bug`, () => {
+  test(`vertexLimitWeightsGeneral(${n}): dotted directly against an asymmetric neighborhood, reproduces vertexLimitPosition's own independent (n-3,4R,4F)/(n+5) computation exactly`, () => {
     const template = standardNeighborhoodCage(n);
     const realCage = {
       vertices: template.vertices.map((_, i) => [
@@ -333,7 +316,7 @@ for (const n of [3, 4, 5, 6, 7]) {
     }
   });
 
-  test(`powerIterationLeftDominant on A(${n}): A(n)'s own dominant left eigenvector (found by a genuinely independent numerical method, never reading the closed form) matches vertexLimitWeightsGeneral(${n}) exactly, and the eigenvalue is exactly 1`, () => {
+  test(`powerIterationLeftDominant on A(${n}): A(n)'s own dominant left eigenvector (found by an independent numerical method, never reading the closed form) matches vertexLimitWeightsGeneral(${n}) exactly, and the eigenvalue is exactly 1`, () => {
     const A = buildSubdivisionMatrix(n);
     const { eigenvalue, eigenvector } = powerIterationLeftDominant(A);
     assert.ok(Math.abs(eigenvalue - 1) < 1e-9, `dominant eigenvalue: got ${eigenvalue}, expected 1`);
@@ -343,7 +326,7 @@ for (const n of [3, 4, 5, 6, 7]) {
     }
   });
 
-  test(`geometric contraction, n=${n}: repeated A(n) application on a REAL asymmetric neighborhood converges monotonically toward vertexLimitPosition's own value — the discrete-refinement analog of "evaluated at a sequence of (u,v) approaching (0,0)"`, () => {
+  test(`geometric contraction, n=${n}: repeated A(n) application on an asymmetric neighborhood converges monotonically toward vertexLimitPosition's own value — the discrete-refinement analog of "evaluated at a sequence of (u,v) approaching (0,0)"`, () => {
     const template = standardNeighborhoodCage(n);
     const realCage = {
       vertices: template.vertices.map((_, i) => [
@@ -361,11 +344,10 @@ for (const n of [3, 4, 5, 6, 7]) {
       realCage.vertices.map((p) => p[1]),
       realCage.vertices.map((p) => p[2]),
     ];
-    // Iteration count is NOT fixed at a value tuned to look good — a
-    // higher valence has a real, larger subdominant eigenvalue |lambda1|
-    // (slower geometric contraction is a genuine property of the
-    // surface near that vertex, not a test artifact), so this runs until
-    // genuinely converged rather than asserting a one-size count.
+    // The iteration count is not fixed: a higher valence has a larger
+    // subdominant eigenvalue |lambda1| (slower geometric contraction is a
+    // property of the surface near that vertex, not a test artifact), so
+    // this runs until converged rather than asserting a one-size count.
     let prevErr = Infinity;
     let err = Infinity;
     for (let k = 1; k <= 60; k++) {
@@ -382,13 +364,13 @@ for (const n of [3, 4, 5, 6, 7]) {
   });
 }
 
-test('n=4 (regular) run through the SAME general vertex-limit machinery agrees EXACTLY with step 1\'s own regular bicubic fast path, at their one shared point (u,v)=(0,0) — proving the two paths agree at the boundary, not just independently "look right"', () => {
-  // A real 4x4 regular grid (step 1's own domain) has its own vertex-0
+test('n=4 (regular) run through the same general vertex-limit machinery agrees exactly with step 1\'s own regular bicubic fast path, at their one shared point (u,v)=(0,0)', () => {
+  // A 4x4 regular grid (step 1's own domain) has its own vertex-0
   // analog sitting at grid[1][1] (the shared corner of the center 2x2
   // face, per bicubicRegularPatchSurface's own documented layout) — its
   // one-ring neighborhood in the (2n+1)=9-point template's own index
   // order (center, 4 spokes = its 4 orthogonal grid neighbors, 4 corners
-  // = its 4 diagonal grid neighbors) is read directly off the SAME grid.
+  // = its 4 diagonal grid neighbors) is read directly off the same grid.
   const grid = [
     [[0, 0, 0.2], [1, 0, 0.6], [2, 0, 0.1], [3, 0, 0.9]],
     [[0, 1, 0.7], [1, 1, 1.3], [2, 1, 0.4], [3, 1, 1.1]],
@@ -401,8 +383,8 @@ test('n=4 (regular) run through the SAME general vertex-limit machinery agrees E
   const n = 4;
   const template = standardNeighborhoodCage(n);
   // template order: center, spoke_0..3 (orthogonal neighbors), corner_0..3
-  // (diagonal neighbors) of grid[1][1] — reading its real 9-point
-  // one-ring straight off the SAME grid, no relabeling trick.
+  // (diagonal neighbors) of grid[1][1] — its 9-point one-ring, read
+  // straight off the same grid.
   const P = grid[1][1];
   const spokes = [grid[0][1], grid[1][0], grid[1][2], grid[2][1]];
   const corners = [grid[0][0], grid[0][2], grid[2][0], grid[2][2]];
@@ -413,44 +395,40 @@ test('n=4 (regular) run through the SAME general vertex-limit machinery agrees E
     assert.ok(Math.abs(generalAnswer[k] - regularAnswer[k]) < 1e-9,
       `axis ${k}: general vertex-mask machinery=${generalAnswer[k]}, step-1 regular fast path=${regularAnswer[k]}`);
   }
-  assert.ok(srf.degU === 3 && srf.degV === 3, 'sanity: the regular patch really is the expected bicubic surface');
+  assert.ok(srf.degU === 3 && srf.degV === 3, 'sanity: the regular patch is the expected bicubic surface');
 });
 
-// ================================================================
-// STEP 5 — SEMI-SHARP HYBRID, checked against a real fixture with a
-// genuine partially-decayed semi-sharp crease weight (strictly between
-// 0 and the app's own real reachable cap, 3 — kernel/subd.mjs's own
-// documented SUPERB_CREASE_LEVEL_SCALE range), checked for continuity
-// at the discrete-decay-then-exact seam.
-// ================================================================
+// Step 5: semi-sharp hybrid, checked on a fixture with a partially decayed
+// semi-sharp crease weight (strictly between 0 and the reachable cap, 3 —
+// kernel/subd.mjs's documented SUPERB_CREASE_LEVEL_SCALE range), for
+// continuity at the discrete-decay-then-exact seam.
 
-test('semiSharpHybridLimitPosition: the crease decay genuinely matters — a partially-decayed weight gives a DIFFERENT answer than pretending the vertex is already smooth', () => {
+test('semiSharpHybridLimitPosition: the crease decay matters — a partially-decayed weight gives a different answer than pretending the vertex is already smooth', () => {
   const n = 5;
   const center = [3, -2, 1];
   const cage = buildSymmetricFan(n, center, 1, 1.7);
   cage.creases = {}; // buildSymmetricFan doesn't set any; be explicit
-  cage.creases[edgeKey(0, 1)] = 1.5; // a real, active, partially-decayed weight (0 < 1.5 < cap 3)
+  cage.creases[edgeKey(0, 1)] = 1.5; // an active, partially-decayed weight (0 < 1.5 < cap 3)
 
   const hybrid = semiSharpHybridLimitPosition(cage, 0);
   const ignoringCrease = vertexLimitPosition(cage, 0); // wrong on purpose: treats vertex 0 as already smooth
   const dist = Math.hypot(hybrid[0] - ignoringCrease[0], hybrid[1] - ignoringCrease[1], hybrid[2] - ignoringCrease[2]);
-  assert.ok(dist > 1e-6, `hybrid=${hybrid} must genuinely differ from the "ignore the crease" answer=${ignoringCrease} (dist=${dist})`);
+  assert.ok(dist > 1e-6, `hybrid=${hybrid} must differ from the "ignore the crease" answer=${ignoringCrease} (dist=${dist})`);
 });
 
-test('semiSharpHybridLimitPosition: a PERMANENT marker weight (far above the app\'s real [0,3] decaying-crease range — e.g. a TOSUBD marked corner, real weights in the hundreds) refuses honestly instead of attempting a catastrophic number of whole-cage subdivision levels', () => {
+test('semiSharpHybridLimitPosition: a permanent marker weight (far above the app\'s [0,3] decaying-crease range — e.g. a ToSubD marked corner, weights in the hundreds) refuses instead of attempting a catastrophic number of whole-cage subdivision levels', () => {
   const n = 5;
   const cage = buildSymmetricFan(n, [0, 0, 0], 1, 1.7);
   cage.creases = {};
-  cage.creases[edgeKey(0, 1)] = 1000; // a real marked-corner-scale weight, not a decaying crease
+  cage.creases[edgeKey(0, 1)] = 1000; // a marked-corner-scale weight, not a decaying crease
   assert.throws(() => semiSharpHybridLimitPosition(cage, 0), /MAX_SEMISHARP_DECAY_LEVELS/);
-  // A weight right at the cap boundary must still be genuinely evaluated
-  // (never a false-positive refusal for a real, if unusually high but
-  // still bounded, ordinary crease request).
+  // A weight right at the cap boundary must still be evaluated: an
+  // unusually high but bounded ordinary crease is not refused.
   cage.creases[edgeKey(0, 1)] = 8;
   assert.doesNotThrow(() => semiSharpHybridLimitPosition(cage, 0));
 });
 
-test('semiSharpHybridLimitPosition: CONTINUITY at the decay-then-exact seam — real, repeated discrete subdivision of the SAME creased cage converges toward the hybrid\'s exact answer with monotonically shrinking error, no jump at the handoff point', () => {
+test('semiSharpHybridLimitPosition: continuity at the decay-then-exact seam — repeated discrete subdivision of the same creased cage converges toward the hybrid\'s exact answer with monotonically shrinking error, no jump at the handoff point', () => {
   const n = 5;
   const center = [-1, 4, 2];
   const cage = buildSymmetricFan(n, center, 1, 1.7);
@@ -463,23 +441,20 @@ test('semiSharpHybridLimitPosition: CONTINUITY at the decay-then-exact seam — 
 
   const hybrid = semiSharpHybridLimitPosition(cage, 0);
 
-  // Real, independent ground truth: repeatedly subdivide the SAME
-  // original creased cage (subd.mjs's own already-proven decay), reading
-  // vertex 0's own RAW (not exact-limit) position at each level. This is
-  // a genuinely different computation from semiSharpHybridLimitPosition
-  // itself (that function stops discrete refinement at k and switches to
-  // the exact eigenbasis machinery; this loop keeps discretely refining
-  // past k) — if the handoff were discontinuous, this sequence would NOT
-  // converge toward the hybrid's own answer.
-  // Capped at 8 real, WHOLE-CAGE subdivision levels, deliberately not
-  // more: unlike step 4's own A(n)-matrix convergence proof (a cheap
-  // (2n+1)x(2n+1) operation, safe to iterate dozens of times), this loop
-  // runs subd.mjs's own REAL subdivideCatmullClark on the WHOLE cage —
-  // every face, everywhere, not just this one vertex's neighborhood —
-  // and Catmull-Clark refinement genuinely quadruples the total face
-  // count every level, so it must stay bounded (5 faces at level 0 is
-  // already 5*4^8 = 327,680 by level 8; a few more levels would exhaust
-  // available memory for no further proof value, confirmed empirically).
+  // Independent ground truth: repeatedly subdivide the same original
+  // creased cage (subd.mjs's own decay), reading vertex 0's own raw (not
+  // exact-limit) position at each level. This is a different computation
+  // from semiSharpHybridLimitPosition itself (that function stops discrete
+  // refinement at k and switches to the exact eigenbasis machinery; this
+  // loop keeps discretely refining past k) — if the handoff were
+  // discontinuous, this sequence would not converge toward the hybrid's
+  // own answer.
+  // Capped at 8 whole-cage subdivision levels: unlike step 4's A(n)-matrix
+  // convergence check (a cheap (2n+1)x(2n+1) operation, safe to iterate
+  // dozens of times), this loop runs subdivideCatmullClark on the whole
+  // cage, and Catmull-Clark refinement quadruples the total face count
+  // every level (5 faces at level 0 is already 5*4^8 = 327,680 by level 8;
+  // a few more levels would exhaust available memory).
   let c = cage;
   const errors = [];
   for (let m = 0; m <= 8; m++) {
@@ -490,9 +465,9 @@ test('semiSharpHybridLimitPosition: CONTINUITY at the decay-then-exact seam — 
   }
   // Once the crease has structurally decayed away (level k and beyond —
   // the smooth eigen-convergence regime), the error must shrink, level
-  // over level, toward zero — the actual continuity proof.
+  // over level, toward zero — the continuity check.
   for (let m = k; m < errors.length - 1; m++) {
     assert.ok(errors[m + 1] <= errors[m] + 1e-12, `level ${m}->${m + 1}: error must not grow (${errors[m]} -> ${errors[m + 1]})`);
   }
-  assert.ok(errors[errors.length - 1] < 1e-4, `after 8 real discrete levels past a weight-1.5 crease, residual error to the hybrid's exact answer is ${errors[errors.length - 1]}, expected essentially converged`);
+  assert.ok(errors[errors.length - 1] < 1e-4, `after 8 discrete levels past a weight-1.5 crease, residual error to the hybrid's exact answer is ${errors[errors.length - 1]}, expected essentially converged`);
 });

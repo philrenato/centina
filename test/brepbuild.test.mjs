@@ -1,8 +1,8 @@
 // kernel/brepbuild.mjs — welding a plain set of face boundary loops into a
-// real half-edge B-rep, then handing it to kernel/brep.mjs's OWN validator.
+// real half-edge B-rep, then handing it to kernel/brep.mjs's own validator.
 //
 // Nothing here trusts the builder's own word: every structural claim is
-// re-checked by validateBrep (a genuinely separate implementation with its
+// re-checked by validateBrep (a separate implementation with its
 // own error codes), and every count is checked against the textbook value
 // for the polyhedron in question, not against whatever the builder said.
 import { test } from 'node:test';
@@ -12,7 +12,7 @@ import { validateBrep, eulerCharacteristic, hasErrorCode, allFaces } from '../ke
 
 // A unit cube as six quad loops. Faces 0/2/4 are wound one way and 1/3/5 the
 // other, exactly the way a corner-by-corner primitive authors them — i.e.
-// deliberately NOT consistently oriented, so the builder's own orientation
+// deliberately not consistently oriented, so the builder's own orientation
 // pass is exercised rather than bypassed.
 function cubeFaces(s = 1) {
   const c = (x, y, z) => [x * s, y * s, z * s];
@@ -44,13 +44,13 @@ test('a cube welds to the textbook V=8 E=12 F=6, chi=2, and passes validateBrep'
   assert.equal(e.V - e.E + e.F, 2);
   assert.equal(e.ok, true);
   assert.equal(allFaces(res.solid).length, 6);
-  // The input faces really were inconsistently wound, so the orientation
-  // pass genuinely had work to do — proving the pass, not just its absence.
+  // The input faces are inconsistently wound, so the orientation pass has
+  // work to do — this exercises the pass, not just its absence.
   assert.ok(res.stats.flippedFaces > 0, 'the fixture is deliberately mis-wound; some faces must have been flipped');
   assert.match(brepVerdict(res), /CLOSED SOLID/);
 });
 
-test('a cube with one face removed is an OPEN SHELL with exactly 4 naked edges, not a solid', () => {
+test('a cube with one face removed is an open shell with exactly 4 naked edges, not a solid', () => {
   const faces = cubeFaces();
   faces.splice(1, 1); // drop z = 1
   const res = buildBrepSolid(faces);
@@ -65,7 +65,7 @@ test('a cube with one face removed is an OPEN SHELL with exactly 4 naked edges, 
   assert.match(brepVerdict(res), /4 naked edges/);
 });
 
-test('an edge shared by three faces is refused BY NAME as non-manifold', () => {
+test('an edge shared by three faces is refused by name as non-manifold', () => {
   // Three quads hinged on one shared spine edge.
   const spineA = [0, 0, 0], spineB = [1, 0, 0];
   const res = buildBrepSolid([
@@ -79,7 +79,7 @@ test('an edge shared by three faces is refused BY NAME as non-manifold', () => {
   assert.match(brepVerdict(res), /NON-MANIFOLD/);
 });
 
-test('two disjoint cubes build as TWO shells with chi = 4, genus 0, and still validate', () => {
+test('two disjoint cubes build as two shells with chi = 4, genus 0, and still validate', () => {
   const a = cubeFaces();
   const b = cubeFaces().map((f) => f.map((p) => [p[0] + 10, p[1], p[2]]));
   const res = buildBrepSolid([...a, ...b]);
@@ -95,13 +95,13 @@ test('two disjoint cubes build as TWO shells with chi = 4, genus 0, and still va
   assert.equal(eulerCharacteristic(res.solid).ok, true);
 });
 
-test('corners perturbed below tolerance still weld to ONE vertex (and above it do not)', () => {
+test('corners perturbed below tolerance still weld to one vertex (and above it do not)', () => {
   const jitter = (p, i) => [p[0] + (i % 3 === 0 ? 4e-7 : 0), p[1], p[2]];
   const faces = cubeFaces().map((f, fi) => f.map((p) => jitter(p, fi)));
   const welded = weldPoints(faces.flatMap((f) => [f]), 1e-6);
   assert.equal(welded.points.length, 8, 'sub-tolerance jitter must not split a corner');
   const tight = weldPoints(faces.flatMap((f) => [f]), 1e-9);
-  assert.ok(tight.points.length > 8, 'below the jitter, the same corners must NOT weld — proving the tolerance is real');
+  assert.ok(tight.points.length > 8, 'below the jitter, the same corners must not weld — the tolerance is applied');
 });
 
 test('boundaryLoops finds the single closed rim of an open box, and none of a closed one', () => {
@@ -117,7 +117,7 @@ test('boundaryLoops finds the single closed rim of an open box, and none of a cl
   assert.equal(boundaryLoops(closed.loops).nakedEdgeCount, 0);
 });
 
-test('a genuinely non-orientable face set is refused BY NAME, not silently solidified', () => {
+test('a non-orientable face set is refused by name, not silently solidified', () => {
   // A three-quad Möbius band: the last strip is joined back to the first
   // with a half twist, so no consistent winding exists.
   const p = [
@@ -135,13 +135,13 @@ test('a genuinely non-orientable face set is refused BY NAME, not silently solid
   assert.match(brepVerdict(res), /NOT ORIENTABLE/);
 });
 
-// --- SHELL ORIENTATION -----------------------------------------------
+// Shell orientation
 // Consistency and outwardness are different facts. Every test above is
-// satisfied by a shell that is consistently wound INSIDE-OUT, which is
-// why these measure SIGNED volume: it is the one quantity that reads the
+// satisfied by a shell that is consistently wound inside-out, which is
+// why these measure signed volume: it is the one quantity that reads the
 // direction rather than merely the agreement.
 
-// A cube wound CONSISTENTLY, in a direction the caller chooses. This has
+// A cube wound consistently, in a direction the caller chooses. This has
 // to be a separate fixture from `cubeFaces` above: that one is
 // deliberately mis-wound, so which way `orientLoops` settles it is
 // decided by whichever face seeded the traversal — precisely the
@@ -160,7 +160,7 @@ function consistentCube(s = 1, outward = true, off = [0, 0, 0]) {
   return outward ? faces : faces.map((l) => l.slice().reverse());
 }
 
-// Signed volume straight from the BUILT solid's own half-edge loops, by
+// Signed volume straight from the built solid's own half-edge loops, by
 // the divergence theorem over origin-fanned tetrahedra. Deliberately
 // re-derived here from the result rather than imported from the module
 // under test, so this measures what was built rather than restating the
@@ -187,10 +187,10 @@ function brepSignedVolume(solid) {
   return v;
 }
 
-test('a consistently INSIDE-OUT cube is turned outward, and reports that it was', () => {
+test('a consistently inside-out cube is turned outward, and reports that it was', () => {
   // Every neighbor agrees with every neighbor here, so `orientLoops`
-  // has nothing to fix — this is exactly the case that used to come back
-  // inside-out with a clean bill of health.
+  // has nothing to fix — consistency alone cannot see that this shell faces
+  // inward.
   const res = buildBrepSolid(consistentCube(3, false));
   assert.equal(res.ok, true, res.reason ?? '');
   assert.equal(res.stats.flippedFaces, 0, 'the fixture is already consistent; orientLoops must find nothing to do');
@@ -213,9 +213,9 @@ test('an already-outward cube is left completely alone', () => {
 
 test('the mis-wound fixture lands outward too, whichever way its traversal happened to seed', () => {
   // `cubeFaces` is inconsistently wound, so orientLoops picks a direction
-  // on its own; the ALL-REVERSED twin of the same fixture generally picks
-  // the other one. Both must still end up measuring +27 — the real claim
-  // is that the OUTCOME no longer depends on that accident.
+  // on its own; the all-reversed twin of the same fixture generally picks
+  // the other one. Both must still end up measuring +27 — the outcome must
+  // not depend on which face seeded the traversal.
   for (const faces of [cubeFaces(3), cubeFaces(3).map((l) => l.slice().reverse())]) {
     const res = buildBrepSolid(faces);
     assert.equal(res.ok, true, res.reason ?? '');
@@ -224,7 +224,7 @@ test('the mis-wound fixture lands outward too, whichever way its traversal happe
   }
 });
 
-test('two DISJOINT solids are both outer — the case a largest-volume rule would get wrong', () => {
+test('two disjoint solids are both outer — the case a largest-volume rule would get wrong', () => {
   // Deliberately different sizes, both arriving inside-out. A rule that
   // called the bigger one the solid and the smaller one its void would
   // pass every structural check above and total 27 - 1 instead of 27 + 1.
@@ -237,13 +237,13 @@ test('two DISJOINT solids are both outer — the case a largest-volume rule woul
   assert.deepEqual(res.solid.shells.map((s) => s.shellKind), ['outer', 'outer']);
   assert.equal(res.stats.flippedShells, 2);
   const vol = brepSignedVolume(res.solid);
-  assert.ok(Math.abs(vol - 28) < 1e-9, `two disjoint solids must SUM (27 + 1 = 28), got ${vol}`);
+  assert.ok(Math.abs(vol - 28) < 1e-9, `two disjoint solids must sum (27 + 1 = 28), got ${vol}`);
 });
 
-test('a VOID shell is classified as one and faces INTO the cavity, whichever way it arrives', () => {
+test('a void shell is classified as one and faces into the cavity, whichever way it arrives', () => {
   // A hollow cube: a 6-unit outer with a 2-unit cavity centered inside it,
-  // fed in with BOTH shells wound outward — so the inner one is genuinely
-  // wrong on arrival and must be reversed.
+  // fed in with both shells wound outward — so the inner one is wrong on
+  // arrival and must be reversed.
   const res = buildBrepSolid([
     ...consistentCube(6, true),
     ...consistentCube(2, true, [2, 2, 2]),
@@ -255,13 +255,13 @@ test('a VOID shell is classified as one and faces INTO the cavity, whichever way
   assert.equal(kinds.filter((k) => k === 'outer').length, 1);
   assert.equal(kinds.filter((k) => k === 'void').length, 1);
   assert.equal(res.stats.flippedShells, 1, 'exactly the inner shell was wrong');
-  // 6^3 - 2^3 = 208: the void SUBTRACTS, which is the whole point of the
+  // 6^3 - 2^3 = 208: the void subtracts, which is the purpose of the
   // convention — a hollow solid's volume is the plain sum of its shells.
   const vol = brepSignedVolume(res.solid);
   assert.ok(Math.abs(vol - 208) < 1e-9, `a hollow cube must measure 6^3 - 2^3 = 208, got ${vol}`);
 });
 
-test('a void arriving ALREADY correct is not flipped back out again', () => {
+test('a void arriving already correct is not flipped back out again', () => {
   const res = buildBrepSolid([
     ...consistentCube(6, true),
     ...consistentCube(2, false, [2, 2, 2]),

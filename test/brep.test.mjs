@@ -1,19 +1,19 @@
-// PHASE 1 B-REP TOPOLOGY — tests.
+// B-rep topology tests.
 //
-// The load-bearing checks here, in order of how much they actually prove:
-//   1. Euler-Poincaré holds after EVERY operator and every sequence, not
+// The main checks here, in order of how much they prove:
+//   1. Euler-Poincaré holds after every operator and every sequence, not
 //      just at the end of a construction. `stepper()` wraps every operator
-//      call in a real assertion so a bookkeeping mistake is caught at the
+//      call in an assertion so a bookkeeping mistake is caught at the
 //      step that made it, not 20 steps later.
-//   2. Two non-trivial closed solids are built THROUGH THE OPERATORS ALONE
+//   2. Two non-trivial closed solids are built through the operators alone
 //      (no hand-written pointer surgery anywhere in this file's fixtures):
 //      a box, and a rectangular block with a rectangular through-hole
 //      (genus 1, two rings — deliberately non-cubic and with an off-center
 //      hole, so a symmetry accident cannot make a wrong answer look right).
-//   3. Every operator's inverse restores the prior STRUCTURE, compared by a
+//   3. Every operator's inverse restores the prior structure, compared by a
 //      canonical id-free fingerprint; for the three pairs where object
 //      identity is also preservable, exact id-set equality is asserted too.
-//   4. validateBrep genuinely fires on each named failure mode, against a
+//   4. validateBrep fires on each named failure mode, against a
 //      deliberately corrupted structure per mode.
 
 import test from 'node:test';
@@ -33,13 +33,11 @@ import { trimLoopsValid, signedArea2D } from '../kernel/trim.mjs';
 import { tessellateTrimmedSurface, tessellationArea } from '../kernel/trimtess.mjs';
 import { intersectSurfaces } from '../kernel/ssi.mjs';
 
-// ---------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------
+// Helpers
 
-// Wraps a construction so every single operator call is followed by a real
+// Wraps a construction so every single operator call is followed by an
 // Euler-Poincaré assertion. Returns the list of step labels so a test can
-// also assert HOW MANY operators ran (a construction that silently took a
+// also assert how many operators ran (a construction that silently took a
 // different path would change that count).
 function stepper(labels = [], journal = []) {
   return (label, solid, result) => {
@@ -50,14 +48,13 @@ function stepper(labels = [], journal = []) {
 }
 
 // Drive a recorded construction backwards, one inverse per forward operator,
-// asserting the invariant AND structural validity after every single step.
+// asserting the invariant and structural validity after every single step.
 //
-// The `rebind` map is not incidental bookkeeping — it is the honest
-// consequence of a real property of this operator set, found by running this
-// teardown rather than by reading the code: KEMR destroys an edge that an
-// EARLIER MEV created, and its inverse MEKR re-creates that edge as a new
-// object. Every handle recorded when the spur was first made is therefore
-// dead from the moment KEMR runs, and a backwards replay must re-bind it.
+// The `rebind` map follows from a property of this operator set: KEMR
+// destroys an edge that an earlier MEV created, and its inverse MEKR
+// re-creates that edge as a new object. Every handle recorded when the spur
+// was first made is therefore dead from the moment KEMR runs, and a
+// backwards replay must re-bind it.
 // KEMR hands back exactly what is needed to do so.
 function teardown(solid, journal) {
   const rebind = new Map();
@@ -111,17 +108,15 @@ function buildBlock(w, d, h, onStep) {
   const made = mef(heFrom(lLower, vA, rB.vertex), heFrom(lLower, rD.vertex, rC.vertex));
   onStep('mef', solid, made);
 
-  // `made.loop` is A->B->C->D (counter-clockwise seen from +Z); sweeping THAT
+  // `made.loop` is A->B->C->D (counter-clockwise seen from +Z); sweeping that
   // one upward is what makes it the top face with an outward-pointing
   // orientation, and leaves fLower (D->C->B->A) as the correctly-oriented
-  // bottom. Orientation is a real choice here, not an accident.
+  // bottom. Orientation is a deliberate choice here, not an accident.
   const topVerts = sweepLoop(made.loop, (v) => [v.point[0], v.point[1], h], { onStep });
   return { solid, bottomFace: fLower, bottomLoop: lLower, topFace: made.face, topLoop: made.loop, topVerts };
 }
 
-// ---------------------------------------------------------------------
-// 1. the invariant itself
-// ---------------------------------------------------------------------
+// 1. The invariant itself
 
 test('eulerCharacteristic on a bare MVFS seed: V=1 E=0 F=1 L=1 R=0 S=1 G=0, and the invariant holds', () => {
   const { solid } = mvfs([0, 0, 0]);
@@ -142,11 +137,9 @@ test('assertEulerPoincare fires on a deliberately mis-counted solid — the inva
   assert.throws(() => assertEulerPoincare(solid, 'tampered'), /Euler-Poincar/);
 });
 
-// ---------------------------------------------------------------------
-// 2. real solids, built through the operators alone
-// ---------------------------------------------------------------------
+// 2. Solids built through the operators alone
 
-test('a rectangular block built through the Euler operators alone: the invariant holds after EVERY step, and the finished solid validates', () => {
+test('a rectangular block built through the Euler operators alone: the invariant holds after every step, and the finished solid validates', () => {
   const labels = [];
   const { solid } = buildBlock(60, 40, 25, stepper(labels));
 
@@ -164,7 +157,7 @@ test('a rectangular block built through the Euler operators alone: the invariant
   assert.deepEqual(res.errors, [], 'a finished block should have zero validity errors');
   assert.ok(res.ok);
 
-  // Every face is a genuine 4-sided closed cycle of distinct vertices.
+  // Every face is a 4-sided closed cycle of distinct vertices.
   for (const f of allFaces(solid)) {
     assert.equal(f.loops.length, 1);
     const hes = loopHalfEdges(f.loops[0]);
@@ -183,13 +176,13 @@ test('a rectangular block built through the Euler operators alone: the invariant
 });
 
 // The non-trivial fixture: a 60 x 40 x 25 block with a 30 x 20 rectangular
-// through-hole, deliberately OFF-CENTER (x 15..45 in a 0..60 span, y 10..30
+// through-hole, deliberately off-center (x 15..45 in a 0..60 span, y 10..30
 // in a 0..40 span) so nothing here can pass by symmetry.
 function buildWasher(onStep) {
   const block = buildBlock(60, 40, 25, onStep);
   const { solid, topLoop, bottomFace } = block;
 
-  // Traced counter-clockwise so the RING left behind on the top face (which
+  // Traced counter-clockwise so the ring left behind on the top face (which
   // is the return path, i.e. the reverse of the traced order) comes out
   // clockwise — opposite the counter-clockwise outer loop, which is exactly
   // the outer/hole winding convention kernel/trim.mjs already enforces.
@@ -203,7 +196,7 @@ function buildWasher(onStep) {
   return { ...block, ring: cut.ring, tunnelVerts: tunnel, holeRing: punched.ring };
 }
 
-test('a block with a rectangular THROUGH-HOLE, built through the Euler operators alone: genus 1, two rings, invariant holds at every step, and it validates clean', () => {
+test('a block with a rectangular through-hole, built through the Euler operators alone: genus 1, two rings, invariant holds at every step, and it validates clean', () => {
   const labels = [];
   const { solid, topFace, bottomFace, ring, holeRing } = buildWasher(stepper(labels));
 
@@ -225,7 +218,7 @@ test('a block with a rectangular THROUGH-HOLE, built through the Euler operators
   const res = validateBrep(solid);
   assert.deepEqual(res.errors, [], 'a finished genus-1 solid should have zero validity errors');
 
-  // The two rings really are rings, on the two faces we expect.
+  // The two rings are rings, on the two faces we expect.
   assert.equal(topFace.loops.length, 2);
   assert.equal(topFace.loops[1], ring);
   assert.equal(bottomFace.loops.length, 2);
@@ -233,24 +226,22 @@ test('a block with a rectangular THROUGH-HOLE, built through the Euler operators
   assert.equal(loopHalfEdges(ring).length, 4);
   assert.equal(loopHalfEdges(holeRing).length, 4);
 
-  // 4 tunnel walls exist and each is a real quad face distinct from the 6
-  // outer-block faces — i.e. the hole is a genuine tunnel, not bookkeeping.
+  // 4 tunnel walls exist and each is a quad face distinct from the 6
+  // outer-block faces — i.e. the hole is a tunnel, not bookkeeping.
   const quadFaces = allFaces(solid).filter((f) => f.loops.length === 1 && loopHalfEdges(f.loops[0]).length === 4);
   assert.equal(quadFaces.length, 8, '4 outer side walls + 4 tunnel walls');
 
-  // Both rings wind OPPOSITE their own face's outer loop, in the XY plane
-  // both those faces live in — the real orientation property, measured, not
+  // Both rings wind opposite their own face's outer loop, in the XY plane
+  // both those faces live in — the orientation property, measured, not
   // assumed.
   const xy = (loop) => loopHalfEdges(loop).map((he) => [he.vertex.point[0], he.vertex.point[1]]);
   assert.ok(signedArea2D(xy(topFace.loops[0])) > 0 && signedArea2D(xy(ring)) < 0);
   assert.ok(signedArea2D(xy(bottomFace.loops[0])) < 0 && signedArea2D(xy(holeRing)) > 0);
 });
 
-// ---------------------------------------------------------------------
-// 3. inverses
-// ---------------------------------------------------------------------
+// 3. Inverses
 
-test('MEV/KEV and MEF/KEF round-trip EXACTLY — same structure and the same entity ids, not merely an isomorphic rebuild', () => {
+test('MEV/KEV and MEF/KEF round-trip exactly — same structure and the same entity ids, not merely an isomorphic rebuild', () => {
   const { solid, topLoop, topVerts } = buildBlock(60, 40, 25, () => {});
   const before = brepFingerprint(solid);
   const beforeIds = idSet(solid);
@@ -272,7 +263,7 @@ test('MEV/KEV and MEF/KEF round-trip EXACTLY — same structure and the same ent
   assert.deepEqual(validateBrep(solid).errors, []);
 });
 
-test('KEMR/MEKR and KFMRH/MFKRH round-trip to the exact prior STRUCTURE (identity is not preserved — an inverse that re-creates an entity gets a fresh id, stated rather than glossed)', () => {
+test('KEMR/MEKR and KFMRH/MFKRH round-trip to the exact prior structure (identity is not preserved — an inverse that re-creates an entity gets a fresh id)', () => {
   const journal = [];
   const { solid, topFace, bottomFace, ring, holeRing } = buildWasher(() => {}, journal);
   const washer = brepFingerprint(solid);
@@ -295,7 +286,7 @@ test('KEMR/MEKR and KFMRH/MFKRH round-trip to the exact prior STRUCTURE (identit
   const reRing = kemr(bridged.halfEdge);
   assert.equal(topFace.loops.length, 2);
   assert.equal(brepFingerprint(solid), washer, 'structure restored exactly');
-  assert.notEqual(reRing.ring, ring, 'the restored ring is a NEW loop object — structure is restored, identity is not');
+  assert.notEqual(reRing.ring, ring, 'the restored ring is a new loop object — structure is restored, identity is not');
   assert.deepEqual(validateBrep(solid).errors, []);
 });
 
@@ -332,14 +323,12 @@ test('the genus-1 through-hole solid tears all the way down too — every one of
   kvfs(solid);
 });
 
-test('KVFS refuses anything that is not a bare seed — it will not silently discard a real solid', () => {
+test('KVFS refuses anything that is not a bare seed — it will not silently discard a built solid', () => {
   const { solid } = buildBlock(10, 10, 10, () => {});
   assert.throws(() => kvfs(solid), /only a bare MVFS seed/);
 });
 
-// ---------------------------------------------------------------------
-// 4. the shell term
-// ---------------------------------------------------------------------
+// 4. The shell term
 
 test('a two-shell solid (a block with a block-shaped cavity): S=2, the invariant still holds, and it validates', () => {
   const outer = buildBlock(60, 40, 25, () => {});
@@ -359,11 +348,9 @@ test('a two-shell solid (a block with a block-shaped cavity): S=2, the invariant
   assert.deepEqual(validateBrep(outer.solid).errors, []);
 });
 
-// ---------------------------------------------------------------------
-// 5. validateBrep genuinely fires, one deliberately broken structure per mode
-// ---------------------------------------------------------------------
+// 5. validateBrep fires, one deliberately broken structure per mode
 
-test('validateBrep catches a NON-MANIFOLD edge (an edge used by more than two faces)', () => {
+test('validateBrep catches a non-manifold edge (an edge used by more than two faces)', () => {
   const { solid } = buildBlock(60, 40, 25, () => {});
   assert.ok(validateBrep(solid).ok);
   const edge = solid.edges[0];
@@ -375,8 +362,8 @@ test('validateBrep catches a NON-MANIFOLD edge (an edge used by more than two fa
   assert.match(res.errors.find((x) => x.code === 'non-manifold-edge').message, /used by 3 half-edges/);
 });
 
-test('validateBrep catches a REPEATED VERTEX in a face loop — and correctly does NOT flag the legitimate mid-construction case when told the build is unfinished', () => {
-  // A genuine intermediate state, not a hand-corrupted one: a spur path
+test('validateBrep catches a repeated vertex in a face loop — and does not flag the legitimate mid-construction case when told the build is unfinished', () => {
+  // An intermediate state, not a hand-corrupted one: a spur path
   // A->B->C traverses B twice by construction.
   const { solid, loop, vertex: vA } = mvfs([0, 0, 0]);
   const rB = mev(loop, vA, [10, 0, 0]);
@@ -392,7 +379,7 @@ test('validateBrep catches a REPEATED VERTEX in a face loop — and correctly do
   assert.deepEqual(lenient.errors, [], 'mid-construction these are legitimate, and the gate says so explicitly');
 });
 
-test('validateBrep catches DANGLING and ORPHANED elements', () => {
+test('validateBrep catches dangling and orphaned elements', () => {
   // dangling: a spur grown off a finished block
   const block = buildBlock(60, 40, 25, () => {});
   mev(block.topLoop, block.topVerts[0], [-5, -5, 40]);
@@ -422,7 +409,7 @@ test('validateBrep catches DANGLING and ORPHANED elements', () => {
   assert.ok(hasErrorCode(orphanH, 'orphan-edge'));
 });
 
-test('validateBrep catches INCONSISTENT WINDING between adjacent faces', () => {
+test('validateBrep catches inconsistent winding between adjacent faces', () => {
   const { solid } = buildBlock(60, 40, 25, () => {});
   assert.ok(validateBrep(solid).ok);
   const [a, b] = solid.edges[0].halfEdges;
@@ -433,7 +420,7 @@ test('validateBrep catches INCONSISTENT WINDING between adjacent faces', () => {
   assert.match(res.errors.find((x) => x.code === 'inconsistent-winding').message, /traverse it the same way/);
 });
 
-test('validateBrep catches an UNCLOSED loop, in both of the two ways a cycle can break', () => {
+test('validateBrep catches an unclosed loop, in both of the two ways a cycle can break', () => {
   const broken1 = buildBlock(60, 40, 25, () => {});
   loopHalfEdges(broken1.topLoop)[1].next = null;
   const r1 = validateBrep(broken1.solid);
@@ -448,7 +435,7 @@ test('validateBrep catches an UNCLOSED loop, in both of the two ways a cycle can
   assert.match(r2.errors.find((x) => x.code === 'unclosed-loop').message, /next\/prev disagree/);
 });
 
-test('validateBrep catches an EMPTY loop, a STALE vertex half-edge, BROKEN ownership, and an EULER-POINCARÉ violation', () => {
+test('validateBrep catches an empty loop, a stale vertex half-edge, broken ownership, and an Euler-Poincaré violation', () => {
   const seed = mvfs([0, 0, 0]);
   assert.ok(hasErrorCode(validateBrep(seed.solid), 'empty-loop'));
   assert.ok(validateBrep(seed.solid, { allowIntermediate: true }).ok);
@@ -473,9 +460,7 @@ test('validateBrep on an intact solid reports zero errors — it is not a valida
   assert.deepEqual(validateBrep(buildWasher(() => {}).solid).errors, []);
 });
 
-// ---------------------------------------------------------------------
-// 6. compatibility with the existing trimmed-surface + SSI models
-// ---------------------------------------------------------------------
+// 6. Compatibility with the existing trimmed-surface and SSI models
 
 // A bilinear planar patch whose parameter domain IS its own (x, y) extent,
 // so surfacePoint(u, v) = (u, v, z) exactly and the UV mapping below is not
@@ -492,7 +477,7 @@ function planarPatch(w, d, z) {
   };
 }
 
-test('a B-rep face hands its trim boundary to the EXISTING trimmed-surface model: derived loops pass trimLoopsValid, and tessellating them yields the true annular area', () => {
+test('a B-rep face hands its trim boundary to the existing trimmed-surface model: derived loops pass trimLoopsValid, and tessellating them yields the true annular area', () => {
   const { topFace } = buildWasher(() => {});
   attachSurface(topFace, planarPatch(60, 40, 25));
   assignPlanarPcurves(topFace, (p) => [p[0], p[1]]);
@@ -503,7 +488,7 @@ test('a B-rep face hands its trim boundary to the EXISTING trimmed-surface model
   assert.equal(ts.trimHoles[0].length, 4);
 
   // The face's own half-edge cycles, not a second stored copy, are what
-  // produced these — the outer loop's corners really are the block's.
+  // produced these — the outer loop's corners are the block's.
   const corners = new Set(ts.trimLoop.map((p) => p.join(',')));
   assert.deepEqual([...corners].sort(), ['0,0', '0,40', '60,0', '60,40']);
 
@@ -517,14 +502,14 @@ test('a B-rep face hands its trim boundary to the EXISTING trimmed-surface model
   assert.ok(Math.abs(area - expected) / expected < 0.005, `trimmed area ${area} should be within 0.5% of ${expected}`);
 });
 
-test('loopUVPolyline refuses honestly when a half-edge has no pcurve, rather than inventing one', () => {
+test('loopUVPolyline refuses when a half-edge has no pcurve, rather than inventing one', () => {
   const { topFace } = buildWasher(() => {});
   attachSurface(topFace, planarPatch(60, 40, 25));
   assert.throws(() => faceTrimmedSurface(topFace), /has no pcurve/);
 });
 
-test('an edge and its two half-edges take their geometry directly from a real kernel/ssi.mjs intersection — the shapes line up with no adapter beyond field names', () => {
-  // Two genuinely crossing patches: a horizontal plate and a vertical one.
+test('an edge and its two half-edges take their geometry directly from a kernel/ssi.mjs intersection — the shapes line up with no adapter beyond field names', () => {
+  // Two crossing patches: a horizontal plate and a vertical one.
   const plate = planarPatch(60, 40, 0);
   const wall = {
     degU: 1, degV: 1,
@@ -536,7 +521,7 @@ test('an edge and its two half-edges take their geometry directly from a real ke
     ],
   };
   const hit = intersectSurfaces(plate, wall, { seedGrid: 12 });
-  assert.ok(hit.ok, `expected a real intersection: ${hit.reason ?? ''}`);
+  assert.ok(hit.ok, `expected an intersection: ${hit.reason ?? ''}`);
   assert.ok(hit.samples.length >= 2);
 
   const geom = pcurvesFromSSISamples(hit.samples);
@@ -544,8 +529,8 @@ test('an edge and its two half-edges take their geometry directly from a real ke
   assert.equal(geom.uv1.length, hit.samples.length);
   assert.equal(geom.uv2.length, hit.samples.length);
 
-  // Every sampled 3D point really is on the shared line y = 20, z = 0, and
-  // each pcurve really is in its OWN surface's parameter space (uv1 in the
+  // Every sampled 3D point is on the shared line y = 20, z = 0, and
+  // each pcurve is in its own surface's parameter space (uv1 in the
   // plate's [0,60]x[0,40], uv2 in the wall's [0,60]x[0,20]).
   for (let i = 0; i < geom.curve3d.length; i++) {
     const [x, y, z] = geom.curve3d[i];
@@ -554,7 +539,7 @@ test('an edge and its two half-edges take their geometry directly from a real ke
     assert.ok(geom.uv2[i][0] >= -1e-6 && geom.uv2[i][0] <= 60 + 1e-6 && Math.abs(geom.uv2[i][1] - 10) < 1e-3);
   }
 
-  // The slots those three arrays are destined for exist on a real edge, one
+  // The slots those three arrays are destined for exist on an edge, one
   // pcurve per side — Weiler's coedge, and the direct counterpart of
   // kernel/trim.mjs's own reserved edge3d/tolerance pair.
   const { solid, topLoop, topVerts } = buildBlock(60, 40, 25, () => {});
@@ -574,9 +559,7 @@ test('pcurvesFromSSISamples refuses a degenerate sample list rather than returni
   assert.throws(() => pcurvesFromSSISamples([{ u1: 0, v1: 0, u2: 0, v2: 0, point: [0, 0, 0] }]), /at least 2 SSI samples/);
 });
 
-// ---------------------------------------------------------------------
-// 7. operators refuse honestly rather than corrupting
-// ---------------------------------------------------------------------
+// 7. Operators refuse rather than corrupting
 
 test('every operator refuses an inapplicable case by name instead of silently producing a broken solid', () => {
   const { solid, topLoop, topVerts, topFace, bottomFace } = buildBlock(60, 40, 25, () => {});

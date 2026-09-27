@@ -1,52 +1,45 @@
-// CURVE-CURVE INTERSECTION IN THE PLANE.
+// Curve-curve intersection in the plane.
 //
-// WHY 2D, AND WHY THAT IS THE RIGHT QUESTION: this exists to gate trim-loop
-// validity and to pave face boundaries for face splitting, and both of those
-// live in a surface's own UV domain. Two general curves in 3D generically do
-// not meet at all, so a 3D version would answer a question nobody is asking.
-// Callers hand in curves whose x/y ARE the coordinates they care about; z is
-// ignored outright rather than projected, so a caller that has not already
-// flattened its input gets a wrong answer loudly rather than a plausible one
-// quietly.
+// Why 2D: this gates trim-loop validity and paves face boundaries for face
+// splitting, and both live in a surface's UV domain. Two general curves in 3D
+// generically do not meet at all. Callers hand in curves whose x/y are the
+// coordinates they care about; z is ignored rather than projected, so a caller
+// that has not flattened its input gets a visibly wrong answer rather than a
+// plausible one.
 //
-// EVERY STEP IS A PROOF OR A REFUSAL, not an approximation:
+// Every step is a proof or a refusal, not an approximation:
 //
 //   1. decomposeToBezier (kernel/knots.mjs) turns each curve into Bezier
 //      pieces, because the convex hull property below is stated for a Bezier,
 //      not for a general B-spline.
 //
-//   2. CONVEX HULL REJECTION. A rational Bezier with POSITIVE weights is a
-//      convex combination of its own euclidean control points: the rational
+//   2. Convex hull rejection. A rational Bezier with positive weights is a
+//      convex combination of its euclidean control points: the rational
 //      basis R_i = w_i*B_i / sum(w_j*B_j) is non-negative and sums to one. So
 //      the piece lies inside its control points' bounding box, and two pieces
-//      with disjoint boxes provably cannot cross. A rejection here is a proof,
-//      not a heuristic, which is what lets the recursion discard whole
-//      parameter ranges outright.
+//      with disjoint boxes cannot cross. A rejection here is a proof, which is
+//      what lets the recursion discard whole parameter ranges.
 //
-//      The positive-weight precondition is CHECKED, never assumed. A negative
-//      weight breaks the convex combination and with it the entire rejection
-//      argument, so it is refused by name rather than silently producing a
-//      confidently wrong answer.
+//      The positive-weight precondition is checked. A negative weight breaks
+//      the convex combination and with it the rejection argument, so it is
+//      refused by name.
 //
-//   3. SUBDIVISION is de Casteljau at the midpoint, run in HOMOGENEOUS space,
+//   3. Subdivision is de Casteljau at the midpoint, run in homogeneous space,
 //      which is exact for a rational piece — an arc or circle segment
-//      subdivides without drift, matching every other rational-aware routine
-//      in this kernel.
+//      subdivides without drift.
 //
-//   4. NEWTON REFINEMENT. Subdivision alone converges linearly and would need
+//   4. Newton refinement. Subdivision alone converges linearly and would need
 //      dozens of levels to reach machine precision. Each surviving leaf seeds
 //      a 2x2 Newton solve on (Ax(uA)-Bx(uB), Ay(uA)-By(uB)) against the
-//      curves' own analytic derivatives, which converges quadratically and
-//      lands on the TRUE curves rather than on a subdivided approximation of
-//      them. A step that fails to reduce the residual is rejected rather than
-//      taken, so a bad seed degrades to its own starting accuracy instead of
-//      wandering.
+//      curves' analytic derivatives, which converges quadratically and lands
+//      on the curves themselves rather than on a subdivided approximation. A
+//      step that fails to reduce the residual is rejected, so a bad seed
+//      degrades to its starting accuracy instead of wandering.
 //
-//   5. TANGENCY AND OVERLAP ARE REFUSED, NOT GUESSED. At a transversal
-//      crossing the Jacobian [A'(uA), -B'(uB)] is well conditioned; at a
-//      tangency it is singular, and along an overlap every leaf survives
-//      subdivision. Both are reported by name. Transversal-only is the stated
-//      scope, so an honest refusal is the correct output, not a fallback.
+//   5. Tangency and overlap are refused. At a transversal crossing the
+//      Jacobian [A'(uA), -B'(uB)] is well conditioned; at a tangency it is
+//      singular, and along an overlap every leaf survives subdivision. Both
+//      are reported by name; transversal crossings are the stated scope.
 
 import { decomposeToBezier } from './knots.mjs';
 import { curvePoint, rationalCurveDerivs } from './curve.mjs';
@@ -99,7 +92,7 @@ function splitHomog(ptsW, t) {
   return { left, right };
 }
 
-// Bounding box of the EUCLIDEAN control points — the convex hull bound from
+// Bounding box of the euclidean control points — the convex hull bound from
 // step 2. Homogeneous points are divided through by w here precisely because
 // the hull property is about the euclidean points, not the homogeneous ones.
 function box2(ptsW) {
@@ -121,7 +114,7 @@ function boxesOverlap(a, b, tol) {
 }
 
 // Every weight must be strictly positive for the convex hull argument to
-// hold. Checked rather than assumed — see the header.
+// hold — see the header.
 function weightsPositive(crv) {
   return crv.ctrlPts.every((p) => p[3] > 0);
 }
@@ -133,10 +126,10 @@ function refine(crvA, crvB, uA0, uB0, domA, domB) {
   let uA = uA0, uB = uB0;
   const clamp = (u, d) => Math.min(d[1], Math.max(d[0], u));
   // Seeded from the incoming guess rather than left null: a NaN residual on
-  // the very first evaluation (a degenerate input curve) would otherwise leave
-  // this null and turn an honest refusal into a thrown TypeError one line
-  // later. A seeded best degrades to "no better than where we started", which
-  // the caller's own residual gate then discards.
+  // the first evaluation (a degenerate input curve) would otherwise leave this
+  // null and turn a refusal into a TypeError one line later. A seeded best
+  // degrades to "no better than the start", which the caller's residual check
+  // then discards.
   let best = { uA, uB }, bestRes = Infinity;
   for (let it = 0; it < NEWTON_STEPS; it++) {
     const dA = rationalCurveDerivs(crvA, uA, 1);
@@ -177,7 +170,7 @@ function refine(crvA, crvB, uA0, uB0, domA, domB) {
  * Returns { ok, points, reason?, tangential?, overlapping? } where each point
  * is { uA, uB, point:[x,y,z] }. `ok:false` is always accompanied by a reason
  * naming the case — an empty `points` array with `ok:true` means the curves
- * genuinely do not meet, which is a real answer and not a failure.
+ * do not meet.
  */
 export function intersectCurves2D(crvA, crvB, opts = {}) {
   if (!weightsPositive(crvA) || !weightsPositive(crvB)) {
@@ -200,8 +193,7 @@ export function intersectCurves2D(crvA, crvB, opts = {}) {
   const recurse = (a, b, depth) => {
     if (overflowed) return;
     const ba = box2(a.ptsW), bb = box2(b.ptsW);
-    // The provable rejection. Everything else in this function is bookkeeping
-    // around this one line.
+    // The convex hull rejection (header step 2).
     if (!boxesOverlap(ba, bb, seedTol)) return;
     if ((ba.size <= seedTol && bb.size <= seedTol) || depth >= MAX_DEPTH) {
       if (leaves.length >= MAX_LEAVES) { overflowed = true; return; }
@@ -253,9 +245,9 @@ export function intersectCurves2D(crvA, crvB, opts = {}) {
     const pA = curvePoint(crvA, r.uA);
     const pB = curvePoint(crvB, r.uB);
     const pt = [(pA[0] + pB[0]) / 2, (pA[1] + pB[1]) / 2, (pA[2] + pB[2]) / 2];
-    // Dedupe on the POINT, not the parameters: subdivision routinely lands
+    // Dedupe on the point, not the parameters: subdivision often lands
     // several leaves on one root, and a closed curve reaches the same point
-    // from two very different parameters at its own seam.
+    // from two different parameters at its seam.
     if (out.some((e) => Math.hypot(e.point[0] - pt[0], e.point[1] - pt[1]) <= mergeTol)) continue;
     out.push({ uA: r.uA, uB: r.uB, point: pt });
   }

@@ -1,38 +1,36 @@
-// TEXT OUTLINES, MEASURED AS GEOMETRY — kernel/text.mjs end to end, over real
-// glyphs.
+// Text outlines, measured as geometry — kernel/text.mjs end to end, over
+// traced glyphs.
 //
-// WHY THIS FILE EXISTS AND WHY IT IS NOT PART OF text.test.mjs. Every existing
-// assertion about Text reads a RECORD: a curve count, a corner count, a
-// `closed` flag a builder wrote as a literal. None of them looks at the shape.
-// A closed least-squares fit that ran a sixth of a lap past its own start and
-// retraced the bottom of every round letter passed all of them, because the
-// only thing that could have caught it — the length of the curve against the
-// length of the contour it fits — was never measured anywhere.
+// Kept apart from text.test.mjs, whose assertions about Text read a record:
+// a curve count, a corner count, a `closed` flag a builder wrote as a
+// literal. None of them looks at the shape. A closed least-squares fit that
+// ran a sixth of a lap past its own start and retraced the bottom of every
+// round letter would pass all of them, because the only thing that can catch
+// it is the length of the curve against the length of the contour it fits.
 //
 // So the assertions here are all about the curve as a curve: is it as long as
 // the thing it fits, does it cross itself, do its two ends actually meet. Length
 // is the one that carries the most, because it is the only cheap quantity an
-// EXCURSION cannot hide from: deviation is measured at the samples, and a curve
+// excursion cannot hide from: deviation is measured at the samples, and a curve
 // that swings clear of the data between two samples moves no sample at all.
 //
-// THE GLYPHS ARE BANKED, DELIBERATELY. There is no font file in this project;
-// outlines come out of a browser rasteriser, which a node test does not have
+// The glyphs are banked, deliberately. There is no font file in this project;
+// outlines come out of a browser rasterizer, which a node test does not have
 // and which would in any case give a different typeface on a different
-// machine. `test/fixtures/glyph_contours_sans_220.json` holds real traced
+// machine. `test/fixtures/glyph_contours_sans_220.json` holds traced
 // outlines for a pangram's alphabet at the shipped default of 220 px/em, so
-// these are genuine measurements of a real face AND the same ones on every
+// these are measurements of a real face and the same ones on every
 // machine. Regenerating it is a deliberate act: the numbers below are stated
 // against these outlines.
 //
-// ⚠ AN ALPHABET OF CORNERED LETTERS CANNOT SEE HALF OF THIS. `contourToCurve`
-// sends a contour with detected corners down the corner-split chain of OPEN
-// fits and a contour with none down a single CLOSED fit, and the two branches
+// An alphabet of cornered letters cannot see half of this. `contourToCurve`
+// sends a contour with detected corners down the corner-split chain of open
+// fits and a contour with none down a single closed fit, and the two branches
 // fail differently: the closed one by retracing past its own seam, the open one
 // by a span swinging clear of a long straight leg that carries no sample to
-// hold it down. "E" — the fixture the app-level gate used — has no cornerless
-// contour at all. The counts asserted below pin how many contours here reach
-// EACH branch, so a change that stops exercising one fails loudly instead of
-// going quietly green.
+// hold it down. "E" has no cornerless contour at all. The counts asserted
+// below pin how many contours here reach each branch, so a change that stops
+// exercising one fails instead of passing unnoticed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -86,7 +84,7 @@ function polygonDiagonal(pts) {
 
 // Sampled arc length. 4000 segments over a letter 20mm tall is a chord error
 // far below anything asserted here, and it under-reports rather than over-,
-// so a curve that fails the length bound is genuinely at least that long.
+// so a curve that fails the length bound is at least that long.
 function arcLength(crv, n = 4000) {
   const p = crv.degree, U = crv.knots;
   const t0 = U[p], t1 = U[U.length - 1 - p];
@@ -124,20 +122,20 @@ function measure(built) {
   return out;
 }
 
-// A LOOP MAY NOT BE LONGER THAN THE THING IT FITS. This is the direct
+// A loop may not be longer than the thing it fits. This is the direct
 // statement that a fit neither retraces nor wanders: a curve threading a
-// polygon is slightly LONGER than that polygon (the polygon is inscribed in the
-// shape both are measurements of), by a fraction of a per cent at this sampling
+// polygon is slightly longer than that polygon (the polygon is inscribed in the
+// shape both are measurements of), by a fraction of a percent at this sampling
 // — measured at 1.0013 to 1.0041 across this bank, over both branches. 1.02
-// leaves an order of magnitude of headroom over the real excess and still
+// leaves an order of magnitude of headroom over the measured excess and still
 // catches a closed retrace (which starts at about 1.15) and an open span
 // swinging off a long straight leg (which reached 1.51 on this bank).
 const LENGTH_BOUND = 1.02;
-// The two ends of a closed loop must MEET, not merely come close. Relative to
+// The two ends of a closed loop must meet, not merely come close. Relative to
 // the glyph's own diagonal, so it means the same thing at any cap height.
 const CLOSURE_BOUND = 1e-9;
 
-test('BOTH FIT BRANCHES ARE REACHED, AND THE FIXTURE PROVES IT', () => {
+test('both fit branches are reached by the fixture', () => {
   const rows = measure(build(PANGRAM));
   const nurbs = rows.filter((r) => r.kind === 'nurbs');
   const spans = rows.filter((r) => r.kind !== 'nurbs');
@@ -156,7 +154,7 @@ test('BOTH FIT BRANCHES ARE REACHED, AND THE FIXTURE PROVES IT', () => {
   }
 });
 
-test('NO LOOP IS LONGER THAN ITS OWN CONTOUR — neither branch, the retrace and excursion assertion', () => {
+test('no loop is longer than its own contour — neither branch, the retrace and excursion assertion', () => {
   const bad = [];
   for (const text of ['O', 'o', 'g', 'e', 'Type', PANGRAM]) {
     for (const r of measure(build(text))) {
@@ -166,7 +164,7 @@ test('NO LOOP IS LONGER THAN ITS OWN CONTOUR — neither branch, the retrace and
   assert.deepEqual(bad, [], `loops longer than the contour they fit:\n  ${bad.join('\n  ')}`);
 });
 
-test('NO LOOP CROSSES ITSELF, on either branch, and "not tested" is not a pass', () => {
+test('no loop crosses itself, on either branch, and "not tested" is not a pass', () => {
   const bad = [], untested = [];
   for (const text of ['O', 'o', 'g', 'e', 'Type', PANGRAM]) {
     for (const r of measure(build(text))) {
@@ -178,7 +176,7 @@ test('NO LOOP CROSSES ITSELF, on either branch, and "not tested" is not a pass',
   assert.deepEqual(bad, [], `loops that cross themselves:\n  ${bad.join('\n  ')}`);
 });
 
-test('A CLOSED FIT ACTUALLY CLOSES — first and last control point, not a flag', () => {
+test('a closed fit closes — first and last control point, not a flag', () => {
   const bad = [];
   for (const text of ['O', 'o', 'g', 'e', 'Type', PANGRAM]) {
     for (const r of measure(build(text))) {
@@ -188,11 +186,11 @@ test('A CLOSED FIT ACTUALLY CLOSES — first and last control point, not a flag'
   assert.deepEqual(bad, [], `loops whose two ends do not meet:\n  ${bad.join('\n  ')}`);
 });
 
-// THE THREE HARDEST LOOPS IN THIS BANK, NAMED, so the general assertions above
-// cannot go green by accident on an easier population. All three come from the
-// corner-split OPEN fit and each is a different way for a span to leave its own
+// The three hardest loops in this bank, named, so the general assertions above
+// cannot pass by accident on an easier population. All three come from the
+// corner-split open fit and each is a different way for a span to leave its own
 // data — which is the failure a deviation measure structurally cannot see,
-// because deviation is measured AT the samples and an excursion happens between
+// because deviation is measured at the samples and an excursion happens between
 // them:
 //   - "t" span 4->9: six points, five control points, and the last leg nine
 //     units long with nothing on it. Under chord-length parametrization the fit
@@ -203,9 +201,9 @@ test('A CLOSED FIT ACTUALLY CLOSES — first and last control point, not a flag'
 //   - "m" span 14->25: an arch whose two long straight legs carry no interior
 //     sample at all, so the fit overshoots its own end corner and crosses the
 //     baseline segment that starts there.
-// Asserted as SHAPE, not as a count: each of them must be clean, and each must
+// Asserted as shape, not as a count: each of them must be clean, and each must
 // stay inside the same length bound every other loop is held to.
-test('THE THREE HARDEST LOOPS IN THIS BANK ARE CLEAN — named, because a population average would hide them', () => {
+test('the three hardest loops in this bank are clean — named, because a population average would hide them', () => {
   const rows = measure(build(PANGRAM));
   const wanted = ['j#0', 'm#0', 't#0'];
   const found = wanted.map((label) => {
@@ -221,7 +219,7 @@ test('THE THREE HARDEST LOOPS IN THIS BANK ARE CLEAN — named, because a popula
   assert.deepEqual(long, [], `and must not wander off their own contour:\n  ${long.join('\n  ')}`);
 });
 
-test('ONE DETECTED CORNER IS ONE SPAN ALL THE WAY ROUND, not a degree-1 polyline', () => {
+test('one detected corner is one span all the way round, not a degree-1 polyline', () => {
   const ring = Array.from({ length: 20 }, (_, i) => {
     const t = (i / 20) * Math.PI * 2;
     return [10 * Math.cos(t), 10 * Math.sin(t), 0];
@@ -240,10 +238,9 @@ test('ONE DETECTED CORNER IS ONE SPAN ALL THE WAY ROUND, not a degree-1 polyline
     `at most one contour of the pangram may fall back to a polyline (got ${built.report.polylineFallbacks})`);
 });
 
-test('A TRACED CONTOUR IS A RING, WITHOUT ITS START REPEATED', () => {
+test('a traced contour is a ring, without its start repeated', () => {
   // A filled disc on a coverage grid — the smallest thing that produces a
-  // closed traced contour, and the shape the tracer's seam duplicate was first
-  // measured on.
+  // closed traced contour.
   const W = 40, H = 40, cov = new Float64Array(W * H);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) cov[y * W + x] = Math.hypot(x - 19.5, y - 19.5) < 14 ? 1 : 0;
@@ -258,8 +255,7 @@ test('A TRACED CONTOUR IS A RING, WITHOUT ITS START REPEATED', () => {
     const a = pts[i], b = pts[(i + 1) % pts.length];
     assert.ok(Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-12, `no zero-length edge (index ${i})`);
   }
-  // And the same, over every glyph in the bank — a duplicate that only the
-  // synthetic case avoids is not fixed.
+  // And the same, over every glyph in the bank, not only the synthetic case.
   for (const [ch, g] of Object.entries(BANK.glyphs)) {
     for (let i = 0; i < g.contours.length; i++) {
       const xy = g.contours[i].xy;
@@ -269,7 +265,7 @@ test('A TRACED CONTOUR IS A RING, WITHOUT ITS START REPEATED', () => {
   }
 });
 
-test('THE WINDING SURVIVES ALL OF IT — outers counter-clockwise, counters clockwise', () => {
+test('the winding survives all of it — outers counter-clockwise, counters clockwise', () => {
   const built = build(PANGRAM);
   const signedArea = (crv) => {
     const p = crv.degree, U = crv.knots;

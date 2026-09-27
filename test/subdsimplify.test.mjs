@@ -1,4 +1,4 @@
-// SIMPLIFY IS A CLAIM ABOUT A CAGE, NOT ABOUT A FACE COUNT.
+// Simplify is a claim about a cage, not about a face count.
 //
 // Every assertion here is about the thing handed to the subdivider and then to
 // subdToPatches: all quads, closed if it started closed, no interior pinch, the
@@ -7,14 +7,14 @@
 // winding, the crease, or the genus has produced something no later command
 // names as broken; it just stops converting.
 //
-// THE FIXTURES ARE CHOSEN AGAINST THE WAYS THIS GOES WRONG:
-//   · `bump` is ASYMMETRIC and carries valence 3, 4 AND 5 — a smooth dense
+// The fixtures are chosen against the ways this goes wrong:
+//   · `bump` is asymmetric and carries valence 3, 4 and 5 — a smooth dense
 //     symmetric cage cannot catch a winding-order or wheel-walk bug, because
 //     the reversed answer is the same answer.
-//   · `plane` is OPEN. Its corners are valence 2, which is an ordinary corner
+//   · `plane` is open. Its corners are valence 2, which is an ordinary corner
 //     on a boundary and a pinch in the interior; a fixture set of closed cages
 //     only would have let one floor stand in for the other.
-//   · the creased cube is run at five weights, including the two that leave NO
+//   · the creased cube is run at five weights, including the two that leave no
 //     entry at all in the subdivided cage.
 //   · `twoShells` is disconnected, which is the only input that reaches the
 //     per-component path.
@@ -29,9 +29,8 @@ import {
   cageInvariants, checkSimplifyInvariants, cageExtent,
 } from '../kernel/subdsimplify.mjs';
 
-// EVERY CHECK IS COUNTED AND NONE OF THEM STOPS THE RUN. A suite that dies on
-// the first failure reports one defect however many it has, and the score is
-// what says whether a change fixed one thing or moved the deficit.
+// Every check is counted and none of them stops the run. A suite that dies on
+// the first failure reports one defect however many it has.
 let CHECKS = 0;
 const FAILURES = [];
 const record = (fn, msg) => {
@@ -39,16 +38,14 @@ const record = (fn, msg) => {
   try { fn(); } catch (e) { FAILURES.push(`${msg} — ${e.message.split('\n')[0]}`); }
 };
 const ok = (cond, msg) => record(() => assert.ok(cond, msg), msg);
-// A SECTION THAT THROWS MUST STILL LEAVE A SCORE. A defect anywhere in this
+// A section that throws must still leave a score. A defect anywhere in this
 // module reaches most of these checks through a value that is now undefined, and
-// a run that dies on the stack trace reports NOTHING about the other 300.
+// a run that dies on the stack trace reports nothing about the other checks.
 const section = (id, fn) => { try { fn(); } catch (e) { FAILURES.push(`section ${id} threw — ${String(e.message).split('\n')[0]}`); } };
 const eq = (a, b, msg) => record(() => assert.equal(a, b, msg), msg);
 const deep = (a, b, msg) => record(() => assert.deepEqual(a, b, msg), msg);
 
-// --------------------------------------------------------------------------
-// FIXTURES
-// --------------------------------------------------------------------------
+// Fixtures
 
 const cube = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
 const box2 = superbBoxCage([0, 0, 0], [10, 7, 4], 2);
@@ -93,10 +90,8 @@ const maxCoordDiff = (a, b) => {
   return worst;
 };
 
-// --------------------------------------------------------------------------
-// 1. THE INSTRUMENT ITSELF — an invariant check that cannot go red is not a
+// 1. The instrument itself — an invariant check that cannot go red is not a
 //    check. Each of these is a cage that violates exactly one clause.
-// --------------------------------------------------------------------------
 
 section(1, () => {
   {
@@ -116,17 +111,14 @@ section(1, () => {
     const opened = { vertices: cube.vertices, faces: cube.faces.slice(1), creases: {} };
     ok(checkSimplifyInvariants(cube, opened).problems.some((p) => p.includes('closed')), 'losing closure must be caught');
     ok(checkSimplifyInvariants(cube, opened).problems.some((p) => p.includes('Euler')), 'a genus change must be caught');
-    console.log(`  invariants: five defective cages, five named problems`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 2. THE CUBE'S PREIMAGE IS NOT UNIQUE, and no solver fixes that.
+// 2. The cube's preimage is not unique, and no solver fixes that.
 //    Displacing the four corners of one inscribed tetrahedron by +d and the
-//    other four by -d leaves the subdivision IDENTICAL. Every rule is a
+//    other four by -d leaves the subdivision identical. Every rule is a
 //    weighted average; the vertex rule's own P coefficient is (n-3)/n, which is
 //    zero at valence 3, and the two colors cancel everywhere else.
-// --------------------------------------------------------------------------
 
 section(2, () => {
   {
@@ -141,26 +133,23 @@ section(2, () => {
 
     const r = unsubdivideCage(a);
     eq(r.ok, true, 'the subdivided cube must still invert');
-    eq(r.unique, false, 'the cube must REPORT that its preimage is a family, not a point');
+    eq(r.unique, false, 'the cube must report that its preimage is a family, not a point');
     ok(r.message.includes('not unique'), 'and say so in words');
     ok(maxCoordDiff(r.cage, cube) < 1e-9, 'and return the symmetric member, which is the cube');
 
     const r2 = unsubdivideCage(subdivideCatmullClark(box2));
-    eq(r2.unique, true, 'a cage with any valence other than 3 has ONE preimage');
-    console.log(`  cube null space: two cages ${maxCoordDiff(cube, shifted).toFixed(1)} apart subdivide to within ${diff.toExponential(1)}`);
+    eq(r2.unique, true, 'a cage with any valence other than 3 has one preimage');
   }
 });
 
-// --------------------------------------------------------------------------
-// 3. TIER 1 — EXACT ROUND TRIP. subdivide, un-subdivide, and get the SAME cage
+// 3. Tier 1 — exact round trip. subdivide, un-subdivide, and get the same cage
 //    back: same faces index-for-index (which pins the winding, since a wheel
 //    walked the other way returns the reversed loop), same creases, positions
 //    to floating point.
-// --------------------------------------------------------------------------
 
 // `cylinder` is here with `allowNgons` on deliberately: its preimage is a
 // cylinder, n-gon caps and all, and the inversion is exact on it. What the
-// default REFUSES is handing that preimage back as a simplification (section
+// default refuses is handing that preimage back as a simplification (section
 // 5), which is a separate judgment from whether the arithmetic inverts.
 const roundTrips = [['cube', cube, true], ['box2', box2, true], ['torus', torus, true], ['plane', plane, true], ['bump', bump, true], ['twoShells', twoShells, true], ['cylinder', cylinder, false]];
 section(3, () => {
@@ -174,11 +163,10 @@ section(3, () => {
     deep(r.cage.faces, coarse.faces, `${name}: faces did not come back index-for-index, in the same winding`);
     if (quadPreimage) deep(checkSimplifyInvariants(fine, r.cage).problems, [], `${name}: the preimage breaks an invariant`);
     eq(isSubdivisionOfSomething(fine), quadPreimage, `${name}: the boolean form disagrees`);
-    console.log(`  round trip ${name.padEnd(10)} F ${String(fine.faces.length).padStart(4)} -> ${String(r.cage.faces.length).padStart(3)}  residual ${r.residual.toExponential(1)}  worst ${diff.toExponential(1)}`);
   }
 });
 
-// TWO LEVELS. Repeating the operation walks back another level.
+// Two levels. Repeating the operation walks back another level.
 section(4, () => {
   {
     const twice = subdivideCatmullClark(subdivideCatmullClark(bump));
@@ -189,14 +177,11 @@ section(4, () => {
     // ...and asking for a third stops at what it could do rather than refusing.
     const r3 = simplifySubD(twice, { tier: 'unsubdivide', amount: 3 });
     eq(r3.steps.length, 2, 'a third level is not there and must not be invented');
-    console.log('  two levels of subdivision come back exactly, a third stops');
   }
 });
 
-// --------------------------------------------------------------------------
-// 4. CREASES. A crease silently dropped changes the limit surface and no
-//    count-based check sees it, so the WEIGHTS and the EDGES are both asserted.
-// --------------------------------------------------------------------------
+// 4. Creases. A crease silently dropped changes the limit surface and no
+//    count-based check sees it, so the weights and the edges are both asserted.
 
 section(5, () => {
   for (const w of [3, 2, 1.5, 1]) {
@@ -206,18 +191,17 @@ section(5, () => {
     eq(r.ok, true, `crease ${w}: ${r.message}`);
     deep(r.cage.creases, coarse.creases, `crease ${w}: came back as ${JSON.stringify(r.cage.creases)}`);
     ok(maxCoordDiff(r.cage, coarse) < 1e-9 * cageExtent(coarse), `crease ${w}: positions moved`);
-    // The whole point: the recovered cage must subdivide back to the input,
-    // creases and all. A dropped crease changes the geometry, so this fails too.
+    // The recovered cage must subdivide back to the input, creases and all.
+    // A dropped crease changes the geometry, so this fails too.
     const again = subdivideCatmullClark(r.cage);
     deep(again.creases, fine.creases, `crease ${w}: the recovered cage does not re-subdivide to the same crease map`);
     ok(maxCoordDiff(again, fine) < 1e-9 * cageExtent(fine), `crease ${w}: the recovered cage does not re-subdivide to the same cage`);
-    console.log(`  crease w=${w}: ${Object.keys(fine.creases).length} entries in the subdivided cage -> ${Object.keys(r.cage.creases).length} recovered at weight ${w}`);
   }
 });
 
-// WEIGHT 1 IS THE INTERESTING ONE. One pass decrements it to 0 and drops it, so
-// the subdivided cage carries NO crease entry at all — the crease is recovered
-// from the face-centroid equations, not from the map.
+// Weight 1: one pass decrements it to 0 and drops it, so the subdivided cage
+// carries no crease entry at all — the crease is recovered from the
+// face-centroid equations, not from the map.
 section(6, () => {
   {
     const fine = subdivideCatmullClark(creasedCube(1));
@@ -228,7 +212,7 @@ section(6, () => {
   }
 });
 
-// A WEIGHT BETWEEN 0 AND 1 IS A PARTIAL BLEND AND LEAVES NOTHING TO READ. That
+// A weight between 0 and 1 is a partial blend and leaves nothing to read. That
 // is refused by name rather than returned as a smooth cage, which is the one
 // answer that would look right and be wrong.
 section(7, () => {
@@ -238,13 +222,10 @@ section(7, () => {
     eq(r.ok, false, 'a weight-0.5 crease must not silently come back smooth');
     eq(r.reason, 'POSITIONS_DO_NOT_MATCH', `got ${r.reason}`);
     ok(r.message.includes('crease of weight between 0 and 1'), 'the refusal must name the cause');
-    console.log(`  crease w=0.5: refused — ${r.message.slice(0, 96)}...`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 5. TIER 1 REFUSALS. Each one names what is wrong with the cage in front of it.
-// --------------------------------------------------------------------------
+// 5. Tier 1 refusals. Each one names what is wrong with the cage in front of it.
 
 section(8, () => {
   {
@@ -261,17 +242,16 @@ section(8, () => {
       eq(r.ok, false, `${name} must not invert`);
       eq(r.reason, reason, `${name}: got ${r.reason}`);
       ok(r.message.length > 40 && /[.]$/.test(r.message), `${name}: the refusal must be a sentence`);
-      console.log(`  refuses ${name.padEnd(22)} ${r.reason}`);
     }
 
-    // ⚠ THE ONE THAT MATTERS. A two-facet sphere HAS the topology of a subdivided
+    // A two-facet sphere has the topology of a subdivided
     // octahedron, and a residual-ranked answer would hand back a cage of the
     // right size and the wrong identity. It is refused, and the miss is quoted.
     const s = unsubdivideCage(superbSphereCage([0, 0, 0], 10, 2));
     eq(s.ok, false, 'a two-facet sphere must not be swapped for its dual');
     ok(s.residual > 1e-6, `and the miss must be reported (${s.residual})`);
 
-    // A cage that WAS a subdivision and then had one point dragged is refused too.
+    // A cage that was a subdivision and then had one point dragged is refused too.
     const moved = subdivideCatmullClark(bump);
     moved.vertices = moved.vertices.map((v, i) => (i === 7 ? [v[0] + 0.4, v[1], v[2]] : v));
     const m = unsubdivideCage(moved);
@@ -290,8 +270,8 @@ section(8, () => {
   }
 });
 
-// A PRIMITIVE NOBODY EVER PRESSED SUBDIVIDE ON CAN STILL BE ONE. A two-facet
-// box is EXACTLY one Catmull-Clark pass of a one-facet box whose twelve edges
+// A primitive that was never subdivided can still be a subdivision. A two-facet
+// box is exactly one Catmull-Clark pass of a one-facet box whose twelve edges
 // all carry weight 1 — the sharp rules hold every corner still, put every edge
 // point at a midpoint and every face point at a centroid, which is precisely
 // the uniform grid the primitive builds. The limit surface is unchanged,
@@ -307,16 +287,13 @@ section(9, () => {
     const back = subdivideCatmullClark(r.cage);
     const canon = (c) => c.vertices.map((v) => v.map((x) => x.toFixed(9)).join(',')).sort().join('|');
     eq(canon(back), canon(box2), 'and re-subdividing it reproduces the primitive exactly');
-    console.log(`  a two-facet box IS a subdivision: ${box2.faces.length} -> 6 faces, twelve weight-1 creases, re-subdivides exactly`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 6. THE POLYCHORD DECOMPOSITION IS COMPLETE. Every quad lies on exactly two
+// 6. The polychord decomposition is complete. Every quad lies on exactly two
 //    chords, so the chord lengths must sum to twice the face count. That one
 //    identity catches a walk that stops early, one that double-counts, and one
 //    that visits a face in the wrong direction.
-// --------------------------------------------------------------------------
 
 const quadCages = [['cube', cube], ['box2', box2], ['torus', torus], ['plane', plane], ['bump', bump], ['puff', puffDisc.cage], ['puffLong', puffLong.cage], ['coneFine', coneFine], ['twoShells', twoShells]];
 section(10, () => {
@@ -325,16 +302,11 @@ section(10, () => {
     eq(r.ok, true, `${name}: ${r.message}`);
     const sum = r.chords.reduce((a, c) => a + c.length, 0);
     eq(sum, 2 * cage.faces.length, `${name}: chord lengths sum to ${sum}, not ${2 * cage.faces.length}`);
-    const collapsible = r.chords.filter((c) => c.collapsible).length;
-    console.log(`  chords ${name.padEnd(10)} ${String(r.chords.length).padStart(3)} chords, ${String(collapsible).padStart(3)} collapsible, lengths ${[...new Set(r.chords.map((c) => c.length))].sort((a, b) => a - b).join('/')}`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 7. TIER 2 — EVERY COLLAPSE, ON EVERY FIXTURE, HOLDS THE INVARIANT.
-// --------------------------------------------------------------------------
+// 7. Tier 2 — every collapse, on every fixture, holds the invariant.
 
-let collapses = 0;
 section(11, () => {
   for (const [name, cage] of quadCages) {
     const r = polychordsOf(cage, { allowOpenChords: true });
@@ -345,30 +317,25 @@ section(11, () => {
       const check = checkSimplifyInvariants(cage, res.cage);
       deep(check.problems, [], `${name} chord ${chord.id}: ${check.problems.join('; ')}`);
       eq(res.cage.faces.length, cage.faces.length - chord.length, `${name} chord ${chord.id}: wrong number of faces removed`);
-      collapses += 1;
     }
   }
 });
-console.log(`  ${collapses} single collapses across ${quadCages.length} cages, every one all-quad, closed as it started, same Euler, no interior valence < 3`);
 
-// AND REPEATEDLY, which is where a greedy loop walks a cage off a cliff.
+// And repeatedly, which is where a greedy loop can walk a cage into a degenerate state.
 section(12, () => {
   for (const [name, cage] of [['puff', puffDisc.cage], ['bump', bump], ['torus', torus]]) {
     const r = simplifySubD(cage, { amount: 20 });
     eq(r.ok, true, `${name}: ${r.message}`);
     deep(r.invariants.problems, [], `${name}: ${r.invariants.problems.join('; ')}`);
     ok(r.cage.faces.length >= 6, `${name}: went below the floor to ${r.cage.faces.length} faces`);
-    console.log(`  greedy ${name.padEnd(8)} ${cage.faces.length} -> ${r.cage.faces.length} faces in ${r.steps.filter((s) => s.tier === 'polychord').length} collapses`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 8. TIER 2 REFUSALS.
-// --------------------------------------------------------------------------
+// 8. Tier 2 refusals.
 
 section(13, () => {
   {
-    // AN OPEN CAGE. Every strip in a plane grid runs off the boundary, so by
+    // An open cage. Every strip in a plane grid runs off the boundary, so by
     // default Simplify refuses the whole cage rather than moving the boundary;
     // `allowOpenChords` is the caller's way of saying it meant to.
     const r = polychordsOf(plane);
@@ -382,13 +349,12 @@ section(13, () => {
     eq(s2.ok, true, 'and collapse when the caller asks for it');
     deep(checkSimplifyInvariants(plane, s2.cage).problems, [], 'an open collapse must still hold the invariant');
     eq(cageInvariants(s2.cage).boundaryEdgeCount > 0, true, 'and the result must still be open');
-    console.log(`  open cage: ${r.chords.length} open chords refused by default, ${plane.faces.length} -> ${s2.cage.faces.length} faces when allowed`);
   }
 });
 
 section(14, () => {
   {
-    // A CREASE ON A RUNG HAS NOWHERE TO GO — the collapse deletes that edge.
+    // A crease on a rung has nowhere to go — the collapse deletes that edge.
     const c = { vertices: torus.vertices, faces: torus.faces, creases: {} };
     const chords = polychordsOf(c).chords;
     const victim = chords.find((x) => x.collapsible);
@@ -399,12 +365,11 @@ section(14, () => {
     ok(again.refusal.message.includes('Remove the crease first'), 'and say what to change');
     const direct = collapsePolychord(creased, again, {});
     eq(direct.ok, false, 'and the direct call must refuse too, not just the offer');
-    console.log(`  crease on a strip: ${again.refusal.message}`);
   }
 });
 
 section(14.5, () => {
-  // THE SIDES OF A STRIP MERGE INTO ONE EDGE, and a crease has to survive that.
+  // The sides of a strip merge into one edge, and a crease has to survive that.
   // The two rails of every face in the strip land on the same pair of welded
   // points, so a crease on both carries across at that weight — and a crease on
   // only one of them has no right answer, which is a refusal rather than a guess.
@@ -426,14 +391,13 @@ section(14.5, () => {
   const odd = { vertices: torus.vertices, faces: torus.faces, creases: { [[...rails][0]]: 2 } };
   const o = polychordsOf(odd).chords.find((x) => x.id === chord.id);
   eq(o.refusal && o.refusal.reason, 'CREASE_COLLISION', `got ${o.refusal && o.refusal.reason}`);
-  console.log(`  strip creases: ${rails.size} rail edges merge to ${Object.keys(r.cage.creases).length}, and a one-sided crease is refused`);
 });
 
 section(15, () => {
   {
-    // A SELF-TOUCHING STRIP. Around a subdivided cone's apex, a strip comes back
+    // A self-touching strip. Around a subdivided cone's apex, a strip comes back
     // to a vertex it has already crossed: welding both of those rungs would pull
-    // three or more points onto one. Note WHICH of the two guards fires — the
+    // three or more points onto one. Note which of the two guards fires — the
     // walk itself completes, and it is the rung-vertex test that catches it, so a
     // fixture set that only exercised the walk would leave this open.
     const r = polychordsOf(coneFine);
@@ -441,15 +405,14 @@ section(15, () => {
     ok(self.length > 0, 'the subdivided cone must have self-touching chords');
     eq(self.every((c) => !c.selfTouching), true, 'and it is the shared-vertex guard, not the walk, that names them');
     ok(self[0].refusal.message.includes('weld'), 'the refusal must say what would happen');
-    console.log(`  self-touching: ${self.length} of ${r.chords.length} chords on a subdivided cone, caught by the shared-rung-vertex guard`);
   }
 });
 
 section(16, () => {
   {
-    // THE FLOOR, AND THE THING BEHIND IT. A 6-face cube is already at the default
+    // The floor, and the guard behind it. A 6-face cube is already at the default
     // floor, so every strip is refused on the count. Drop the floor to 1 and the
-    // strips are STILL refused — collapsing one leaves two quads sharing all four
+    // strips are still refused — collapsing one leaves two quads sharing all four
     // edges, whose vertices are interior and valence 2. That is the guard that
     // actually holds: all-quad, closed and Euler 2 are all satisfied by that
     // two-face pillow, so they are not stopping conditions and never fire.
@@ -462,7 +425,7 @@ section(16, () => {
     const pv = cageInvariants(pillow);
     eq(pv.allQuads && pv.closed && pv.euler === 2, true, 'the cage the guard refuses passes all-quad, closed and Euler 2');
 
-    // AND A GREEDY LOOP WITH NO FLOOR AT ALL STILL STOPS, at a cage that is still
+    // A greedy loop with no floor at all still stops, at a cage that is still
     // a surface. This is the check the floor alone could not make.
     for (const [name, cage, floor] of [['puff', puffDisc.cage, 6], ['torus', torus, 9]]) {
       const g = simplifySubD(cage, { amount: 50, minFaces: 1 });
@@ -470,13 +433,12 @@ section(16, () => {
       deep(checkSimplifyInvariants(cage, g.cage).problems, [], `${name}: unbounded greedy broke an invariant`);
       ok(cageInvariants(g.cage).minInteriorValence >= 3, `${name}: unbounded greedy left a pinch`);
     }
-    console.log('  the floor: 6 faces by default; with the floor removed the valence guard stops the loop anyway');
   }
 });
 
 section(17, () => {
   {
-    // AN N-GON CAGE HAS NO STRIP AT ALL.
+    // An n-gon cage has no strip at all.
     const r = polychordsOf(cylinder);
     eq(r.ok, false, 'a cylinder must be refused whole');
     eq(r.reason, 'NOT_ALL_QUADS', `got ${r.reason}`);
@@ -484,11 +446,9 @@ section(17, () => {
   }
 });
 
-// --------------------------------------------------------------------------
-// 9. THE REFIT. Moving the control points until their LIMIT positions land back
+// 9. The refit. Moving the control points until their limit positions land back
 //    where they were is the puff's own technique; here it is what makes a
 //    collapse invisible rather than merely legal.
-// --------------------------------------------------------------------------
 
 section(18, () => {
   for (const [name, cage] of [['puff', puffDisc.cage], ['puffLong', puffLong.cage], ['bump', bump]]) {
@@ -498,7 +458,6 @@ section(18, () => {
     eq(a.cage.faces.length, b.cage.faces.length, `${name}: the refit must not change the topology`);
     deep(a.cage.faces, b.cage.faces, `${name}: the refit must not change the topology`);
     ok(a.steps.at(-1).drift < b.steps.at(-1).drift, `${name}: the refit did not help (${a.steps.at(-1).drift} vs ${b.steps.at(-1).drift})`);
-    console.log(`  refit ${name.padEnd(9)} drift ${(b.steps.at(-1).drift * 100).toFixed(3)}% -> ${(a.steps.at(-1).drift * 100).toFixed(3)}% of extent at the surviving points`);
   }
 });
 
@@ -513,9 +472,7 @@ section(19, () => {
   }
 });
 
-// --------------------------------------------------------------------------
-// 10. THE COMMAND — which tier answered, and what it cost.
-// --------------------------------------------------------------------------
+// 10. The command — which tier answered, and what it cost.
 
 section(20, () => {
   {
@@ -534,15 +491,10 @@ section(20, () => {
     ok(ranked.ranked[0].worst <= ranked.ranked.at(-1).worst, 'and they must be ordered cheapest first');
     const drift = polychordDrift(puffDisc.cage, ranked.ranked[0].chord);
     ok(drift.worst >= 0 && drift.mean <= drift.worst, 'the drift proxy must be self-consistent');
-
-    console.log(`  tiers: ${exact.message}`);
-    console.log(`         ${approx.message}`);
   }
 });
 
-// --------------------------------------------------------------------------
-// 11. THE CAGE-LEVEL REFUSALS, each on a cage that violates exactly one clause.
-// --------------------------------------------------------------------------
+// 11. The cage-level refusals, each on a cage that violates exactly one clause.
 
 section(21, () => {
   {
@@ -562,7 +514,7 @@ section(21, () => {
       eq(polychordsOf(cage).reason, reason, `${name}: the strip walk must refuse the same way`);
     }
 
-    // A PINCHED PREIMAGE. Two quads sharing all four edges pass all-quad, closed
+    // A pinched preimage. Two quads sharing all four edges pass all-quad, closed
     // and Euler 2, and their subdivision is a perfectly ordinary-looking cage —
     // so the tier that inverts it exactly must still refuse to hand it back.
     const pillow = { vertices: [[0, 0, 0], [10, 0, 0], [10, 10, 3], [0, 10, 3]], faces: [[0, 1, 2, 3], [3, 2, 1, 0]], creases: {} };
@@ -571,7 +523,7 @@ section(21, () => {
     eq(p.reason, 'PREIMAGE_PINCHED', `got ${p.reason}`);
     eq(unsubdivideCage(subdivideCatmullClark(pillow), { allowNgons: true }).ok, true, 'though the arithmetic inverts it');
 
-    // THE TWO HALVES OF A CREASED EDGE ALWAYS CARRY THE SAME WEIGHT after one
+    // The two halves of a creased edge always carry the same weight after one
     // pass, so a cage where they do not was not made by one.
     const fine = subdivideCatmullClark(creasedCube(3));
     const keys = Object.keys(fine.creases);
@@ -581,19 +533,13 @@ section(21, () => {
     eq(t.reason, 'NOT_A_SUBDIVISION', `got ${t.reason}`);
     ok(t.message.includes('different weights'), 'and say which fact is wrong');
 
-    // A CREASE ONE PASS WOULD NEVER HAVE CREATED — on a spoke from an edge point
+    // A crease one pass would never have created — on a spoke from an edge point
     // to a face point — rules the cage out too.
     const spoke = { vertices: fine.vertices, faces: fine.faces, creases: { ...fine.creases, [edgeKey(fine.faces[0][1], fine.faces[0][2])]: 2 } };
     const sp = unsubdivideCage(spoke);
     eq(sp.ok, false, 'a crease on a spoke must be refused');
     ok(sp.message.includes('smooth'), `got "${sp.message}"`);
-    console.log('  cage-level refusals: empty, degenerate face, stray vertex, non-manifold, pinched preimage, two crease shapes');
   }
 });
 
-if (FAILURES.length) {
-  for (const f of FAILURES) console.log(`  FAIL ${f}`);
-  console.log(`subdsimplify: ${CHECKS - FAILURES.length}/${CHECKS} checks passed`);
-  assert.fail(`${FAILURES.length} of ${CHECKS} checks failed`);
-}
-console.log(`subdsimplify: ok — ${CHECKS}/${CHECKS} checks passed`);
+assert.equal(FAILURES.length, 0, `${FAILURES.length} of ${CHECKS} checks failed:\n${FAILURES.join('\n')}`);

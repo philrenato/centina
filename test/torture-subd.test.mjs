@@ -1,38 +1,25 @@
-// A GENERATED TORTURE CORPUS FOR THE SUBD CAGE — the recommended first
-// lane, built rather than the external one.
+// A generated torture corpus for the SubD cage.
 //
-// WHY THIS LANE FIRST: "this project already
-// generates its own adversarial fixtures programmatically... a generated
-// corpus — sweep N, run length, symmetry, tilt, and input ORDER, then
-// assert the invariants rather than a golden output — found both bridge
-// bugs, and cost nothing in licensing or build footprint. Worth
-// exhausting that lane before taking on an external corpus, and it makes
-// the eventual external one easier to judge, since the invariants will
-// already be written." An OCCT corpus additionally cannot be loaded at
-// all today (it is STEP/IGES/BREP; this app reads .3dm and .obj), so the
-// external lane is gated on decisions nobody has made. This one is not.
+// Fixtures are generated programmatically — sweep N, run length, symmetry,
+// tilt and input order — and checked against invariants rather than a golden
+// output.
 //
-// WHAT A CORPUS IS ACTUALLY FOR HERE, and why it is not "more tests":
-// every robustness bug found in this area was found by a fixture someone
-// hand-built for one round, and the pattern is consistent — the honest
-// fixtures find real bugs, the convenient ones pass. The N-way bridge is
-// the worked example: tilted, unevenly-spaced flaps were robust across
-// every variant, while a plain SYMMETRIC rim exposed two genuine
-// order-dependence bugs, because symmetry produces EXACT TIES and a
-// hand-built fixture rarely does. So this file sweeps deliberately toward
-// the shapes a person would not think to author: symmetric, degenerate,
+// Hand-built fixtures tend to be the convenient cases. A symmetric rim
+// produces exact ties, which a hand-built fixture rarely does, and exact ties
+// are where order-dependence bugs appear. So this file sweeps toward the
+// shapes a person would not think to author: symmetric, degenerate,
 // permuted, and applied at every site rather than one chosen site.
 //
-// INVARIANTS, NOT GOLDEN OUTPUTS. Nothing here asserts a specific vertex
-// position. Every check is a property that must hold of ANY valid cage
+// Invariants, not golden outputs. Nothing here asserts a specific vertex
+// position. Every check is a property that must hold of any valid cage
 // however it was produced — which is what lets one assertion cover a few
-// thousand generated cases, and what makes a failure a real finding
+// thousand generated cases, and what makes a failure a finding
 // rather than a fixture needing its expected numbers updated.
 //
-// AN OPERATION IS ALLOWED TO REFUSE. A refusal (a thrown, named error) is
-// a correct outcome for a genuinely degenerate input and is recorded, not
-// failed. What is never allowed is a SILENTLY BROKEN cage: a returned
-// result that violates an invariant is the actual bug class this hunts.
+// An operation is allowed to refuse. A refusal (a thrown, named error) is
+// a correct outcome for a degenerate input and is recorded, not
+// failed. What is never allowed is a silently broken cage: a returned
+// result that violates an invariant is the bug class this file tests for.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -47,28 +34,26 @@ import {
   computeAverageNormal,
 } from '../kernel/subdedit.mjs';
 
-// extrudeFaces wants a real direction vector — a null one is an APP-layer
+// extrudeFaces wants a real direction vector — a null one is an app-layer
 // convention (a coincident direction pick means "use the selection's own
 // average normal"), resolved before the kernel is ever called. The sweep
 // resolves it the same way rather than passing the null through.
 const faceDir = (cage, idx) => computeAverageNormal(cage, idx);
 
-// ===================================================================
-// THE INVARIANT LIBRARY
+// Invariant library
 //
-// Deliberately recomputed here from the raw {vertices, faces} rather than
+// Recomputed here from the raw {vertices, faces} rather than
 // asked of buildTopology — a corpus that trusted the same helper the code
 // under test uses would agree with it about a shared mistake. This walks
 // the face lists directly.
-// ===================================================================
 
 const ekey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
 
 // Every editing function in this kernel returns either a bare cage or a
-// RESULT OBJECT carrying the cage plus its own bookkeeping (which faces
+// result object carrying the cage plus its own bookkeeping (which faces
 // it made, how many vertices it pruned). Both shapes are real and both
 // are correct; a harness that assumed one of them would report the other
-// as "not a cage" and read as a swarm of app bugs. Unwrapped once here.
+// as "not a cage". Unwrapped once here.
 const unwrap = (r) => (r && r.cage ? r.cage : r);
 
 // Returns a list of violation strings; empty means the cage is well-formed.
@@ -87,8 +72,7 @@ function cageViolations(cage, opts = {}) {
 
   // 2. Every face index is in range, and no face repeats a vertex. A
   //    repeated vertex is a zero-area sliver that still evaluates, still
-  //    renders, and quietly corrupts every later subdivision — precisely
-  //    the class the N-way bridge shipped and had to have fixed.
+  //    renders, and corrupts every later subdivision.
   cage.faces.forEach((f, fi) => {
     if (!Array.isArray(f) || f.length < 3) { v.push(`face ${fi} has ${f?.length} corners`); return; }
     const seen = new Set();
@@ -100,7 +84,7 @@ function cageViolations(cage, opts = {}) {
   });
   if (v.length) return v; // later checks would only produce noise on a malformed list
 
-  // 3. MANIFOLD: no edge may be shared by more than two faces.
+  // 3. Manifold: no edge may be shared by more than two faces.
   const edgeFaces = new Map();
   for (let fi = 0; fi < cage.faces.length; fi++) {
     const f = cage.faces[fi];
@@ -112,8 +96,8 @@ function cageViolations(cage, opts = {}) {
   }
   for (const [k, fs] of edgeFaces) if (fs.length > 2) v.push(`edge ${k} is shared by ${fs.length} faces — non-manifold`);
 
-  // 4. CONSISTENT WINDING: a consistently-oriented 2-manifold never
-  //    traverses the same DIRECTED edge twice. This is the property the
+  // 4. Consistent winding: a consistently-oriented 2-manifold never
+  //    traverses the same directed edge twice. This is the property the
   //    bridge's own winding search verifies rather than derives, reused
   //    here as a check on every generated result.
   const directed = new Set();
@@ -125,17 +109,17 @@ function cageViolations(cage, opts = {}) {
     }
   }
 
-  // 5. NO ORPHANS: every vertex is used by at least one face. An orphan
-  //    is invisible on screen and was a real bug in the hub builder's own
-  //    winding search (rejected trials leaking their vertices).
+  // 5. No orphans: every vertex is used by at least one face. An orphan
+  //    is invisible on screen; rejected trials in a winding search can
+  //    leak their vertices this way.
   if (opts.noOrphans !== false) {
     const used = new Set();
     for (const f of cage.faces) for (const idx of f) used.add(idx);
     for (let i = 0; i < nV; i++) if (!used.has(i)) v.push(`vertex ${i} is an orphan — used by no face`);
   }
 
-  // 6. CREASE KEYS NAME REAL EDGES. A crease left on a key that no longer
-  //    exists is silent: it changes nothing, until a later edit
+  // 6. Crease keys name real edges. A crease left on a key that is not an
+  //    edge is silent: it changes nothing, until a later edit
   //    resurrects that key and a crease appears from nowhere.
   if (cage.creases) {
     for (const k of Object.keys(cage.creases)) {
@@ -144,7 +128,7 @@ function cageViolations(cage, opts = {}) {
     }
   }
 
-  // 7. CLOSED cages only: every edge has exactly two faces, and the Euler
+  // 7. Closed cages only: every edge has exactly two faces, and the Euler
   //    characteristic is even (chi = 2 - 2g admits only even values).
   if (opts.closed) {
     for (const [k, fs] of edgeFaces) if (fs.length !== 2) v.push(`closed cage has a naked edge ${k} (${fs.length} face)`);
@@ -155,7 +139,7 @@ function cageViolations(cage, opts = {}) {
 }
 
 // A cage that passes every structural check can still be one a real
-// subdivision pass destroys. Running one genuine Catmull-Clark level is
+// subdivision pass destroys. Running one Catmull-Clark level is
 // the cheapest way to catch that, and it is what every downstream
 // consumer actually does.
 function survivesSubdivision(cage) {
@@ -173,17 +157,15 @@ function nakedEdgesOf(cage) {
   return [...count.entries()].filter(([, n]) => n === 1).map(([k]) => k);
 }
 
-// ===================================================================
-// THE FIXTURE SWEEP
+// Fixture sweep
 //
-// Deliberately includes the shapes a person authoring one fixture would
+// Includes the shapes a person authoring one fixture would
 // skip: facets=1 (as coarse as a cage gets, where neighborhoods overlap
-// in ways denser cages never do), a genus-1 torus, two cages with real
-// POLES (cone apex, sphere/ellipsoid), an OPEN cage (plane), and
-// deliberately ASYMMETRIC dimensions alongside perfectly symmetric ones —
-// symmetry is what produces the exact ties that found the bridge bugs, so
+// in ways denser cages never do), a genus-1 torus, two cages with
+// poles (cone apex, sphere/ellipsoid), an open cage (plane), and
+// asymmetric dimensions alongside perfectly symmetric ones —
+// symmetry produces the exact ties that expose order-dependence bugs, so
 // it is generated on purpose rather than avoided.
-// ===================================================================
 function fixtures() {
   const out = [];
   for (const f of [1, 2, 3]) {
@@ -205,8 +187,7 @@ function fixtures() {
 
 const FIXTURES = fixtures();
 
-// ===================================================================
-test('CORPUS BASELINE: every generated fixture is itself well-formed', () => {
+test('Corpus baseline: every generated fixture is itself well-formed', () => {
   let checked = 0;
   for (const f of FIXTURES) {
     const v = cageViolations(f.cage, { closed: f.closed });
@@ -215,18 +196,16 @@ test('CORPUS BASELINE: every generated fixture is itself well-formed', () => {
     assert.deepEqual(s, [], `${f.name}: ${s.join('; ')}`);
     checked++;
   }
-  assert.ok(checked >= 25, `the sweep must be genuinely broad, got ${checked} fixtures`);
+  assert.ok(checked >= 25, `the sweep must be broad, got ${checked} fixtures`);
 });
 
-// ===================================================================
-// SINGLE-SITE OPERATIONS, APPLIED AT EVERY SITE
+// Single-site operations, applied at every site
 //
-// Not "pick a face and extrude it" — extrude EVERY face of EVERY fixture,
-// insert a point on EVERY edge, and so on. This is the part a hand-built
+// Not "pick a face and extrude it" — extrude every face of every fixture,
+// insert a point on every edge, and so on. This is the part a hand-built
 // fixture structurally cannot do, and it is where a site-dependent bug
 // (a pole, a seam, a valence-3 corner) hides.
-// ===================================================================
-test('TORTURE: extrudeFaces at every single face of every fixture', () => {
+test('Torture: extrudeFaces at every single face of every fixture', () => {
   let ran = 0, refused = 0;
   for (const f of FIXTURES) {
     for (let fi = 0; fi < f.cage.faces.length; fi++) {
@@ -239,10 +218,10 @@ test('TORTURE: extrudeFaces at every single face of every fixture', () => {
       ran++;
     }
   }
-  assert.ok(ran > 400, `the sweep must genuinely run, got ${ran} extrusions (${refused} honest refusals)`);
+  assert.ok(ran > 400, `the sweep must run, got ${ran} extrusions (${refused} refusals)`);
 });
 
-test('TORTURE: insertPointOnEdge at every edge, at several parameters including both extremes', () => {
+test('Torture: insertPointOnEdge at every edge, at several parameters including both extremes', () => {
   let ran = 0, refused = 0;
   for (const f of FIXTURES) {
     const ctx = buildTopology(f.cage);
@@ -259,7 +238,7 @@ test('TORTURE: insertPointOnEdge at every edge, at several parameters including 
   assert.ok(ran > 1000, `got ${ran} insertions (${refused} refusals)`);
 });
 
-test('TORTURE: deleteFaces at every face, and the hole it leaves is a real boundary', () => {
+test('Torture: deleteFaces at every face, and the hole it leaves is a real boundary', () => {
   let ran = 0;
   for (const f of FIXTURES) {
     for (let fi = 0; fi < f.cage.faces.length; fi++) {
@@ -268,7 +247,7 @@ test('TORTURE: deleteFaces at every face, and the hole it leaves is a real bound
       const cage = unwrap(out);
       const v = cageViolations(cage);
       assert.deepEqual(v, [], `${f.name} delete face ${fi}: ${v.join('; ')}`);
-      // Deleting one face of a CLOSED cage must open exactly that face's
+      // Deleting one face of a closed cage must open exactly that face's
       // own edges and no others — an accounting check, strictly stronger
       // than "some naked edges appeared".
       if (f.closed) {
@@ -282,7 +261,7 @@ test('TORTURE: deleteFaces at every face, and the hole it leaves is a real bound
   assert.ok(ran > 400, `got ${ran} deletions`);
 });
 
-test('TORTURE: slideEdges over the full legal parameter range, including near the refusal boundary', () => {
+test('Torture: slideEdges over the full legal parameter range, including near the refusal boundary', () => {
   let ran = 0, refused = 0;
   for (const f of FIXTURES.slice(0, 14)) {
     const ctx = buildTopology(f.cage);
@@ -300,7 +279,7 @@ test('TORTURE: slideEdges over the full legal parameter range, including near th
   assert.ok(ran > 200, `got ${ran} slides (${refused} refusals)`);
 });
 
-test('TORTURE: offsetCage and thickenCage across sign and magnitude, including magnitudes that must be refused or clamped', () => {
+test('Torture: offsetCage and thickenCage across sign and magnitude, including magnitudes that must be refused or clamped', () => {
   let ran = 0, refused = 0;
   for (const f of FIXTURES) {
     for (const d of [-40, -3, -0.01, 0.01, 3, 40]) {
@@ -317,7 +296,7 @@ test('TORTURE: offsetCage and thickenCage across sign and magnitude, including m
   assert.ok(ran > 100, `got ${ran} offsets (${refused} refusals)`);
 });
 
-test('TORTURE: insertEdgeLoop seeded from every edge, both sides', () => {
+test('Torture: insertEdgeLoop seeded from every edge, both sides', () => {
   let ran = 0, refused = 0;
   for (const f of FIXTURES.slice(0, 16)) {
     const ctx = buildTopology(f.cage);
@@ -335,7 +314,7 @@ test('TORTURE: insertEdgeLoop seeded from every edge, both sides', () => {
   assert.ok(ran > 100, `got ${ran} loop insertions (${refused} refusals)`);
 });
 
-test('TORTURE: subdivideFaces at every single face, and subdivideCageGlobal on every fixture', () => {
+test('Torture: subdivideFaces at every single face, and subdivideCageGlobal on every fixture', () => {
   for (const f of FIXTURES) {
     const g = unwrap(subdivideCageGlobal(f.cage));
     const gv = cageViolations(g, { closed: f.closed });
@@ -355,15 +334,11 @@ test('TORTURE: subdivideFaces at every single face, and subdivideCageGlobal on e
   }
 });
 
-// ===================================================================
-// ORDER DEPENDENCE — the specific bug class a generated corpus exists to
+// Order dependence — the bug class a generated corpus exists to
 // find, and the one that a hand-built fixture is worst at exposing.
 //
-// An operation taking a SET must not depend on the order that set
-// happens to arrive in. Two genuine bugs in bridgeEdgeRunsHub were
-// exactly this, and both were invisible to fixtures that were robust in
-// every other respect.
-// ===================================================================
+// An operation taking a set must not depend on the order that set
+// happens to arrive in.
 function permutations(arr, cap = 24) {
   if (arr.length <= 1) return [arr.slice()];
   const out = [];
@@ -376,7 +351,7 @@ function permutations(arr, cap = 24) {
   return out;
 }
 
-test('ORDER DEPENDENCE: deleteFaces gives the same result whatever order the faces arrive in', () => {
+test('Order dependence: deleteFaces gives the same result whatever order the faces arrive in', () => {
   let compared = 0;
   for (const f of FIXTURES) {
     if (f.cage.faces.length < 4) continue;
@@ -388,8 +363,8 @@ test('ORDER DEPENDENCE: deleteFaces gives the same result whatever order the fac
       const cage = unwrap(out);
       const v = cageViolations(cage);
       assert.deepEqual(v, [], `${f.name} delete ${JSON.stringify(perm)}: ${v.join('; ')}`);
-      // Compared as a SET of faces keyed by their own sorted vertex
-      // POSITIONS, not indices: a different input order may legitimately
+      // Compared as a set of faces keyed by their own sorted vertex
+      // positions, not indices: a different input order may legitimately
       // renumber the compacted vertex array, so comparing indices would
       // assert something never promised. The geometry must match.
       const key = cage.faces
@@ -403,11 +378,11 @@ test('ORDER DEPENDENCE: deleteFaces gives the same result whatever order the fac
   assert.ok(compared > 100, `got ${compared} permutation comparisons`);
 });
 
-test('ORDER DEPENDENCE: weldVertices gives the same geometry whatever order the vertices arrive in', () => {
+test('Order dependence: weldVertices gives the same geometry whatever order the vertices arrive in', () => {
   let compared = 0;
   for (const f of FIXTURES) {
     const ctx = buildTopology(f.cage);
-    // Weld a genuine EDGE's two endpoints — a real, reachable gesture,
+    // Weld an edge's two endpoints — a reachable gesture,
     // unlike two arbitrary far-apart vertices.
     const keys = [...ctx.edgeMap.keys()].slice(0, 6);
     for (const k of keys) {
@@ -422,7 +397,7 @@ test('ORDER DEPENDENCE: weldVertices gives the same geometry whatever order the 
         results.push(cage.faces.length + ':' + cage.vertices.length);
       }
       // 'average' is symmetric in its inputs, so both orders must agree
-      // on whether the weld is legal at all AND on the resulting counts.
+      // on whether the weld is legal at all and on the resulting counts.
       assert.equal(results[0], results[1], `${f.name} edge ${k}: weldVertices depends on input order`);
       compared++;
     }
@@ -430,7 +405,7 @@ test('ORDER DEPENDENCE: weldVertices gives the same geometry whatever order the 
   assert.ok(compared > 50, `got ${compared} weld comparisons`);
 });
 
-test('ORDER DEPENDENCE: mergeFaces gives the same geometry whatever order the faces arrive in', () => {
+test('Order dependence: mergeFaces gives the same geometry whatever order the faces arrive in', () => {
   let compared = 0;
   for (const f of FIXTURES) {
     const ctx = buildTopology(f.cage);
@@ -456,19 +431,16 @@ test('ORDER DEPENDENCE: mergeFaces gives the same geometry whatever order the fa
   assert.ok(compared > 50, `got ${compared} merge comparisons`);
 });
 
-// ===================================================================
-// SYMMETRY — the property that produces EXACT TIES, and the one that
-// found both N-way bridge bugs. Generated on purpose here rather than
-// avoided, across every run count and every input permutation.
-// ===================================================================
-test('SYMMETRY + ORDER: an N-way hub on a perfectly symmetric rim survives every run permutation and direction', () => {
+// Symmetry — the property that produces exact ties. Generated on purpose
+// here rather than avoided, across every run count and every input
+// permutation.
+test('Symmetry and order: an N-way hub on a perfectly symmetric rim survives every run permutation and direction', () => {
   let built = 0, refused = 0;
   for (const N of [3, 4, 5, 6]) {
     // N arcs evenly spaced around one rim — perfectly symmetric on
     // purpose, so every pairwise comparison the hub makes is an exact
-    // tie. This is the fixture shape that exposed a summed-cross-product
-    // plane derivation collapsing to zero and a direction rule falling
-    // through to input order.
+    // tie, where a summed-cross-product plane derivation can collapse to
+    // zero and a direction rule can fall through to input order.
     const verts = [], runs = [];
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2;
@@ -495,11 +467,11 @@ test('SYMMETRY + ORDER: an N-way hub on a perfectly symmetric rim survives every
   // A hub on a flat rim may legitimately refuse (coplanar arcs with no
   // junction plane is a named refusal). What must never happen is a
   // returned cage that violates an invariant — asserted above for every
-  // one that DID build.
-  assert.ok(built + refused > 80, `the permutation sweep must genuinely run, got ${built} built / ${refused} refused`);
+  // one that did build.
+  assert.ok(built + refused > 80, `the permutation sweep must run, got ${built} built / ${refused} refused`);
 });
 
-test('SYMMETRY: a two-run bridge is invariant to which run is named first', () => {
+test('Symmetry: a two-run bridge is invariant to which run is named first', () => {
   let compared = 0;
   for (const seg of [1, 2, 3]) {
     for (const len of [2, 3, 4]) {
@@ -528,12 +500,10 @@ test('SYMMETRY: a two-run bridge is invariant to which run is named first', () =
   assert.ok(compared >= 9, `got ${compared} comparisons`);
 });
 
-// ===================================================================
-// COMPOSITION — a cage is rarely edited once. Real corruption tends to
+// Composition — a cage is rarely edited once. Corruption tends to
 // appear only after several operations have each individually "passed",
 // which no single-operation test can reach.
-// ===================================================================
-test('TORTURE: chains of edits compose without silently corrupting the cage', () => {
+test('Torture: chains of edits compose without silently corrupting the cage', () => {
   const ops = [
     ['subdivideFaces', (c) => subdivideFaces(c, [0])],
     ['extrudeFaces', (c) => extrudeFaces(c, [0], faceDir(c, [0]), 4)],
@@ -545,7 +515,7 @@ test('TORTURE: chains of edits compose without silently corrupting the cage', ()
   ];
   let chains = 0;
   for (const f of FIXTURES.slice(0, 12)) {
-    // Every ordered PAIR and a sample of triples — deliberately including
+    // Every ordered pair and a sample of triples — deliberately including
     // pairs a person would not try (delete then offset, extrude then
     // slide) because those are where a stale index or a dropped crease
     // key surfaces.
@@ -573,12 +543,10 @@ test('TORTURE: chains of edits compose without silently corrupting the cage', ()
   assert.ok(chains > 200, `got ${chains} completed two-op chains`);
 });
 
-// ===================================================================
-// DEGENERATE INPUT — an operation must refuse honestly (a thrown, named
+// Degenerate input — an operation must refuse (a thrown, named
 // error) rather than return a broken cage. A refusal is a pass here; a
 // silently invalid result is the bug.
-// ===================================================================
-test('DEGENERATE INPUT: every operation either refuses honestly or returns a valid cage — never a broken one', () => {
+test('Degenerate input: every operation either refuses or returns a valid cage — never a broken one', () => {
   const cage = superbBoxCage([0, 0, 0], [25, 25, 25], 2);
   const nF = cage.faces.length, nV = cage.vertices.length;
   const attempts = [
@@ -629,6 +597,6 @@ test('DEGENERATE INPUT: every operation either refuses honestly or returns a val
     returned++;
   }
   assert.deepEqual(silentlyBroken, [],
-    `every degenerate input must be REFUSED or produce a VALID cage; these returned a broken one:\n  ${silentlyBroken.join('\n  ')}`);
-  assert.ok(refusals > 5, `the degenerate set must genuinely reach real refusals, got ${refusals} refusals / ${returned} accepted`);
+    `every degenerate input must be refused or produce a valid cage; these returned a broken one:\n  ${silentlyBroken.join('\n  ')}`);
+  assert.ok(refusals > 5, `the degenerate set must reach refusals, got ${refusals} refusals / ${returned} accepted`);
 });

@@ -17,30 +17,24 @@ test('solveSquareSystem returns null for a singular system rather than a wrong a
   assert.equal(x, null);
 });
 
-// Two real cylinders, built from this kernel's own extrude() (Ch.8 ruled
-// surface) — a real Extrude surface this app already produces, closed in U
-// (the circular cross-section), open in V (the finite length). Chosen over
-// a Revolve-of-an-arc sphere/barrel specifically because probing this file
-// surfaced a genuine, pre-existing exactness gap in revolve()'s own pole
-// handling (named separately, and fixed in its own round) —
-// cylinders sidestep that unrelated issue entirely (no pole, no per-row arc
-// weight structure at all) while still being a real "solid of revolution"
-// cross-section and a real Extrude surface, matching the named
-// example ("two Revolve or Extrude surfaces intersecting").
+// Two cylinders, built from this kernel's own extrude() (Ch.8 ruled
+// surface) — an Extrude surface this app produces, closed in U (the
+// circular cross-section), open in V (the finite length). Cylinders have no
+// pole and no per-row arc weight structure, so the fixture does not depend
+// on revolve()'s pole handling, while still being a "solid of revolution"
+// cross-section and an Extrude surface, matching the case "two Revolve or
+// Extrude surfaces intersecting".
 //
-// DELIBERATELY UNEQUAL radii and an axis OFFSET (not through a common
-// point) — a first attempt at this test used EQUAL radii with both axes
-// crossing at the origin (the textbook "Steinmetz solid"), which turned out
-// to be a genuinely bad canonical test case: that configuration's two
-// elliptical intersection branches actually CROSS EACH OTHER at (0,+-R,0) —
-// real algebraic singular points of the full intersection locus, not a
-// fixture mistake — and the coarse seed search kept landing near one of
-// them, correctly triggering this module's own near-tangent refusal (the
-// direction is genuinely ill-defined exactly at a self-crossing point).
-// Unequal radii + an offset axis is the actually-representative case (two
-// differently-sized pipes welded at an angle, axes not meeting) and
-// produces a single smooth transversal loop with no such singularity —
-// confirmed directly, not assumed, before trusting this as the test fixture.
+// Deliberately unequal radii and an axis offset (not through a common
+// point). With equal radii and both axes crossing at the origin (the
+// textbook "Steinmetz solid"), the two elliptical intersection branches
+// cross each other at (0,+-R,0) — algebraic singular points of the full
+// intersection locus — and a coarse seed search landing near one of them
+// correctly triggers this module's own near-tangent refusal (the direction
+// is ill-defined exactly at a self-crossing point). Unequal radii + an
+// offset axis is the representative case (two differently-sized pipes
+// welded at an angle, axes not meeting) and produces a single smooth
+// transversal loop with no such singularity.
 function makeCylinderZ(R, halfHeight) {
   const profile = makeCircle([0, 0, -halfHeight], [1, 0, 0], [0, 1, 0], R, 4);
   return extrude(profile, [0, 0, 1], 2 * halfHeight); // axis Z through the origin
@@ -64,9 +58,9 @@ test('cylinder fixtures: every evaluated point is at the correct radial distance
   }
 });
 
-// TWO REAL CYLINDERS OF DIFFERENT RADII, PERPENDICULAR, OFFSET AXES — the
-// task's own named "two Revolve or Extrude surfaces intersecting" student
-// scenario, in its generic (non-degenerate) form. KNOWN closed-form
+// Two cylinders of different radii, perpendicular, offset axes — "two
+// Revolve or Extrude surfaces intersecting" in its generic
+// (non-degenerate) form. Known closed-form
 // intersection (independent of this kernel, elementary algebra): cylinder1
 // (axis Z through the origin, radius R1) is x^2+y^2=R1^2; cylinder2 (axis X
 // through (*,0,z0), radius R2) is y^2+(z-z0)^2=R2^2. Substituting
@@ -74,23 +68,22 @@ test('cylinder fixtures: every evaluated point is at the correct radial distance
 // own circle) gives (z-z0)^2 = R2^2 - R1^2*sin^2(theta) — real only where
 // R1^2*sin^2(theta) <= R2^2, i.e. two disjoint theta arcs (R2<R1: the
 // smaller pipe only pierces the larger one over a bounded front/back
-// range), each combining the +/- sqrt branches into ONE smooth closed loop
-// meeting where the sqrt hits zero. A real pipe-through-pipe cut, not a
-// synthetic edge case.
-test('intersectSurfaces on two real, differently-sized, offset-axis perpendicular cylinders finds a CLOSED loop matching the known analytic implicit equations exactly', () => {
+// range), each combining the +/- sqrt branches into one smooth closed loop
+// meeting where the sqrt hits zero: a pipe-through-pipe cut.
+test('intersectSurfaces on two differently-sized, offset-axis perpendicular cylinders finds a closed loop matching the known analytic implicit equations exactly', () => {
   const R1 = 5, R2 = 3, z0 = 2;
   const cz = makeCylinderZ(R1, 9); // generous half-height, so the loop fits without being clipped
   const cx = makeCylinderXOffset(R2, 9, z0);
   // A smaller stepLen than the open-curve test below — this loop pinches
   // tightly near where its +/- z branches meet (the smaller cylinder just
-  // grazing the edge of its own valid theta range), a real higher-curvature
-  // region where a larger predictor step measurably degrades the
-  // corrector's own convergence (found directly: stepLen=0.2 left ~1e-4
-  // residual error right at the pinch, stepLen=0.08 tightens it to ~8e-7).
+  // grazing the edge of its own valid theta range), a higher-curvature
+  // region where a larger predictor step degrades the corrector's own
+  // convergence (stepLen=0.2 leaves ~1e-4 residual error right at the
+  // pinch, stepLen=0.08 tightens it to ~8e-7).
   const result = intersectSurfaces(cz, cx, { stepLen: 0.08, maxSteps: 800 });
-  assert.equal(result.ok, true, `expected a real intersection, got refusal: ${result.reason}`);
-  assert.equal(result.closed, true, 'a smaller cylinder piercing a larger one, front region only, must produce a CLOSED loop');
-  assert.ok(result.samples.length > 10, `expected a real march, got only ${result.samples.length} samples`);
+  assert.equal(result.ok, true, `expected an intersection, got refusal: ${result.reason}`);
+  assert.equal(result.closed, true, 'a smaller cylinder piercing a larger one, front region only, must produce a closed loop');
+  assert.ok(result.samples.length > 10, `expected a full march, got only ${result.samples.length} samples`);
 
   for (const s of result.samples) {
     const [x, y, z] = s.point;
@@ -104,21 +97,21 @@ test('intersectSurfaces on two real, differently-sized, offset-axis perpendicula
   const closeDist = Math.hypot(first[0] - last[0], first[1] - last[1], first[2] - last[2]);
   assert.ok(closeDist < 1e-6, `loop did not close bit-exactly: ${closeDist}`);
 
-  // The loop must genuinely stay on the "front" side (x>0, near cylinder1's
-  // own u1=0) — a real, bounded loop, not something that wrapped implausibly.
+  // The loop must stay on the "front" side (x>0, near cylinder1's own
+  // u1=0) — a bounded loop, not something that wrapped implausibly.
   for (const s of result.samples) assert.ok(s.point[0] > 0, `expected the front-side loop to stay at x>0, got x=${s.point[0]}`);
 });
 
-test('intersectSurfaces on two cylinders far apart honestly refuses (no intersection exists)', () => {
+test('intersectSurfaces on two cylinders far apart refuses (no intersection exists)', () => {
   const R1 = 5, R2 = 3;
   const cz = makeCylinderZ(R1, 9);
   const cxFar = makeCylinderXOffset(R2, 9, 100); // shifted far away in Z
   const result = intersectSurfaces(cz, cxFar);
   assert.equal(result.ok, false);
-  assert.ok(/no intersection/i.test(result.reason), `expected an honest "no intersection" refusal, got: ${result.reason}`);
+  assert.ok(/no intersection/i.test(result.reason), `expected a "no intersection" refusal, got: ${result.reason}`);
 });
 
-test('seedSurfaceIntersection on two overlapping cylinders finds a point genuinely on BOTH surfaces (residual ~0)', () => {
+test('seedSurfaceIntersection on two overlapping cylinders finds a point on both surfaces (residual ~0)', () => {
   const R1 = 5, R2 = 3, z0 = 2;
   const cz = makeCylinderZ(R1, 9);
   const cx = makeCylinderXOffset(R2, 9, z0);
@@ -126,23 +119,23 @@ test('seedSurfaceIntersection on two overlapping cylinders finds a point genuine
   assert.ok(seed.distance < 1e-6, `seed residual too large: ${seed.distance}`);
 });
 
-// OPEN CURVE case: the SAME two cylinders, but cylinder1's own half-height
-// is now shorter than the loop's own real z-extent — the true closed loop
-// found above genuinely runs off cylinder1's own top/bottom parametric
-// boundary (v1=1 / v1=0) partway through, so the real curve is an OPEN ARC,
-// terminating exactly where the loop would have crossed z=+-halfHeight1.
-// Proves the boundary-exit path (the second SSI case: "an open
+// Open curve case: the same two cylinders, but cylinder1's own half-height
+// is shorter than the loop's own z-extent — the closed loop found above
+// runs off cylinder1's own top/bottom parametric boundary (v1=1 / v1=0)
+// partway through, so the curve is an open arc, terminating exactly where
+// the loop would have crossed z=+-halfHeight1.
+// Checks the boundary-exit path (the second SSI case: "an open
 // curve... running off to a surface's own boundary"), not just the
 // closed-loop path above.
-test('intersectSurfaces on a SHORT cylinder clipping the loop finds an OPEN curve terminating exactly at the short cylinder boundary', () => {
+test('intersectSurfaces on a short cylinder clipping the loop finds an open curve terminating exactly at the short cylinder boundary', () => {
   const R1 = 5, R2 = 3, z0 = 2;
   const halfHeight1 = 2.4; // shorter than the closed loop's own z-extent around z0 -> clips it
   const cz = makeCylinderZ(R1, halfHeight1);
   const cx = makeCylinderXOffset(R2, 9, z0);
   const result = intersectSurfaces(cz, cx, { stepLen: 0.15, maxSteps: 400 });
-  assert.equal(result.ok, true, `expected a real intersection, got refusal: ${result.reason}`);
-  assert.equal(result.closed, false, 'the short cylinder clips the loop — this must be an OPEN curve, not closed');
-  assert.ok(result.samples.length > 5, `expected a real march, got only ${result.samples.length} samples`);
+  assert.equal(result.ok, true, `expected an intersection, got refusal: ${result.reason}`);
+  assert.equal(result.closed, false, 'the short cylinder clips the loop — this must be an open curve, not closed');
+  assert.ok(result.samples.length > 5, `expected a full march, got only ${result.samples.length} samples`);
 
   for (const s of result.samples) {
     const [x, y, z] = s.point;
@@ -159,37 +152,35 @@ test('intersectSurfaces on a SHORT cylinder clipping the loop finds an OPEN curv
   assert.ok(Math.abs(Math.abs(zLast) - halfHeight1) < 1e-4, `end z=${zLast} should be at the cylinder1 boundary +-${halfHeight1}`);
 });
 
-// CLOSURE MUST NOT OVERSHOOT INTO A SECOND LAP.
+// Closure must not overshoot into a second lap.
 //
-// The marcher used to test closure against the current SAMPLE's distance to
-// the seed, with a tolerance of half a step. That is marginal BY
-// CONSTRUCTION: with samples one step apart, the nearest one to the seed can
-// sit a full half-step away, so a seed landing midway between two samples is
-// a dead tie decided by float noise. Measured on this exact fixture before
-// the fix: the two samples straddling the seed read 0.6140 and 0.6145
-// against a tolerance of 0.6141 and 0.6142. The march missed, kept going,
-// and closed a full lap later.
+// Testing closure against the current sample's distance to the seed, with
+// a tolerance of half a step, is marginal by construction: with samples one
+// step apart, the nearest one to the seed can sit a full half-step away, so
+// a seed landing midway between two samples is a dead tie decided by float
+// noise. On this fixture the two samples straddling the seed read 0.6140
+// and 0.6145 against a tolerance of 0.6141 and 0.6142; a missed closure
+// keeps marching and closes a full lap later. Closure is therefore tested
+// against the distance to the marched segment.
 //
 // The failure is silent and lands three stages downstream: a doubly-traced
 // loop self-overlaps in UV, the face arrangement cuts hundreds of fragments
-// out of it, and the sew reports NON-MANIFOLD -- which reads like a topology
-// bug, not a marching one. It is worth an explicit lap count here for that
-// reason: sample count alone would not name what went wrong.
+// out of it, and the sew reports non-manifold -- which reads like a topology
+// bug, not a marching one. Hence an explicit lap count here: sample count
+// alone would not name what went wrong.
 //
-// NEGATIVE CONTROL, run by hand when this landed: against the old
-// sample-distance test this fixture marched 403 samples over 2.0000 laps;
-// against the segment-distance test, 204 samples over 1.0000 laps. The other
-// two pairs of the same three-sphere fixture were byte-identical either way
-// (230 and 244 samples, 1.0000 laps) -- segment distance <= endpoint
-// distance always, so the new test can only ever close EARLIER, never later.
-test('a marched closed loop closes on its FIRST lap, not its second', () => {
+// Against a sample-distance test this fixture marches 403 samples over
+// 2.0000 laps; against the segment-distance test, 204 samples over 1.0000
+// laps. Segment distance <= endpoint distance always, so the segment test
+// can only close earlier, never later.
+test('a marched closed loop closes on its first lap, not its second', () => {
   const R = 40;
   const centres = { B: [55, 0, 0], C: [27, 46, 0] };
-  // Two R=40 spheres. Deliberately NOT exact spheres -- these are revolves of
-  // a 7-point interpolated profile, i.e. what this app actually builds, whose
-  // intersection curve is a genuinely wavy non-planar loop. That is the point:
-  // the aliasing this guards against depends on real step spacing, which an
-  // idealised exact circle would not reproduce.
+  // Two R=40 spheres. Deliberately not exact spheres -- these are revolves of
+  // a 7-point interpolated profile, i.e. what this app builds, whose
+  // intersection curve is a wavy non-planar loop. The aliasing this guards
+  // against depends on the marched step spacing, which an idealized exact
+  // circle would not reproduce.
   const profile = (() => {
     const pts = [];
     for (let i = 0; i < 7; i++) {
@@ -210,7 +201,7 @@ test('a marched closed loop closes on its FIRST lap, not its second', () => {
   const comp = res.components[0];
   assert.ok(comp.closed, 'and that loop is closed');
 
-  // Total turn about the EXACT circle axis. For two equal-radius spheres the
+  // Total turn about the exact circle axis. For two equal-radius spheres the
   // intersection plane is perpendicular to the center line, so the axis is
   // known in closed form -- no centroid fitting, nothing derived from the
   // marched samples themselves, so this cannot agree with the code under test

@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { waveControlNet, normalizeWaveParams } from '../kernel/wave.mjs';
 import { makeCircle, revolve } from '../kernel/primitives.mjs';
 
-// A real torus — closed in BOTH U and V, matching noise.test.mjs's own
-// identical fixture (the exact shape this self-intersection was originally
-// found on, both closed directions checked at once, not just one).
+// A torus — closed in both U and V, matching noise.test.mjs's own
+// identical fixture (both closed directions checked at once, not just one).
 function torus(majorR = 30, minorR = 5) {
   const profile = makeCircle([majorR, 0, 0], [0, 0, 1], [1, 0, 0], minorR, 4);
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
@@ -48,7 +47,7 @@ test('normalizeWaveParams: fills defaults and clamps a garbage bag', () => {
   assert.equal(p.refine, 3);
 });
 
-test('amplitude 0 is an EXACT, byte-identical passthrough', () => {
+test('amplitude 0 is an exact, byte-identical passthrough', () => {
   const srf = flatNet();
   const out = waveControlNet(srf, { amplitude: 0, frequency: 2, phase: 1, direction: 'world-z' });
   assert.equal(out, srf);
@@ -56,24 +55,24 @@ test('amplitude 0 is an EXACT, byte-identical passthrough', () => {
   assert.equal(out2, srf);
 });
 
-test('amplitude>0 displaces only INTERIOR control points; boundary rows/cols and every weight untouched', () => {
+test('amplitude>0 displaces only interior control points; boundary rows/cols and every weight untouched', () => {
   const srf = flatNet();
   const out = waveControlNet(srf, { amplitude: 5, frequency: 1, axis: 'u', direction: 'world-z' });
   const nu = out.ctrlNet.length, nv = out.ctrlNet[0].length;
   for (let i = 0; i < nu; i++) {
     for (let j = 0; j < nv; j++) {
       const isBoundary = i === 0 || i === nu - 1 || j === 0 || j === nv - 1;
-      assert.equal(out.ctrlNet[i][j][3], srf.ctrlNet[i][j][3]); // weight NEVER touched
+      assert.equal(out.ctrlNet[i][j][3], srf.ctrlNet[i][j][3]); // weight never touched
       if (isBoundary) {
         assert.deepEqual(out.ctrlNet[i][j].slice(0, 3), srf.ctrlNet[i][j].slice(0, 3));
       }
     }
   }
-  // at least one real interior point genuinely moved
+  // at least one interior point moved
   assert.ok(maxNetDiff(out.ctrlNet, srf.ctrlNet) > 0.01);
 });
 
-test('world-axis direction displaces EXACTLY along that axis, matching the closed-form sine at every interior point', () => {
+test('world-axis direction displaces exactly along that axis, matching the closed-form sine at every interior point', () => {
   const srf = flatNet();
   const p = { amplitude: 3, frequency: 2, phase: 0.7, axis: 'v', direction: 'world-x' };
   const out = waveControlNet(srf, p);
@@ -89,7 +88,7 @@ test('world-axis direction displaces EXACTLY along that axis, matching the close
   }
 });
 
-test('direction:normal displaces along the surface\'s own TRUE (constant, tilted) normal', () => {
+test('direction:normal displaces along the surface\'s own true (constant, tilted) normal', () => {
   const srf = tiltedNet(); // true normal is (-1,0,1)/sqrt(2) everywhere
   const out = waveControlNet(srf, { amplitude: 4, frequency: 1, axis: 'u', direction: 'normal' });
   const n = 1 / Math.sqrt(2);
@@ -106,7 +105,7 @@ test('direction:normal displaces along the surface\'s own TRUE (constant, tilted
   assert.ok(sawReal);
 });
 
-test('axis choice genuinely changes the displacement pattern (u vs v vs diagonal all differ)', () => {
+test('axis choice changes the displacement pattern (u vs v vs diagonal all differ)', () => {
   const srf = flatNet();
   const p = { amplitude: 5, frequency: 3, direction: 'world-z' };
   const outU = waveControlNet(srf, { ...p, axis: 'u' });
@@ -117,7 +116,7 @@ test('axis choice genuinely changes the displacement pattern (u vs v vs diagonal
   assert.ok(maxNetDiff(outV.ctrlNet, outD.ctrlNet) > 0.01);
 });
 
-test('phase genuinely shifts the wave (a real animatable knob, per the doc\'s own "no special Animator coupling needed" instruction)', () => {
+test('phase shifts the wave (an animatable knob, with no special Animator coupling needed)', () => {
   const srf = flatNet();
   const outA = waveControlNet(srf, { amplitude: 5, frequency: 1, axis: 'u', direction: 'world-z', phase: 0 });
   const outB = waveControlNet(srf, { amplitude: 5, frequency: 1, axis: 'u', direction: 'world-z', phase: Math.PI / 2 });
@@ -131,7 +130,7 @@ test('refine raises control-point density before displacement (shape-preserving 
   assert.ok(out.ctrlNet[0].length > srf.ctrlNet[0].length);
 });
 
-test('a pole (no defined normal) is skipped honestly under direction:normal — no NaN/Infinity', () => {
+test('a pole (no defined normal) is skipped under direction:normal — no NaN/Infinity', () => {
   // collapse one interior row to a single point (pole-like degeneracy)
   const srf = flatNet();
   srf.ctrlNet[2] = srf.ctrlNet[2].map(() => [20, 20, 0, 1]);
@@ -139,17 +138,17 @@ test('a pole (no defined normal) is skipped honestly under direction:normal — 
   for (const row of out.ctrlNet) for (const cp of row) for (const v of cp) assert.ok(Number.isFinite(v));
 });
 
-// ---- SELF-INTERSECTION-SAFE AMPLITUDE CLAMP, on a real doubly-closed torus ----
-test('SELF-INTERSECTION CLAMP: a small, safe amplitude on a real torus (closed in BOTH U and V) is left completely untouched', () => {
+// Self-intersection-safe amplitude clamp, on a doubly-closed torus
+test('self-intersection clamp: a small, safe amplitude on a torus (closed in both U and V) is left completely untouched', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const out = waveControlNet(srf, { amplitude: minorR * 0.05, axis: 'u', frequency: 2, direction: 'normal' });
-  assert.ok(out.ampClamp, 'a real, real-shape amplitude edit always attaches clamp metadata');
+  assert.ok(out.ampClamp, 'an amplitude edit always attaches clamp metadata');
   assert.equal(out.ampClamp.clamped, false, 'a small amplitude relative to the tube radius must not be clamped');
   assert.equal(out.ampClamp.applied, out.ampClamp.requested);
 });
 
-test('SELF-INTERSECTION CLAMP: a large amplitude on the SAME torus (multiple times the minor radius) is auto-clamped, never silently folded', () => {
+test('self-intersection clamp: a large amplitude on the same torus (multiple times the minor radius) is auto-clamped, never silently folded', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const requested = minorR * 5; // wildly larger than the tube can carry without self-intersecting
@@ -157,16 +156,16 @@ test('SELF-INTERSECTION CLAMP: a large amplitude on the SAME torus (multiple tim
   assert.equal(out.ampClamp.requested, requested);
   assert.equal(out.ampClamp.clamped, true, 'a hugely oversized amplitude on a small-radius tube must be clamped, not applied verbatim');
   assert.ok(out.ampClamp.applied < requested, 'the applied amplitude must sit strictly below the request');
-  assert.ok(out.ampClamp.applied > 0, 'the clamp must still leave a real, non-zero, usable amplitude');
-  assert.equal(out.ampClamp.applied, out.ampClamp.safeMax, 'a clamped result applies EXACTLY the computed safe maximum, not an arbitrary smaller number');
+  assert.ok(out.ampClamp.applied > 0, 'the clamp must still leave a non-zero, usable amplitude');
+  assert.equal(out.ampClamp.applied, out.ampClamp.safeMax, 'a clamped result applies exactly the computed safe maximum, not an arbitrary smaller number');
 });
 
-test('SELF-INTERSECTION CLAMP: the SAME torus, checked in the OTHER closed direction (axis:v) too — not a lopsided per-axis fix', () => {
+test('self-intersection clamp: the same torus, checked in the other closed direction (axis:v) too — not a lopsided per-axis fix', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const requested = minorR * 5;
   const outU = waveControlNet(srf, { amplitude: requested, axis: 'u', frequency: 2, direction: 'normal' });
   const outV = waveControlNet(srf, { amplitude: requested, axis: 'v', frequency: 2, direction: 'normal' });
   assert.equal(outU.ampClamp.clamped, true, 'axis:u direction is clamped');
-  assert.equal(outV.ampClamp.clamped, true, 'axis:v direction is ALSO clamped — the protection is not lopsided per axis');
+  assert.equal(outV.ampClamp.clamped, true, 'axis:v direction is also clamped — the protection is not lopsided per axis');
 });

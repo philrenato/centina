@@ -1,5 +1,5 @@
-// INSERT POINT — split one edge with a new vertex. What matters is not that
-// a vertex appeared but that BOTH faces using that edge learned about it: a
+// Insert point — split one edge with a new vertex. What matters is not that
+// a vertex appeared but that both faces using that edge learned about it: a
 // cage where only one did still renders and still counts right, and
 // subdivides into a crack.
 import test from 'node:test';
@@ -18,7 +18,7 @@ function report(cage) {
   return { boundary, nonManifold, chi: cage.vertices.length - ctx.edgeMap.size + cage.faces.length };
 }
 
-test('an interior edge gains one vertex, and BOTH its faces become 5-gons', () => {
+test('an interior edge gains one vertex, and both its faces become 5-gons', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const ctx = buildTopology(cage);
   const interior = [...ctx.edgeMap.entries()].find(([, e]) => e.faces.length === 2);
@@ -32,21 +32,21 @@ test('an interior edge gains one vertex, and BOTH its faces become 5-gons', () =
   cage.faces.forEach((f, fi) => { if (!edge.faces.includes(fi)) assert.deepEqual(r.cage.faces[fi], f); });
 });
 
-test('THE POINT: no T-junction — the new vertex is used by both faces, and the cage stays closed and manifold', () => {
+test('The point: no T-junction — the new vertex is used by both faces, and the cage stays closed and manifold', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const before = report(cage);
   const ctx = buildTopology(cage);
   const key = [...ctx.edgeMap.keys()][0];
   const { cage: out, newVertexIndex } = insertPointOnEdge(cage, key, 0.5);
   const users = out.faces.filter((f) => f.includes(newVertexIndex)).length;
-  assert.equal(users, 2, 'the new vertex must be used by BOTH faces that shared the split edge');
+  assert.equal(users, 2, 'the new vertex must be used by both faces that shared the split edge');
   const after = report(out);
   assert.equal(after.boundary, before.boundary);
   assert.equal(after.nonManifold, 0);
   assert.equal(after.chi, before.chi, 'splitting an edge adds one vertex and one edge — the Euler characteristic must not move');
 });
 
-test('and the widened cage really subdivides — the failure a T-junction would only show up in', () => {
+test('and the widened cage subdivides — the failure a T-junction would only show up in', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const ctx = buildTopology(cage);
   const { cage: out } = insertPointOnEdge(cage, [...ctx.edgeMap.keys()][0], 0.35);
@@ -68,7 +68,7 @@ test('t places the point along the edge, exactly', () => {
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(got[k] - expect[k]) < 1e-12);
 });
 
-test('a NAKED edge works too — one face widens, the boundary stays a boundary', () => {
+test('a naked edge works too — one face widens, the boundary stays a boundary', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const ctx = buildTopology(cage);
   const [key, edge] = [...ctx.edgeMap.entries()].find(([, e]) => e.faces.length === 1);
@@ -80,7 +80,7 @@ test('a NAKED edge works too — one face widens, the boundary stays a boundary'
   assert.equal(report(out).boundary, report(cage).boundary + 1, 'splitting one naked edge leaves two naked edges in its place');
 });
 
-test('a crease on the split edge transfers to BOTH halves and never dangles', () => {
+test('a crease on the split edge transfers to both halves and never dangles', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const ctx = buildTopology(cage);
   const [key, edge] = [...ctx.edgeMap.entries()][0];
@@ -93,7 +93,7 @@ test('a crease on the split edge transfers to BOTH halves and never dangles', ()
   assert.equal(creaseWeight(out, newVertexIndex, edge.v1), 4);
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals, and the input cage is never mutated', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const before = JSON.stringify(cage);
   assert.throws(() => insertPointOnEdge(cage, '999_1000', 0.5), /not a real edge/);

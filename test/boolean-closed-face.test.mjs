@@ -8,22 +8,21 @@ import { projectPointsToSurfaceUV, trivialTrimLoop } from '../kernel/trim.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 import { surfaceClosure } from '../kernel/surface.mjs';
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE: a CYLINDER passing clean through a BOX. Its own hard case is
+// The fixture: a cylinder passing clean through a box. Its hard case is
 // neither the pole (boolean-organic.test.mjs owns that) nor the T-junction on
-// a straight edge (boolean-tjunction.test.mjs owns that) — it is a FACE THAT
-// WRAPS A CLOSED DIRECTION AND IS CUT ALL THE WAY AROUND.
+// a straight edge (boolean-tjunction.test.mjs owns that) — it is a face that
+// wraps a closed direction and is cut all the way around.
 //
 // Three things only this shape reaches:
 //
-//   1. The cut curve is a full circle. It is CLOSED in 3D, but in the wall's
+//   1. The cut curve is a full circle. It is closed in 3D, but in the wall's
 //      own (u,v) it runs off one edge of the domain rectangle and resumes at
 //      the other, because u=uMin and u=uMax are the same physical place. Fed
 //      to the arrangement as sampled, it reads as an out-and-back that stops
 //      short of both edges and is pruned as a dangling spur, and the face
-//      comes back UNSPLIT.
+//      comes back unsplit.
 //
-//   2. What survives the cut is a TUBE, not a disk. Its corner polygon
+//   2. What survives the cut is a tube, not a disk. Its corner polygon
 //      revisits the seam, so it has no boundary a solid builder can accept.
 //
 //   3. Cutting that tube open puts a new vertex partway along the shared
@@ -35,8 +34,7 @@ import { surfaceClosure } from '../kernel/surface.mjs';
 // The cylinder passes entirely through the box in Z and sits well inside it in
 // X and Y, so the wall meets only the box's two caps and every intersection is
 // one of these full circles. That is deliberate: a partial overlap would give
-// open arcs, which are the case that already worked.
-// ---------------------------------------------------------------------------
+// open arcs, a different case.
 
 function quadSurface(p00, p10, p11, p01) {
   const w = (p) => [p[0], p[1], p[2], 1];
@@ -71,8 +69,8 @@ function tessellate(faces, res) {
 
 const R = 12, Z0 = -30, Z1 = 30, BOX = 20;
 
-// Real face-pair SSI, not hand-derived circles: the whole point of the fixture
-// is what the marcher's own discretization does to a wrapped cut.
+// Real face-pair SSI, not hand-derived circles: the fixture exists to test
+// what the marcher's own discretization does to a wrapped cut.
 function buildFixture() {
   const wall = revolve(makeLine([R, 0, Z0], [R, 0, Z1]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const capBot = revolve(makeLine([0, 0, Z0], [R, 0, Z0]), [0, 0, Z0], [0, 0, -1], 0, 2 * Math.PI);
@@ -98,7 +96,7 @@ function buildFixture() {
   return { cyl, bx, curves };
 }
 
-test('the fixture really is the hard case: a closed face cut by a closed curve', () => {
+test('the fixture is the hard case: a closed face cut by a closed curve', () => {
   const { cyl, curves } = buildFixture();
   const wall = cyl.faces[0].srf;
 
@@ -121,10 +119,10 @@ test('the fixture really is the hard case: a closed face cut by a closed curve',
     // ...and yet discontinuous in the wall's own parameters: the projected
     // chain jumps more than half the closed direction's span somewhere.
     //
-    // THAT ALONE DOES NOT DISCRIMINATE, which is the point of what follows. An
-    // ordinary hole sitting ON the seam also jumps — it crosses the seam going
-    // out and crosses back coming home. What separates the two is the NET
-    // WINDING: a straddling hole's crossings cancel to zero, while a genuine
+    // That alone does not discriminate, hence what follows. An
+    // ordinary hole sitting on the seam also jumps — it crosses the seam going
+    // out and crosses back coming home. What separates the two is the net
+    // winding: a straddling hole's crossings cancel to zero, while a
     // wrap crosses an odd number of times and nets +/-1, because it goes all
     // the way around the closed direction and never comes back. The closing
     // segment is included, so this is the winding number of the whole closed
@@ -145,7 +143,7 @@ test('the fixture really is the hard case: a closed face cut by a closed curve',
   }
 });
 
-test('the wrapped face is genuinely cut, into an inside and two outsides', () => {
+test('the wrapped face is cut, into an inside and two outsides', () => {
   const { cyl, bx, curves } = buildFixture();
   const res = booleanSolids(cyl, bx, curves, 'union');
   const wallReport = res.faceReports.find((r) => r.label === 'A face 0');
@@ -155,7 +153,7 @@ test('the wrapped face is genuinely cut, into an inside and two outsides', () =>
     'the middle band is the part inside the box');
 });
 
-test('a cylinder through a box UNIONS into one closed solid', () => {
+test('a cylinder through a box unions into one closed solid', () => {
   const { cyl, bx, curves } = buildFixture();
   const res = booleanSolids(cyl, bx, curves, 'union');
   assert.ok(res.ok, res.reason || res.verdict);
@@ -165,7 +163,7 @@ test('a cylinder through a box UNIONS into one closed solid', () => {
   assert.ok(res.worstSharedGap < 1e-6, `worst weld gap ${res.worstSharedGap}`);
 });
 
-test('the same pair INTERSECTS into the cylinder segment inside the box', () => {
+test('the same pair intersects into the cylinder segment inside the box', () => {
   const { cyl, bx, curves } = buildFixture();
   const res = booleanSolids(cyl, bx, curves, 'intersect');
   assert.ok(res.ok, res.reason || res.verdict);
@@ -174,9 +172,9 @@ test('the same pair INTERSECTS into the cylinder segment inside the box', () => 
   assert.equal(res.stats.shellCount, 1);
 });
 
-test('the same pair DIFFERENCES into the two ends left outside the box', () => {
+test('the same pair differences into the two ends left outside the box', () => {
   // A minus B is the cylinder minus the box, and the box cuts a band out of
-  // the middle of it — so what is left is genuinely two separate closed
+  // the middle of it — so what is left is two separate closed
   // solids, one at each end.
   const { cyl, bx, curves } = buildFixture();
   const res = booleanSolids(cyl, bx, curves, 'difference');
@@ -187,7 +185,7 @@ test('the same pair DIFFERENCES into the two ends left outside the box', () => {
 });
 
 test('the cut-open seam is what leaves the naked edges, and the T-junction pass is what closes them', () => {
-  // The negative control, on the REAL fragment loops. Cutting the wrapped face
+  // The negative control, on the real fragment loops. Cutting the wrapped face
   // open introduces a vertex partway along the shared intersection circle that
   // the box cap has no reason to place; without the pass those edges stay
   // one-sided. Counting before and after is what proves the union above closes
@@ -218,6 +216,6 @@ test('the cut-open seam is what leaves the naked edges, and the T-junction pass 
     return [...seen.values()].filter((n) => n === 1).length;
   };
 
-  assert.equal(nakedCount(loops), 12, 'the raw fragment loops genuinely do not close');
+  assert.equal(nakedCount(loops), 12, 'the raw fragment loops do not close');
   assert.equal(nakedCount(insertTJunctionVertices(loops, TOL)), 0, 'and the pass is what closes them');
 });

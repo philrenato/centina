@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { booleanSolids } from '../kernel/boolean.mjs';
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE: two axis-aligned boxes overlapping at ONE CORNER, offset so
+// The fixture: two axis-aligned boxes overlapping at one corner, offset so
 // that no face of either is coplanar with any face of the other. Every face
 // pair that meets, meets transversally — which is exactly the case the
 // pipeline scopes to, and deliberately not the aligned box-on-box named as
@@ -13,7 +12,6 @@ import { booleanSolids } from '../kernel/boolean.mjs';
 // Every curve below is a hand-derived line segment, not something read back
 // out of a marcher — so the expected results are independent of any code
 // under test.
-// ---------------------------------------------------------------------------
 
 function quadSurface(p00, p10, p11, p01) {
   const w = (p) => [p[0], p[1], p[2], 1];
@@ -88,7 +86,7 @@ function bboxOf(res) {
   return { lo, hi };
 }
 
-test('INTERSECT of two corner-overlapping boxes is exactly the shared cube', () => {
+test('Intersect of two corner-overlapping boxes is exactly the shared cube', () => {
   const res = booleanSolids(solidA, solidB, CURVES, 'intersect');
   assert.ok(res.ok, res.reason || res.verdict);
 
@@ -99,13 +97,13 @@ test('INTERSECT of two corner-overlapping boxes is exactly the shared cube', () 
   assert.equal(res.stats.nakedEdgeCount, 0);
   assert.equal(res.stats.shellCount, 1);
 
-  // NOT 8 vertices. A cut edge carries its own curve's SAMPLE points into the
+  // Not 8 vertices. A cut edge carries its own curve's sample points into the
   // topology, so the shared cube arrives with a vertex at every sample along
   // every cut rather than only at its true corners. That is correct and is
-  // what real kernels do too — the intersection curve's discretization is
+  // what other kernels do too — the intersection curve's discretization is
   // part of the result — but it means a vertex count here is sample-driven,
   // so the invariant worth pinning is Euler, not a hand-counted V and E.
-  assert.ok(res.stats.V > 8, 'cut edges genuinely carry their samples');
+  assert.ok(res.stats.V > 8, 'cut edges carry their samples');
   assert.equal(res.stats.V - res.stats.E + res.stats.F, 2, 'Euler-Poincare holds whatever the sampling');
 
   // Independently derived from the two boxes' own extents, not from the split.
@@ -114,7 +112,7 @@ test('INTERSECT of two corner-overlapping boxes is exactly the shared cube', () 
     assert.ok(Math.abs(lo[k] - 5) < 1e-9, `low bound on axis ${k}: ${lo[k]}`);
     assert.ok(Math.abs(hi[k] - 10) < 1e-9, `high bound on axis ${k}: ${hi[k]}`);
   }
-  // Every vertex sits ON the shared cube's own surface — the check that the
+  // Every vertex sits on the shared cube's own surface — the check that the
   // extra sample vertices are real points of the answer and not stray ones.
   for (const v of res.solid.vertices) {
     const onFace = v.point.some((c) => Math.abs(c - 5) < 1e-9 || Math.abs(c - 10) < 1e-9);
@@ -128,7 +126,7 @@ test('INTERSECT of two corner-overlapping boxes is exactly the shared cube', () 
   for (const r of untouchedA) assert.equal(r.kept, 0, `${r.label} is outside B and must not survive an intersect`);
 });
 
-test('UNION keeps the outside of both and is still one closed solid', () => {
+test('Union keeps the outside of both and is still one closed solid', () => {
   const res = booleanSolids(solidA, solidB, CURVES, 'union');
   assert.ok(res.ok, res.reason || res.verdict);
   assert.equal(res.stats.chi, 2, res.verdict);
@@ -146,18 +144,18 @@ test('UNION keeps the outside of both and is still one closed solid', () => {
   }
 });
 
-test('DIFFERENCE is A with B\'s corner notched out — and is NOT the union', () => {
+test('Difference is A with B\'s corner notched out — and is not the union', () => {
   const res = booleanSolids(solidA, solidB, CURVES, 'difference');
   assert.ok(res.ok, res.reason || res.verdict);
   assert.equal(res.stats.chi, 2, res.verdict);
   assert.equal(res.stats.nakedEdgeCount, 0);
 
   // A's three far faces whole, A's three cut faces' outside pieces, and B's
-  // three cut faces' INSIDE pieces lining the notch.
+  // three cut faces' inside pieces lining the notch.
   assert.equal(res.stats.F, 9);
 
   // The result stays within A — nothing of B's own far side survives, which
-  // is the check that the second operand's rule really was reversed.
+  // is the check that the second operand's rule was reversed.
   const { lo, hi } = bboxOf(res);
   for (let k = 0; k < 3; k++) {
     assert.ok(Math.abs(lo[k] - 0) < 1e-9, `low bound on axis ${k}: ${lo[k]}`);
@@ -165,7 +163,7 @@ test('DIFFERENCE is A with B\'s corner notched out — and is NOT the union', ()
   }
 });
 
-test('the three operators genuinely differ on the same inputs', () => {
+test('the three operators differ on the same inputs', () => {
   const u = booleanSolids(solidA, solidB, CURVES, 'union');
   const i = booleanSolids(solidA, solidB, CURVES, 'intersect');
   const d = booleanSolids(solidA, solidB, CURVES, 'difference');

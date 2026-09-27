@@ -1,11 +1,11 @@
-// AN ENVIRONMENT MAP, AND THE DISTRIBUTION THAT LETS A RENDERER AIM AT IT.
+// An environment map, and the distribution that lets a renderer aim at it.
 //
 // Two things live here. Decoding a RADIANCE `.hdr` file into linear RGB, and
 // building the piecewise-constant 2D distribution that turns "where is the light
 // in this image" into a sampler — the construction in Pharr, Jakob & Humphreys,
-// *Physically Based Rendering*, chapter 13.
+// *Physically Based Rendering* (3rd ed.), chapter 13.
 //
-// ⚠⚠ THE SAMPLER AND THE PDF-FROM-DIRECTION MUST AGREE EXACTLY. A path tracer
+// The sampler and the pdf-from-direction must agree exactly. A path tracer
 // draws a direction from the sampler and, on any path that arrives at the
 // environment some other way, asks the pdf what the chances of that direction
 // were — and weights the two estimates against each other. If the two
@@ -13,7 +13,7 @@
 // too dark, in the specular highlights only, and stays that way. They are
 // derived from one mapping here for that reason.
 //
-// ⚠ AND AN UNNORMALIZED PDF IS THE SAME KIND OF FAILURE. Estimating an integral
+// An unnormalized pdf is the same kind of failure. Estimating an integral
 // as the mean of `L / pdf` is only correct when the pdf integrates to one over
 // its domain; a pdf off by a constant makes every render off by that constant,
 // which reads as an exposure error and gets compensated for in the
@@ -57,7 +57,7 @@ export function decodeRadianceHDR(bytes) {
   const emit = (y) => {
     for (let x = 0; x < width; x += 1) {
       const e = row[x * 4 + 3];
-      /* ⚠ AN EXPONENT OF ZERO MEANS BLACK, not 2^-128. RGBE stores a shared
+      /* An exponent of zero means black, not 2^-128. RGBE stores a shared
          exponent biased by 128, and the zero case is the encoding's own way of
          writing zero — reading it as a power produces a floor of 1e-38 across
          the whole image, which is invisible until something divides by it. */
@@ -110,7 +110,7 @@ export function decodeRadianceHDR(bytes) {
  * as one flat array of three tables laid end to end — a marginal CDF over rows,
  * one conditional CDF per row, and a per-texel pdf.
  *
- * ⚠ THE ROWS ARE WEIGHTED BY `sin(theta)` BEFORE ANYTHING ELSE. An
+ * The rows are weighted by `sin(theta)` before anything else. An
  * equirectangular image gives every row the same number of texels, and the rows
  * near the poles cover almost no solid angle — sampling it without that weight
  * aims a renderer at the poles, where there is nothing, and the picture is dim
@@ -145,8 +145,8 @@ export function buildEnvDistribution(rgb, width, height, opts = {}) {
     const base = condOff + y * (cw + 1);
     let rs = 0;
     for (let x = 0; x < cw; x += 1) {
-      /* THE EPSILON KEEPS EVERY TEXEL REACHABLE. A pdf of exactly zero anywhere
-         makes that direction impossible to sample AND makes the weight on any
+      /* The epsilon keeps every texel reachable. A pdf of exactly zero anywhere
+         makes that direction impossible to sample and makes the weight on any
          path that reaches it by another route a division by zero. */
       const L = lumAt(x, y) * sinT + 1e-7;
       rs += L;
@@ -210,7 +210,7 @@ export function envSample(D, u1, u2) {
 
 /**
  * The solid-angle pdf of a direction the sampler did not produce.
- * ⚠ THIS AND `envSample` ARE ONE EXPRESSION SPLIT IN TWO, and a renderer weights
+ * This and `envSample` are one expression split in two, and a renderer weights
  * them against each other — so a change to the mapping has to move both, and
  * changing only one is an image subtly wrong in its highlights alone.
  */
@@ -224,17 +224,15 @@ export function envPdfDir(D, dir) {
 }
 
 /**
- * ⭐ THE WHITE FURNACE, AND IT NEEDS NO RENDERER.
+ * The white furnace test, run without a renderer.
  *
  * A Monte Carlo estimate of the environment's total irradiance, `mean(L/pdf)`,
  * against the same integral summed directly over the texels. They agree only if
- * the pdf is correctly normalized AND the solid-angle conversion is right.
+ * the pdf is correctly normalized and the solid-angle conversion is right.
  *
- * This is the single check that catches an unnormalized pdf. Left uncaught it is
- * not visible as an error anywhere: every render is off by one constant factor,
- * which reads as the exposure being wrong and gets compensated for in the
- * exposure — after which the renderer is permanently, invisibly mis-weighted.
- * Returns the relative error.
+ * An unnormalized pdf is not visible as an error anywhere else: every render is
+ * off by one constant factor, which reads as an exposure error.
+ * Returns `{ reference, estimate, relativeError }`.
  */
 export function envFurnaceError(D, rgb, width, height, samples = 200000, seed = 12345) {
   const { cw, ch } = D;

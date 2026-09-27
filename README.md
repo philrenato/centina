@@ -6,7 +6,7 @@ no DOM — just math over plain serializable data.
 Centina is the geometry kernel of [Unreason3D](#the-app), a NURBS modeler built
 to teach CAD to design students.
 
-> **Pre-alpha.** `0.1.0-alpha.0`. The API is not frozen and the
+> **Pre-alpha.** `0.1.0-alpha.1`. The API is not frozen and the
 > [capability map](#what-it-does-not-do) is not short. Read it before you build
 > on this.
 
@@ -17,13 +17,17 @@ Not on npm. Clone this repository, or `npm install` it from its git URL.
 - **Curves and surfaces** — evaluation, derivatives, closest point, arc length,
   knot insertion, degree elevation, splitting, joining.
 - **Construction** — line, arc, circle, ellipse, squircle; extrude, revolve,
-  loft, sweep (1- and 2-rail), Gordon network surface, blend, offset.
+  loft, sweep (1- and 2-rail), Gordon network surface, Coons patch, blend
+  curves, blend surfaces between two surface edges (G1 or G2), offset.
 - **Trimming and booleans** — surface-surface intersection, trimmed surfaces,
   B-rep sewing, union/intersect/difference on solids.
 - **Fillets** — rolling-ball edge blends at constant and variable radius,
   chamfers, corner patches.
 - **SubD** — Catmull-Clark, exact limit positions, and a ToNURBS bridge that
   converts a cage to bicubic patches.
+- **Lattices, deformers and dynamics** — lattice graphs clipped to a closed
+  body, a directional light deformer for quad cages, and coarse-cage XPBD
+  with bonds that hold a cage to a host surface.
 - **Measurement** — mass properties, curvature, deviation across a shared edge.
 - **Interchange** — `.3dm` (Rhino) read and write, from a **separate entry
   point**: `import { ... } from 'centina/io3dm'`.
@@ -34,15 +38,15 @@ Not on npm. Clone this repository, or `npm install` it from its git URL.
   is for.
 
 `io3dm` sits outside `kernel/`, and the boundary is a provenance one:
-**`kernel/` is clean-room**, derived from Piegl & Tiller only, while `io3dm`
-converts against rhino3dm/OpenNURBS's representation and is attributed
-third-party infrastructure. It takes an awaited `rhino3dm()` instance as its
-first argument rather than importing one, so Centina itself has **no runtime
-dependencies** — supply rhino3dm if you want `.3dm`, and nothing is pulled in if
-you do not.
+**`kernel/` is clean-room**, hand-derived from published research with no code
+taken from another kernel, while `io3dm` converts against rhino3dm/OpenNURBS's
+representation and is attributed third-party infrastructure. It takes an
+awaited `rhino3dm()` instance as its first argument rather than importing one,
+so Centina itself has **no runtime dependencies** — supply rhino3dm if you want
+`.3dm`, and nothing is pulled in if you do not.
 
-The routines are hand-derived from Piegl & Tiller *The NURBS Book* and cited per
-function.
+The routines are hand-derived from published research — Piegl & Tiller *The
+NURBS Book* first among about ninety works — and cited per function.
 
 ## The data contract
 
@@ -61,7 +65,7 @@ exception.
 `ctrlNet` is indexed `[u][v]`, and everything is JSON-serializable — store it,
 post it to a worker or diff it without a serializer.
 
-⚠ **A curve's domain is not `[0,1]`.** It runs from `knots[0]` to
+**A curve's domain is not `[0,1]`.** It runs from `knots[0]` to
 `knots[knots.length - 1]`, and for a circle built by `makeCircle` that is `0..4`
 — one unit per quadrant. Ask the knot vector, never assume.
 
@@ -131,7 +135,7 @@ From the repo root, in about a minute. A handful of interop tests need
 `rhino3dm` (a dev dependency) and cover `.3dm` read/write; the rest is pure
 kernel and needs nothing.
 
-⚠ `node --test test/` does **not** work on Node ≥ 22 — positional arguments are
+`node --test test/` does **not** work on Node ≥ 22 — positional arguments are
 files and globs, not directories. Use `npm test`, or `node --test 'test/*.test.mjs'`.
 
 ## The app

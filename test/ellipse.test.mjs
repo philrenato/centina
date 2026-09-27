@@ -6,15 +6,15 @@ import { curvePoint } from '../kernel/curve.mjs';
 // Local-frame decomposition: an ellipse point P must satisfy
 //   (u/radiusX)^2 + (v/radiusY)^2 === 1
 // where u = (P - center)·xHatUnit, v = (P - center)·yHatUnit (the in-plane
-// components against the UNIT axes). This is the actual ellipse equation,
-// tested directly against real sampled curve points — not the control net
-// (whose rational middle points sit OFF the true ellipse by construction).
+// components against the unit axes). This is the ellipse equation,
+// tested directly against sampled curve points — not the control net
+// (whose rational middle points sit off the ellipse by construction).
 function ellipseResidualAt(crv, center, xHat, yHat, radiusX, radiusY, u) {
   const p = curvePoint(crv, u);
   const rel = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
   const uu = rel[0] * xHat[0] + rel[1] * xHat[1] + rel[2] * xHat[2];
   const vv = rel[0] * yHat[0] + rel[1] * yHat[1] + rel[2] * yHat[2];
-  // also confirm the point genuinely lies IN the ellipse's own plane (no
+  // also confirm the point lies in the ellipse's own plane (no
   // out-of-plane drift): the component along the plane normal must be ~0.
   const nx = xHat[1] * yHat[2] - xHat[2] * yHat[1];
   const ny = xHat[2] * yHat[0] - xHat[0] * yHat[2];
@@ -43,7 +43,7 @@ test('makeEllipse: every sampled point satisfies the ellipse equation exactly', 
 
 test('makeEllipse: exact on a rotated/oblique in-plane frame too', () => {
   const center = [0, 0, 0];
-  // an oblique but orthonormal plane (its normal is NOT a world axis)
+  // an oblique but orthonormal plane (its normal is not a world axis)
   const xHat = [0.6, 0.8, 0], yHat = [0, 0, 1];
   const rx = 25, ry = 60;
   const crv = makeEllipse(center, xHat, yHat, rx, ry, 6);
@@ -85,7 +85,7 @@ test('makeEllipse: no NaN/Infinity anywhere in the control net, at several segme
   }
 });
 
-test('makeEllipse: the two radii genuinely differ the shape (not a coincidental circle)', () => {
+test('makeEllipse: the two radii change the shape (not a coincidental circle)', () => {
   // The point at parameter-start (angle 0) sits at +radiusX along xHat; a
   // quarter-turn later it sits at +radiusY along yHat — different distances
   // from center, which a true circle could never produce.

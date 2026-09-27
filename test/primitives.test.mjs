@@ -36,7 +36,7 @@ test('makeArc for a partial sweep (e.g. 270deg) stays on the circle and matches 
 
 // "Rebuild" up/down leaves the circle alone and only changes how many
 // control points describe it — more/fewer via segments,
-// staying EXACTLY circular at every level, never an approximating refit.
+// staying exactly circular at every level, never an approximating refit.
 test('makeCircle with more segments (a "rebuild") stays exactly circular, with proportionally more control points', () => {
   const center = [1, 2, 3], xAxis = [1, 0, 0], yAxis = [0, 1, 0], radius = 6;
   const base = makeCircle(center, xAxis, yAxis, radius); // default segments=4
@@ -44,7 +44,7 @@ test('makeCircle with more segments (a "rebuild") stays exactly circular, with p
   const rebuiltDown = makeCircle(center, xAxis, yAxis, radius, 1); // clamped back up to the natural minimum (4)
   assert.equal(base.ctrlPts.length, 2 * 4 + 1);
   assert.equal(rebuiltUp.ctrlPts.length, 2 * 8 + 1);
-  assert.equal(rebuiltDown.ctrlPts.length, 2 * 4 + 1, 'requesting FEWER than the natural minimum (4 spans for a full sweep) clamps back up to it, not below');
+  assert.equal(rebuiltDown.ctrlPts.length, 2 * 4 + 1, 'requesting fewer than the natural minimum (4 spans for a full sweep) clamps back up to it, not below');
   for (const circle of [base, rebuiltUp, rebuiltDown]) {
     for (let u = 0; u <= circle.knots[circle.knots.length - 1]; u += 0.1) {
       const p = curvePoint(circle, u);
@@ -94,17 +94,17 @@ test('extrude produces a ruled surface at constant offset along the direction', 
   }
 });
 
-test('extrude with draftAngleDeg=0 is byte-identical to the un-tapered extrude (regression safety, the default is truly unchanged)', () => {
+test('extrude with draftAngleDeg=0 is byte-identical to the un-tapered extrude (the default is unchanged)', () => {
   const profile = makeCircle([1, -2, 0], [1, 0, 0], [0, 1, 0], 3);
   const plain = extrude(profile, [0, 0, 1], 8);
   const tapered0 = extrude(profile, [0, 0, 1], 8, 0);
   assert.deepEqual(tapered0.ctrlNet, plain.ctrlNet);
 });
 
-test('extrude with a nonzero draftAngleDeg grows the top row radially from the profile\'s own centroid by exactly distance*tan(angle) — exact for a regular polygon, where every control point is genuinely equidistant from center', () => {
+test('extrude with a nonzero draftAngleDeg grows the top row radially from the profile\'s own centroid by exactly distance*tan(angle) — exact for a regular polygon, where every control point is equidistant from center', () => {
   // A square built as a degree-1 4-point closed profile (all weights 1) —
   // every corner is exactly equidistant from the centroid, so the
-  // "radial grow from centroid" simplification IS a true, exact offset
+  // "radial grow from centroid" simplification is an exact offset
   // here, not an approximation — a clean case to prove the formula.
   const square = {
     degree: 1, knots: [0, 0, 1, 2, 3, 4, 4],
@@ -124,7 +124,7 @@ test('extrude with a nonzero draftAngleDeg grows the top row radially from the p
   }
 });
 
-test('extrude with a NEGATIVE draftAngleDeg shrinks the top row (an inward taper, not just an outward one)', () => {
+test('extrude with a negative draftAngleDeg shrinks the top row (an inward taper, not just an outward one)', () => {
   const square = {
     degree: 1, knots: [0, 0, 1, 2, 3, 4, 4],
     ctrlPts: [[-5, -5, 0, 1], [5, -5, 0, 1], [5, 5, 0, 1], [-5, 5, 0, 1]],
@@ -137,23 +137,23 @@ test('extrude with a NEGATIVE draftAngleDeg shrinks the top row (an inward taper
   }
 });
 
-// EXTRUDE vDegree — an extrusion may carry a higher degree in the
+// Extrude vDegree — an extrusion may carry a higher degree in the
 // direction of extrusion than the profile's own. Optional,
-// defaults to 1 (proven above, byte-identical when omitted). A higher
+// defaults to 1 (byte-identical when omitted). A higher
 // vDegree degree-elevates each row's own straight bottom-to-top ruling
-// line via kernel/knots.mjs's degreeElevateCurve — a real, exact,
+// line via kernel/knots.mjs's degreeElevateCurve — an exact,
 // shape-preserving operation, so the resulting surface must still be
-// PERFECTLY straight/flat along V at every (u,v), not just at the two
-// original endpoints, despite now having real intermediate control
+// straight/flat along V at every (u,v), not just at the two
+// original endpoints, despite having intermediate control
 // points to drag.
-test('extrude with vDegree omitted (or 1) is byte-identical to before — the new param changes nothing unless asked for', () => {
+test('extrude with vDegree omitted (or 1) is byte-identical to the call without it — the param changes nothing unless asked for', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 4);
   const withoutParam = extrude(profile, [0, 0, 1], 6);
   const explicit1 = extrude(profile, [0, 0, 1], 6, 0, 1);
   assert.deepEqual(explicit1.ctrlNet, withoutParam.ctrlNet);
   assert.equal(explicit1.degV, 1);
 });
-test('extrude with vDegree=3 gives 4 control points per row (not 2), and every (u,v) point still lies EXACTLY on the original straight ruling line', () => {
+test('extrude with vDegree=3 gives 4 control points per row (not 2), and every (u,v) point still lies exactly on the original straight ruling line', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 5);
   const direction = [0, 0, 1], distance = 12;
   const srf = extrude(profile, direction, distance, 0, 3);
@@ -171,7 +171,7 @@ test('extrude with vDegree=3 gives 4 control points per row (not 2), and every (
     }
   }
 });
-test('extrude with vDegree=3 AND a nonzero draft: every row still traces its own real (radially-grown) straight ruling line exactly, at any v, not just row endpoints', () => {
+test('extrude with vDegree=3 and a nonzero draft: every row still traces its own (radially-grown) straight ruling line exactly, at any v, not just row endpoints', () => {
   const square = {
     degree: 1, knots: [0, 0, 1, 2, 3, 4, 4],
     ctrlPts: [[-5, -5, 0, 1], [5, -5, 0, 1], [5, 5, 0, 1], [-5, 5, 0, 1]],
@@ -192,10 +192,10 @@ test('extrude with vDegree=3 AND a nonzero draft: every row still traces its own
   }
 });
 
-// INSPECT/WHAT's own "naked edge count" — genuinely
-// computable from the control net's own U/V wrap-around, no Brep needed,
-// as far as a single untrimmed-face surface can honestly go.
-test('surfaceClosure/nakedEdgeCount: a FULL revolve of an OPEN profile is a cylinder — closed in the sweep (V), open in the profile (U), 2 naked edges (top+bottom rims)', () => {
+// The naked edge count Inspect/What reports — computable from the control
+// net's own U/V wrap-around, no Brep needed, for a single untrimmed-face
+// surface.
+test('surfaceClosure/nakedEdgeCount: a full revolve of an open profile is a cylinder — closed in the sweep (V), open in the profile (U), 2 naked edges (top+bottom rims)', () => {
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[3, 0, 0, 1], [3, 0, 10, 1]] };
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -204,7 +204,7 @@ test('surfaceClosure/nakedEdgeCount: a FULL revolve of an OPEN profile is a cyli
   assert.equal(nakedEdgeCount(srf), 2);
 });
 
-test('surfaceClosure/nakedEdgeCount: a PARTIAL revolve (270deg) of an open profile has all 4 sides free', () => {
+test('surfaceClosure/nakedEdgeCount: a partial revolve (270deg) of an open profile has all 4 sides free', () => {
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[3, 0, 0, 1], [3, 0, 10, 1]] };
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 1.5 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -213,7 +213,7 @@ test('surfaceClosure/nakedEdgeCount: a PARTIAL revolve (270deg) of an open profi
   assert.equal(nakedEdgeCount(srf), 4);
 });
 
-test('surfaceClosure/nakedEdgeCount: extrude of a CLOSED profile (a circle) is a tube — closed in the profile (U), open in the extrude direction (V), 2 naked edges (the two rim openings)', () => {
+test('surfaceClosure/nakedEdgeCount: extrude of a closed profile (a circle) is a tube — closed in the profile (U), open in the extrude direction (V), 2 naked edges (the two rim openings)', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 2);
   const srf = extrude(profile, [0, 0, 1], 5);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -222,7 +222,7 @@ test('surfaceClosure/nakedEdgeCount: extrude of a CLOSED profile (a circle) is a
   assert.equal(nakedEdgeCount(srf), 2);
 });
 
-test('surfaceClosure/nakedEdgeCount: extrude of an OPEN profile (a straight line) is a flat ruled patch — all 4 sides free', () => {
+test('surfaceClosure/nakedEdgeCount: extrude of an open profile (a straight line) is a flat ruled patch — all 4 sides free', () => {
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [10, 0, 0, 1]] };
   const srf = extrude(profile, [0, 1, 0], 5);
   const { closedU, closedV } = surfaceClosure(srf);

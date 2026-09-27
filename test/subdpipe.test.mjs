@@ -7,9 +7,8 @@ import { globalCurveInterp } from '../kernel/interpolate.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
 import { joinCurvesC0 } from '../kernel/knots.mjs';
 
-// A deliberately CURVED rail — a straight line would let a whole class of
-// frame/transport bug pass unnoticed, and this project's own record says
-// so more than once.
+// A deliberately curved rail — a straight line would let a whole class of
+// frame/transport bug pass unnoticed.
 function curvedRail() {
   return globalCurveInterp([[0, 0, 0], [40, 0, 20], [80, 0, 0], [120, 0, 20]], 3);
 }
@@ -30,7 +29,7 @@ function edgeFaceCounts(cage) {
   return counts;
 }
 
-// No DIRECTED edge traversed twice — the real orientability property, the
+// No directed edge traversed twice — the real orientability property, the
 // same one subdedit's own bridge winding search verifies rather than
 // derives.
 function directedEdgeReuse(cage) {
@@ -57,10 +56,10 @@ test('subdPipeCage: an open tube has the exact ring/quad counts its density asks
   assert.equal(cage.endRim.length, facets);
 });
 
-test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a genuinely curved rail', () => {
+test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a curved rail', () => {
   const rail = curvedRail();
   const cage = subdPipeCage(rail, { radius: 7, facets: 10, segments: 6 });
-  // A parallel-transport frame's origin IS a point of the rail, so the
+  // A parallel-transport frame's origin is a point of the rail, so the
   // distance from a ring vertex to its own station is the tube radius
   // exactly — checked against the rail's own evaluated point, not against
   // the frame the cage was built from.
@@ -70,7 +69,7 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
   let worstRadius = 0, worstOnRail = 0;
   for (let s = 0; s <= 6; s++) {
     const ring = cage.vertices.slice(s * 10, s * 10 + 10);
-    // A regular polygon's centroid IS its circumcenter, so the ring's own
+    // A regular polygon's centroid is its circumcenter, so the ring's own
     // centroid is exactly the frame origin — measure the radius against
     // that, which is exact, rather than against a brute-force nearest
     // rail sample, whose error is just the scan's own resolution.
@@ -78,7 +77,7 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
     for (const v of ring) {
       worstRadius = Math.max(worstRadius, Math.abs(Math.hypot(v[0] - c[0], v[1] - c[1], v[2] - c[2]) - 7));
     }
-    // Separately: that center genuinely lies ON the rail. Tolerance is
+    // Separately: that center lies on the rail. Tolerance is
     // the scan's own step, not a claim about the geometry.
     let best = Infinity;
     for (let i = 0; i <= SCAN; i++) {
@@ -91,10 +90,10 @@ test('subdPipeCage: every ring vertex sits exactly `radius` from the rail, on a 
   assert.ok(worstOnRail < scanRes * 60, `a ring center drifted off the rail by ${worstOnRail}`);
 });
 
-test('subdPipeCage: stations are ARC-LENGTH even, not parameter even', () => {
+test('subdPipeCage: stations are arc-length even, not parameter even', () => {
   // A rail whose parametrization is deliberately uneven: interpolated
   // through points with very different spacing, so parameter-even and
-  // arc-length-even genuinely disagree.
+  // arc-length-even disagree.
   const rail = globalCurveInterp([[0, 0, 0], [5, 0, 0], [10, 0, 0], [120, 0, 0]], 3);
   const segments = 6;
   const cage = subdPipeCage(rail, { radius: 2, facets: 4, segments });
@@ -108,9 +107,9 @@ test('subdPipeCage: stations are ARC-LENGTH even, not parameter even', () => {
     gaps.push(Math.hypot(centres[i + 1][0] - centres[i][0], centres[i + 1][1] - centres[i][1], centres[i + 1][2] - centres[i][2]));
   }
   const min = Math.min(...gaps), max = Math.max(...gaps);
-  // Chord vs arc means these are not identical, but they must be CLOSE.
+  // Chord vs arc means these are not identical, but they must be close.
   // Parameter-even stationing on this rail is wildly uneven, so this is a
-  // genuinely discriminating bound, not a loose one.
+  // discriminating bound, not a loose one.
   assert.ok(max / min < 1.15, `stations are not arc-length even: gaps ${gaps.map((g) => g.toFixed(2)).join(', ')}`);
 });
 
@@ -138,7 +137,7 @@ test('subdPipeCage: an uncapped tube has exactly its two rims as boundary', () =
   assert.equal(directedEdgeReuse(cage), 0);
 });
 
-test('subdPipeCage: a round cap is a real dome — it grows PAST the rail end and reports no rim', () => {
+test('subdPipeCage: a round cap is a real dome — it grows past the rail end and reports no rim', () => {
   const rail = makeLine([0, 0, 0], [0, 0, 50]);
   const radius = 6;
   const cage = subdPipeCage(rail, { radius, facets: 12, segments: 3, capStart: 'round', capEnd: 'round' });
@@ -157,24 +156,24 @@ test('subdPipeCage: a round cap is a real dome — it grows PAST the rail end an
   assert.equal(directedEdgeReuse(cage), 0);
 });
 
-test('subdPipeCage: crease 0 writes NO key at all, so soft is provably the same cage as no-crease-feature', () => {
+test('subdPipeCage: crease 0 writes no key at all, so soft is provably the same cage as no-crease-feature', () => {
   const rail = curvedRail();
   const a = subdPipeCage(rail, { radius: 5, facets: 8, segments: 3, capStart: 'flat', crease: 0 });
   assert.deepEqual(a.creases, {});
   const b = subdPipeCage(rail, { radius: 5, facets: 8, segments: 3, capStart: 'flat', crease: 1 });
   assert.equal(Object.keys(b.creases).length, 8, 'a creased flat rim should carry exactly one key per rim edge');
   assert.ok(Object.values(b.creases).every((w) => w > 0));
-  // Positions are identical either way — a crease changes the LIMIT
+  // Positions are identical either way — a crease changes the limit
   // surface, never the cage.
   assert.deepEqual(a.vertices, b.vertices);
   assert.deepEqual(a.faces, b.faces);
 });
 
-test('subdPipeCage: a creased rim genuinely holds its edge under real subdivision', () => {
+test('subdPipeCage: a creased rim holds its edge under real subdivision', () => {
   const rail = makeLine([0, 0, 0], [0, 0, 40]);
   const soft = subdivideCatmullClark(subdPipeCage(rail, { radius: 5, facets: 8, segments: 3, capStart: 'flat', capEnd: 'flat', crease: 0 }));
   const crisp = subdivideCatmullClark(subdPipeCage(rail, { radius: 5, facets: 8, segments: 3, capStart: 'flat', capEnd: 'flat', crease: 1 }));
-  // A soft rim rounds off, pulling the end ring INWARD toward the axis;
+  // A soft rim rounds off, pulling the end ring inward toward the axis;
   // a creased one holds it out at the cage radius. Measured as the widest
   // real radius at the very end of the tube — a shape difference, not a
   // stored-weight one. (The Z extent is the wrong measure: a flat cap's
@@ -185,10 +184,10 @@ test('subdPipeCage: a creased rim genuinely holds its edge under real subdivisio
   assert.ok(crispR <= 5 + 1e-9, 'and never wider than the cage itself');
 });
 
-test('subdPipeCage: density genuinely changes the limit surface, not just the drawing', () => {
+test('subdPipeCage: density changes the limit surface, not just the drawing', () => {
   const rail = makeLine([0, 0, 0], [0, 0, 40]);
   const radius = 10;
-  // A cage ring is a POLYGON inscribed in the tube, so its limit circle
+  // A cage ring is a polygon inscribed in the tube, so its limit circle
   // sits inside the true radius — and gets closer as facets rise. That is
   // the difference between a density dial on a cage and one on a
   // tessellation: here it moves the actual surface.
@@ -218,11 +217,11 @@ test('subdPipeCage: the cage survives real Catmull-Clark subdivision with no NaN
   }
 });
 
-test('subdPipeCage: refuses honestly rather than building a degenerate cage', () => {
+test('subdPipeCage: refuses rather than building a degenerate cage', () => {
   const rail = makeLine([0, 0, 0], [0, 0, 40]);
   assert.throws(() => subdPipeCage(rail, { radius: 0 }), /radius must be positive/);
   assert.throws(() => subdPipeCage(null, {}), /needs a real rail/);
-  // Below-minimum density is CLAMPED, not refused — a cage needs at least
+  // Below-minimum density is clamped, not refused — a cage needs at least
   // 3 facets and 1 segment to exist at all, and clamping matches this
   // app's own clamp-not-refuse precedent for a value with a real floor.
   const c = subdPipeCage(rail, { radius: 3, facets: 1, segments: 0 });
@@ -233,12 +232,10 @@ test('subdPipeCage: refuses honestly rather than building a degenerate cage', ()
 // own seed normal. `anyPerpendicular([1,0,0])` is [0,0,1], so a rail running
 // along X and then straight up Z hands the station just past the corner a
 // prevNormal exactly parallel to its new tangent — and a degree<=1 rail's
-// tangent changes DISCONTINUOUSLY there, so no amount of station density
-// smooths it out. This threw outright before buildParallelTransportFrames'
-// own projection guard was applied at every station rather than only at a
-// control-point corner. A pipe running along the floor and then up a wall is
-// an ordinary thing to draw, so this is a real reachable case, not a
-// contrived one.
+// tangent changes discontinuously there, so no amount of station density
+// smooths it out; buildParallelTransportFrames' projection guard has to
+// apply at every station rather than only at a control-point corner. A pipe
+// running along the floor and then up a wall is an ordinary thing to draw.
 test('subdPipeCage: a rail turning into its own seed normal still builds', () => {
   const rail = joinCurvesC0([makeLine([0, 0, 0], [60, 0, 0]), makeLine([60, 0, 0], [60, 0, 40])]);
   for (const segments of [1, 2, 3, 5, 8]) {

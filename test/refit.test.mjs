@@ -4,16 +4,13 @@ import { makeEllipse, makeCircle } from '../kernel/primitives.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
 import { fitLine, fitPlane, fitCircle, fitEllipse, fitAll, FIT_REFUSAL } from '../kernel/refit.mjs';
 
-// ---------------------------------------------------------------------
-// FIXTURES — deliberately ROTATED, OFF-ORIGIN, and NON-AXIS-ALIGNED, per
-// this project's own standing rule against symmetric test geometry. An
+// Fixtures — deliberately rotated, off-origin, and non-axis-aligned. An
 // ellipse centered at the origin with its axes on world X/Y would let an
 // axis-assignment or sign bug pass unnoticed: every candidate frame would
 // give the same answer. Every fixture here therefore lives on an oblique
 // plane (normal along [1,2,3]), off the origin, with its own major axis
-// rotated a further 31 degrees WITHIN that plane so it coincides with
+// rotated a further 31 degrees within that plane so it coincides with
 // neither world axes nor the module's own canonical plane basis.
-// ---------------------------------------------------------------------
 function norm3(v) { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; }
 function cross3(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -38,7 +35,7 @@ function obliqueFrame(rotDeg) {
   return { normal: n, ex, ey: cross3(n, ex) };
 }
 
-// Sample a curve at `n` evenly spaced PARAMETER values across its own
+// Sample a curve at `n` evenly spaced parameter values across its own
 // knot domain. Sampled points, never raw control points — a rational
 // curve's control points are not on the curve (see refit.mjs's own input
 // convention note), so fitting them would be testing the wrong thing.
@@ -56,10 +53,8 @@ function ellipseFixture(rotDeg = 31, segments = 4, count = 60) {
   return { normal, ex, ey, crv, points: sampleCurve(crv, count) };
 }
 
-// ---------------------------------------------------------------------
-// ROUND-TRIP AGAINST THE REAL KERNEL — the strongest check available:
+// Round-trip against the real kernel — the strongest check available:
 // build with known params, sample, fit, recover the params.
-// ---------------------------------------------------------------------
 test('fitEllipse round-trips a real makeEllipse: every recovered param matches the built one to ~1e-13', () => {
   const { normal, ex, points } = ellipseFixture();
   const f = fitEllipse(points);
@@ -67,23 +62,23 @@ test('fitEllipse round-trips a real makeEllipse: every recovered param matches t
   assert.equal(f.shape, 'ellipse');
 
   // Center, radii: absolute model units on a ~41mm shape at ~65mm from
-  // the origin — so these tolerances are genuinely tight, not generous.
+  // the origin — so these tolerances are tight, not generous.
   assert.ok(dist3(f.center, CENTER) < 1e-11, `center off by ${dist3(f.center, CENTER)}`);
   assert.ok(Math.abs(f.radiusX - RX) < 1e-11, `radiusX ${f.radiusX} vs ${RX}`);
   assert.ok(Math.abs(f.radiusY - RY) < 1e-11, `radiusY ${f.radiusY} vs ${RY}`);
 
   // Axis directions: |dot| === 1 (a direction is recovered up to sign by
-  // construction — see refit.mjs's canonicalization note — so the SIGN is
+  // construction — see refit.mjs's canonicalization note — so the sign is
   // deliberately not asserted here; determinism of that sign has its own
   // test below).
   assert.ok(Math.abs(Math.abs(dot3(f.xAxis, ex)) - 1) < 1e-12, `xAxis dot ${dot3(f.xAxis, ex)}`);
   assert.ok(Math.abs(Math.abs(dot3(f.normal, normal)) - 1) < 1e-12, `normal dot ${dot3(f.normal, normal)}`);
 
-  // radiusX is the semi-MAJOR axis, always (the stated determinism rule).
+  // radiusX is the semi-major axis, always (the stated determinism rule).
   assert.ok(f.radiusX >= f.radiusY);
   assert.equal(f.circular, false);
 
-  // The measured deviation on an EXACT ellipse is float noise, not a
+  // The measured deviation on an exact ellipse is float noise, not a
   // tolerance that had to be relaxed to pass.
   assert.ok(f.worst < 1e-10, `worst ${f.worst}`);
   assert.ok(f.rms < 1e-10, `rms ${f.rms}`);
@@ -91,11 +86,11 @@ test('fitEllipse round-trips a real makeEllipse: every recovered param matches t
   assert.equal(f.count, points.length);
 });
 
-test('fitEllipse recovered params REBUILD the same curve: makeEllipse(fit) reproduces the original geometry', () => {
+test('fitEllipse recovered params rebuild the same curve: makeEllipse(fit) reproduces the original geometry', () => {
   // The strongest form of the round-trip — not "the numbers look close"
   // but "feeding the recovered params straight back into the kernel's own
   // constructor produces the same curve," which is exactly what a
-  // strategy-switch / conversion caller actually does.
+  // strategy-switch / conversion caller does.
   const { crv, points } = ellipseFixture();
   const f = fitEllipse(points);
   assert.equal(f.ok, true);
@@ -103,23 +98,23 @@ test('fitEllipse recovered params REBUILD the same curve: makeEllipse(fit) repro
   const rebuiltPts = sampleCurve(rebuilt, 200);
   const origPts = sampleCurve(crv, 200);
   // Both curves trace the same ellipse, but a rebuilt curve's own start
-  // angle / sweep direction follow the RECOVERED frame, which may differ
-  // from the original's by a rotation or a reflection. So compare SHAPES:
-  // every rebuilt sample must lie on the ORIGINAL fitted ellipse.
+  // angle / sweep direction follow the recovered frame, which may differ
+  // from the original's by a rotation or a reflection. So compare shapes:
+  // every rebuilt sample must lie on the original fitted ellipse.
   const back = fitEllipse(rebuiltPts);
   assert.equal(back.ok, true);
   assert.ok(dist3(back.center, CENTER) < 1e-10);
   assert.ok(Math.abs(back.radiusX - RX) < 1e-10);
   assert.ok(Math.abs(back.radiusY - RY) < 1e-10);
-  // And, directly: the original points are on the REBUILT ellipse too.
+  // And, directly: the original points are on the rebuilt ellipse too.
   const cross = fitEllipse(origPts);
   assert.ok(cross.worst < 1e-10);
   assert.ok(rebuiltPts.every((p) => p.every(Number.isFinite)));
 });
 
-test('fitEllipse works on a HALF arc, not just a closed loop', () => {
+test('fitEllipse works on a half arc, not just a closed loop', () => {
   // A conic fit degrades on short arcs (a documented property of the
-  // algebraic method, named honestly in refit.mjs's header). Half an
+  // algebraic method, named in refit.mjs's header). Half an
   // ellipse is the realistic worst case a recipe re-derivation sees, and
   // it still recovers exactly here.
   const { points } = ellipseFixture(31, 4, 240);
@@ -131,32 +126,30 @@ test('fitEllipse works on a HALF arc, not just a closed loop', () => {
   assert.ok(f.worst < 1e-8, `worst ${f.worst}`);
 });
 
-test('fitEllipse recovers the major axis of an AXIS-ALIGNED ellipse (semi-major eigenvector from the best-conditioned row)', () => {
-  // A DELIBERATE EXCEPTION to this file's own oblique/rotated fixture rule,
-  // and the reason the rule let a real bug through: every other fixture here
-  // is rotated 31 degrees inside an oblique plane specifically so no axis
-  // assignment can pass by coincidence — which also meant nothing ever fed
-  // the fitter the ONE case an app produces constantly, an ellipse whose own
-  // axes line up with its fitted plane's own basis. There B (the off-diagonal
-  // conic term) is float dust rather than zero, so the old fixed-row
-  // eigenvector read [dust, dust] and returned a direction that was pure
-  // noise: the radii came back exact (40 and 20) while the major axis was
-  // reported ~43 degrees off, and the deviation for an EXACT ellipse read
-  // 14+ mm. Both world orientations are checked, since only ONE of the two
-  // lands the major axis on the fitted plane's second basis vector (the
-  // failing side), and which one that is depends on the plane fit's own
+test('fitEllipse recovers the major axis of an axis-aligned ellipse (semi-major eigenvector from the best-conditioned row)', () => {
+  // A deliberate exception to this file's own oblique/rotated fixture rule:
+  // every other fixture here is rotated 31 degrees inside an oblique plane so
+  // no axis assignment can pass by coincidence, and none of them is the case
+  // an app produces constantly, an ellipse whose own axes line up with its
+  // fitted plane's own basis. There B (the off-diagonal conic term) is float
+  // dust rather than zero, so an eigenvector taken from a fixed row reads
+  // [dust, dust] and its direction is noise: the radii come back exact (40
+  // and 20) while the major axis is ~43 degrees off, and the deviation for an
+  // exact ellipse reads 14+ mm. Both world orientations are checked, since
+  // only one of the two lands the major axis on the fitted plane's second
+  // basis vector, and which one that is depends on the plane fit's own
   // deterministic basis, not on anything the caller controls.
   for (const [label, rx, ry] of [['major along X', 40, 20], ['major along Y', 20, 40]]) {
     const crv = makeEllipse([0, 0, 0], [1, 0, 0], [0, 1, 0], rx, ry, 4);
     const points = sampleCurve(crv, 64);
     const f = fitEllipse(points);
     assert.equal(f.ok, true, `${label}: ${f.detail}`);
-    // Radii were ALWAYS right, even when the axis was garbage — asserting
-    // them alone would have kept passing through the bug.
+    // The radii come out right even when the axis is wrong, so asserting
+    // them alone says nothing about the axis.
     assert.ok(Math.abs(f.radiusX - Math.max(rx, ry)) < 1e-9, `${label}: radiusX ${f.radiusX}`);
     assert.ok(Math.abs(f.radiusY - Math.min(rx, ry)) < 1e-9, `${label}: radiusY ${f.radiusY}`);
     // The real assertion: the recovered major axis is the world axis the
-    // longer radius was actually built along (up to sign), and the measured
+    // longer radius was built along (up to sign), and the measured
     // deviation is float noise rather than a large, confident, wrong number.
     const expected = rx >= ry ? [1, 0, 0] : [0, 1, 0];
     assert.ok(
@@ -188,7 +181,7 @@ test('fitCircle round-trips a real makeCircle, and its deviation is the true 3D 
     assert.ok(Math.abs(dot3([p[0] - CENTER[0], p[1] - CENTER[1], p[2] - CENTER[2]], normal)) < 1e-10);
   }
 
-  // A point pushed OUT OF PLANE must raise the deviation by that full
+  // A point pushed out of plane must raise the deviation by that full
   // out-of-plane amount (the metric is the real 3D distance to the circle
   // curve, not the in-plane radial miss alone).
   const off = points.slice();
@@ -228,21 +221,19 @@ test('fitPlane recovers an oblique plane exactly, with a right-handed determinis
   assert.ok(Math.abs(dot3(f.xAxis, f.normal)) < 1e-14);
   const xy = cross3(f.xAxis, f.yAxis);
   assert.ok(dist3(xy, f.normal) < 1e-12, `xAxis x yAxis !== normal`);
-  // The plane's basis is derived from the NORMAL, never from the data's
-  // in-plane spread — so it does NOT coincide with the ellipse's own
+  // The plane's basis is derived from the normal, never from the data's
+  // in-plane spread — so it does not coincide with the ellipse's own
   // major axis, which is exactly the property that keeps it stable for a
   // near-circular point set.
   assert.ok(Math.abs(Math.abs(dot3(f.xAxis, ex)) - 1) > 1e-6);
 });
 
-// ---------------------------------------------------------------------
-// GRACEFUL DEGRADATION — the deviation metric has to MEAN something.
-// ---------------------------------------------------------------------
+// Graceful degradation — the deviation metric has to mean something.
 test('the reported deviation tracks an injected perturbation, and scales linearly with it', () => {
-  // Perturb each sample RADIALLY (alternating in/out) by a known amount.
+  // Perturb each sample radially (alternating in/out) by a known amount.
   // Radial is deliberately not the same direction as the ellipse's own
   // surface normal, so the measured perpendicular distance is a known
-  // FRACTION of the injected offset rather than equal to it — the honest
+  // fraction of the injected offset rather than equal to it — the
   // check is therefore (a) the same order of magnitude, and (b) exactly
   // linear in the injected amount, which is what proves the number is
   // measured rather than decorative.
@@ -271,16 +262,16 @@ test('the reported deviation tracks an injected perturbation, and scales linearl
     const ratio = results[i].rms / results[i - 1].rms;
     assert.ok(Math.abs(ratio - 10) < 0.5, `rms did not scale linearly: ratio ${ratio}`);
   }
-  // An UNperturbed fit of the same fixture reports essentially zero, so
-  // the numbers above are genuinely responding to the injected error.
+  // An unperturbed fit of the same fixture reports essentially zero, so
+  // the numbers above are responding to the injected error.
   assert.ok(fitEllipse(points).rms < 1e-10);
 });
 
-test('a parabola handed to the ellipse fit returns an ELLIPSE (never a hyperbola) — with an honest, large deviation', () => {
+test('a parabola handed to the ellipse fit returns an ellipse (never a hyperbola) — with a large deviation', () => {
   // This is the case an unconstrained algebraic conic fit gets wrong: it
   // would happily return a hyperbola or parabola. The Fitzgibbon
   // ellipse-specific constraint makes that unreachable, so the answer is
-  // structurally an ellipse — and the MEASURED deviation is what tells the
+  // structurally an ellipse — and the measured deviation is what tells the
   // caller the answer is a bad description of the data. Both halves
   // matter; either alone would be misleading.
   const pts = [];
@@ -290,13 +281,13 @@ test('a parabola handed to the ellipse fit returns an ELLIPSE (never a hyperbola
   assert.ok(f.radiusX > 0 && f.radiusY > 0, 'a real, positive-radius ellipse');
   assert.ok([...f.center, ...f.xAxis, ...f.yAxis, f.radiusX, f.radiusY, f.worst, f.rms].every(Number.isFinite));
   // The extent of the data is ~9 units; a worst deviation on that order
-  // is the honest "this is not an ellipse" signal.
+  // is the "this is not an ellipse" signal.
   assert.ok(f.worst > 0.05, `worst ${f.worst} should be a real, visible miss`);
 
-  // A PERFECTLY SYMMETRIC parabola sample is the harder case, and worth
-  // recording rather than avoiding: its scatter matrix is genuinely
+  // A perfectly symmetric parabola sample is the harder case, and worth
+  // recording rather than avoiding: its scatter matrix is
   // singular, so the fit refuses DEGENERATE_CONIC instead of returning an
-  // ellipse at all. Both outcomes are honest — what never happens is a
+  // ellipse at all. Both outcomes are correct — what never happens is a
   // hyperbola or a parabola coming back wearing `ok: true`.
   const sym = [];
   for (let x = -3; x <= 3; x += 0.5) sym.push([x, x * x, 0]);
@@ -305,16 +296,14 @@ test('a parabola handed to the ellipse fit returns an ELLIPSE (never a hyperbola
   assert.equal(s.reason, FIT_REFUSAL.DEGENERATE_CONIC);
 });
 
-// ---------------------------------------------------------------------
-// REFUSALS — every path, each with its own case.
-// ---------------------------------------------------------------------
+// Refusals — every path, each with its own case.
 test('refusal: TOO_FEW_POINTS, per fit, at each fit own structural minimum', () => {
   const { points } = ellipseFixture();
   assert.equal(fitLine(points.slice(0, 1)).reason, FIT_REFUSAL.TOO_FEW_POINTS);
   assert.equal(fitPlane(points.slice(0, 2)).reason, FIT_REFUSAL.TOO_FEW_POINTS);
   assert.equal(fitCircle(points.slice(0, 2)).reason, FIT_REFUSAL.TOO_FEW_POINTS);
   assert.equal(fitEllipse(points.slice(0, 4)).reason, FIT_REFUSAL.TOO_FEW_POINTS);
-  // And one MORE point than the minimum is accepted, so the boundary is
+  // And one more point than the minimum is accepted, so the boundary is
   // a real minimum and not an off-by-one refusing valid input.
   assert.equal(fitLine(points.slice(0, 2)).ok, true);
   assert.equal(fitPlane(points.slice(0, 3)).ok, true);
@@ -325,27 +314,27 @@ test('refusal: TOO_FEW_POINTS, per fit, at each fit own structural minimum', () 
   assert.ok(typeof r.detail === 'string' && r.detail.length > 0);
 });
 
-test('refusal: COINCIDENT_POINTS — enough points, too few DISTINCT ones', () => {
+test('refusal: COINCIDENT_POINTS — enough points, too few distinct ones', () => {
   const p = [1.5, -2.5, 7];
   const dup = [p, p.slice(), p.slice(), p.slice(), p.slice(), p.slice()];
   assert.equal(fitEllipse(dup).reason, FIT_REFUSAL.COINCIDENT_POINTS);
   assert.equal(fitCircle(dup).reason, FIT_REFUSAL.COINCIDENT_POINTS);
   assert.equal(fitPlane(dup).reason, FIT_REFUSAL.COINCIDENT_POINTS);
   assert.equal(fitLine(dup).reason, FIT_REFUSAL.COINCIDENT_POINTS);
-  // Two genuinely distinct points among six duplicates: a line is
+  // Two distinct points among six duplicates: a line is
   // determined, a plane and a conic are not.
   const two = [p, p.slice(), p.slice(), [p[0] + 9, p[1] + 3, p[2] - 1], p.slice(), p.slice()];
   assert.equal(fitLine(two).ok, true);
   assert.equal(fitPlane(two).reason, FIT_REFUSAL.COINCIDENT_POINTS);
 });
 
-test('refusal: COLLINEAR — a line determines neither a plane nor a conic', () => {
+test('refusal: collinear — a line determines neither a plane nor a conic', () => {
   const col = [];
   for (let i = 0; i < 8; i++) col.push([2 * i - 3, 3 * i + 1, -i + 4]);
   assert.equal(fitPlane(col).reason, FIT_REFUSAL.COLLINEAR);
   assert.equal(fitCircle(col).reason, FIT_REFUSAL.COLLINEAR);
   assert.equal(fitEllipse(col).reason, FIT_REFUSAL.COLLINEAR);
-  // fitLine is the one fit for which collinear input is the GOOD case.
+  // fitLine is the one fit for which collinear input is the good case.
   const lf = fitLine(col);
   assert.equal(lf.ok, true);
   assert.ok(lf.worst < 1e-12);
@@ -374,8 +363,8 @@ test('refusal: NOT_PLANAR — and the measured planar deviation comes back with 
   assert.ok(loose.worst >= 0.5 - 1e-6, 'the out-of-plane miss is counted in the deviation');
 });
 
-test('refusal: DEGENERATE_CONIC — the last-resort guard genuinely fires', () => {
-  // Reaching this needs the earlier COLLINEAR guard deliberately disabled
+test('refusal: DEGENERATE_CONIC — the last-resort guard fires', () => {
+  // Reaching this needs the earlier collinear guard deliberately disabled
   // (collinearTol: 0), which is exactly the point: it is defense in
   // depth. A near-collinear set that slips past the geometric check still
   // refuses at the numerical one rather than returning whatever the
@@ -404,9 +393,7 @@ test('refusal: NOT_FINITE — a NaN anywhere in the input refuses, it never leak
   assert.equal(fitEllipse(undefined).reason, FIT_REFUSAL.TOO_FEW_POINTS);
 });
 
-// ---------------------------------------------------------------------
-// DETERMINISM + THE PERFECT-CIRCLE CASE
-// ---------------------------------------------------------------------
+// Determinism + the perfect-circle case
 test('determinism: a near-degenerate input fitted twice returns byte-identical results', () => {
   const { normal, ex, ey } = obliqueFrame(31);
   // Radii that differ by one part in ~2e8 — the axis directions here are
@@ -430,7 +417,7 @@ test('determinism: a near-degenerate input fitted twice returns byte-identical r
   assert.ok(Math.abs(Math.abs(dot3(a.normal, normal)) - 1) < 1e-10);
 });
 
-test('a PERFECT circle handed to fitEllipse: circular flag, equal radii, canonical (not arbitrary) axes', () => {
+test('a perfect circle handed to fitEllipse: circular flag, equal radii, canonical (not arbitrary) axes', () => {
   const { normal, ex, ey } = obliqueFrame(53);
   const R = 23;
   const pts = sampleCurve(makeCircle(CENTER, ex, ey, R, 4), 40);
@@ -442,16 +429,16 @@ test('a PERFECT circle handed to fitEllipse: circular flag, equal radii, canonic
   assert.ok(dist3(f.center, CENTER) < 1e-10);
   assert.ok(f.worst < 1e-10, `worst ${f.worst}`);
 
-  // The returned axes are the PLANE's own canonical basis (derived from
+  // The returned axes are the plane's own canonical basis (derived from
   // the normal alone), not whatever the conic eigen-solve happened to
-  // produce — a circle's axes are genuinely arbitrary, so the module
+  // produce — a circle's axes are arbitrary, so the module
   // returns a stable frame rather than an unstable measurement.
   const plane = fitPlane(pts);
   assert.deepEqual(f.xAxis, plane.xAxis);
   assert.ok(dist3(f.yAxis, cross3(f.normal, f.xAxis)) < 1e-14, 'yAxis must be cross(normal, xAxis)');
 
-  // Rotating the SAME circle's construction frame in-plane must not
-  // change the reported axes at all — the actual anti-flicker property.
+  // Rotating the same circle's construction frame in-plane must not
+  // change the reported axes at all — the anti-flicker property.
   const other = obliqueFrame(11);
   const pts2 = sampleCurve(makeCircle(CENTER, other.ex, other.ey, R, 4), 40);
   const g = fitEllipse(pts2);
@@ -461,9 +448,9 @@ test('a PERFECT circle handed to fitEllipse: circular flag, equal radii, canonic
 });
 
 test('axis assignment is stable: radiusX is always the major axis, and the frame stays right-handed', () => {
-  // Build the SAME ellipse twice, once with the two radii passed in the
+  // Build the same ellipse twice, once with the two radii passed in the
   // opposite order (and the frame rotated 90 degrees to match), so the
-  // shape is identical but the CONSTRUCTION labeled its axes the other
+  // shape is identical but the construction labeled its axes the other
   // way round. The fit must report the same major axis either way.
   const { normal, ex, ey } = obliqueFrame(31);
   const a = fitEllipse(sampleCurve(makeEllipse(CENTER, ex, ey, RX, RY, 4), 60));
@@ -481,9 +468,7 @@ test('axis assignment is stable: radiusX is always the major axis, and the frame
   }
 });
 
-// ---------------------------------------------------------------------
-// FINITENESS + SHAPE OF EVERY RETURN
-// ---------------------------------------------------------------------
+// Finiteness + shape of every return
 test('every returned number is finite, on ordinary and on adversarial input alike', () => {
   const { points } = ellipseFixture();
   const cases = [
@@ -514,7 +499,7 @@ test('every returned number is finite, on ordinary and on adversarial input alik
   }
 });
 
-test('params come back as PLAIN DATA in exactly the operator param shape (never a class instance)', () => {
+test('params come back as plain data in exactly the operator param shape (never a class instance)', () => {
   // A hard constraint, and the one the param editor depends
   // on: a recovered param bag must be plain arrays/numbers, serializable
   // as-is, with no revival step.
@@ -532,7 +517,7 @@ test('params come back as PLAIN DATA in exactly the operator param shape (never 
   // And it feeds the kernel constructor directly, no translation.
   const rebuilt = makeEllipse(f.center, f.xAxis, f.yAxis, f.radiusX, f.radiusY, 4);
   assert.ok(rebuilt.ctrlPts.flat().every(Number.isFinite));
-  // No `segments` is invented — the fit describes the SHAPE, not the
+  // No `segments` is invented — the fit describes the shape, not the
   // representation the app happened to build it with.
   assert.equal('segments' in f, false);
 });
@@ -543,14 +528,14 @@ test('fitAll runs every candidate and ranks none of them', () => {
   assert.deepEqual(Object.keys(all).sort(), ['circle', 'ellipse', 'line', 'plane']);
   assert.equal(all.ellipse.ok, true);
   assert.equal(all.plane.ok, true);
-  // A genuine ellipse is NOT a circle: the circle fit succeeds (the
+  // A real ellipse is not a circle: the circle fit succeeds (the
   // points are planar and non-collinear) but its measured deviation is
   // large, which is exactly the evidence a caller needs to decide which
   // recipe to name.
   assert.equal(all.circle.ok, true);
   assert.ok(all.circle.worst > 5, `circle worst ${all.circle.worst} should be a real miss on a 41x17 ellipse`);
   assert.ok(all.ellipse.worst < 1e-10);
-  // The line fit also "succeeds" and is also honestly terrible.
+  // The line fit also "succeeds" and is also terrible.
   assert.equal(all.line.ok, true);
   assert.ok(all.line.worst > 5);
   // Nothing in the result claims a winner.

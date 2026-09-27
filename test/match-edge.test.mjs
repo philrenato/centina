@@ -1,17 +1,16 @@
-// MATCH EDGE — the maths, before any handle exists. The spec asks for exactly
-// this order ("prove the hard math before shipping UI"), and continuity is a
-// claim that is very easy to make and very easy to make wrongly: a fold back on
-// itself reports a perfect tangent ANGLE, and a control net that looks matched
-// says nothing about the surface it actually generates.
+// Match Edge: the math, independent of any UI handle. Continuity is a claim
+// that is easy to make wrongly: a fold back on itself reports a perfect
+// tangent angle, and a control net that looks matched says nothing about the
+// surface it actually generates.
 //
-// So every claim here is measured ON THE SURFACES, through
+// So every claim here is measured on the surfaces, through
 // surfacePointAndPartials, not read off the control net that was just edited.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { surfacePoint, surfacePointAndPartials } from '../kernel/surface.mjs';
 import { matchEdge, tangentDeviationAcross, edgeRows, edgeOrientation, edgeGap } from '../kernel/matchedge.mjs';
 
-// Two bicubic patches sharing the plane x = 0. The BASE is deliberately creased
+// Two bicubic patches sharing the plane x = 0. The base is deliberately creased
 // against the target: its second row kicks up in +z, so an unmatched seam has a
 // large tangent break and a matched one has none. Both are non-planar, because
 // a plane matches a plane by accident.
@@ -31,20 +30,20 @@ function patch(rows) {
     ctrlNet: rows.map((r) => r.map((p) => [p[0], p[1], p[2], 1])),
   };
 }
-// TARGET occupies x in [0, 30]; its edge at x = 0 is the shared seam (its 'u0').
+// The target occupies x in [0, 30]; its edge at x = 0 is the shared seam (its 'u0').
 function makeTarget() {
   const rows = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
     for (let j = 0; j < 4; j++) {
       const x = (30 * i) / 3, y = (30 * j) / 3;
-      row.push([x, y, 0.004 * x * x + 0.002 * y * y]); // genuinely curved, so tangents are not all parallel
+      row.push([x, y, 0.004 * x * x + 0.002 * y * y]); // curved, so tangents are not all parallel
     }
     rows.push(row);
   }
   return patch(rows);
 }
-// BASE occupies x in [-30, 0]; its edge at x = 0 is its 'u1'. Its second row is
+// The base occupies x in [-30, 0]; its edge at x = 0 is its 'u1'. Its second row is
 // pulled far out of the target's tangent plane, so the seam starts creased.
 function makeBase() {
   const rows = [];
@@ -62,7 +61,7 @@ function makeBase() {
 const withNet = (srf, net) => ({ ...srf, ctrlNet: net });
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-test('the fixture is genuinely creased, or nothing below is measuring a fix', () => {
+test('the fixture is creased, or nothing below is measuring a fix', () => {
   const base = makeBase(), target = makeTarget();
   const gap = edgeGap(base.ctrlNet, 'u1', target.ctrlNet, 'u0', 'aligned');
   assert.ok(gap < 1e-9, `the edges must already meet for a match to be legitimate, gap ${gap}`);
@@ -76,13 +75,13 @@ test('G0 puts the boundary rows exactly together', () => {
   const moved = base.ctrlNet.map((r) => r.map((p) => [...p]));
   for (let j = 0; j < 4; j++) moved[3][j] = [moved[3][j][0], moved[3][j][1], moved[3][j][2] + 9, 1];
   const shifted = withNet(base, moved);
-  assert.ok(edgeGap(shifted.ctrlNet, 'u1', target.ctrlNet, 'u0', 'aligned') > 8, 'the fixture is genuinely apart before G0');
+  assert.ok(edgeGap(shifted.ctrlNet, 'u1', target.ctrlNet, 'u0', 'aligned') > 8, 'the fixture is apart before G0');
 
   const res = matchEdge(shifted, 'u1', target, 'u0', { order: 0 });
   assert.equal(res.ok, true, res.reason);
   assert.ok(edgeGap(res.net, 'u1', target.ctrlNet, 'u0', 'aligned') < 1e-9, 'G0 closes the gap exactly');
 
-  // And it is a SUBSTITUTION, not a fit: the surfaces agree along the whole
+  // It is a substitution, not a fit: the surfaces agree along the whole
   // shared edge, not merely at the control points.
   const matched = withNet(shifted, res.net);
   let worst = 0;
@@ -90,10 +89,10 @@ test('G0 puts the boundary rows exactly together', () => {
     const s = i / 8;
     worst = Math.max(worst, dist(surfacePoint(matched, 1, s), surfacePoint(target, 0, s)));
   }
-  assert.ok(worst < 1e-9, `the edge CURVES coincide, worst ${worst}`);
+  assert.ok(worst < 1e-9, `the edge curves coincide, worst ${worst}`);
 });
 
-test('⭐ G1 closes the tangent break, measured on the surfaces', () => {
+test('G1 closes the tangent break, measured on the surfaces', () => {
   const base = makeBase(), target = makeTarget();
   const before = tangentDeviationAcross(base, 'u1', target, 'u0');
   const res = matchEdge(base, 'u1', target, 'u0', { order: 1 });
@@ -102,8 +101,8 @@ test('⭐ G1 closes the tangent break, measured on the surfaces', () => {
   assert.ok(after < 0.05, `G1 should leave essentially no tangent break, got ${after.toFixed(4)} degrees (was ${before.toFixed(2)})`);
 });
 
-test('⭐ G1 does NOT fold the base back over the target', () => {
-  // A fold reports a PERFECT tangent angle while putting the base on the wrong
+test('G1 does not fold the base back over the target', () => {
+  // A fold reports a perfect tangent angle while putting the base on the wrong
   // side of the seam — the one failure the angle alone cannot see, so it is
   // checked as its own claim.
   const base = makeBase(), target = makeTarget();
@@ -150,14 +149,14 @@ test('a reversed neighbor is matched without twisting', () => {
   // Same target, its shared edge built in the opposite direction.
   const flipped = { ...target, ctrlNet: target.ctrlNet.map((row) => [...row].reverse()) };
   const orientation = edgeOrientation(base.ctrlNet, 'u1', flipped.ctrlNet, 'u0');
-  assert.equal(orientation, 'reversed', 'the fixture really is reversed, or this test proves nothing');
+  assert.equal(orientation, 'reversed', 'the fixture is reversed, or this test proves nothing');
   const res = matchEdge(base, 'u1', flipped, 'u0', { order: 1 });
   assert.equal(res.ok, true, res.reason);
   const after = tangentDeviationAcross(withNet(base, res.net), 'u1', flipped, 'u0');
   assert.ok(after < 0.05, `a reversed edge still matches, got ${after.toFixed(4)} degrees`);
 });
 
-test('G2 is REFUSED by name, not silently delivered as G1', () => {
+test('G2 is refused by name, not silently delivered as G1', () => {
   const base = makeBase(), target = makeTarget();
   const res = matchEdge(base, 'u1', target, 'u0', { order: 2 });
   assert.equal(res.ok, false);
@@ -175,10 +174,10 @@ test('mismatched control counts are refused, naming the shared knot vector', () 
   assert.match(res.reason, /shared knot vector|control counts/i);
 });
 
-// MERGE — the claim is that the merged surface IS both originals, not something
+// Merge: the claim is that the merged surface is both originals, not something
 // close to them. So it is measured by evaluating the merged surface over each
 // half and comparing against the patch that half came from.
-test('⭐ merging two patches reproduces BOTH of them exactly', async () => {
+test('merging two patches reproduces both of them exactly', async () => {
   const { harmonizeDirections, seamDirectionFor } = await import('../kernel/surfaceknots.mjs');
   const { mergeAcrossSeam } = await import('../kernel/matchedge.mjs');
   const base = makeBase(), target = makeTarget();
@@ -212,11 +211,11 @@ test('⭐ merging two patches reproduces BOTH of them exactly', async () => {
       worstTarget = Math.max(worstTarget, Math.hypot(pm2[0] - pt[0], pm2[1] - pt[1], pm2[2] - pt[2]));
     }
   }
-  assert.ok(worstBase < 1e-9, `the merged surface reproduces the BASE half exactly, worst ${worstBase}`);
-  assert.ok(worstTarget < 1e-9, `and the TARGET half exactly, worst ${worstTarget}`);
+  assert.ok(worstBase < 1e-9, `the merged surface reproduces the base half exactly, worst ${worstBase}`);
+  assert.ok(worstTarget < 1e-9, `and the target half exactly, worst ${worstTarget}`);
 });
 
-test('merge refuses an unharmonised pair by name rather than approximating', async () => {
+test('merge refuses an unharmonized pair by name rather than approximating', async () => {
   const { mergeAcrossSeam } = await import('../kernel/matchedge.mjs');
   const base = makeBase();
   const wide = makeTarget();
@@ -226,11 +225,11 @@ test('merge refuses an unharmonised pair by name rather than approximating', asy
   assert.match(res.reason, /different control counts|harmonise/i);
 });
 
-// ⚠ A RATIONAL PAIR — the case every fixture above misses, because a hand-built
-// net has w = 1 everywhere and the weight handling is then invisible. A quarter
-// cylinder is genuinely rational, and matching two of them exercises the
+// A rational pair. A hand-built net has w = 1 everywhere, where the weight
+// handling is invisible. A quarter cylinder is rational, and matching two of
+// them exercises the
 // weights in G0's substitution and G1's redirection at once.
-test('⭐ matching two RATIONAL surfaces keeps them on their own geometry', async () => {
+test('matching two rational surfaces keeps them on their own geometry', async () => {
   const { makeLine: mkLine, revolve: rev } = await import('../kernel/primitives.mjs');
   const { harmonizeDirections, seamDirectionFor } = await import('../kernel/surfaceknots.mjs');
   const quarter = (a0, a1) => rev(mkLine([25, 0, 0], [25, 0, 40]), [0, 0, 0], [0, 0, 1], a0, a1 - a0);
@@ -238,7 +237,7 @@ test('⭐ matching two RATIONAL surfaces keeps them on their own geometry', asyn
   const B = quarter(Math.PI / 2, Math.PI);
   const weights = A.ctrlNet.flat().map((cp) => cp[3]);
   assert.ok(weights.some((w) => Math.abs(w - 1) > 1e-6),
-    'the fixture is genuinely RATIONAL — otherwise this test is the same as every one above');
+    'the fixture is rational — otherwise this test is the same as every one above');
 
   const h = harmonizeDirections(A, seamDirectionFor('v1'), B, seamDirectionFor('v0'));
   assert.equal(h.ok, true, h.reason);
@@ -246,7 +245,7 @@ test('⭐ matching two RATIONAL surfaces keeps them on their own geometry', asyn
   assert.equal(res.ok, true, res.reason);
 
   // The two quarters already meet tangentially, so a correct match must leave
-  // the surface ON the cylinder of radius 25. A weight mistake pulls the
+  // the surface on the cylinder of radius 25. A weight mistake pulls the
   // control points off it and the radius drifts.
   const matched = withNet(h.a, res.net);
   const domOf = (k, d) => [k[d], k[k.length - 1 - d]];
@@ -262,12 +261,12 @@ test('⭐ matching two RATIONAL surfaces keeps them on their own geometry', asyn
   assert.ok(worst < 1e-6, `every point stays on the 25mm cylinder, worst off by ${worst}`);
 });
 
-// G2 — CURVATURE CONTINUITY. The claim is measured on the SURFACES, through
+// G2: curvature continuity. The claim is measured on the surfaces, through
 // their own curvature, not read off the control net that was just solved.
-test('⭐ G2 closes the CURVATURE jump that G1 leaves behind', async () => {
+test('G2 closes the curvature jump that G1 leaves behind', async () => {
   const { applyG2, curvatureDeviationAcross } = await import('../kernel/matchedge.mjs');
   const { surfaceDerivs2 } = await import('../kernel/curvature.mjs');
-  // Deeper patches: G2 solves the THIRD row, so a 4-deep net is the minimum
+  // Deeper patches: G2 solves the third row, so a 4-deep net is the minimum
   // that can carry one and still have shape left over.
   const mk = (x0, x1, kick) => {
     const rows = [];
@@ -298,20 +297,20 @@ test('⭐ G2 closes the CURVATURE jump that G1 leaves behind', async () => {
 
   const curvBefore = curvatureDeviationAcross(afterG1, 'u1', target, 'u0', surfaceDerivs2);
   assert.ok(curvBefore > 0.05,
-    `⚠ the fixture must have a REAL curvature jump left after G1, or G2 has nothing to close — got ${curvBefore.toFixed(4)}`);
+    `the fixture must have a curvature jump left after G1, or G2 has nothing to close — got ${curvBefore.toFixed(4)}`);
 
   const g2 = applyG2(base, 'u1', target, 'u0', g1.net, { blend: 1, derivs2: surfaceDerivs2 });
   assert.equal(g2.ok, true, g2.reason);
   const afterG2 = withNet(base, g2.net);
   const curvAfter = curvatureDeviationAcross(afterG2, 'u1', target, 'u0', surfaceDerivs2);
   assert.ok(curvAfter < curvBefore * 0.2,
-    `⭐ G2 closes the curvature jump (${curvBefore.toFixed(4)} -> ${curvAfter.toFixed(4)})`);
+    `G2 closes the curvature jump (${curvBefore.toFixed(4)} -> ${curvAfter.toFixed(4)})`);
 
-  // AND IT MUST NOT UNDO G1. Solving the third row moves the surface, so the
+  // It must not undo G1: solving the third row moves the surface, so the
   // tangent it was given has to survive the solve.
   const tangentG2 = tangentDeviationAcross(afterG2, 'u1', target, 'u0');
   assert.ok(tangentG2 < 0.05,
-    `⭐ and the TANGENT continuity survives it (${tangentG2.toFixed(4)} degrees) — a G2 that broke G1 would be worse than none`);
+    `and the tangent continuity survives it (${tangentG2.toFixed(4)} degrees)`);
 });
 
 test('G2 is refused by name on a surface too shallow to carry it', async () => {
@@ -325,12 +324,12 @@ test('G2 is refused by name on a surface too shallow to carry it', async () => {
   assert.match(res.reason, /third row|two control points/i);
 });
 
-// THE CURVATURE MEASURE AGAINST A PLANAR TARGET. A plane's normal curvature
+// The curvature measure against a planar target. A plane's normal curvature
 // across the seam is exactly zero, and a successful G2 drives the base's to
 // zero with it — so a purely relative ratio divides a vanishing residual by a
 // vanishing scale and returns 1.0, the worst reading it can produce, precisely
 // when the join is perfect. The measure has to stay meaningful as both sides
-// approach flat, which means the scale needs a floor the MODEL can recognize
+// approach flat, which means the scale needs a floor the model can recognize
 // rather than a numerical epsilon.
 test('curvature deviation against a plane grows with the residual instead of pinning at 1', async () => {
   const { curvatureDeviationAcross } = await import('../kernel/matchedge.mjs');
@@ -347,8 +346,8 @@ test('curvature deviation against a plane grows with the residual instead of pin
   assert.equal(read(0), 0);
   assert.ok(read(1e-7) < 1e-3, `a 1e-7 residual read ${read(1e-7)}`);
 
-  // And it must still be a MEASURE: monotone in the residual, over the range
-  // where the old relative form was saturated at exactly 1.
+  // It must still be a measure: monotone in the residual, over the range
+  // where a purely relative form saturates at exactly 1.
   const ladder = [1e-4, 1e-2, 1].map(read);
   for (let i = 1; i < ladder.length; i++) {
     assert.ok(ladder[i] > ladder[i - 1] * 5,
@@ -357,19 +356,19 @@ test('curvature deviation against a plane grows with the residual instead of pin
   assert.ok(ladder[2] > 0.05, `a 1mm break on a 90mm patch should read clearly, got ${ladder[2]}`);
 });
 
-// TOO SHALLOW IS NOT A REFUSAL ANY MORE. A surface two control points deep
-// across the seam has no third row to solve for, and one that is DEGREE 1
+// A shallow surface is deepened, not refused. A surface two control points deep
+// across the seam has no third row to solve for, and one that is degree 1
 // across has no second derivative to move — three rows would still carry
 // exactly zero curvature, so depth alone is not enough. Both repairs are exact,
-// which is the whole reason they can be applied without asking.
+// which is why they can be applied without asking.
 test('a shallow surface can be deepened exactly, and then reaches G2', async () => {
   const { applyG2 } = await import('../kernel/matchedge.mjs');
   const { surfaceElevateDegree, refineToCount, countIn, degreeIn } = await import('../kernel/surfaceknots.mjs');
   const { surfaceDerivs2 } = await import('../kernel/curvature.mjs');
   const base = makeBase(), target = makeTarget();
 
-  // Two points deep across u, degree 1 there: a ruled strip, and the shape the
-  // old refusal named.
+  // Two points deep across u, degree 1 there: a ruled strip, which applyG2
+  // refuses as it stands.
   const shallow = { ...base, ctrlNet: base.ctrlNet.slice(0, 2), knotsU: [0, 0, 1, 1], degU: 1 };
   const before = matchEdge(shallow, 'u1', target, 'u0', { order: 1 });
   assert.equal(before.ok, true, before.reason);
@@ -381,7 +380,7 @@ test('a shallow surface can be deepened exactly, and then reaches G2', async () 
   if (countIn(deep, 'u') < 3) deep = refineToCount(deep, 'u', 3);
   assert.ok(degreeIn(deep, 'u') >= 2 && countIn(deep, 'u') >= 3, 'deepening must deliver both degree and rows');
 
-  // EXACT — the surface is described differently and sits in the same place.
+  // Exact: the surface is described differently and sits in the same place.
   for (const [u, v] of [[0, 0], [0.25, 0.4], [0.5, 0.5], [1, 0.75], [0.9, 1]]) {
     const a = surfacePoint(shallow, u, v), b = surfacePoint(deep, u, v);
     assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9,
@@ -394,10 +393,9 @@ test('a shallow surface can be deepened exactly, and then reaches G2', async () 
   assert.equal(g2.ok, true, `after deepening, G2 must go through — got ${g2.reason}`);
 });
 
-// NEVER NaN. A refined or force-harmonised seam can carry a zero-width knot
-// span, and a derivative taken there is not a number. That value propagated to
-// the Properties panel and printed "curvature NaN" beside a match the app was
-// calling achieved — arithmetic wearing the clothes of a measurement.
+// Never NaN. A refined or force-harmonized seam can carry a zero-width knot
+// span, and a derivative taken there is not a number. An unmeasurable
+// deviation is null, so no consumer displays NaN as a measurement.
 test('the curvature measure returns null rather than NaN when it cannot evaluate', async () => {
   const { curvatureDeviationAcross } = await import('../kernel/matchedge.mjs');
   const base = makeBase(), target = makeTarget();

@@ -1,45 +1,33 @@
-// EXACT Catmull-Clark limit-surface evaluation
-// — a sibling of subd.mjs, not a rewrite of it: subd.mjs
-// produces a FINER CAGE (one discrete refinement step); this module
-// evaluates the true infinite-refinement LIMIT exactly, at an arbitrary
-// (u,v), with no loop. Two genuinely different concerns kept in two files
-// on purpose, per this project's own module-boundary discipline.
+// Exact Catmull-Clark limit-surface evaluation. A sibling of subd.mjs:
+// subd.mjs produces a finer cage (one discrete refinement step); this module
+// evaluates the infinite-refinement limit exactly, at an arbitrary (u,v),
+// with no loop.
 //
-// STEP 1 — THE REGULAR-PATCH FAST PATH. Away from any extraordinary
-// vertex (valence != 4) or crease, a Catmull-Clark limit surface converges
-// EXACTLY to an ordinary uniform bicubic B-spline patch over the 16
-// control points surrounding a face (the standard, textbook Catmull-Clark
-// convergence identity — not an approximation). This needs zero new
-// evaluation math: it reuses kernel/surface.mjs's own already-proven
-// surfacePointAndPartials (the same rational tensor-product evaluator
-// already shipped for ordinary NURBS surfaces) against a SYNTHETIC,
+// Regular-patch fast path. Away from any extraordinary vertex (valence != 4)
+// or crease, the Catmull-Clark limit surface is exactly an ordinary uniform
+// bicubic B-spline patch over the 16 control points surrounding a face (the
+// standard Catmull-Clark convergence identity, not an approximation). It is
+// evaluated with kernel/surface.mjs's surfacePointAndPartials (the rational
+// tensor-product evaluator used for ordinary NURBS surfaces) on a synthetic,
 // non-rational, uniform-knot patch built from the 16 points.
 //
-// The knot vector [-3,-2,-1,0,1,2,3,4] (a plain, unclamped, evenly-spaced
-// integer sequence — 4 control points, degree 3, so knots.length ==
-// n+p+1 == 4+3+1 == 8) is deliberately NOT the clamped [0,0,0,0,1,1,1,1]
-// a 4-point Bezier patch would use: the 16 stencil points are the
-// CONTROL POINTS OF A UNIFORM B-SPLINE (the shape that repeated regular
-// subdivision converges to), not Bezier control points, and a clamped
-// knot vector would evaluate a genuinely different (wrong) patch through
-// the same 16 points. With exactly 4 control points and degree 3 there is
-// only ONE valid parametric span regardless of clamping (n - p == 1
-// span); the shift to [-3..4] puts that one valid span, [knots[p],
-// knots[n]] == [knots[3], knots[4]], at exactly [0,1] — the natural,
-// convenient domain for a caller — while the SURROUNDING knot values
-// (which basisFuns/dersBasisFuns read from a window centered on the
-// span, not just its own two endpoints) still shape the basis functions
-// as genuinely uniform, not clamped.
+// The knot vector [-3,-2,-1,0,1,2,3,4] (unclamped, evenly spaced — 4 control
+// points, degree 3, so knots.length == n+p+1 == 4+3+1 == 8) is not the
+// clamped [0,0,0,0,1,1,1,1] a 4-point Bezier patch would use: the 16 stencil
+// points are the control points of a uniform B-spline (the shape repeated
+// regular subdivision converges to), not Bezier control points, and a clamped
+// knot vector would evaluate a different patch through the same 16 points.
+// With 4 control points and degree 3 there is one valid span regardless of
+// clamping (n - p == 1); the shift to [-3..4] puts that span, [knots[p],
+// knots[n]] == [knots[3], knots[4]], at [0,1], while the surrounding knot
+// values (which basisFuns/dersBasisFuns read from a window centered on the
+// span) keep the basis functions uniform rather than clamped.
 //
-// STENCIL LAYOUT: grid[i][j] for i,j in 0..3 (U-direction first index,
-// matching kernel/surface.mjs's own ctrlNet[i][j] convention). The face
-// being evaluated sits at the CENTER 2x2 of the grid (indices (1,1),
-// (1,2), (2,1), (2,2) are the face's own 4 corners); the remaining 12
-// points are that face's own one-ring of surrounding vertices. This
-// module does not yet care how a caller derives that layout from a real
-// SuperB cage — that mapping is later app-layer wiring (STEP 6); this
-// step only needs the grid-to-patch evaluator to be correct and reused,
-// not re-derived, since every later step depends on it.
+// Stencil layout: grid[i][j] for i,j in 0..3 (U-direction first index,
+// matching kernel/surface.mjs's ctrlNet[i][j] convention). The evaluated face
+// sits at the center 2x2 of the grid ((1,1), (1,2), (2,1), (2,2) are its 4
+// corners); the remaining 12 points are its one-ring. regularFaceStencil
+// below reads that layout out of a cage.
 
 import { surfacePointAndPartials } from './surface.mjs';
 import { add, scale } from './vec3.mjs';
@@ -58,50 +46,41 @@ export function bicubicRegularPatchSurface(grid4x4) {
   return { degU: 3, degV: 3, knotsU: REGULAR_PATCH_KNOTS, knotsV: REGULAR_PATCH_KNOTS, ctrlNet };
 }
 
-// CLAMPED FORM OF THE SAME PATCH — identical surface, representation a
-// downstream consumer can actually trust.
+// Clamped form of the same patch: the identical surface, with a knot array
+// whose ends bound the valid domain.
 //
-// THE PROBLEM, stated more precisely than it first was. An unclamped patch
-// evaluates correctly through surfacePoint when handed a (u,v) inside its own
-// true span; that was checked directly, and the earlier claim that surfacePoint
-// "returns null for such a patch" does not hold — the null readings that
-// produced it came from a malformed cage, not from the knot vector. The real
-// defect is narrower and worse: the patch's knot ARRAY spans [-3,4] while its
+// An unclamped patch evaluates correctly through surfacePoint for a (u,v)
+// inside its span. The problem is that its knot array spans [-3,4] while its
 // valid domain is [0,1], and roughly ten consumers across this kernel and the
-// app tier derive a surface's domain as `knots[0] .. knots[last]`. That is
-// exactly right for a clamped surface — which, until these patches, was every
-// surface this app had — and silently wrong by a factor of seven here.
-// extractBorderCurves is the plainest case: it asks for the border at
-// knots[0], four knots outside the span, and hands back a curve measured 131
-// units from the real patch edge. Clamping fixes all of those consumers at
-// once, which is a better trade than auditing a dozen call sites.
+// app tier derive a surface's domain as `knots[0] .. knots[last]` — right for
+// a clamped surface, wrong by a factor of seven here. extractBorderCurves is
+// the plainest case: it asks for the border at knots[0], four knots outside
+// the span, and returns a curve 131 units from the real patch edge. Clamping
+// fixes all of those consumers at once.
 //
-// WHY NOT KNOT INSERTION, which is the obvious route and the one the plan
-// named. insertKnot/extractSubCurve are exact for the CLAMPED curves they were
-// written for, and are NOT exact here: isolating a sub-range needs the boundary
-// knot raised to multiplicity degree+1, and that last step duplicates a control
-// point without blending. On a clamped curve that is correct, because at
-// multiplicity `degree` the duplicated point already lies ON the curve. On an
-// unclamped one it does not, and the result is a different curve — measured at
+// Why not knot insertion: insertKnot/extractSubCurve are exact for clamped
+// curves and not here. Isolating a sub-range raises the boundary knot to
+// multiplicity degree+1, and that last step duplicates a control point
+// without blending. On a clamped curve that is correct, because at
+// multiplicity `degree` the duplicated point already lies on the curve. On an
+// unclamped one it does not, and the result is a different curve — off by
 // 0.37 units on a plain uniform cubic spanning about 3. decomposeToBezier
 // assumes clamped input too. See kernel/knots.mjs's own note.
 //
-// WHAT IS USED INSTEAD is not a workaround but the exact, standard conversion
-// for precisely the shape this module emits: a UNIFORM cubic B-spline segment
-// has a closed-form Bezier equivalent, and REGULAR_PATCH_KNOTS is uniform by
+// What is used instead is the standard closed-form conversion of a uniform
+// cubic B-spline segment to Bezier form; REGULAR_PATCH_KNOTS is uniform by
 // construction. For the span governed by P0..P3:
 //     B0 = (P0 + 4*P1 + P2) / 6      B1 = (2*P1 + P2) / 3
 //     B2 = (P1 + 2*P2) / 3           B3 = (P1 + 4*P2 + P3) / 6
-// Verified against the curve's own sampled points at 4.5e-16 — machine
-// precision, not a tolerance. Being linear, it applies to a tensor grid one
-// direction at a time in either order.
+// It matches the curve's own sampled points to 4.5e-16 (machine precision).
+// Being linear, it applies to a tensor grid one direction at a time in either
+// order.
 //
-// SCOPED HONESTLY: this is correct for THIS knot vector and degree, not for an
-// arbitrary unclamped surface, and it is deliberately not named as though it
-// were. Nothing else in this kernel produces an unclamped surface. The patches
-// are also always NON-RATIONAL (bicubicRegularPatchSurface's own stated scope —
-// a plain average of real points), so the weight rides through as 1 rather than
-// being blended in homogeneous space.
+// Scope: correct for this knot vector and degree only, not for an arbitrary
+// unclamped surface; nothing else in this kernel produces an unclamped
+// surface. The patches are always non-rational (bicubicRegularPatchSurface's
+// stated scope), so the weight rides through as 1 rather than being blended
+// in homogeneous space.
 function uniformCubicSpanToBezier(p0, p1, p2, p3) {
   const mix = (...terms) => [0, 1, 2].map((d) => terms.reduce((acc, [pt, k]) => acc + pt[d] * k, 0));
   return [
@@ -114,86 +93,66 @@ function uniformCubicSpanToBezier(p0, p1, p2, p3) {
 const CLAMPED_PATCH_KNOTS = [0, 0, 0, 0, 1, 1, 1, 1];
 export function clampedBicubicPatchSurface(grid4x4) {
   const src = bicubicRegularPatchSurface(grid4x4).ctrlNet; // reuses its own shape/validation
-  // U pass — each control COLUMN (fixed j, varying i) is a uniform cubic span.
+  // U pass — each control column (fixed j, varying i) is a uniform cubic span.
   const cols = [];
   for (let j = 0; j < 4; j++) cols.push(uniformCubicSpanToBezier(src[0][j], src[1][j], src[2][j], src[3][j]));
   const mid = [];
   for (let i = 0; i < 4; i++) mid.push(cols.map((c) => c[i]));
-  // V pass — each ROW of that result is a uniform cubic span in the other direction.
+  // V pass — each row of that result is a uniform cubic span in the other direction.
   const ctrlNet = mid.map((row) => uniformCubicSpanToBezier(row[0], row[1], row[2], row[3]).map((p) => [p[0], p[1], p[2], 1]));
   return { degU: 3, degV: 3, knotsU: CLAMPED_PATCH_KNOTS, knotsV: CLAMPED_PATCH_KNOTS, ctrlNet };
 }
 
-// u, v in [0,1] — (0,0)/(1,0)/(0,1)/(1,1) are the patch's own four
-// parametric corners, each converging to one of the face's own 4
-// vertices' true Catmull-Clark limit positions (NOT any single control
-// point directly — a regular vertex's limit position is itself a
-// weighted average over its own one-ring, exactly what evaluating this
-// patch at a corner computes).
+// u, v in [0,1]. (0,0)/(1,0)/(0,1)/(1,1) are the patch's parametric corners,
+// each converging to the true Catmull-Clark limit position of one of the
+// face's 4 vertices (not any single control point: a regular vertex's limit
+// position is a weighted average over its one-ring, which is what evaluating
+// this patch at a corner computes).
 export function regularPatchPointAndPartials(grid4x4, u, v) {
   return surfacePointAndPartials(bicubicRegularPatchSurface(grid4x4), u, v);
 }
 
-// STEP 2 — THE HALSTEAD/KASS/DEROSE (1993) VERTEX-LIMIT-POSITION MASK,
-// standalone independent ground truth for step 4's eigenbasis evaluator
-// (built BEFORE that evaluator exists, so it can never be checked
-// tautologically against itself) — reuses ONLY subd.mjs's own already-
-// proven buildTopology/computeFacePoint (real, shipped, tested code),
-// never anything from this module's own step-1 regular-patch path or a
-// future eigen-decomposition.
+// Halstead, Kass & DeRose (1993) vertex limit-position mask. Independent
+// ground truth for the eigenbasis cross-check below: it reuses only subd.mjs's
+// buildTopology/computeFacePoint, nothing from the regular-patch path or the
+// eigendecomposition.
 //
-// DERIVATION (worked out here, not transcribed from memory — the exact
-// concern this project's own standing discipline names for Stam's own
-// closed-form eigenbasis polynomials applies equally to trusting an
-// uncertain recollection of ANY published subdivision-limit formula):
-// consider a fully rotationally-symmetric neighborhood of an
-// extraordinary vertex P0 of valence n — n "spoke" neighbor vertices Qi
-// and, for each of the n incident quad faces, one "far" (diagonal)
-// corner vertex Ri. Define the three rotationally-invariant (DC-mode)
-// scalars p = P0, q = avg(Qi), r = avg(Ri). One Catmull-Clark
-// subdivision step (subd.mjs's own already-proven face/edge/vertex-point
-// rules, restricted to this fully symmetric case) gives:
+// Derivation. Consider a rotationally symmetric neighborhood of an
+// extraordinary vertex P0 of valence n — n spoke neighbor vertices Qi and, for
+// each of the n incident quad faces, one far (diagonal) corner vertex Ri.
+// Define the three rotationally invariant scalars p = P0, q = avg(Qi),
+// r = avg(Ri). One Catmull-Clark step (subd.mjs's face/edge/vertex-point
+// rules, restricted to this symmetric case) gives:
 //   new face-centroid average  = (p + 2q + r) / 4
 //   new edge-point average     = (3p + 4q + r) / 8
-//   new vertex point (smoothVertexRule, n valid for any n)
+//   new vertex point (smoothVertexRule, valid for any n)
 //                               = [(4n-7)p + 6q + r] / (4n)
-// — a genuine 3x3 LINEAR map (p,q,r) -> (p',q',r'), independent of n
-// only through its own coefficients. Because every row of this matrix
-// sums to 1 (a real, checked invariant — each new value really is a
-// weighted AVERAGE of old ones), it is row-stochastic: repeated
-// application converges every one of p, q, r to the SAME fixed value,
-// the matrix's own dominant (eigenvalue-1) fixed point — this IS the
-// vertex's true limit position, by construction (as the neighborhood
-// shrinks to a point under infinite subdivision, its center, spoke-
-// average, and corner-average must all coincide there). Solving
-// (M^T - I) v = 0 for this 3x3 system by hand gives the eigenvector
-// v = (n, 4, 1) (verified directly in this module's own test file,
-// which re-derives and checks every step of this system, not just its
-// final answer) — normalized (sum = n+5), the limit position is:
+// — a 3x3 linear map (p,q,r) -> (p',q',r') that depends on n only through its
+// coefficients. Every row sums to 1 (each new value is a weighted average of
+// old ones), so the matrix is row-stochastic: repeated application converges
+// p, q and r to the same value, the dominant (eigenvalue-1) fixed point, which
+// is the vertex's limit position (as the neighborhood shrinks to a point, its
+// center, spoke average and corner average coincide). Solving (M^T - I) v = 0
+// gives v = (n, 4, 1) (the test file re-derives each step); normalized
+// (sum = n+5), the limit position is:
 //   L = (n*p + 4*q + r) / (n+5)
-// Converting q, r into subd.mjs's OWN R (average adjacent EDGE MIDPOINT,
-// not neighbor vertex) and F (average adjacent FACE CENTROID) —
-// R = (p+q)/2 so q = 2R-p; F = (p+2q+r)/4 so r = p+4F-4R — and
-// substituting gives the form actually used below:
+// Converting q, r into subd.mjs's R (average adjacent edge midpoint, not
+// neighbor vertex) and F (average adjacent face centroid) — R = (p+q)/2 so
+// q = 2R-p; F = (p+2q+r)/4 so r = p+4F-4R — gives the form used below:
 //   L = [(n-3)*P + 4*R + 4*F] / (n+5)
-// CROSS-VALIDATED (not just algebraically self-consistent) against the
-// widely-published REGULAR-vertex (n=4) mask, stated in terms of the
-// vertex V, its 4 edge-neighbor vertices Qi, and its 4 face-diagonal
-// corners Ri: "(16*V + 4*sum(Qi) + sum(Ri)) / 36" — substituting
-// sum(Qi)=4q, sum(Ri)=4r into that published formula gives
-// (16p+16q+4r)/36, algebraically IDENTICAL to this module's own
-// (n*p+4*q+r)/(n+5) at n=4 -> (4p+4q+r)/9 -> (16p+16q+4r)/36. Same
-// answer, reached two independent ways.
+// Cross-check against the published regular-vertex (n=4) mask in terms of the
+// vertex V, its 4 edge-neighbor vertices Qi and its 4 face-diagonal corners Ri,
+// "(16*V + 4*sum(Qi) + sum(Ri)) / 36": substituting sum(Qi)=4q, sum(Ri)=4r
+// gives (16p+16q+4r)/36, identical to (n*p+4*q+r)/(n+5) at n=4 ->
+// (4p+4q+r)/9 -> (16p+16q+4r)/36.
 export function vertexLimitMaskFromRF(P, R, F, n) {
   const num = add(add(scale(P, n - 3), scale(R, 4)), scale(F, 4));
   return scale(num, 1 / (n + 5));
 }
 
-// Cage-facing wrapper — R/F computed the IDENTICAL way
-// computeVertexPoint's own smoothVertexRule already does (reused
-// directly, not re-derived a second, possibly-inconsistent way), so this
-// can never silently disagree with what a real subdivision step itself
-// would compute as this vertex's own F/R inputs.
+// Cage-facing wrapper. R and F are computed the same way computeVertexPoint's
+// smoothVertexRule computes them, so this agrees with what a subdivision step
+// takes as this vertex's F/R inputs.
 export function vertexLimitPosition(cage, vIdx, ctx = buildTopology(cage)) {
   const P = cage.vertices[vIdx];
   const faces = ctx.vertexFaces[vIdx];
@@ -212,43 +171,30 @@ export function vertexLimitPosition(cage, vIdx, ctx = buildTopology(cage)) {
   return vertexLimitMaskFromRF(P, R, F, n);
 }
 
-// STEP 3 — THE SUBDIVISION-MATRIX BUILDER, A(n), for Stam's eigenbasis
-// method (the general, non-symmetric-reduced case step 2 deliberately
-// didn't need). A(n) is a (2n+1)x(2n+1) linear map over the STANDARD
-// local neighborhood template of an extraordinary vertex of valence n —
-// index 0 the vertex itself, indices 1..n its n "spoke" edge-neighbors,
-// indices n+1..2n the n "far" diagonal corner of each incident quad face
-// (face i = [0, spoke_i, far_i, spoke_{i+1}]) — mapping this OLD (2n+1)
-// neighborhood to the NEW one, one subdivision step later, around the
-// SAME vertex (still valence n, still the same local topology — a real,
-// checked structural fact of Catmull-Clark refinement, not assumed).
+// The subdivision matrix A(n) for Stam's eigenbasis method (the general,
+// unreduced case). A(n) is a (2n+1)x(2n+1) linear map over the standard local
+// neighborhood template of an extraordinary vertex of valence n — index 0 the
+// vertex, indices 1..n its n spoke edge-neighbors, indices n+1..2n the far
+// diagonal corner of each incident quad face (face i = [0, spoke_i, far_i,
+// spoke_{i+1}]) — mapping this neighborhood to the new one around the same
+// vertex one subdivision step later (still valence n, same local topology).
 //
-// Built the way this doc's own build order specifies: run subd.mjs's
-// own already-proven, already-tested subdivideCatmullClark on REAL UNIT
-// BASIS VECTORS over this template (`standardNeighborhoodCage`), one
-// column of A(n) at a time — never a symbolic re-derivation of the
-// stencil coefficients a second time (that risks exactly the kind of
-// transcription error this whole project's own standing discipline
-// exists to avoid). Because every one of computeVertexPoint's/
-// computeEdgePoint's/computeFacePoint's rules is a genuine LINEAR
-// (weighted-average) function of neighboring positions, this is exactly
-// A(n) — not an approximation of it — for any of the 3 coordinate axes
-// independently (a "unit basis vector" here is a single SCALAR value
-// placed at one neighborhood point and 0 elsewhere; the real 3D case is
-// just this same scalar operation applied three times, once per axis,
-// exactly equivalent to applying A(n) directly to real 3-vectors, since
-// every underlying rule is a plain per-component weighted average).
+// Built by running subd.mjs's subdivideCatmullClark on unit basis vectors over
+// this template (`standardNeighborhoodCage`), one column of A(n) at a time,
+// rather than re-deriving the stencil coefficients symbolically. Every one of
+// computeVertexPoint's/computeEdgePoint's/computeFacePoint's rules is a linear
+// (weighted-average) function of neighboring positions, so this is exactly
+// A(n) for each coordinate axis independently (a "unit basis vector" here is a
+// single scalar placed at one neighborhood point and 0 elsewhere; the 3D case
+// is the same scalar operation applied once per axis).
 //
-// SELF-CONTAINMENT, checked directly in this module's own test file, not
-// assumed: every one of the new center/new-spoke/new-corner formulas
-// above reads ONLY template points already inside this same (2n+1)-point
-// neighborhood (an outer "boundary-looking" edge of the template, e.g.
-// spoke_i to far_i, genuinely IS a boundary edge from ITS OWN
-// perspective — only 1 face uses it here — but this builder never reads
-// a NEW VERTEX POINT at a spoke/far position, only the new CENTER vertex
-// point, the new EDGE points on the vertex's own n original edges, and
-// the new FACE points of the vertex's own n original faces — none of
-// which ever needs anything outside the template to compute).
+// Self-containment (checked in the test file): every new center/spoke/corner
+// value reads only points inside the (2n+1)-point neighborhood. An outer edge
+// of the template, e.g. spoke_i to far_i, is a boundary edge from its own
+// perspective (only 1 face uses it here), but this builder never reads a new
+// vertex point at a spoke/far position — only the new center vertex point,
+// the new edge points on the vertex's n original edges, and the new face
+// points of its n original faces, none of which reads outside the template.
 export function standardNeighborhoodCage(n) {
   const vertices = [[0, 0, 0]];
   for (let i = 0; i < n; i++) vertices.push([1, i, 0]); // placeholder positions — A(n) is topology-only; geometry here is never read as geometry, only overwritten with unit basis scalars during the build
@@ -261,16 +207,13 @@ export function standardNeighborhoodCage(n) {
   return { vertices, faces, creases: {} };
 }
 
-// Where a given original (undirected) edge's own NEW edge-point vertex
-// lands in a subdivideCatmullClark output — subd.mjs's own documented
-// ordering (vertex points keep their original index; edge points
-// appended next, in buildTopology's own edgeMap iteration order; face
-// points last) reused directly, not re-derived. `template` must be the
-// EXACT cage subdivideCatmullClark itself was called against (edgeMap
-// order is a pure function of the cage's own faces, so any structurally
-// identical cage — same vertex count, same face index/vertex-order
-// shape — produces the same order regardless of the vertex POSITIONS,
-// which this builder deliberately overwrites for each unit-basis pass).
+// Where an original (undirected) edge's new edge-point vertex lands in a
+// subdivideCatmullClark output, by subd.mjs's documented ordering (vertex
+// points keep their original index; edge points next, in buildTopology's
+// edgeMap iteration order; face points last). `template` must be structurally
+// identical to the cage subdivideCatmullClark was called on: edgeMap order
+// depends only on the faces, not on the vertex positions, which the matrix
+// builder overwrites for each unit-basis pass.
 export function edgePointIndexMap(template) {
   const ctx = buildTopology(template);
   const map = new Map();
@@ -283,13 +226,11 @@ export function facePointIndexBase(template) {
   return template.vertices.length + ctx.edgeMap.size;
 }
 
-// Reads the (2n+1)-length neighborhood-template vector (center, n
-// spokes, n corners, matching standardNeighborhoodCage's own index
-// order) out of a REFINED cage — full [x,y,z] per point, generally
-// useful (this module's own test file uses it to cross-check A(n)
-// against a real, non-unit-basis subdivideCatmullClark call on all 3
-// axes at once); the matrix builder below only ever needs one channel
-// per pass, read directly rather than through this helper.
+// Reads the (2n+1)-length neighborhood-template vector (center, n spokes, n
+// corners, in standardNeighborhoodCage's index order) out of a refined cage,
+// full [x,y,z] per point. The test file uses it to cross-check A(n) against a
+// non-unit-basis subdivideCatmullClark call on all 3 axes at once; the matrix
+// builder reads one channel per pass directly.
 export function readNeighborhoodVectors(template, refined, n, edgeIdx, faceBase) {
   const out = [refined.vertices[0].slice()];
   for (let i = 1; i <= n; i++) out.push(refined.vertices[edgeIdx.get(edgeKey(0, i))].slice());
@@ -303,11 +244,9 @@ function readNeighborhoodX(template, refined, n, edgeIdx, faceBase) {
   return out;
 }
 
-// A(n) as a plain (2n+1)x(2n+1) array of arrays, A[row][col] — applying
-// it to a (2n+1)-vector v (real matrix-vector product, A.map(row =>
-// row.reduce sum) is the caller's own job, not built into this function)
-// reproduces exactly what one real subdivideCatmullClark step would do
-// to that same neighborhood, for any of x/y/z independently.
+// A(n) as a (2n+1)x(2n+1) array of arrays, A[row][col]. Applying it to a
+// (2n+1)-vector v (applyMatrix) reproduces one subdivideCatmullClark step on
+// that neighborhood, for x, y or z independently.
 export function buildSubdivisionMatrix(n) {
   const template = standardNeighborhoodCage(n);
   const edgeIdx = edgePointIndexMap(template);
@@ -337,51 +276,40 @@ export function applyMatrix(A, v) {
   return A.map((row) => row.reduce((sum, a, j) => sum + a * v[j], 0));
 }
 
-// STEP 4 — VERTEX-LIMIT WEIGHTS PER INDIVIDUAL NEIGHBOR (generalizing
-// step 2's reduced P/R/F triple to all 2n+1 points directly), plus a
-// numerical eigendecomposition cross-check via power iteration.
+// Vertex-limit weights per individual neighbor (the P/R/F mask above,
+// expanded to all 2n+1 points), plus a numerical eigendecomposition
+// cross-check by power iteration.
 //
-// SCOPING DECISION, stated honestly, not silently narrowed: Stam's own
-// full construction lets a caller evaluate the limit surface at an
-// ARBITRARY (u,v) anywhere near an extraordinary vertex, by applying
-// A(n)^k (via a cached eigendecomposition, no loop) and then handing a
-// "regular sub-patch" of the resulting refined neighborhood to step 1's
-// fast path. Building that requires a LARGER template than the (2n+1)
-// neighborhood here captures (a full 16-point regular-patch stencil one
-// ring further out than this module's own template reaches), plus the
-// "picking matrices" Stam's paper uses to extract it at each recursion
-// level — real, additional transcription risk this project's own
-// standing "don't rush unverified math you can't check against the
-// source" rule flags directly. It is NOT attempted here. What step 4
-// DOES deliver, safely: an EXACT closed-form limit-POSITION weight per
-// INDIVIDUAL neighbor (not just the reduced P/R/F triple step 2 used),
-// independently re-derived below (not assumed), numerically cross-
-// checked against A(n)'s own dominant eigenvector via power iteration
-// (a method that never reads the closed form), and checked for genuine
-// geometric convergence under repeated A(n) application. Every cage
-// VERTEX position is exact via this; arbitrary interior (u,v) strictly
-// between a vertex and a regular region remains the existing bounded
-// discrete-refinement approximation SuperB already uses today for that
-// one sub-case — a real, named, unchanged limitation, not a regression.
+// Scope: Stam's full construction evaluates the limit surface at an arbitrary
+// (u,v) near an extraordinary vertex by applying A(n)^k through a cached
+// eigendecomposition and handing a regular sub-patch of the refined
+// neighborhood to the regular fast path. That needs a larger template than
+// the (2n+1) neighborhood here (a full 16-point stencil one ring further out)
+// plus the picking matrices of Stam's paper, and is not implemented. What is
+// provided is an exact closed-form limit-position weight per individual
+// neighbor, derived below, and cross-checked numerically against A(n)'s
+// dominant eigenvector by power iteration, which never reads the closed form.
+// Every cage vertex position is exact through this; an arbitrary interior
+// (u,v) between a vertex and a regular region falls back to bounded discrete
+// refinement.
 //
-// THE DERIVATION — direct algebraic expansion of step 2's own R/F
-// definitions in terms of the individual spoke values Q_1..Q_n and
-// corner values C_1..C_n, no symmetry assumption needed (valid for a
-// genuinely irregular/asymmetric neighborhood, not just a symmetric fan):
+// Derivation — direct expansion of R/F in terms of the individual spoke
+// values Q_1..Q_n and corner values C_1..C_n, with no symmetry assumption
+// (valid for an irregular neighborhood, not just a symmetric fan):
 //   R = (1/n) * sum_i (P+Q_i)/2  =  P/2 + (1/(2n)) * sum_i Q_i
 //   F = (1/n) * sum_i (P+Q_i+C_i+Q_{i+1})/4
 //     = P/4 + (1/(2n)) * sum_i Q_i + (1/(4n)) * sum_i C_i
-//     [sum_i Q_{i+1 mod n} == sum_i Q_i, just a cyclic relabeling of the
-//      exact same n terms — the "+1" shift never drops or duplicates one]
-// Substituting into step 2's own L = [(n-3)P + 4R + 4F] / (n+5):
+//     [sum_i Q_{i+1 mod n} == sum_i Q_i, a cyclic relabeling of the same
+//      n terms — the "+1" shift never drops or duplicates one]
+// Substituting into L = [(n-3)P + 4R + 4F] / (n+5):
 //   4R = 2P + (2/n) * sum_i Q_i
 //   4F = P + (2/n) * sum_i Q_i + (1/n) * sum_i C_i
 //   (n-3)P + 4R + 4F = (n-3+2+1)*P + (4/n) sum_i Q_i + (1/n) sum_i C_i
 //                    = n*P + (4/n) sum_i Q_i + (1/n) sum_i C_i
 // so, per individual point (dividing through by (n+5)):
 //   w(P)   = n / (n+5)
-//   w(Q_i) = 4 / (n*(n+5))   for EACH of the n spokes individually
-//   w(C_i) = 1 / (n*(n+5))   for EACH of the n corners individually
+//   w(Q_i) = 4 / (n*(n+5))   for each of the n spokes
+//   w(C_i) = 1 / (n*(n+5))   for each of the n corners
 // (sums to exactly 1: n/(n+5) + n*[4/(n(n+5))] + n*[1/(n(n+5))] == 1.)
 export function vertexLimitWeightsGeneral(n) {
   const w = new Array(2 * n + 1);
@@ -391,16 +319,13 @@ export function vertexLimitWeightsGeneral(n) {
   return w;
 }
 
-// Numerical, genuinely independent cross-check of the closed form above:
-// A(n) is a real, non-negative, row-STOCHASTIC matrix (every row already
-// proven above to sum to exactly 1 — kernel/subd.mjs's own weighted-
-// average construction) with the constant vector as its own right
-// eigenvector of eigenvalue 1 (also already proven above). By Perron-
-// Frobenius, that eigenvalue is real, simple, and dominant, with a
-// strictly positive LEFT eigenvector — power iteration on A(n)^T from
-// any generic seed converges to it. This function never reads
-// vertexLimitWeightsGeneral at all; the two are compared only in the
-// test file, as two independently-arrived-at answers.
+// Numerical cross-check of the closed form above. A(n) is a non-negative,
+// row-stochastic matrix (every row sums to 1 — subd.mjs's weighted-average
+// rules) with the constant vector as its right eigenvector of eigenvalue 1.
+// By Perron-Frobenius that eigenvalue is real, simple and dominant, with a
+// strictly positive left eigenvector, so power iteration on A(n)^T from a
+// generic seed converges to it. This never reads vertexLimitWeightsGeneral;
+// the two are compared in the test file.
 export function powerIterationLeftDominant(A, opts = {}) {
   const dim = A.length;
   const maxIter = opts.maxIter ?? 4000;
@@ -428,50 +353,33 @@ export function powerIterationLeftDominant(A, opts = {}) {
   return { eigenvalue: lambda, eigenvector: w.map((x) => x / sum) };
 }
 
-// STEP 5 — SEMI-SHARP HYBRID: an EXACT vertex-limit position at a vertex
-// whose neighborhood currently carries a real, ACTIVE semi-sharp crease
-// weight (a genuine value strictly between 0 and the app's own real cap
-// — SUPERB_CREASE_LEVEL_SCALE=3, kernel/subd.mjs's own documented
-// reachable range for any ordinary shipped Crease/SoftCrease gesture).
+// Semi-sharp hybrid: an exact vertex limit position at a vertex whose
+// neighborhood carries an active semi-sharp crease weight (strictly between 0
+// and SUPERB_CREASE_LEVEL_SCALE=3, subd.mjs's documented range for an ordinary
+// Crease/SoftCrease).
 //
-// A REAL, DELIBERATE EXCLUSION: a stored crease weight is NOT always a
-// decaying semi-sharp
-// value in this app — kernel/subd.mjs's own MARKED_CORNER_WEIGHT_FLOOR
-// mechanism deliberately stores a weight far above the ordinary [0,3]
-// range (TOSUBD's own DEFAULT_CORNER_CREASE_WEIGHT, well above 100) as a
-// PERMANENT "hold this corner at P forever" marker, specifically chosen
-// so it can NEVER be confused with an ordinary decaying crease. Naively
-// running `ceil(weight)` real discrete levels for a weight in the
-// hundreds would try to whole-cage-subdivide the cage hundreds of times
-// (each level multiplying total face count by 4) — a catastrophic
-// blowup, not a slow-but-correct answer. `MAX_SEMISHARP_DECAY_LEVELS`
-// (8, a generous margin above the real reachable [0,3] ordinary range)
-// refuses honestly rather than attempting this — and the refusal is
-// harmless to fall back on: a marked-corner vertex is PROVABLY already
-// exact at any discrete level once marked (computeVertexPoint's own
-// marked-corner branch returns its OWN CURRENT position unconditionally,
-// forever, the instant sharpness clamps to 1 — so "the position never
-// moves again" makes the current discrete-refinement value already
-// equal to every future level's value, including the true limit,
-// trivially).
+// Excluded: a stored crease weight is not always a decaying semi-sharp value.
+// subd.mjs's MARKED_CORNER_WEIGHT_FLOOR mechanism stores a weight far above
+// the ordinary [0,3] range (TOSUBD's DEFAULT_CORNER_CREASE_WEIGHT, above 100)
+// as a permanent "hold this corner at P" marker. Running `ceil(weight)`
+// discrete levels for a weight in the hundreds would subdivide the whole cage
+// hundreds of times, each level multiplying the face count by 4.
+// MAX_SEMISHARP_DECAY_LEVELS (8, a margin above the ordinary [0,3] range)
+// refuses instead, and the fallback is already exact: computeVertexPoint's
+// marked-corner branch returns the vertex's current position unconditionally
+// once sharpness clamps to 1, so the discrete-refinement value equals every
+// later level's value, the limit included.
 export const MAX_SEMISHARP_DECAY_LEVELS = 8;
 //
-// The eigenbasis machinery above (steps 2-4) all assumes an ORDINARY
-// smooth vertex — a crease changes computeVertexPoint's own rule
-// entirely (the CREASE branch, dart/crease-line/corner), which the
-// (2n+1)-point template and every mask/matrix built from it never
-// modeled. Rather than re-derive a second, crease-aware eigenbasis (real
-// literature exists for this — Biermann/Levin/Zorin's semi-sharp-crease
-// eigenanalysis — but transcribing it without the source in hand is
-// exactly the risk this project's standing discipline avoids), this
-// reuses subd.mjs's own ALREADY-PROVEN, already-tested per-level decay
-// (`max(0, weight-1)`, dropped entirely once non-positive — see
-// subd.mjs's own subdivideCatmullClark) for EXACTLY as many real
-// discrete levels as it takes the crease to fully decay away from this
-// one vertex's own immediate neighborhood, then hands off to the exact
-// machinery once that neighborhood is genuinely, structurally smooth
-// again (0 sharp edges incident to it) — never approximating past that
-// point with yet more discrete refinement.
+// The eigenbasis machinery above assumes a smooth vertex. A crease changes
+// computeVertexPoint's rule entirely (the crease branch: dart/crease-line/
+// corner), which the (2n+1)-point template never models. Rather than a
+// crease-aware eigenbasis (DeRose, Kass & Truong's semi-sharp creases and
+// their eigenanalysis), this applies subd.mjs's per-level decay
+// (`max(0, weight-1)`, dropped once non-positive — see subdivideCatmullClark)
+// for as many discrete levels as it takes the crease to decay away from this
+// vertex's neighborhood, then hands off to the exact mask once no sharp edge
+// is incident to it.
 export function semiSharpHybridLimitPosition(cage, vIdx) {
   const ctx0 = buildTopology(cage);
   const edges = ctx0.vertexEdges[vIdx] || [];
@@ -489,35 +397,24 @@ export function semiSharpHybridLimitPosition(cage, vIdx) {
   return vertexLimitPosition(refined, vIdx);
 }
 
-// ===================================================================
-// STEP 6 — REGULAR-FACE CLASSIFICATION AND STENCIL EXTRACTION
-// (ToNURBS, step 1)
+// Regular-face classification and stencil extraction.
 //
-// bicubicRegularPatchSurface above takes a 4x4 grid and says nothing
-// about where that grid comes from; its own header deliberately left
-// "how a caller derives that layout from a real cage" for later. This is
-// later. Two functions: one that says whether a face QUALIFIES, and one
-// that reads the 16 points out in the order the patch evaluator expects.
+// One function says whether a face qualifies; the other reads its 16 points
+// out in the order bicubicRegularPatchSurface expects.
 //
-// WHAT "REGULAR" HAS TO MEAN, and why each clause is load-bearing rather
-// than defensive: the limit surface over a face is exactly a uniform
-// bicubic B-spline patch on its 16-point neighborhood ONLY when nothing
-// in that neighborhood perturbs the ordinary smooth rules. So every one
-// of the face's four corners must be INTERIOR (a boundary edge is pinned
-// to full sharpness forever by edgeSharpness, so the smooth rules never
-// apply there), of VALENCE EXACTLY 4 (an extraordinary vertex is the
-// whole reason the general case is hard), and its whole one-ring must be
-// QUADS (a triangle or n-gon in the ring changes what the stencil even
-// is — there is no 4x4 grid to read). Creases are checked across the
-// entire 3x3 face block, not just the center face's own four edges: a
-// crease on the OUTER boundary of the block still changes the subdivision
-// that the block's own points converge under, so a stencil that ignored
-// it would return a patch that is simply not the limit surface.
+// What "regular" has to mean: the limit surface over a face is a uniform
+// bicubic B-spline patch on its 16-point neighborhood only when nothing in
+// that neighborhood perturbs the smooth rules. So each of the face's four
+// corners must be interior (a boundary edge is pinned to full sharpness by
+// edgeSharpness, so the smooth rules never apply there), of valence exactly 4,
+// and its one-ring must be all quads (a triangle or n-gon in the ring leaves
+// no 4x4 grid to read). Creases are checked across the whole 3x3 face block,
+// not just the center face's edges: a crease on the block's outer boundary
+// still changes the subdivision the block's points converge under.
 //
-// A conservative classifier is the correct kind here. A face wrongly
-// called irregular costs one extra isolation step (73's own step 2, which
-// shrinks the region geometrically anyway); a face wrongly called regular
-// emits a patch that is silently, unrecoverably not the surface.
+// The classifier is conservative on purpose. A face wrongly called irregular
+// costs one extra isolation step, which shrinks the region geometrically
+// anyway; a face wrongly called regular emits a patch that is not the surface.
 function faceAcrossEdge(ctx, faceIdx, v0, v1) {
   const e = ctx.edgeMap.get(edgeKey(v0, v1));
   if (!e || e.faces.length !== 2) return -1; // boundary, or non-manifold
@@ -547,12 +444,12 @@ export function isRegularFace(cage, faceIdx, ctx = buildTopology(cage)) {
 }
 
 // The 16 points, in bicubicRegularPatchSurface's own grid[i][j] order
-// (i = U, j = V). The face's own four corners land at the CENTER 2x2:
+// (i = U, j = V). The face's own four corners land at the center 2x2:
 // face[0] -> (1,1), face[1] -> (2,1), face[2] -> (2,2), face[3] -> (1,2),
 // so U runs face[0]->face[1] and V runs face[0]->face[3], and the patch's
 // parametric corners (0,0)/(1,0)/(1,1)/(0,1) correspond to the face's own
 // vertices in cyclic order. Everything else is read off the surrounding
-// ring: an EDGE-neighbor face contributes the two points just outside
+// ring: an edge-neighbor face contributes the two points just outside
 // that edge, and the one remaining face at each corner (the diagonal one,
 // sharing only that single vertex with the center face) contributes the
 // single far corner point.
@@ -574,7 +471,7 @@ export function regularFaceStencil(cage, faceIdx, ctx = buildTopology(cage)) {
     const f = cage.faces[nf];
     const kp = f.indexOf(p);
     const nextP = f[(kp + 1) % 4], prevP = f[(kp + 3) % 4];
-    const outerP = nextP === q ? prevP : nextP; // the neighbor of p in that face that ISN'T q
+    const outerP = nextP === q ? prevP : nextP; // the neighbor of p in that face that isn't q
     const kq = f.indexOf(q);
     const nextQ = f[(kq + 1) % 4], prevQ = f[(kq + 3) % 4];
     const outerQ = nextQ === p ? prevQ : nextQ;
@@ -610,61 +507,49 @@ export function regularFaceStencil(cage, faceIdx, ctx = buildTopology(cage)) {
   return grid;
 }
 
-// The whole point of steps 1+6 together: one regular face becomes one
-// EXACT bicubic patch, with no fitting, no tolerance and no sampling.
-//
-// EMITTED CLAMPED. The patch is the same surface either way; what the
-// clamped form buys is a knot array whose ends actually bound the valid
-// domain, which is what the ~ten consumers that derive a surface's domain
-// as knots[0]..knots[last] silently assume. See clampedBicubicPatchSurface
-// for the conversion and why it is not knot insertion.
+// One regular face becomes one exact bicubic patch, with no fitting,
+// tolerance or sampling. Emitted clamped: the same surface, with a knot array
+// whose ends bound the valid domain, which the ~ten consumers that derive a
+// surface's domain as knots[0]..knots[last] assume. See
+// clampedBicubicPatchSurface for the conversion and why it is not knot
+// insertion.
 export function regularFaceToPatch(cage, faceIdx, ctx = buildTopology(cage)) {
   return clampedBicubicPatchSurface(regularFaceStencil(cage, faceIdx, ctx));
 }
 
-// ===================================================================
-// STEP 7 — ISOLATE AND EMIT (ToNURBS,
-// steps 0-2). Turns a whole cage into exact bicubic patches.
+// Isolate and emit: turns a whole cage into exact bicubic patches.
 //
-// THE SHAPE OF THE ALGORITHM, and why it terminates usefully: a face
-// touching an extraordinary vertex subdivides into four sub-faces, only
-// ONE of which still touches that vertex. So each isolation level emits
-// the three that became regular and carries the fourth forward, and the
-// unconverted region shrinks by a factor of 4 per level while the patch
-// ring around each extraordinary point grows. Nothing here approximates:
-// every patch this returns is the exact limit surface over its own face.
+// A face touching an extraordinary vertex subdivides into four sub-faces, only
+// one of which still touches that vertex. Each isolation level emits the three
+// that became regular and carries the fourth forward, so the unconverted
+// region shrinks by a factor of 4 per level while the patch ring around each
+// extraordinary point grows. Every patch returned is the exact limit surface
+// over its own face.
 //
-// WHAT THIS DELIBERATELY DOES NOT DO — and this is the honest line, not
-// a missing feature discovered later. It does NOT cap the shrinking hole
-// around an extraordinary vertex. A cap pinned only at that vertex's own
-// exact limit position meets its neighbors at a POINT, not along their
-// shared EDGES, which is precisely the gap a stitch cannot close; the
-// tractable cap has to take its boundary control rows FROM the adjacent
-// patches (they are shared exactly, by construction) and pin only the
-// remaining interior freedom. That is its own build. Until it exists,
-// the leftover faces are RETURNED, named, measured — never quietly
-// papered over with a patch that is not the surface.
+// Without capping, the shrinking hole around an extraordinary vertex stays
+// open. A cap pinned only at that vertex's exact limit position meets its
+// neighbors at a point, not along their shared edges, which is a gap a stitch
+// cannot close; the cap below instead takes its boundary control rows from
+// the adjacent patches (shared exactly, by construction) and pins only the
+// remaining interior freedom. Leftover faces are returned, named and measured,
+// never covered by a patch that is not the surface.
 //
-// COVERAGE IS REPORTED IN DOMAIN TERMS, not by eye: an uncovered face at
-// isolation level L occupies 4^-L of one original face, so the returned
-// uncoveredFraction is a real number a caller can act on (and a real
-// number a test can watch shrink as levels rise).
+// Coverage is reported in domain terms: an uncovered face at isolation level L
+// occupies 4^-L of one original face, so uncoveredFraction is a number a
+// caller can act on.
 //
-// The input cage is never mutated — every level works on a fresh
-// subdivided copy, matching this module's own discipline throughout.
+// The input cage is never mutated; every level works on a fresh subdivided
+// copy.
 //
-// CAPPING IS OPT-IN, `{ cap: true }`. Without it the behavior above is
-// unchanged and the leftovers are reported rather than covered, which is
-// what a caller that wants to know about them relies on. With it, step 8
-// below emits one patch per leftover region and `uncovered` shrinks to
-// only the regions that could not be capped, each carrying the reason.
-// THE ISOLATION LOOP ITSELF, with what to do about a face that came out
-// regular left to the caller. Two callers want the same walk and disagree only
-// about that: the conversion builds a patch, and the pre-flight estimate
-// counts one. Sharing the loop is what stops the estimate from drifting away
-// from the thing it predicts — a predictor with its own copy of the walk is a
-// second implementation, and the first time the two disagree the estimate is
-// silently wrong about the only number it exists to report.
+// Capping is opt-in, `{ cap: true }`. Without it the leftovers are reported
+// rather than covered. With it, the cap builder emits one patch per leftover
+// region and `uncovered` shrinks to the regions that could not be capped,
+// each carrying the reason.
+//
+// isolateRegularFaces is the isolation loop, with what to do about a face
+// that came out regular left to the caller: the conversion builds a patch,
+// and the pre-flight estimate counts one. The estimate shares the loop so it
+// cannot drift from the conversion it predicts.
 //
 // `onRegular(cage, faceIdx, ctx, level)` is called once per face that
 // converged, and whatever it returns is stored in the level's own emitted map
@@ -691,27 +576,24 @@ function isolateRegularFaces(cage, maxIsolation, onRegular, localShare = ISOLATI
     live = stillLive;
     if (!live.length || level >= maxIsolation) { current = { ...current, __ctx: undefined }; break; }
 
-    // ISOLATION IS LOCAL, SO THE REFINEMENT IS TOO. Every face still live
+    // Isolation is local, so the refinement is too. Every face still live
     // after the first pass touches an extraordinary vertex or a crease, and
     // on any cage with an interior the count stops falling almost at once:
     // a 24x24x6 box cage is 3456 faces, of which 24 are still live after
-    // level 0 and stay 96 for every level after. Refining the WHOLE cage to
-    // serve them takes it to 221,184 faces by level 3 and is, measured, 93%
-    // of this function's entire cost — buildTopology and subdivideCatmullClark
-    // on a cage that is 99.96% pad. Cutting the working cage down to the live
-    // faces plus a margin of rings does the identical arithmetic on the part
-    // that is read.
+    // level 0 and 96 at every level after. Refining the whole cage to serve
+    // them takes it to 221,184 faces by level 3, 99.96% of it pad, and that
+    // is 93% of this function's cost. Cutting the working cage down to the
+    // live faces plus a margin of rings does the identical arithmetic on the
+    // part that is read.
     //
-    // THE PAD IS THE SAME MEASURED QUANTITY localNeighbourhoodCage's own
-    // header states, spent one ring per remaining refinement: the sub-cage's
-    // cut edge is a naked boundary from its own perspective, so the boundary
-    // rules fire there and that wrong value spreads one further ring inward
-    // per level. Arriving at the final level with LOCAL_PROBE_RINGS rings
-    // still correct is what the cap's own dyadic probe then asks for, and
-    // ISOLATION_PAD_MARGIN is margin on top of that. The whole claim —
-    // that this changes cost and not one control point — is asserted by
-    // comparing every emitted patch against the whole-cage answer bit for
-    // bit, which is a test and not a comment.
+    // The pad is the one localNeighbourhoodCage describes, spent one ring per
+    // remaining refinement: the sub-cage's cut edge is a naked boundary from
+    // its own perspective, so the boundary rules fire there and that wrong
+    // value spreads one further ring inward per level. Arriving at the final
+    // level with LOCAL_PROBE_RINGS rings still correct is what the cap's
+    // dyadic probe needs, and ISOLATION_PAD_MARGIN is margin on top of that.
+    // The test file compares every emitted patch against the whole-cage
+    // answer bit for bit.
     {
       const rings = LOCAL_PROBE_RINGS + ISOLATION_PAD_MARGIN + (maxIsolation - level);
       const local = localNeighbourhoodCage(current, ctx, live, rings, current.faces.length * localShare);
@@ -759,9 +641,8 @@ export function subdToPatches(cage, opts = {}) {
   const describe = (fi) => ({
     level,
     faceIndex: fi,
-    // The extraordinary vertices actually responsible, each with its own
-    // EXACT limit position already in hand — this is what a cap builder
-    // needs first, and it is exactly the point 73 notes is already known
+    // The extraordinary vertices responsible, each with its exact limit
+    // position — what a cap builder needs first, and the one point known
     // exactly when everything around it is not.
     extraordinary: current.faces[fi]
       .filter((v) => ctxFinal.vertexEdges[v].length !== 4 || ctxFinal.vertexFaces[v].length !== 4)
@@ -793,24 +674,21 @@ export function subdToPatches(cage, opts = {}) {
   };
 }
 
-// WHAT THE CONVERSION WILL COST, WITHOUT PAYING IT. The number a caller has
-// to decide on is how many surfaces come out, and that is not a property of
-// the cage's face count: a torus cage of 576 faces is regular everywhere and
+// What the conversion will cost, without paying it. The number a caller
+// decides on is how many surfaces come out, and that is not a property of the
+// cage's face count: a torus cage of 576 faces is regular everywhere and
 // converts to 576 patches at level 0, while a 6-face box cage reaches 168
-// because every one of its corners is a star point and the region around each
-// has to be refined three times to isolate it. Nothing readable off the cage
-// up front separates those two cases, so this runs the real isolation walk —
-// the same one subdToPatches runs, not a model of it — and skips only the part
-// that builds geometry.
+// because every one of its corners is a star point and the region around
+// each has to be refined three times to isolate it. Nothing readable off the
+// cage up front separates those two cases, so this runs the same isolation
+// walk subdToPatches runs and skips only the part that builds geometry.
 //
-// WHAT IT COSTS TO ASK: the walk without patch construction and without the
-// cap's own two refinements, which is roughly half of the conversion on a
-// small cage and a much smaller share on a large one, where building and
-// meshing the patches is what dominates.
+// Cost: the walk without patch construction and without the cap's two
+// refinements — roughly half of the conversion on a small cage and much less
+// on a large one, where building and meshing the patches dominates.
 //
-// The count is EXACT, caps included: the cap planner runs too, because whether
-// a leftover region can be capped is decided by topology alone and costs
-// nothing next to building one.
+// The count is exact, caps included: whether a leftover region can be capped
+// is decided by topology alone, so the cap planner runs too.
 export function estimateSubdToPatches(cage, opts = {}) {
   const maxIsolation = opts.maxIsolation ?? 3;
   let regular = 0;
@@ -831,105 +709,92 @@ export function estimateSubdToPatches(cage, opts = {}) {
   };
 }
 
-// ===================================================================
-// STEP 8 — THE CAP (ToNURBS, step 3).
+// The cap.
 //
-// WHAT A CAP HAS TO BE. Step 7 leaves, around every extraordinary vertex E
-// of valence n, a ring of n quad faces that never became regular. Each one
-// has E at one corner and three ordinary valence-4 corners, and — MEASURED,
-// not assumed — exactly TWO of its four edges border a face that step 7
-// already emitted as an exact patch; the other two run from E out to a
-// neighboring corner and are shared with the next face of the same ring.
-// So a cap is not a lid over a hole with a free rim. It is a patch whose
-// boundary is almost entirely already decided by surfaces that are exactly
-// the limit surface, and the only real freedom is near E.
+// Isolation leaves, around every extraordinary vertex E of valence n, a ring
+// of n quad faces that never became regular. Each has E at one corner and
+// three ordinary valence-4 corners, and exactly two of its four edges border
+// a face already emitted as an exact patch; the other two run from E out to a
+// neighboring corner and are shared with the next face of the same ring. So a
+// cap's boundary is almost entirely decided by surfaces that are exactly the
+// limit surface, and the only freedom is near E.
 //
-// WHY NOT PIN ONLY THE VERTEX. A cap pinned only at E's own exact limit
-// position meets its neighbors at a POINT and nowhere else — a hole with
-// extra steps, and precisely the gap a B-rep stitch cannot close.
+// A cap pinned only at E's exact limit position would meet its neighbors at
+// a point and nowhere else, which a B-rep stitch cannot close.
 //
-// THE CONSTRUCTION IS LOOP & SCHAEFER'S ACC (Approximating Catmull-Clark
+// The construction is Loop & Schaefer's ACC (Approximating Catmull-Clark
 // Subdivision Surfaces with Bicubic Patches, ACM TOG 27(1), 2008), the
-// standard answer to this problem and the one shipped in hardware
-// tessellation pipelines. In Bezier form, per quad face:
+// standard answer to this problem and the one used in hardware tessellation
+// pipelines. In Bezier form, per quad face:
 //
 //   corner  b00   the vertex's own exact limit position — the Halstead/
 //                 Kass/DeRose mask, which is vertexLimitPosition above.
 //   interior b11  (n*v + 2*(ePrev + eNext) + diag) / (n + 5), where v is
-//                 the corner, ePrev/eNext its two neighbors IN THAT FACE,
+//                 the corner, ePrev/eNext its two neighbors in that face,
 //                 diag the face's fourth vertex, and n = valence(v).
-//   edge    b10   the MIDPOINT of the two adjacent faces' own interior
+//   edge    b10   the midpoint of the two adjacent faces' own interior
 //                 points at the shared corner.
 //
-// Those three masks are not transcribed; they are re-derived here from the
-// paper's own stated geometric relationship — that a corner point is the
-// centroid of the interior points around it, and an edge point the midpoint
-// of the two beside it. Writing the interior mask as
-// (a*v + b*(ePrev+eNext) + c*diag)/(a+2b+c) and demanding that the centroid
-// over the n faces at v reproduce (n^2*v + 4*sum(e) + sum(diag))/(n(n+5))
-// forces a:b:c = n^2 : 2n : n, i.e. the form above, with the denominator
-// falling out as n(n+5) — the limit mask's own. At n = 4 all three reduce
-// to the uniform B-spline-to-Bezier knot-insertion masks, which is the
-// correctness check that matters: the same numbers clampedBicubicPatchSurface
-// produces for a regular face, reached a completely different way.
+// Those three masks are re-derived here from the paper's stated geometric
+// relationship — a corner point is the centroid of the interior points around
+// it, and an edge point the midpoint of the two beside it. Writing the
+// interior mask as (a*v + b*(ePrev+eNext) + c*diag)/(a+2b+c) and demanding
+// that the centroid over the n faces at v reproduce
+// (n^2*v + 4*sum(e) + sum(diag))/(n(n+5)) forces a:b:c = n^2 : 2n : n, i.e.
+// the form above, with the denominator falling out as n(n+5) — the limit
+// mask's own. At n = 4 all three reduce to the uniform B-spline-to-Bezier
+// knot-insertion masks: the same numbers clampedBicubicPatchSurface produces
+// for a regular face, reached a different way.
 //
-// WHAT THAT BUYS, and it is more than the plan expected. ACC's continuity
-// claim is that patches meet smoothly EXCEPT along an edge containing an
-// extraordinary vertex, where they are only C0. A cap's two outer edges do
-// not contain E. So the join between a cap and the exact regular region is
-// tangent-continuous, and measurably so: the normal deviation across it is
-// 0.0000 degrees on every fixture tried, including a valence-5 extruded
-// cage. The tangent break is confined to the star edges, cap against cap,
-// where it is real and named rather than approximated away.
+// ACC's continuity claim is that patches meet smoothly except along an edge
+// containing an extraordinary vertex, where they are only C0. A cap's two
+// outer edges do not contain E, so the join between a cap and the exact
+// regular region is tangent-continuous: the normal deviation across it is
+// 0.0000 degrees on every fixture tried, including a valence-5 extruded cage.
+// The tangent break is confined to the star edges, cap against cap.
 //
-// THE ONE REFINEMENT ON TOP OF ACC. Of the sixteen control points, thirteen
-// are pinned: the two outer rows are the neighbors' own rows copied
-// element for element, and the two rows immediately inside them carry the
-// cross-boundary derivative that makes that join exact. Three are touched
-// by no continuity condition at all — the two star-edge control points
-// adjacent to E, and the interior point nearest E. Those three are re-
-// solved to INTERPOLATE the true limit surface at three points near the
-// star: one quarter of the way along each star edge, and the (1/4,1/4)
-// corner of the face. The true limit at a dyadic parameter needs no new
-// evaluation math — it is a twice-refined vertex's own limit position under
-// the same mask this module already uses as ground truth. Measured, this
-// cuts the worst deviation from the true limit surface by about 3.9x and
-// the tangent break across the star edges by about 1.9x, and leaves every
-// exactness property of the ACC base untouched.
+// One refinement on top of ACC. Of the sixteen control points, thirteen are
+// pinned: the two outer rows are the neighbors' own rows copied element for
+// element, and the two rows immediately inside them carry the cross-boundary
+// derivative that makes that join exact. Three are touched by no continuity
+// condition — the two star-edge control points adjacent to E, and the
+// interior point nearest E. Those three are solved to interpolate the true
+// limit surface at three points near the star: one quarter of the way along
+// each star edge, and the (1/4,1/4) corner of the face. The true limit at a
+// dyadic parameter is a twice-refined vertex's limit position under the same
+// mask used above. This cuts the worst deviation from the true limit surface
+// by about 3.9x and the tangent break across the star edges by about 1.9x,
+// and leaves every exactness property of the ACC base untouched.
 //
-// WHAT IS EXACT AND WHAT IS NOT, stated plainly:
-//   EXACT  the star corner IS vertexLimitPosition(E), bit for bit.
-//   EXACT  the two outer boundary rows are the neighboring patches' own
-//          arrays, so the shared edge curve is literally the same curve.
-//   EXACT  the two star-edge rows are computed once per edge and read by
+// What is exact and what is not:
+//   Exact  the star corner is vertexLimitPosition(E), bit for bit.
+//   Exact  the two outer boundary rows are the neighboring patches' own
+//          arrays, so the shared edge curve is the same curve.
+//   Exact  the two star-edge rows are computed once per edge and read by
 //          both caps that share it, so cap meets cap bit for bit.
-//   EXACT  tangent continuity across a cap's two outer edges.
-//   NOT    the interior. A single bicubic cannot be the Catmull-Clark limit
+//   Exact  tangent continuity across a cap's two outer edges.
+//   Not    the interior. A single bicubic cannot be the Catmull-Clark limit
 //          over a face touching an extraordinary vertex — that surface is
 //          an infinite nest of patches, not one. The deviation is measured
-//          in this module's own test file rather than claimed, and it does
-//          not vanish with isolation level: the region is self-similar
-//          under refinement, so the ABSOLUTE error shrinks (about 2.4x per
-//          level) while the error relative to the cap's own size holds
-//          steady near 0.4%.
-//   NOT    tangent continuity across the star edges. Real, measured, and
-//          shrinking with isolation level; this is the knob.
+//          in the test file, and it does not vanish with isolation level:
+//          the region is self-similar under refinement, so the absolute
+//          error shrinks (about 2.4x per level) while the error relative to
+//          the cap's own size holds near 0.4%.
+//   Not    tangent continuity across the star edges; it shrinks with
+//          isolation level, which is the knob.
 //
-// A NAMED LIMIT ON BIT-EXACTNESS AT THE JUNCTION CORNERS. A corner where a
-// cap meets two regular patches can only carry one value, and the two
-// regular patches do not agree on it to the last bit — they agree to about
-// 1e-15, because each computes the same limit position through a different
-// order of the same arithmetic. That disagreement is a pre-existing
-// property of the emitted set, not something capping introduces: NO two
-// adjacent regular patches in this module's output are bit-identical along
-// their shared row either. So each cap is bit-identical with one of its two
-// regular neighbors along the whole shared row, and with the other on the
-// two interior control points, differing only at the shared corner and only
-// by the amount those two neighbors already differ. Welding the whole
-// emitted set to per-edge and per-vertex canonical values would close that
-// last gap; it is deliberately not done here, because it would perturb
-// patches that are currently exactly the limit surface in order to fix a
-// disagreement no consumer's tolerance can see.
+// Limit on bit-exactness at the junction corners. A corner where a cap meets
+// two regular patches can carry only one value, and the two regular patches
+// agree on it to about 1e-15, not to the last bit, because each computes the
+// same limit position through a different order of the same arithmetic. No
+// two adjacent regular patches in this output are bit-identical along their
+// shared row either. So each cap is bit-identical with one of its two regular
+// neighbors along the whole shared row, and with the other on the two
+// interior control points, differing only at the shared corner and only by
+// the amount those two neighbors already differ. Welding the whole emitted
+// set to per-edge and per-vertex canonical values would close that gap; it
+// is not done because it would perturb patches that are exactly the limit
+// surface to fix a disagreement below any consumer's tolerance.
 const CAP_QUARTER_BASIS = [27 / 64, 27 / 64, 9 / 64, 1 / 64]; // cubic Bernstein at t = 1/4
 
 function linComb(terms) {
@@ -976,20 +841,18 @@ export function patchBoundaryRow(srf, faceVerts, v0, v1) {
 }
 
 // The faces within `rings` vertex-steps of `seedFaces`, lifted out as a cage
-// in their own numbering. Used only to keep the star correction's two
-// refinements local — refining a whole cage twice to read a few dozen points
-// near its extraordinary vertices costs an order of magnitude more than
-// everything else in this file put together.
+// in their own numbering. Keeps the star correction's two refinements local:
+// refining a whole cage twice to read a few dozen points near its
+// extraordinary vertices costs an order of magnitude more than everything
+// else in this file put together.
 //
-// THE PAD IS DELIBERATE MARGIN, not a guess that happened to work. Two
-// separate things reach outward: subdivision treats the sub-cage's cut edge
-// as a real naked boundary and applies the boundary rules there, and that
+// The pad. Two things reach outward: subdivision treats the sub-cage's cut
+// edge as a naked boundary and applies the boundary rules there, and that
 // wrong value spreads one further ring inward per level; and a limit position
 // two levels down reads through roughly three rings of the cage it started
-// from. A pad of 2 already reproduces the whole-cage answer BIT-IDENTICALLY
-// on every cage tried, so 5 is margin over a measured floor rather than the
-// floor itself. The bit-identity is measured in the test file; if it ever
-// fails, this number is the thing to raise.
+// from. A pad of 2 reproduces the whole-cage answer bit-identically on every
+// cage tried, so 5 is margin over that floor. The test file checks the
+// bit-identity; if it fails, this number is the thing to raise.
 const LOCAL_PROBE_RINGS = 5;
 
 // Extra rings the isolation loop carries on top of LOCAL_PROBE_RINGS, so the
@@ -998,21 +861,19 @@ const LOCAL_PROBE_RINGS = 5;
 const ISOLATION_PAD_MARGIN = 1;
 
 // The share of the cage a localized neighborhood may reach before localizing
-// stops being worth its own ring walk. Measured on an open plane cage, whose
-// whole naked border stays live forever: there the padded neighborhood IS the
+// stops being worth its own ring walk. On an open plane cage, whose whole
+// naked border stays live at every level, the padded neighborhood is the
 // cage, and building it costs `rings` passes over every face to save nothing.
 const ISOLATION_LOCAL_SHARE = 0.6;
-// `{ localShare: 0 }` turns localizing off entirely — no neighborhood can come
-// in under a budget of zero faces — which makes the whole-cage computation
-// reachable as what it is: the reference this shortcut has to agree with, bit
-// for bit, rather than a claim in a comment.
+// `{ localShare: 0 }` turns localizing off entirely (no neighborhood fits a
+// budget of zero faces), which keeps the whole-cage computation reachable as
+// the reference this shortcut has to agree with, bit for bit.
 
 // `maxFaces` abandons the walk the moment the neighborhood stops being a
-// neighborhood. A caller that wants a sub-cage BECAUSE it is smaller (the
-// isolation loop) gains nothing from one that covers the whole cage and pays
-// `rings` passes over every face to find that out; it gets null instead and
-// carries on with the cage it has. The probe passes no budget and always
-// gets its cage.
+// neighborhood. A caller that wants a sub-cage because it is smaller (the
+// isolation loop) gains nothing from one that covers the whole cage; it gets
+// null instead and carries on with the cage it has. The probe passes no
+// budget and always gets its cage.
 function localNeighbourhoodCage(cage, ctx, seedFaces, rings, maxFaces = Infinity) {
   let faceSet = new Set(seedFaces);
   if (faceSet.size > maxFaces) return null;
@@ -1065,7 +926,7 @@ function dyadicLimitProbe(outerCage, outerCtx, seedFaces) {
   const ctx2 = buildTopology(r2);
 
   return {
-    // The limit surface one QUARTER of the way along edge v0 -> v1, from v0.
+    // The limit surface one quarter of the way along edge v0 -> v1, from v0.
     // Refining once splits that edge at its midpoint, so the quarter point is
     // the midpoint of the first half — an edge point one level further down.
     alongEdge: (outerV0, outerV1) => {
@@ -1079,16 +940,12 @@ function dyadicLimitProbe(outerCage, outerCtx, seedFaces) {
   };
 }
 
-// One cap per leftover region, or an honest refusal naming what the region
-// failed. `emitted` maps a face index at this level to the patch already
-// emitted for it.
-// WHICH LEFTOVER REGIONS CAN BE CAPPED AT ALL, decided before any geometry is
-// built. Separated from the build because the pre-flight estimate needs this
-// answer and must not pay for the caps to find it out: on an open cage every
-// naked-boundary region refuses, which is 508 of 1564 regions on a 16x16 plane
-// — an estimate that assumed they were all cappable would be half again too
-// large, and it would be too large in exactly the case a caller most wants a
-// straight answer about.
+// Which leftover regions can be capped, decided before any geometry is
+// built. `emitted` maps a face index at this level to the patch already
+// emitted for it. Separate from the build because the pre-flight estimate
+// needs this answer without paying for the caps: on an open cage every
+// naked-boundary region refuses (508 of 1564 regions on a 16x16 plane), so an
+// estimate that assumed every region cappable would be half again too large.
 export function planStarCaps(cage, ctx, live, emitted) {
   const liveSet = new Set(live);
   const refused = [];
@@ -1114,6 +971,8 @@ export function planStarCaps(cage, ctx, live, emitted) {
   return { plans, refused };
 }
 
+// One cap per cappable leftover region; the rest are returned as refusals
+// naming what the region failed.
 export function capStarRegions(cage, ctx, live, emitted) {
   const { plans, refused } = planStarCaps(cage, ctx, live, emitted);
 

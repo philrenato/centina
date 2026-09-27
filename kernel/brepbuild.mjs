@@ -1,76 +1,70 @@
-// BUILD A HALF-EDGE B-REP FROM A PLAIN SET OF FACE BOUNDARY LOOPS
-// ================================================================
-// kernel/brep.mjs is the topology LAYER — entities, Euler operators,
-// validity, the Euler-Poincaré invariant. It deliberately never looks at
-// geometry and has no way in from an ordinary pile of faces. This module
-// is that way in: given N face boundary loops as plain 3D polygons (the
+// Build a half-edge B-rep from a plain set of face boundary loops.
+//
+// kernel/brep.mjs is the topology layer — entities, Euler operators,
+// validity, the Euler-Poincaré invariant. It never looks at geometry and
+// has no way in from an ordinary pile of faces. This module is that way in: given N face boundary loops as plain 3D polygons (the
 // shape every panel container and PolySurface in this app can already
 // produce from its own corner points), it welds coincident corners into
-// shared VERTICES, matches directed edge-uses into shared EDGES, and
-// emits a real half-edge solid in exactly the shape kernel/brep.mjs
+// shared vertices, matches directed edge-uses into shared edges, and
+// emits a half-edge solid in exactly the shape kernel/brep.mjs
 // documents — so `validateBrep`/`eulerCharacteristic` can then be run
-// against it as a genuinely independent check.
+// against it as an independent check.
 //
-// WHY THIS IS WORTH HAVING AT ALL, over the geometric edge matcher this
-// app already ships (findPolySurfaceEdges + curvesCoincident): that
-// matcher answers ONE question per edge pair — "do these two curves
+// Compared with the app's geometric edge matcher (findPolySurfaceEdges +
+// curvesCoincident): that matcher answers one question per edge pair — "do these two curves
 // occupy the same space?" — and stops. It cannot answer "is this a
 // closed solid", "is this orientable", "is any edge shared by three
 // faces", or "what is the genus", because none of those are properties
 // of an edge pair; they are properties of the whole welded topology.
-// Half-edge + Euler-Poincaré answers all four, and answers them by
-// counting, not by hoping. A student who joins five faces of a box and
-// is told "closed solid" by a tool that only ever compared edges
-// pairwise has been misled; V - E + F is what actually knows.
+// Half-edge + Euler-Poincaré answers all four by counting. Five faces of
+// a box pass every pairwise edge comparison; V - E + F reports the open
+// shell.
 //
-// ORIENTATION IS SOLVED HERE, NOT REQUIRED FROM THE CALLER. Face loops
+// Orientation is solved here, not required from the caller. Face loops
 // arriving from a primitive's own panel list are wound however that
 // primitive's construction happened to wind them, which is not
 // guaranteed consistent (a Box's own six bilinear panels are authored
 // corner-by-corner, never checked against each other). A half-edge
-// solid REQUIRES consistent winding — each edge traversed once in each
+// solid requires consistent winding — each edge traversed once in each
 // direction — so this module propagates an orientation outward from the
 // first face by breadth-first search, reversing whichever loops
 // disagree, and reports how many it had to flip. A face set that cannot
 // be consistently oriented at all (a Möbius-like configuration) is
-// refused BY NAME rather than silently producing a solid whose winding
-// lies.
+// refused by name rather than producing a solid whose winding is wrong.
 //
-// SCOPE, named rather than silently missing:
-//   - Faces are SIMPLE loops. A face with an inner ring (a hole) is not
+// Scope:
+//   - Faces are simple loops. A face with an inner ring (a hole) is not
 //     expressible here; `boundaryLoops` will report the extra loop and
-//     `buildBrepSolid` refuses. Rings are a real kernel/brep.mjs
+//     `buildBrepSolid` refuses. Rings are a kernel/brep.mjs
 //     capability (KEMR/MEKR) that this builder does not reach.
-//   - Geometry is carried only as vertex POSITIONS. Face surfaces and
+//   - Geometry is carried only as vertex positions. Face surfaces and
 //     per-half-edge pcurves are left null for the caller to attach via
 //     kernel/brep.mjs's own `attachSurface`/`assignPlanarPcurves`.
-//   - Genus is DERIVED, not tracked: for a closed orientable manifold
+//   - Genus is derived, not tracked: for a closed orientable manifold
 //     with S shells, V - E + F = 2(S - G), so G = S - (V-E+F)/2. That is
-//     a real measurement of the built topology, not an assumption — and
+//     a measurement of the built topology, not an assumption — and
 //     it is what makes `validateBrep`'s own invariant check meaningful
 //     rather than circular (an operator-built solid tracks genus as it
 //     goes; a welded one must measure it).
 //
-// OUTWARDNESS IS A SEPARATE FACT FROM CONSISTENCY, and is settled here
-// too. `orientLoops` above guarantees only that neighbors AGREE; which
+// Outwardness is a separate fact from consistency, and is settled here
+// too. `orientLoops` guarantees only that neighbors agree; which
 // way the whole component ends up facing is decided by whichever face
 // happened to seed its own traversal, so a shell can come back globally
 // inside-out with every check above still passing. Chi, the naked-edge
-// count and even a volume MAGNITUDE all read perfectly on an inside-out
+// count and even a volume magnitude all read correctly on an inside-out
 // shell, while every downstream consumer — a renderer, an exporter, a
-// Thicken, a mass-property measurement — reads its normals as if they
-// meant something. So each shell is classified and, where it disagrees,
-// reversed: see SHELL ORIENTATION below.
+// Thicken, a mass-property measurement — reads its normals. So each shell
+// is classified and, where it disagrees, reversed: see Shell orientation
+// below.
 
 const DEFAULT_WELD_TOL = 1e-6;
 
-// ---------------------------------------------------------------------
-// WELDING
-// ---------------------------------------------------------------------
-// Coincident corners become ONE vertex. A plain spatial hash on the
+// Welding
+// Coincident corners become one vertex. A plain spatial hash on the
 // tolerance grid, probing the 27 neighboring cells so a pair straddling
 // a cell boundary still welds — the same technique kernel/flatten.mjs's
-// own weld already uses, restated here rather than imported because that
+// own weld uses, restated here rather than imported because that
 // one welds a triangulation's own index arrays, not free point lists.
 export function weldPoints(pointLists, tol = DEFAULT_WELD_TOL) {
   const cell = Math.max(tol, 1e-12) * 2;
@@ -107,17 +101,15 @@ export function weldPoints(pointLists, tol = DEFAULT_WELD_TOL) {
   return { points, loops };
 }
 
-// ---------------------------------------------------------------------
-// ORIENTATION
-// ---------------------------------------------------------------------
+// Orientation
 // Two faces sharing an edge are consistently oriented when they traverse
-// that edge in OPPOSITE directions — the combinatorial statement of
+// that edge in opposite directions — the combinatorial statement of
 // "their normals point the same way out". This propagates that from the
 // first face of each connected component outward.
 //
-// Returns `{ ok, loops, flipped, components, reason }`. `loops` is a NEW
+// Returns `{ ok, loops, flipped, components, reason }`. `loops` is a new
 // array (inputs are never mutated). `components` labels each face with
-// its own connected component index, which is what later becomes a SHELL.
+// its own connected component index, which later becomes a shell.
 export function orientLoops(loops) {
   const n = loops.length;
   const out = loops.map((l) => l.slice());
@@ -149,11 +141,11 @@ export function orientLoops(loops) {
         const a = l[i], b = l[(i + 1) % l.length];
         for (const u of uses.get(ukey(a, b))) {
           if (u.face === f) continue;
-          // `u` was recorded against the face's ORIGINAL winding, so read
-          // the neighbor's CURRENT direction off its live loop instead.
+          // `u` was recorded against the face's original winding, so read
+          // the neighbor's current direction off its live loop instead.
           const nb = u.face;
           const dir = loopEdgeDirection(out[nb], a, b);
-          if (dir === 0) continue; // that edge is no longer on this neighbor (shouldn't happen — defensive)
+          if (dir === 0) continue; // defensive: the edge is not on this neighbor
           if (comp[nb] < 0) {
             comp[nb] = c;
             if (dir === +1) { out[nb].reverse(); flippedFlag[nb] = true; flipped++; } // same direction as us: disagrees, flip it
@@ -178,31 +170,28 @@ function loopEdgeDirection(loop, a, b) {
   return 0;
 }
 
-// ---------------------------------------------------------------------
-// SHELL ORIENTATION
-// ---------------------------------------------------------------------
-// A closed shell's OUTWARDNESS is decided by CONTAINMENT, never by size.
+// Shell orientation
+// A closed shell's outwardness is decided by containment, never by size.
 // The standard B-rep convention: a shell bounding material from outside
 // faces outward (positive signed volume, by the divergence theorem); a
-// VOID shell inside that material faces INTO the void (negative), which
-// is exactly what makes a hollow solid's total volume come out as the
+// void shell inside that material faces into the void (negative), which
+// is what makes a hollow solid's total volume come out as the
 // plain sum of its shells rather than needing a per-shell sign table.
 //
-// A LARGEST-VOLUME RULE WOULD BE WRONG, and the counter-example is
-// ordinary rather than exotic: a boolean difference where a slab passes
-// clean through a prism genuinely leaves two SEPARATE solids in one
+// A largest-volume rule would be wrong: a boolean difference where a slab
+// passes clean through a prism leaves two separate solids in one
 // result — both outer, neither a void — and the smaller one would be
 // flipped into a void by any size-based rule. Meanwhile a Shell's own
-// inner wall is a real void whose bbox sits strictly inside its outer
+// inner wall is a void whose bbox sits strictly inside its outer
 // wall's. Only containment tells those two apart.
 //
-// NESTING DEPTH decides it in general, not just one level: a shell
-// contained by an EVEN number of other shells bounds material (outward),
-// an ODD number means it bounds a void (inward). That handles a solid
+// Nesting depth decides it in general, not just one level: a shell
+// contained by an even number of other shells bounds material (outward),
+// an odd number means it bounds a void (inward). That handles a solid
 // sitting inside a cavity of another solid without a special case.
 
 // Signed volume of one shell, by the divergence theorem over tetrahedra
-// fanned from the ORIGIN. The origin needs no relationship to the shell:
+// fanned from the origin. The origin needs no relationship to the shell:
 // a tetrahedron behind it contributes negatively and the far face's own
 // contribution cancels it, so the total is the enclosed volume wherever
 // the shell sits.
@@ -234,8 +223,8 @@ const SHELL_RAY_DIRS = [
   [-0.6396021490668313, -0.2558408596267325, 0.7248824356090421],
 ];
 
-// SIGNED crossings, not parity. A face loop is fan-triangulated, and a
-// fan over a non-convex (or non-planar) loop genuinely produces
+// Signed crossings, not parity. A face loop is fan-triangulated, and a
+// fan over a non-convex (or non-planar) loop produces
 // triangles that escape the loop — a plain even/odd count would be
 // corrupted by them. Signed crossings are not: an escaped triangle is
 // traversed the other way round by its neighbors and cancels exactly,
@@ -273,10 +262,10 @@ function shellWindingAt(point, loops, faceIdx, points, dir, tol) {
       const t = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) * inv;
       if (t <= tol) continue; // behind the point, or the point is on this face
       // Grazing an edge or a vertex, or a hit essentially at the point
-      // itself: this direction cannot be trusted, so refuse it outright
-      // rather than count a crossing that may or may not be real.
+      // itself: this direction cannot be trusted, so refuse it rather than
+      // count an ambiguous crossing.
       if (u < 1e-7 || v < 1e-7 || u + v > 1 - 1e-7) return null;
-      // det = -dot(dir, normal), so a face the ray EXITS through has det < 0.
+      // det = -dot(dir, normal), so a face the ray exits through has det < 0.
       winding += det > 0 ? -1 : 1;
     }
   }
@@ -303,7 +292,7 @@ function pointInsideShell(point, loops, faceIdx, points, tol) {
  * copy by the time this runs). Returns `{ shellKinds, flippedShells,
  * uncertain }` — `shellKinds[c]` is 'outer' | 'void' | null, the null
  * meaning containment could not be decided for that shell, in which case
- * its winding is left EXACTLY as it arrived rather than flipped on a
+ * its winding is left exactly as it arrived rather than flipped on a
  * guess. `uncertain` counts those.
  */
 export function orientShellsOutward(loops, components, componentCount, points, tol = DEFAULT_WELD_TOL) {
@@ -315,9 +304,9 @@ export function orientShellsOutward(loops, components, componentCount, points, t
 
   for (let c = 0; c < componentCount; c++) {
     if (!faceIdx[c].length) continue;
-    // A vertex OF this shell is the representative point. It sits on this
+    // A vertex of this shell is the representative point. It sits on this
     // shell's own surface, which is fine: every containment test below is
-    // against a DIFFERENT shell, and two distinct shells of a valid solid
+    // against a different shell, and two distinct shells of a valid solid
     // do not touch.
     const rep = points[loops[faceIdx[c][0]][0]];
     let depth = 0, decided = true;
@@ -342,14 +331,12 @@ export function orientShellsOutward(loops, components, componentCount, points, t
   return { shellKinds, flippedShells, uncertain };
 }
 
-// ---------------------------------------------------------------------
-// BOUNDARY LOOPS OF A FACE SET
-// ---------------------------------------------------------------------
+// Boundary loops of a face set
 // Every directed edge-use that has no opposite-direction partner is a
-// NAKED boundary; chained head-to-tail these are the outline of the face
-// set. Used two ways: to report an open shell honestly, and — by the app
+// naked boundary; chained head-to-tail these are the outline of the face
+// set. Used two ways: to report an open shell, and — by the app
 // layer — to find the single outer boundary of a group of coplanar
-// panels so they can be merged into one real face.
+// panels so they can be merged into one face.
 export function boundaryLoops(loops) {
   const dir = new Map(); // "a|b" -> count
   const dkey = (a, b) => `${a}|${b}`;
@@ -388,14 +375,11 @@ export function boundaryLoops(loops) {
   return { nakedEdgeCount: naked.length, nakedEdges: naked, loops: chains };
 }
 
-// ---------------------------------------------------------------------
-// THE BUILDER
-// ---------------------------------------------------------------------
+// The builder
 // Emits a solid in exactly kernel/brep.mjs's own documented entity shape
-// (see its ENTITIES section) so that module's `validateBrep`,
+// (see its Entities section) so that module's `validateBrep`,
 // `eulerCharacteristic` and `brepFingerprint` all apply unchanged. This
-// module deliberately does NOT validate its own output — an independent
-// checker is the whole point.
+// module does not validate its own output; that check stays independent.
 export function buildBrepSolid(faceLoops, opts = {}) {
   const tol = opts.tolerance ?? DEFAULT_WELD_TOL;
   const welded = weldPoints(faceLoops, tol);
@@ -414,12 +398,12 @@ export function buildBrepSolid(faceLoops, opts = {}) {
   }
   if (!cleanLoops.length) return report(false, 'no-faces', { points: welded.points });
 
-  // Edge census FIRST, on the raw loops. Deliberately before orientation:
+  // Edge census first, on the raw loops, before orientation:
   // an edge shared by three or more faces makes "which way should the
   // neighbor be wound" ill-posed, so an unfiltered orientation pass
-  // would report a confusing 'non-orientable' for what is really a
-  // non-manifold edge. Undirected counts are orientation-independent, so
-  // this ordering costs nothing and names the real fault.
+  // would report 'non-orientable' for what is a non-manifold edge.
+  // Undirected counts are orientation-independent, so this ordering costs
+  // nothing and names the actual fault.
   const ukey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
   const census = new Map();
   for (let f = 0; f < cleanLoops.length; f++) {
@@ -434,7 +418,7 @@ export function buildBrepSolid(faceLoops, opts = {}) {
   const nonManifold = [];
   const naked = [];
   for (const [k, list] of census) {
-    if (list.length > 2) nonManifold.push({ key: k, uses: list.length, a: list[0].a, b: list[0].b });
+    if (list.length > 2) nonManifold.push({ key: k, uses: list.length, faces: list.map((u) => u.face), a: list[0].a, b: list[0].b });
     else if (list.length === 1) naked.push({ key: k, a: list[0].a, b: list[0].b });
   }
   const V = welded.points.length, E = census.size, F = cleanLoops.length;
@@ -468,7 +452,7 @@ export function buildBrepSolid(faceLoops, opts = {}) {
   stats.flippedShells = shellOrient.flippedShells;
   stats.shellOrientationUncertain = shellOrient.uncertain;
 
-  // --- assemble the half-edge structure -------------------------------
+  // Assemble the half-edge structure.
   const solid = { id: 0, kind: 'solid', nextId: 0, vertices: [], edges: [], shells: [], genus: 0, name: opts.name ?? null };
   const newId = () => solid.nextId++;
   solid.id = newId();
@@ -518,10 +502,10 @@ export function buildBrepSolid(faceLoops, opts = {}) {
     const [h1, h2] = edge.halfEdges;
     h1.twin = h2; h2.twin = h1;
   }
-  // DERIVED, not assumed (see the header note): with S shells and no
+  // Derived, not assumed (see the header note): with S shells and no
   // rings, V - E + F = 2(S - G) fixes G. Stored so kernel/brep.mjs's own
-  // invariant check is a real cross-check of the counts rather than a
-  // tautology against a genus nobody measured.
+  // invariant check is a cross-check of the counts rather than a
+  // tautology against an unmeasured genus.
   const genusTimesTwo = 2 * solid.shells.length - chi;
   solid.genus = genusTimesTwo / 2;
   stats.genus = solid.genus;
@@ -532,7 +516,7 @@ function report(ok, reason, extra) {
   return { ok, reason, ...extra };
 }
 
-// A one-line, student-readable verdict for a `buildBrepSolid` result —
+// A one-line, readable verdict for a `buildBrepSolid` result —
 // kept here rather than in the app so the wording of a topology failure
 // lives beside the code that decides it.
 export function brepVerdict(res) {

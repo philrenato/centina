@@ -1,32 +1,29 @@
-// THE EXACT FORM OF A SEWN SOLID'S EDGES
-// ================================================================
+// The exact form of a sewn solid's edges.
+//
 // Turns the over-decomposed edge set a boolean sews into the edges a B-rep
-// actually has, each carrying a fitted NURBS curve.
+// has, each carrying a fitted NURBS curve.
 //
-// WHY THERE IS ANYTHING TO DO. `sewFragments` builds topology from the
-// MARCHED POLYLINE, so every sample point along an intersection becomes a
-// topological vertex and every step between two samples becomes an edge.
-// Measured on the banked torus pair's union: 18 faces, 526 edges, 506
-// vertices — and 476 of those vertices have edge-degree TWO. A degree-2
-// vertex is not a corner; it is a point in the middle of a smooth run that
-// happens to be where the marcher took a sample. Only ~30 vertices are
-// genuine branch points.
+// `sewFragments` builds topology from the marched polyline, so every sample
+// point along an intersection becomes a topological vertex and every step
+// between two samples becomes an edge. Most vertices of a sewn solid have
+// edge-degree two. A degree-2 vertex is not a corner; it is a point in the
+// middle of a smooth run where the marcher took a sample. Only the
+// remaining vertices are branch points.
 //
-// So the merge is not an optimization, it is the difference between a B-rep
-// and a polyline wearing one. A face boundary here is 76 straight segments
-// where the geometry is one smooth curve.
+// Merging those runs turns a face boundary of many straight segments into
+// the one smooth curve the geometry has.
 //
-// ⚠ THIS DOES NOT MUTATE THE SOLID, and it deliberately does NOT write
-// `curve3d` on the original edges. An edge spanning a single sample step has
-// no curve worth storing — assigning it the whole chain's curve would make
-// every one of 76 edges claim to be the same curve, which is worse than the
-// null it replaces. The fitted curve belongs to the MERGED edge, so that is
+// This does not mutate the solid, and it does not write `curve3d` on the
+// original edges. An edge spanning a single sample step has no curve worth
+// storing — assigning it the whole chain's curve would make every edge of
+// the run claim to be the same curve, which is worse than the null it
+// replaces. The fitted curve belongs to the merged edge, so that is
 // what this returns: a derived record beside the solid, leaving every
 // existing invariant (naked-edge count included) untouched by construction.
 //
 // The (u,v) side lives at the bottom of this file — `fitHalfEdgePcurves`. It
-// is a separate pass on purpose: the 3-D chains are a property of the SOLID,
-// while a pcurve is a property of a half-edge's own FACE, and one chain yields
+// is a separate pass: the 3-D chains are a property of the solid, while a
+// pcurve is a property of a half-edge's own face, and one chain yields
 // a different one on each of the two faces it separates.
 import { fitCurveToPoints } from './fitcurve.mjs';
 
@@ -131,32 +128,27 @@ export function fitSolidEdgeCurves(solid, opts = {}) {
   let worst = 0, refused = 0, exact = 0;
   let relaxedFits = 0, worstRelaxed = 0;
   for (const chain of chains) {
-    // A two-point chain is a straight segment between two genuine corners —
+    // A two-point chain is a straight segment between two corners —
     // already exact, and running it through a least-squares fit would be
     // slower and no better.
     let res = chain.points.length === 2
       ? { ok: true, kind: 'line', curve: { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[...chain.points[0], 1], [...chain.points[1], 1]] }, maxDeviation: 0, ctrlPtCount: 2 }
       : fitCurveToPoints(chain.points, { tolerance, closed: chain.closed });
-    /* ⚠⚠ AN EDGE THAT MISSES THE BOUND BY A HAIR MUST NOT COST THE WHOLE SOLID.
+    /* An edge that misses the bound slightly must not cost the whole solid.
        A refused fit leaves that edge with no curve, which takes every trim
        running along it out of its face's loop; the loop then has a hole the
-       width of the edge, the record refuses, and a capped solid drawn with one
-       curved side exports as loose surfaces instead of a solid. Measured on the
-       plainest such shape: a wavy rim fitted to 1.158e-3 against a 1.0e-3 bound
-       — sixteen per cent over, on sampled points whose own spacing is coarser
-       than either number, which is the case the fitter's own refusal text warns
-       about ("if the bound is below the accuracy of whatever produced these
-       points, no curve can meet it").
-       A B-rep carries a PER-EDGE tolerance and the writer already hands it to
+       width of the edge, the record refuses, and the solid exports as loose
+       surfaces. When the sampled points' own spacing is coarser than the
+       bound, no curve can meet it (the fitter's refusal text says so).
+       A B-rep carries a per-edge tolerance and the writer hands it to
        ON_Brep::NewEdge, so an edge fitted to its own achievable accuracy is
-       writable exactly as it stands. Only the all-or-nothing refusal stood in
-       the way, so it is retried once at the accuracy the fitter itself reported.
-       ⚠ BOUNDED, AND NOT BY A ROUND NUMBER. The relaxation is capped at a ten
-       thousandth of the chain's own extent — the same fraction the boundary
-       sampler uses to space these points in the first place — or ten times the
-       requested tolerance, whichever is larger. An edge missing by more than the
-       spacing of its own samples is not a tolerance question, it is a bad edge,
-       and it still refuses. Counted, so the relaxation is never silent. */
+       writable as it stands. The fit is retried once at the accuracy the
+       fitter itself reported.
+       The relaxation is capped at a ten-thousandth of the chain's own extent —
+       the same fraction the boundary sampler uses to space these points — or
+       ten times the requested tolerance, whichever is larger. An edge missing
+       by more than the spacing of its own samples is a bad edge, not a
+       tolerance question, and still refuses. Relaxed fits are counted. */
     if (!res.ok && Number.isFinite(res.bestDeviation) && res.bestDeviation > 0) {
       let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
       for (const q of chain.points) for (let k = 0; k < 3; k++) { if (q[k] < lo[k]) lo[k] = q[k]; if (q[k] > hi[k]) hi[k] = q[k]; }
@@ -183,7 +175,7 @@ export function fitSolidEdgeCurves(solid, opts = {}) {
 
   // Every original edge must land in exactly one chain. A missed edge is a
   // hole in the exported boundary and a doubled one is a duplicate edge, and
-  // neither shows up as anything but a wrong picture later.
+  // neither is otherwise detectable before the geometry is drawn.
   const covered = new Set();
   let doubled = 0;
   for (const c of out) for (const e of c.sourceEdges) { if (covered.has(e)) doubled++; covered.add(e); }
@@ -208,32 +200,29 @@ export function fitSolidEdgeCurves(solid, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// THE (u,v) SIDE — a pcurve per half-edge.
+// The (u,v) side — a pcurve per half-edge.
 //
-// A B-rep trim is a curve in its OWN face's parameters, and every fitted edge
+// A B-rep trim is a curve in its own face's parameters, and every fitted edge
 // above is shared by two half-edges sitting on two different faces. So one
-// 3-D chain yields TWO pcurves, generally of different shape, and neither is
+// 3-D chain yields two pcurves, generally of different shape, and neither is
 // derivable from the other: the same space curve has a different (u,v) image
-// on each surface it lies on. This is the last thing standing between a fitted
-// solid and a .3dm the authoring bindings can write.
+// on each surface it lies on. The .3dm writer needs both.
 //
-// ⚠ THE PROJECTION IS THE RISK, not the fitting. Inversion goes through
+// The projection is the risk, not the fitting. Inversion goes through
 // closestPointOnSurface, whose seed grid is sized by the control net, so a
 // busy surface on a small net can settle Newton in the wrong basin and return
-// a plausible (u,v) in the wrong place. `projectPointsToSurfaceUV` already
-// carries the oracle for that — it re-evaluates the surface at every recovered
+// a plausible (u,v) in the wrong place. `projectPointsToSurfaceUV` carries
+// the check for that — it re-evaluates the surface at every recovered
 // parameter and refuses the whole chain when any sample misses the 3-D point
 // it came from. Nothing here second-guesses that refusal; it is reported.
 //
-// ⚠ AND A CHAIN CROSSING A SEAM IS NOT ONE PCURVE. On a closed direction the
+// A chain crossing a seam is not one pcurve. On a closed direction the
 // chain leaves the parametric rectangle and re-enters at the far edge, and a
 // single curve through those samples would carry a phantom chord straight
-// across the face. `seamOpenChains` already splits exactly there, giving
-// pieces that each reach the rectangle's edge where the curve genuinely leaves
-// it — so a seam crossing produces SEVERAL pcurves for one 3-D chain, which is
-// what the topology actually needs, and is reported as such rather than being
-// flattened back into one.
+// across the face. `seamOpenChains` splits exactly there, giving pieces that
+// each reach the rectangle's edge where the curve leaves it — so a seam
+// crossing produces several pcurves for one 3-D chain, which is what the
+// topology needs, and is reported as such.
 import { projectPointsToSurfaceUV, seamOpenChains } from './trim.mjs';
 import { surfaceClosure } from './surface.mjs';
 
@@ -250,10 +239,9 @@ function faceSurfaceOf(halfEdge) {
 // or { ..., pieces: null, reason } where the projection or a fit refused.
 export function fitHalfEdgePcurves(solid, fitted, opts = {}) {
   const tolerance = opts.tolerance ?? 1e-3;
-  // The projection bound is about "is this chain ON this surface", which is a
+  // The projection bound is about "is this chain on this surface", which is a
   // different question from "how closely does a curve follow it", so it gets
-  // its own number and defaults to the same value rather than borrowing it
-  // silently.
+  // its own option, defaulting to the same value.
   const projectTolerance = opts.projectTolerance ?? tolerance;
   if (!solid || !fitted || !Array.isArray(fitted.edges)) {
     return { ok: false, reason: 'fitHalfEdgePcurves needs a solid and the result of fitSolidEdgeCurves' };
@@ -263,7 +251,7 @@ export function fitHalfEdgePcurves(solid, fitted, opts = {}) {
 
   for (const [edgeIndex, chain] of fitted.edges.entries()) {
     // The chain's own source edges name the two half-edges it runs between.
-    // Taking the sides from the FIRST source edge is enough: every edge in a
+    // Taking the sides from the first source edge is enough: every edge in a
     // chain separates the same two faces, which is what made it one chain.
     const first = chain.sourceEdges && chain.sourceEdges[0];
     if (!first) continue;
@@ -292,7 +280,7 @@ export function fitHalfEdgePcurves(solid, fitted, opts = {}) {
       let bad = null;
       for (const uv of uvChains) {
         if (uv.length < 2) continue;
-        // (u,v) fitted as a planar 3-D curve at z = 0 — which is exactly what
+        // (u,v) fitted as a planar 3-D curve at z = 0 — which is what
         // a pcurve is, and lets the same fitter and the same conservative
         // deviation measure apply without a second implementation.
         const pts = uv.map((p) => [p[0], p[1], 0]);
@@ -322,23 +310,22 @@ export function fitHalfEdgePcurves(solid, fitted, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// FACE LOOPS, IN TRAVERSAL ORDER — what a B-rep loop actually is.
+// Face loops, in traversal order.
 //
 // `fitHalfEdgePcurves` above answers "what is this edge, in that face's
 // parameters", which is the right question per edge and the wrong shape for a
-// loop. A B-rep loop is an ORDERED, ORIENTED cycle: consecutive trims must
+// loop. A B-rep loop is an ordered, oriented cycle: consecutive trims must
 // join end-to-start in (u,v), and each one carries a flag saying whether it
 // runs with or against its edge's own 3-D curve. Assembling from edge order
-// instead produced exactly the complaint OpenNURBS makes:
+// instead fails OpenNURBS validation:
 //
 //     brep.m_L[0] loop is not valid.
 //       end of brep.m_T[loop.m_ti[0]=0] and start of brep.m_T[loop.m_ti[1]=1]
 //       do not match.
 //
-// So this walks the half-edge cycle FIRST and derives everything from the walk.
+// So this walks the half-edge cycle first and derives everything from the walk.
 // The points handed to the projector are already in traversal order, which
-// means each pcurve is correctly oriented BY CONSTRUCTION rather than fitted
+// means each pcurve is correctly oriented by construction rather than fitted
 // and then flipped — there is no second representation to keep in step.
 import { curvePoint } from './curve.mjs';
 function samePoint3(a, b, tol) {
@@ -346,8 +333,8 @@ function samePoint3(a, b, tol) {
 }
 
 // The ordered half-edges of one loop. A loop is a cycle through `next`, so the
-// walk is bounded by a guard rather than trusted: a malformed cycle is a hang,
-// and a hang inside an exporter reads as the file being enormous.
+// walk is bounded by a guard rather than trusted: a malformed cycle would
+// otherwise hang the exporter.
 function loopHalfEdges(loop, limit = 100000) {
   const out = [];
   let he = loop.halfEdge;
@@ -392,10 +379,10 @@ function curveExcursionFromPolyline(crv, pts, samples = 128) {
 // Degree 1 through every point: clamped, uniform, and exactly the run it was
 // given. #knots = #ctrlPts + degree + 1 by construction.
 function polylineCurveThrough(rawPts) {
-  /* ⚠ CONSECUTIVE DUPLICATES FIRST. A boundary walk can hand back the same
-     (u,v) twice, and a degree-1 curve through them has a ZERO-LENGTH span —
+  /* Consecutive duplicates first. A boundary walk can hand back the same
+     (u,v) twice, and a degree-1 curve through them has a zero-length span —
      which OpenNURBS turns into a NaN while computing the trim's own tolerance
-     and then refuses the whole brep by name ("cv[0] = -nan is not valid"),
+     and then refuses the whole brep ("cv[0] = -nan is not valid"),
      degrading a joined solid into loose faces. The duplicate carries no
      direction and describes no part of the boundary, so dropping it is exact. */
   const pts = [];
@@ -409,10 +396,10 @@ function polylineCurveThrough(rawPts) {
   const knots = [0, 0];
   for (let i = 1; i < m; i++) knots.push(i);
   knots.push(m, m);
-  // ⚠ FOUR COMPONENTS, WEIGHT INCLUDED. Every control point in this kernel is
+  // Four components, weight included. Every control point in this kernel is
   // euclidean-plus-weight, and the file writer destructures all four and
   // multiplies through — a three-component point makes `w` undefined and every
-  // coordinate NaN, which OpenNURBS refuses by name ("cv[0] = -nan is not
+  // coordinate NaN, which OpenNURBS refuses ("cv[0] = -nan is not
   // valid") and which then degrades the whole joined solid into loose faces.
   return { degree: 1, knots, ctrlPts: pts.map((q) => [q[0], q[1], q.length > 2 ? q[2] : 0, 1]) };
 }
@@ -420,7 +407,7 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
   const tolerance = opts.tolerance ?? 1e-3;
   const projectTolerance = opts.projectTolerance ?? tolerance;
   // How close two 3-D points must be to count as the same corner when deciding
-  // which way round a group runs. Deliberately looser than the fit tolerance:
+  // which way round a group runs. Looser than the fit tolerance:
   // this is an identity question about welded vertices, not an accuracy one.
   const joinTolerance = opts.joinTolerance ?? Math.max(tolerance, 1e-6) * 10;
   if (!solid || !fitted || !Array.isArray(fitted.edges)) {
@@ -450,7 +437,7 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
       const hes = loopHalfEdges(loop);
       if (!hes.length) continue;
 
-      // Group CONSECUTIVE half-edges that belong to the same fitted chain —
+      // Group consecutive half-edges that belong to the same fitted chain —
       // one B-rep trim per group, because the merge already decided that a
       // run of degree-2 vertices is one edge.
       const groups = [];
@@ -460,9 +447,9 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
         if (last && last.chainIndex === ci) last.halfEdges.push(he);
         else groups.push({ chainIndex: ci, halfEdges: [he] });
       }
-      // ⚠ THE WALK CAN START MID-CHAIN. `loop.halfEdge` is whichever half-edge
-      // the builder happened to store, so a single chain can appear as the
-      // first group AND the last one. Left alone that emits the same edge
+      // The walk can start mid-chain. `loop.halfEdge` is whichever half-edge
+      // the builder stored, so a single chain can appear as the first group
+      // and the last one. Left alone that emits the same edge
       // twice and neither piece joins its neighbor.
       if (groups.length > 1 && groups[0].chainIndex === groups[groups.length - 1].chainIndex) {
         const tail = groups.pop();
@@ -470,16 +457,13 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
         mergedWraps++;
       }
 
-      // ⚠⚠ PROJECT THE WHOLE LOOP AS ONE WALK, THEN UNWRAP. Projecting each
-      // group independently is what MANUFACTURED the seam problem: the
-      // projector wraps parameters into the domain, so a point sitting near a
-      // seam comes back at either end depending on where its own walk started,
-      // and two adjacent trims end up on opposite edges of the rectangle. That
-      // reads exactly like a face that wraps the closed direction, and none of
-      // these do — measured on all three booleans, 36 / 12 / 24 loops, every
-      // one fitting inside a single period once unwrapped and not one
-      // genuinely wrapping. So the cure is a consistent walk, not the seam
-      // trims the symptom asks for.
+      // Project the whole loop as one walk, then unwrap. Projecting each
+      // group independently creates a false seam: the projector wraps
+      // parameters into the domain, so a point sitting near a seam comes back
+      // at either end depending on where its own walk started, and two
+      // adjacent trims end up on opposite edges of the rectangle. That reads
+      // like a face that wraps the closed direction when it does not. A
+      // consistent walk keeps the loop inside a single period.
       const flat = [];
       const spans = [];
       for (const g of groups) {
@@ -508,13 +492,12 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
           if (prev < min) min = prev;
           if (prev > max) max = prev;
         }
-        // ⚠⚠ FLOOR, NOT ROUND. The shift must land the range INSIDE the
+        // Floor, not round. The shift must land the range inside the
         // domain, and rounding sends it out: a run at min = 0.666667 with
         // period 1 rounds to a shift of 1, putting the range at [-0.333, 0]
         // — entirely below the rectangle — after which the clamp below
-        // squashes all 40 points onto a single parameter. That is a real 3-D
-        // run 391 units long arriving as a point in (u,v), and it read
-        // convincingly like a pole. Floor puts min - shift in [lo, lo + P) by
+        // squashes every point onto a single parameter, and a 3-D run
+        // arrives as a point in (u,v). Floor puts min - shift in [lo, lo + P) by
         // construction. The epsilon keeps a min a hair below lo from wrapping
         // a whole period to the far edge.
         const shift = P * Math.floor((min - lo) / P + 1e-12);
@@ -523,7 +506,7 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
 
       const trims = [];
       for (const [gi, g] of groups.entries()) {
-        // Traversal-order points: each half-edge's ORIGIN, then the final
+        // Traversal-order points: each half-edge's origin, then the final
         // half-edge's destination (its twin's origin). This is the loop's own
         // direction, which is the direction a trim must run in.
         const [off, len] = spans[gi];
@@ -533,7 +516,7 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
 
         const chain = fitted.edges[g.chainIndex];
         // Which way does this group run along its chain? Compared at the
-        // START, and disambiguated by the SECOND point when the chain is
+        // start, and disambiguated by the second point when the chain is
         // closed and both ends are the same corner.
         let reversed = false;
         if (chain && chain.points.length >= 2) {
@@ -549,16 +532,16 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
         }
         if (reversed) reversedCount++;
 
-        // No seam split here, and that is the point: the loop was unwrapped as
-        // a whole above, so a group's (u,v) is already continuous and already
-        // inside the rectangle. Splitting it would reintroduce the very break
-        // the unwrap removed.
+        // No seam split here: the loop was unwrapped as a whole above, so a
+        // group's (u,v) is already continuous and already inside the
+        // rectangle. Splitting it would reintroduce the break the unwrap
+        // removed.
         const uvChains = [uvSlice];
         for (const uv of uvChains) {
           if (uv.length < 2) continue;
-          // ⚠ A TRIM THAT GOES NOWHERE IS NOT A TRIM. A group whose whole
+          // A trim that goes nowhere is not a trim. A group whose whole
           // (u,v) run collapses to a point produces a zero-length pcurve, and
-          // OpenNURBS rejects it by name — "ON_NurbsCurve is a line with no
+          // OpenNURBS rejects it — "ON_NurbsCurve is a line with no
           // length ... trim curve proxy settings are not valid". It happens
           // where the surface itself is degenerate (a pole) or where two
           // welded vertices land on the same parameter. Dropping it is
@@ -567,18 +550,16 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
           let uvSpan = 0;
           for (let i = 1; i < uv.length; i++) uvSpan = Math.max(uvSpan, Math.hypot(uv[i][0] - uv[0][0], uv[i][1] - uv[0][1]));
           if (uvSpan <= degenerateUV) {
-            // ⚠⚠ DEGENERATE IN (u,v) IS NOT THE SAME AS DEGENERATE, and the
-            // difference is measured rather than assumed: a run with real 3-D
-            // LENGTH that collapses to a point in parameters is not nothing,
-            // and dropping it silently removes a boundary the face has.
+            // Degenerate in (u,v) is not the same as degenerate: a run with
+            // 3-D length that collapses to a point in parameters is not
+            // nothing, and dropping it silently removes a boundary the face
+            // has.
             //
             // The split is counted rather than collapsed into one number
             // because the two mean different things to a caller: a run with no
             // 3-D length was never a boundary, and one that has length but no
-            // (u,v) extent is a parameterisation failure the face still needs.
-            // On the banked torus pair both counts are zero for all three
-            // operations at either tolerance, so a non-zero `collapsedInUV`
-            // here is a signal, not a background rate.
+            // (u,v) extent is a parameterization failure the face still needs.
+            // A non-zero `collapsedInUV` is a signal, not a background rate.
             let span3d = 0;
             for (let i = 1; i < pts.length; i++) span3d = Math.max(span3d, Math.hypot(pts[i][0] - pts[0][0], pts[i][1] - pts[0][1], pts[i][2] - pts[0][2]));
             if (span3d <= degenerate3d) { degenerateTrims++; continue; }
@@ -589,28 +570,25 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
           const res = fitCurveToPoints(uvPts, { tolerance, closed: false, exactEndpoints: true });
           if (!res.ok) { faceBad = res.reason; break; }
           if (res.maxDeviation > worst) worst = res.maxDeviation;
-          /* ⚠⚠ A FIT IS JUDGED ONLY WHERE IT WAS SAMPLED, AND A TRIM'S WHOLE JOB
-             IS WHAT HAPPENS BETWEEN THE SAMPLES. `maxDeviationFromCurve` asks of
-             each POINT how far it is from the curve, so a smooth fit that passes
+          /* A fit is judged only where it was sampled, and a trim's job is
+             what happens between the samples. `maxDeviationFromCurve` asks of
+             each point how far it is from the curve, so a smooth fit that passes
              exactly through every corner of a cap's outline and rings far outside
-             it in between measures as perfect. Measured on the plainest capped
-             extrude this app can make from a drawn profile: a cap whose surface
-             domain is [0,1] carried a trim running to u = -0.3775 — 45mm outside
-             its own rectangle on a 120mm shape. OpenNURBS then evaluates that
-             plane EXTRAPOLATED, and the cap arrives in the file as a plate the
-             size of the bounding box with the wall's rim drawn across its middle,
-             which is a different solid from the one on screen.
+             it in between measures as perfect. A trim that leaves its surface's
+             domain makes OpenNURBS evaluate the plane extrapolated, and the cap
+             arrives in the file as an oversized plate with the wall's rim drawn
+             across it.
              So the excursion is measured the other way round as well — every
-             point ON the curve against the polyline it is meant to follow, which
+             point on the curve against the polyline it is meant to follow, which
              is the half a one-directional deviation cannot see. */
           let curve = res.curve, kind = res.kind;
           const excursion = curveExcursionFromPolyline(curve, uvPts);
           if (excursion > tolerance) {
             /* The polyline itself, degree 1 through every sample. Exact where the
-               fit was only close, and inside the surface's own rectangle BY
-               CONSTRUCTION — a degree-1 curve never leaves the convex hull of the
+               fit was only close, and inside the surface's own rectangle by
+               construction — a degree-1 curve never leaves the convex hull of the
                points it runs through, and those came from projecting onto this
-               surface. A heavier trim than a fitted one and the right one. */
+               surface. Heavier than a fitted trim, and correct. */
             const poly = polylineCurveThrough(uvPts);
             if (poly) {
               curve = poly;
@@ -632,9 +610,9 @@ export function fitFaceLoops(solid, fitted, opts = {}) {
     else out.push({ faceId: face.id, srf, loops: loopsOut });
   }
 
-  // THE PROPERTY OPENNURBS ACTUALLY CHECKS, measured here so a break shows up
-  // as a number rather than as a validator complaint three layers away: does
-  // each trim's (u,v) END where the next one STARTS?
+  // The property OpenNURBS checks, measured here so a break shows up as a
+  // number rather than as a validator complaint downstream: does each trim's
+  // (u,v) end where the next one starts?
   let worstJoin = 0, joinBreaks = 0;
   for (const f of out) {
     for (const loop of f.loops || []) {

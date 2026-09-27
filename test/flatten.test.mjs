@@ -1,12 +1,12 @@
-// SURFACE FLATTENING (LSCM) — kernel/flatten.mjs
+// Surface flattening (LSCM) — kernel/flatten.mjs
 //
 // The whole discipline of this file: a flattener is only as trustworthy as
 // the number it reports about its own error, so nothing here checks the
 // flattener against itself. The developable cases are checked against an
-// ANALYTICALLY known unrolled shape derived from the cylinder's/cone's own
+// analytically known unrolled shape derived from the cylinder's/cone's own
 // equations (a rectangle; an annular sector with a computed apex), and the
 // doubly-curved cases are checked for distortion that is nonzero, correctly
-// ordered, and genuinely tracks how curved the input is.
+// ordered, and tracks how curved the input is.
 
 import test from 'node:test';
 import assert from 'node:assert';
@@ -20,18 +20,18 @@ import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 
 const DEG = Math.PI / 180;
 
-// ---- fixtures -----------------------------------------------------------
+// Fixtures
 // Deliberately not trivial and not symmetric where symmetry would hide a
-// bug: every patch below is a PARTIAL revolve (so it is a genuine open
+// bug: every patch below is a partial revolve (so it is a real open
 // strip, not a closed tube whose seam would mask an orientation error), at
 // an odd sweep angle, with a non-square tessellation grid.
 
 const CYL_R = 40, CYL_H = 55, CYL_SWEEP = 200 * DEG;
 function cylinderPatch() {
-  // A vertical line revolved 200 degrees: a genuinely DEVELOPABLE surface
+  // A vertical line revolved 200 degrees: a developable surface
   // (zero Gaussian curvature everywhere). Its tessellation is a prism
   // strip — each quad's four points are coplanar, because the two vertical
-  // edges are parallel — so the polyhedron is EXACTLY developable too, not
+  // edges are parallel — so the polyhedron is exactly developable too, not
   // merely approximately so.
   return revolve(makeLine([CYL_R, 0, 0], [CYL_R, 0, CYL_H]), [0, 0, 0], [0, 0, 1], 0, CYL_SWEEP);
 }
@@ -46,7 +46,7 @@ function conePatch() {
 
 const SPHERE_R = 60;
 function spherePatch(phi0Deg, phi1Deg, sweepDeg) {
-  // A meridian arc revolved: a genuine sphere patch, nonzero Gaussian
+  // A meridian arc revolved: a real sphere patch, nonzero Gaussian
   // curvature everywhere (K = 1/R^2). Poles are deliberately avoided so
   // the tessellation has no degenerate triangles of its own.
   const prof = makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], SPHERE_R, phi0Deg * DEG, (phi1Deg - phi0Deg) * DEG, 2);
@@ -65,14 +65,14 @@ function uvDist(result, a, b) {
   return Math.hypot(result.uv[a][0] - result.uv[b][0], result.uv[a][1] - result.uv[b][1]);
 }
 
-// ---- developable exactness anchor: CYLINDER ----------------------------
+// Developable exactness anchor: cylinder
 
-test('DEVELOPABLE EXACTNESS ANCHOR — a cylinder patch flattens with distortion at numerical-noise level', () => {
+test('Developable exactness anchor — a cylinder patch flattens with distortion at numerical-noise level', () => {
   const r = flattenNurbsSurface(cylinderPatch(), { uRes: 10, vRes: 14 });
   const d = r.distortion;
 
   // The input's own discrete Gaussian curvature is zero, so by Theorema
-  // Egregium an exact unrolling EXISTS — this is what makes a tight
+  // Egregium an exact unrolling exists — this is what makes a tight
   // assertion legitimate here and illegitimate on a curved patch.
   assert.ok(d.intrinsic.maxAbsInteriorAngleDefect < 1e-12,
     `cylinder should be developable; max interior angle defect was ${d.intrinsic.maxAbsInteriorAngleDefect}`);
@@ -89,18 +89,18 @@ test('DEVELOPABLE EXACTNESS ANCHOR — a cylinder patch flattens with distortion
   assert.strictEqual(d.flippedTriangles, 0);
 });
 
-test('DEVELOPABLE GROUND TRUTH — the flattened cylinder patch IS the analytically predicted rectangle', () => {
+test('Developable ground truth — the flattened cylinder patch is the analytically predicted rectangle', () => {
   const r = flattenNurbsSurface(cylinderPatch(), { uRes: 10, vRes: 14 });
   const bottom = ringAt(r, 0), top = ringAt(r, CYL_H);
   assert.ok(bottom.length >= 8 && bottom.length === top.length, 'fixture should give two matching rings');
 
-  // Confirm the fixture really is a cylinder before using cylinder maths
+  // Confirm the fixture is a cylinder before using cylinder maths
   // on it (never trust a fixture's label).
   for (const p of r.positions) {
     assert.ok(Math.abs(Math.hypot(p[0], p[1]) - CYL_R) < 1e-9, 'every vertex must lie on the cylinder');
   }
 
-  // GROUND TRUTH, from the cylinder's own equation, not from the flattener:
+  // Ground truth, from the cylinder's own equation, not from the flattener:
   // unrolling a prism strip lays its polygonal cross-section out straight,
   // so the unrolled width is the sum of the cross-section's chords,
   // 2R*sin(dTheta/2) per step; the unrolled height is exactly the cylinder's
@@ -118,7 +118,7 @@ test('DEVELOPABLE GROUND TRUTH — the flattened cylinder patch IS the analytica
   assert.ok(Math.abs(uvDist(r, bottom[bottom.length - 1].i, top[top.length - 1].i) - CYL_H) < 1e-7,
     'unrolled height at the other end');
 
-  // ...and it is genuinely a RECTANGLE, not merely the right size: the
+  // ...and it is a rectangle, not merely the right size: the
   // corner between the unrolled cross-section and the unrolled ruling is a
   // right angle.
   const o = r.uv[bottom[0].i];
@@ -128,17 +128,17 @@ test('DEVELOPABLE GROUND TRUTH — the flattened cylinder patch IS the analytica
   assert.ok(Math.abs(Math.acos(cosA) / DEG - 90) < 1e-6, `corner angle ${Math.acos(cosA) / DEG} deg`);
 });
 
-// ---- developable exactness anchor: CONE --------------------------------
+// Developable exactness anchor: cone
 
-test('DEVELOPABLE GROUND TRUTH — a cone frustum flattens to the analytically predicted annular sector', () => {
+test('Developable ground truth — a cone frustum flattens to the analytically predicted annular sector', () => {
   const r = flattenNurbsSurface(conePatch(), { uRes: 8, vRes: 12 });
   assert.strictEqual(r.developable, true);
   assert.ok(r.distortion.edge.maxRelErr < 1e-8, `cone edge maxRelErr ${r.distortion.edge.maxRelErr}`);
   assert.strictEqual(r.distortion.flippedTriangles, 0);
 
-  // GROUND TRUTH from the cone's own geometry: the apex sits where the
+  // Ground truth from the cone's own geometry: the apex sits where the
   // radius reaches zero, and unrolling preserves the straight-line ruling
-  // from apex to rim, so in the flattened plane EVERY rim point must lie
+  // from apex to rim, so in the flattened plane every rim point must lie
   // at exactly that analytic slant distance from one common apex.
   const zApex = CONE_H * CONE_R1 / (CONE_R1 - CONE_R2);
   const slant1 = Math.hypot(CONE_R1, zApex);
@@ -179,9 +179,9 @@ test('a flat plane is exact (smoke test, not a fixture)', () => {
   assert.ok(r.distortion.angle.maxDeg < 1e-8, `plane angle maxDeg ${r.distortion.angle.maxDeg}`);
 });
 
-// ---- doubly curved: distortion must be real, and must track reality ----
+// Doubly curved: distortion must be real, and must track reality
 
-test('THEOREMA EGREGIUM — a doubly-curved sphere patch reports genuinely nonzero distortion, and says why', () => {
+test('Theorema Egregium — a doubly-curved sphere patch reports nonzero distortion, and says why', () => {
   const r = flattenNurbsSurface(spherePatch(10, 80, 140), { uRes: 10, vRes: 10 });
   const d = r.distortion;
 
@@ -191,7 +191,7 @@ test('THEOREMA EGREGIUM — a doubly-curved sphere patch reports genuinely nonze
   assert.match(r.note, /Theorema Egregium/);
 
   // A distortion metric that is always tiny is decorative. On this patch
-  // the flattening genuinely costs real material: assert real magnitudes,
+  // the flattening costs real material: assert real magnitudes,
   // not just "greater than zero".
   assert.ok(d.area.maxRelErr > 0.05, `area maxRelErr ${d.area.maxRelErr} should be a real, visible cost`);
   assert.ok(d.edge.maxRelErr > 0.02, `edge maxRelErr ${d.edge.maxRelErr}`);
@@ -199,7 +199,7 @@ test('THEOREMA EGREGIUM — a doubly-curved sphere patch reports genuinely nonze
   assert.ok(d.edge.maxAbsErr > 0.1, `edge maxAbsErr ${d.edge.maxAbsErr} mm — a real, cuttable error`);
 });
 
-test('the reported distortion TRACKS REALITY — a larger patch of the same sphere distorts more, on every metric', () => {
+test('the reported distortion tracks reality — a larger patch of the same sphere distorts more, on every metric', () => {
   const small = flattenNurbsSurface(spherePatch(35, 50, 40), { uRes: 10, vRes: 10 });
   const large = flattenNurbsSurface(spherePatch(10, 80, 140), { uRes: 10, vRes: 10 });
 
@@ -210,16 +210,16 @@ test('the reported distortion TRACKS REALITY — a larger patch of the same sphe
   assert.ok(l.area.rmsRelErr > 2 * s.area.rmsRelErr, `area rmsRelErr: ${s.area.rmsRelErr} -> ${l.area.rmsRelErr}`);
   assert.ok(l.edge.rmsRelErr > 2 * s.edge.rmsRelErr, `edge rmsRelErr: ${s.edge.rmsRelErr} -> ${l.edge.rmsRelErr}`);
 
-  // ...and the small patch, while genuinely curved, is not reported as
+  // ...and the small patch, while curved, is not reported as
   // developable either. No silent rounding of a real cost down to zero.
   assert.strictEqual(small.developable, false);
   assert.ok(s.area.rmsRelErr > 1e-4, `small patch area rmsRelErr ${s.area.rmsRelErr}`);
 });
 
-test('CONFORMALITY — LSCM preserves ANGLES better than it preserves AREAS or LENGTHS', () => {
+test('Conformality — LSCM preserves angles better than it preserves areas or lengths', () => {
   // This is the property that proves the implementation is LSCM and not
   // something else: it minimizes the conformal (angle) energy, so on a
-  // genuinely curved patch the angle error must come out materially
+  // curved patch the angle error must come out materially
   // smaller than the area and length errors it never optimized.
   for (const patch of [spherePatch(35, 50, 40), spherePatch(10, 80, 140)]) {
     const d = flattenNurbsSurface(patch, { uRes: 10, vRes: 10 }).distortion;
@@ -252,23 +252,23 @@ test('every returned coordinate and every reported number is finite', () => {
   }
 });
 
-// ---- honest refusals ---------------------------------------------------
+// Refusals
 
-test('refuses a DEGENERATE TRIANGLE by name (zero area)', () => {
+test('refuses a degenerate triangle by name (zero area)', () => {
   assert.throws(
     () => flattenLSCM({ positions: [[0, 0, 0], [1, 0, 0], [2, 0, 0]], faces: [[0, 1, 2]] }),
     /DEGENERATE TRIANGLE \(zero area/,
   );
 });
 
-test('refuses a DEGENERATE TRIANGLE by name (a repeated vertex)', () => {
+test('refuses a degenerate triangle by name (a repeated vertex)', () => {
   assert.throws(
     () => flattenLSCM({ positions: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 1]] }),
     /DEGENERATE TRIANGLE \(it uses the same vertex twice/,
   );
 });
 
-test('refuses a NON-MANIFOLD mesh by name', () => {
+test('refuses a non-manifold mesh by name', () => {
   assert.throws(
     () => flattenLSCM({
       positions: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1]],
@@ -278,7 +278,7 @@ test('refuses a NON-MANIFOLD mesh by name', () => {
   );
 });
 
-test('refuses a DISCONNECTED mesh by name', () => {
+test('refuses a disconnected mesh by name', () => {
   assert.throws(
     () => flattenLSCM({
       positions: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [10, 0, 0], [11, 0, 0], [10, 1, 0]],
@@ -288,12 +288,12 @@ test('refuses a DISCONNECTED mesh by name', () => {
   );
 });
 
-test('refuses a mesh that is not a TOPOLOGICAL DISK — a full revolve welded shut at its seam is an annulus', () => {
+test('refuses a mesh that is not a topological disk — a full revolve welded shut at its seam is an annulus', () => {
   const tube = revolve(makeLine([40, 0, 0], [40, 0, 55]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   assert.throws(() => flattenNurbsSurface(tube, { uRes: 6, vRes: 16 }), /TOPOLOGICAL DISK/);
 });
 
-test('refuses a CLOSED mesh (no boundary at all) by name', () => {
+test('refuses a closed mesh (no boundary at all) by name', () => {
   // A tetrahedron: manifold, connected, but with nowhere for the surface
   // to open out into the plane.
   const positions = [[0, 0, 0], [10, 0, 0], [0, 11, 0], [0, 0, 12]];
@@ -301,7 +301,7 @@ test('refuses a CLOSED mesh (no boundary at all) by name', () => {
   assert.throws(() => flattenLSCM({ positions, faces }), /CLOSED/);
 });
 
-test('refuses TOO FEW FACES / vertices to constrain the solve, by name', () => {
+test('refuses too few faces / vertices to constrain the solve, by name', () => {
   assert.throws(() => flattenLSCM({ positions: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [] }),
     /no triangles at all/);
   assert.throws(() => flattenLSCM({ positions: [[0, 0, 0], [1, 0, 0]], faces: [[0, 1, 0]] }),
@@ -314,9 +314,9 @@ test('a single triangle is legal and flattens exactly (the smallest well-posed c
   assert.strictEqual(r.distortion.flippedTriangles, 0);
 });
 
-// ---- supporting machinery ----------------------------------------------
+// Supporting machinery
 
-test('weldTriangulation turns a non-indexed tessellation into a genuinely shared-vertex mesh', () => {
+test('weldTriangulation turns a non-indexed tessellation into a shared-vertex mesh', () => {
   const tris = tessellateTrimmedSurface(cylinderPatch(), null, 10, 14);
   const mesh = weldTriangulation(tris);
   assert.strictEqual(mesh.faces.length, tris.length);
@@ -363,7 +363,7 @@ test('isDevelopable separates a cylinder from a sphere patch before any solve is
   assert.ok(b.maxAbsInteriorAngleDefect > 1e-3);
 });
 
-test('nurbsSurfaceArea matches the cylinder patch\'s analytic area, and the tessellation\'s own loss is reported honestly', () => {
+test('nurbsSurfaceArea matches the cylinder patch\'s analytic area, and the tessellation\'s own loss is reported', () => {
   const cyl = cylinderPatch();
   const analytic = CYL_R * CYL_SWEEP * CYL_H;
   const measured = nurbsSurfaceArea(cyl);
@@ -374,7 +374,7 @@ test('nurbsSurfaceArea matches the cylinder patch\'s analytic area, and the tess
   const t = r.tessellation;
   assert.ok(Number.isFinite(t.trueSurfaceArea) && Number.isFinite(t.areaLostToTessellation));
   // A chord always undercuts its arc, so a triangulated curved patch is
-  // always SMALLER than the true surface — and that loss happens before
+  // always smaller than the true surface — and that loss happens before
   // the flattening does anything at all. Reporting it separately is the
   // point: this patch loses ~0.27% to tessellation alone.
   assert.ok(t.tessellatedArea < t.trueSurfaceArea, 'tessellation must undercut the true surface');
@@ -385,7 +385,7 @@ test('flatteningDistortion is a real measurement, not a report from the solver �
   const r = flattenNurbsSurface(cylinderPatch(), { uRes: 8, vRes: 10 });
   const good = flatteningDistortion(r.positions, r.faces, r.uv);
   // Squash the layout in one direction: the map is still a valid function,
-  // just no longer conformal or isometric. The metrics must notice.
+  // but not conformal or isometric. The metrics must notice.
   const squashed = r.uv.map(([u, v]) => [u, v * 0.5]);
   const bad = flatteningDistortion(r.positions, r.faces, squashed);
   assert.ok(good.angle.maxDeg < 1e-6 && bad.angle.maxDeg > 10,
@@ -405,23 +405,21 @@ test('validateFlattenMesh is reusable on its own and returns the topology it che
   assert.ok(topo.boundaryVertices.size > 0);
 });
 
-// ================================================================
-// POLE / CONE-APEX REGRESSION
-// ================================================================
-// A revolve whose profile TOUCHES the axis (a cone with its apex, a
-// sphere, an ellipsoid) has a POLE: the whole pole row of the parameter
+// Poles and cone apexes
+// A revolve whose profile touches the axis (a cone with its apex, a
+// sphere, an ellipsoid) has a pole: the whole pole row of the parameter
 // grid collapses to one point. `tessellateTrimmedSurface` emits two
 // triangles per grid cell unconditionally, so after welding, the pole
 // cell's second triangle has a repeated vertex — a face the NURBS entry
-// point manufactured ITSELF and `validateFlattenMesh` then correctly
-// refused, making every pole-bearing surface unflattenable, INCLUDING a
+// point manufactures itself and `validateFlattenMesh` refuses. Left in, it
+// would make every pole-bearing surface unflattenable, including a
 // partial cone sector that is exactly developable.
 //
 // A repeated-vertex face carries zero area and zero topology (the "quad"
-// at a pole is genuinely a triangle), so dropping it is lossless, not a
-// tolerance. It is done ONLY in the NURBS entry points, where the weld
-// that created the problem happened — `validateFlattenMesh` keeps
-// refusing a degenerate face in a mesh a CALLER supplied, which is a
+// at a pole is a triangle), so dropping it is lossless, not a
+// tolerance. It is done only in the NURBS entry points, where the weld
+// creates these faces — `validateFlattenMesh` keeps
+// refusing a degenerate face in a mesh a caller supplied, which is a
 // different situation and a real thing to catch.
 test('dropDegenerateFaces removes exactly the repeated-vertex faces welding created, and nothing else', () => {
   const cone = revolve(makeLine([30, 0, 0], [0, 0, 50]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
@@ -442,9 +440,9 @@ test('dropDegenerateFaces removes exactly the repeated-vertex faces welding crea
   assert.strictEqual(area(cleaned.faces), area(raw.faces));
 });
 
-test('a CONE SECTOR (a pole plus a partial sweep) flattens EXACTLY — the pole no longer blocks it', () => {
+test('a cone sector (a pole plus a partial sweep) flattens exactly — the pole does not block it', () => {
   // 90-degree sweep, so the apex sits on the domain corner and is a
-  // BOUNDARY vertex: all of the cone's Gaussian curvature is concentrated
+  // boundary vertex: all of the cone's Gaussian curvature is concentrated
   // at that one point, and putting it on the boundary is precisely what
   // makes the sector isometric to the plane.
   const R = 30, H = 50, sweep = Math.PI / 2;
@@ -453,7 +451,7 @@ test('a CONE SECTOR (a pole plus a partial sweep) flattens EXACTLY — the pole 
   assert.strictEqual(r.developable, true, `expected developable, defect ${r.distortion.intrinsic.maxAbsInteriorAngleDefect}`);
   assert.ok(r.distortion.area.maxRelErr < 1e-6, `area err ${r.distortion.area.maxRelErr}`);
   assert.ok(r.distortion.edge.maxRelErr < 1e-6, `edge err ${r.distortion.edge.maxRelErr}`);
-  // The unrolled sector's own radial edge is the cone's SLANT LENGTH — an
+  // The unrolled sector's own radial edge is the cone's slant length — an
   // exact analytic number this construction never had a chance to fit to.
   const slant = Math.hypot(R, H);
   let maxR = 0;
@@ -470,12 +468,12 @@ test('a CONE SECTOR (a pole plus a partial sweep) flattens EXACTLY — the pole 
     `unrolled apex-to-rim distance ${maxSpan} should be the exact slant length ${slant}`);
 });
 
-test('a FULL cone with its apex is honestly reported as NOT developable — the apex is a real concentrated-curvature point', () => {
+test('a full cone with its apex is reported as not developable — the apex is a real concentrated-curvature point', () => {
   // Mathematically load-bearing, and the opposite of a bug: a cone's whole
   // Gaussian curvature lives at its apex (total 2*pi - 2*pi*R/slant). With
-  // the apex INTERIOR (a full 360-degree sweep is a topological disk whose
+  // the apex interior (a full 360-degree sweep is a topological disk whose
   // only boundary is the rim), no isometric flattening exists — unrolling a
-  // cone genuinely requires a cut out to the boundary first. So the honest
+  // cone requires a cut out to the boundary first. So the correct
   // answer here is "doubly curved", with the real number, not "exact".
   const R = 30, H = 50;
   const cone = revolve(makeLine([R, 0, 0], [0, 0, H]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
@@ -485,14 +483,14 @@ test('a FULL cone with its apex is honestly reported as NOT developable — the 
   const defect = r.distortion.intrinsic.maxAbsInteriorAngleDefect;
   assert.ok(Math.abs(defect - expected) < 2e-3,
     `apex angle defect ${defect} should be the analytic cone-point curvature ${expected}`);
-  // And it is a genuine discretization limit, not a fudged tolerance: the
-  // measured defect CONVERGES onto the analytic value as the sweep is
+  // And it is a real discretization limit, not a fudged tolerance: the
+  // measured defect converges onto the analytic value as the sweep is
   // sampled more finely.
   const coarse = flattenNurbsSurface(cone, { uRes: 10, vRes: 16 }).distortion.intrinsic.maxAbsInteriorAngleDefect;
   const fine = flattenNurbsSurface(cone, { uRes: 10, vRes: 128 }).distortion.intrinsic.maxAbsInteriorAngleDefect;
   assert.ok(Math.abs(fine - expected) < Math.abs(defect - expected)
          && Math.abs(defect - expected) < Math.abs(coarse - expected),
     `defect must converge: coarse ${coarse}, mid ${defect}, fine ${fine}, analytic ${expected}`);
-  // The cost of pretending otherwise is enormous and honestly measured.
+  // Flattening it anyway costs more than half the area at the apex.
   assert.ok(r.distortion.area.maxRelErr > 0.5, `apex area error ${r.distortion.area.maxRelErr}`);
 });

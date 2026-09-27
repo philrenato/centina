@@ -5,11 +5,10 @@ import { revolve } from '../kernel/primitives.mjs';
 import { surfacePoint, isFiniteNet, surfaceClosure } from '../kernel/surface.mjs';
 import { splitSurface, c0KnotParams, splitSurfaceAtC0Lines, surfaceCreaseParams } from '../kernel/split.mjs';
 
-// A genuinely non-trivial fixture, matching this project's own "avoid
-// too-simple test geometry" lesson: a real curved profile (not a
-// straight line), revolved through a PARTIAL sweep (270 deg, not a full
-// 360) so BOTH the U (profile) and V (rotation) directions are OPEN —
-// splittable in either direction on the same fixture, and genuinely
+// A non-trivial fixture: a real curved profile (not a
+// straight line), revolved through a partial sweep (270 deg, not a full
+// 360) so both the U (profile) and V (rotation) directions are open —
+// splittable in either direction on the same fixture, and
 // rational/curved in both.
 function partialRevolve() {
   const profile = globalCurveInterp([[10, 0, 0], [16, 0, 20], [12, 0, 45], [18, 0, 70]], 3);
@@ -21,7 +20,7 @@ function fullRevolve() {
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
 }
 
-test('splitSurface: splitting along U reproduces the ORIGINAL surface exactly at every one of its own real stations', () => {
+test('splitSurface: splitting along U reproduces the original surface exactly at every one of its own real stations', () => {
   const srf = partialRevolve();
   const uMid = (srf.knotsU[0] + srf.knotsU[srf.knotsU.length - 1]) / 2;
   const { first, second } = splitSurface(srf, 'u', uMid);
@@ -40,7 +39,7 @@ test('splitSurface: splitting along U reproduces the ORIGINAL surface exactly at
   }
 });
 
-test('splitSurface: between-station points are a close, honest approximation (not exact, stated as such elsewhere in this kernel)', () => {
+test('splitSurface: between-station points are a close approximation (not exact, stated as such elsewhere in this kernel)', () => {
   const srf = partialRevolve();
   const uMid = (srf.knotsU[0] + srf.knotsU[srf.knotsU.length - 1]) / 2;
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
@@ -68,7 +67,7 @@ test('splitSurface: the two halves share a byte-identical boundary control-point
   for (let i = 0; i < firstBoundaryRow.length; i++) {
     for (let c = 0; c < 4; c++) {
       assert.equal(firstBoundaryRow[i][c], secondBoundaryRow[i][c],
-        `boundary control point ${i}, component ${c} must be BYTE-IDENTICAL between halves`);
+        `boundary control point ${i}, component ${c} must be byte-identical between halves`);
     }
   }
 });
@@ -100,7 +99,7 @@ test('splitSurface: refuses a split parameter at or beyond either domain end', (
   assert.throws(() => splitSurface(srf, 'u', uMin - 1), /strictly interior/);
 });
 
-test('splitSurface: refuses splitting a CLOSED direction honestly', () => {
+test('splitSurface: refuses splitting a closed direction', () => {
   const srf = fullRevolve();
   const { closedV } = surfaceClosure(srf);
   assert.equal(closedV, true, 'fixture sanity check: a full 360 revolve must be closed in V');
@@ -113,14 +112,14 @@ test('splitSurface: refuses an invalid direction string', () => {
   assert.throws(() => splitSurface(srf, 'w', 0.5), /must be 'u' or 'v'/);
 });
 
-// ── SPLITTING AT A CREASE THE SURFACE ALREADY HAS ───────────────────────────
+// Splitting at a crease the surface already has
 // Distinct from splitSurface above in both method and scope: this cuts only at
 // knots whose multiplicity reaches the degree, which the surface is already
-// only C0 across, so the cut is EXACT (knot insertion, no sampling, no fitting)
-// and it works on a direction that is CLOSED, which splitSurface refuses.
-test('a crease split is EXACT — each piece is the original surface, not a re-fit of it', () => {
-  // A closed square profile extruded: the "one side surface" an extrude really
-  // produces, whose four corners are creases INSIDE a single face.
+// only C0 across, so the cut is exact (knot insertion, no sampling, no fitting)
+// and it works on a direction that is closed, which splitSurface refuses.
+test('a crease split is exact — each piece is the original surface, not a re-fit of it', () => {
+  // A closed square profile extruded: the "one side surface" an extrude
+  // produces, whose four corners are creases inside a single face.
   const P = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
   const srf = {
     degU: 1, knotsU: [0, 0, 1, 2, 3, 4, 4], degV: 1, knotsV: [0, 0, 1, 1],
@@ -145,7 +144,7 @@ test('a crease split is EXACT — each piece is the original surface, not a re-f
   assert.equal(worst, 0, `a crease split must be exact, worst deviation ${worst}`);
 });
 
-test('a SMOOTH join is not a crease, and splitting there would invent an edge', () => {
+test('a smooth join is not a crease, and splitting there would invent an edge', () => {
   // Interior knot at multiplicity 1 on a cubic: C2, not a crease.
   const srf = {
     degU: 3, knotsU: [0, 0, 0, 0, 0.5, 1, 1, 1, 1], degV: 1, knotsV: [0, 0, 1, 1],
@@ -156,7 +155,7 @@ test('a SMOOTH join is not a crease, and splitting there would invent an edge', 
   assert.equal(splitSurfaceAtC0Lines(srf, 'u')[0], srf, 'and returns it by identity, not a copy');
 });
 
-test('the crease split preserves WEIGHTS — a rational surface stays rational', () => {
+test('the crease split preserves weights — a rational surface stays rational', () => {
   // Two quarter-circle-ish rational spans meeting at a full-multiplicity knot.
   const w = Math.SQRT1_2;
   const srf = {
@@ -167,7 +166,7 @@ test('the crease split preserves WEIGHTS — a rational surface stays rational',
     ],
   };
   assert.deepEqual(c0KnotParams(srf.knotsU, srf.degU), [1]);
-  // This fixture is SMOOTH across that knot (see the circle test below), so the
+  // This fixture is smooth across that knot (see the circle test below), so the
   // combinatorial split has to be asked for by name.
   const pieces = splitSurfaceAtC0Lines(srf, 'u', { allCandidates: true });
   assert.equal(pieces.length, 2);
@@ -185,7 +184,7 @@ test('the crease split preserves WEIGHTS — a rational surface stays rational',
   assert.ok(worst < 1e-12, `rational split must stay exact, got ${worst}`);
 });
 
-test('a NURBS circle is NOT a crease — multiplicity == degree is a candidate, not a verdict', () => {
+test('a NURBS circle is not a crease — multiplicity == degree is a candidate, not a verdict', () => {
   // The counterexample that matters. A standard circle is degree 2 with every
   // quarter-point knot at multiplicity 2, and perfectly smooth across all of
   // them because the control legs meeting there are collinear. Trusting the
@@ -198,13 +197,13 @@ test('a NURBS circle is NOT a crease — multiplicity == degree is a candidate, 
     degU: 2, knotsU: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4], degV: 1, knotsV: [0, 0, 1, 1],
     ctrlNet: cp.map((p, i) => [[p[0], p[1], 0, ws[i]], [p[0], p[1], 25, ws[i]]]),
   };
-  assert.equal(c0KnotParams(cyl.knotsU, cyl.degU).length, 3, 'three interior knots DO reach full multiplicity');
+  assert.equal(c0KnotParams(cyl.knotsU, cyl.degU).length, 3, 'three interior knots do reach full multiplicity');
   assert.deepEqual(surfaceCreaseParams(cyl, 'u'), [], 'and not one of them is a real tangent break');
   assert.equal(splitSurfaceAtC0Lines(cyl, 'u').length, 1, 'so the cylinder stays one face');
 });
 
 test('a crease is found even where it is sharp at only one end of the edge', () => {
-  // A prism whose profile kink CLOSES toward the top: sharp at v=0, straight at
+  // A prism whose profile kink closes toward the top: sharp at v=0, straight at
   // v=1. Sampling only the middle station would call this smooth for half the
   // surfaces it is wrong about.
   const srf = {
@@ -218,7 +217,7 @@ test('a crease is found even where it is sharp at only one end of the edge', () 
   assert.deepEqual(surfaceCreaseParams(srf, 'u'), [1], 'the kink at one end is enough to make it an edge');
 });
 
-test('a POLE is not a crease, and the answer cannot depend on where the object was built', () => {
+test('a pole is not a crease, and the answer cannot depend on where the object was built', () => {
   // A flat circular cap: one whole control row collapsed to the center. The
   // one-sided differences there are not a direction at all — at the origin they
   // come out exactly zero, and far from it they come out as float noise at that

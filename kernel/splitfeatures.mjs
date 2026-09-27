@@ -1,30 +1,28 @@
-// SPLITS AS AN ORDERED FEATURE LIST ON THE SURFACE
-// ================================================================
-// A surface carries a LIST of split entries — `{ direction: 'u'|'v', frac }` —
+// Splits as an ordered feature list on the surface.
+//
+// A surface carries a list of split entries — `{ direction: 'u'|'v', frac }` —
 // rather than being wrapped in a container per split. Evaluating the list cuts
 // the surface into a grid of pieces.
 //
-// WHY A LIST AND NOT NESTED CONTAINERS. A container per split nests containers
+// Why a list and not nested containers: a container per split nests containers
 // for a second split, and a container's pieces are not independently
 // addressable surfaces with their own history — so "split it again over there"
 // has nowhere to live. A list gives many entries, each independently editable,
 // composing with whatever recipe made the surface in the first place (a Loft's
 // curves keep driving it), with nothing nested.
 //
-// ⚠⚠ EVERY FRACTION IS MEASURED ON THE ORIGINAL SURFACE, AND THAT IS NOT A
-// PREFERENCE. `splitSurface` does not cut a NURBS surface exactly — it RESAMPLES
-// each half and refits it (networkCorrectionSurface over a sample grid; exact at
-// the stations, an honest approximation between them). So splitting a piece that
-// is itself already a refit compounds the approximation, and a fifth split would
-// be a refit of a refit of a refit. Cutting the ORIGINAL at every fraction makes
-// each piece exactly ONE refit deep, however many entries the list holds.
+// Every fraction is measured on the original surface. `splitSurface` does not
+// cut a NURBS surface exactly — it resamples each half and refits it
+// (networkCorrectionSurface over a sample grid; exact at the stations, an
+// approximation between them). Splitting a piece that is itself already a refit
+// compounds the approximation. Cutting the original at every fraction makes
+// each piece exactly one refit deep, however many entries the list holds.
 //
-// It also gives the property the list is FOR: entries are independent. Dragging
+// It also makes entries are independent. Dragging
 // one split does not move any other, because none of them is defined relative to
 // another. Two entries in the same direction give strips; two crossed give a
 // grid. Order is presentation order, not evaluation order — the geometry is a
-// set of cut lines, and saying so is more honest than implying a sequence that
-// does not exist.
+// set of cut lines.
 import { surfacePoint, surfaceClosure } from './surface.mjs';
 import { networkCorrectionSurface } from './loft.mjs';
 
@@ -40,7 +38,7 @@ function rescaleKnots(knots, oldMin, oldMax, newMin, newMax) {
   return knots.map((k) => newMin + ((k - oldMin) / span) * (newMax - newMin));
 }
 
-// The cut PARAMETERS in one direction, from the fractions, sorted and with
+// The cut parameters in one direction, from the fractions, sorted and with
 // near-duplicates collapsed. Two entries at the same place would otherwise ask
 // for a zero-width piece, which is not a piece.
 function cutParamsFor(features, direction, domainMin, domainMax, eps) {
@@ -57,7 +55,7 @@ function cutParamsFor(features, direction, domainMin, domainMax, eps) {
 // opts: { sampleCount, crossSampleCount, degU, degV }
 // Returns { ok, pieces, cuts: { u, v }, stats } or { ok: false, reason }.
 // Each piece is an ordinary `{ degU, degV, knotsU, knotsV, ctrlNet }` surface
-// plus `uStations`/`vStations` — the real (u,v) grid it is EXACT at, exposed for
+// plus `uStations`/`vStations` — the real (u,v) grid it is exact at, exposed for
 // the same reason loft() and splitSurface() expose theirs: so a caller never has
 // to guess the internal sample grid to check exactness correctly.
 export function applySplitFeatures(srf, features, opts = {}) {
@@ -69,10 +67,8 @@ export function applySplitFeatures(srf, features, opts = {}) {
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
   const uEps = (uMax - uMin) * 1e-6, vEps = (vMax - vMin) * 1e-6;
 
-  // ⚠ A CLOSED DIRECTION REFUSES BY NAME, exactly as `splitSurface` does and for
-  // its reason: cutting a closed loop at ONE parameter unrolls it into a single
-  // open piece, not two. Offering a slider that cannot do what it says would be
-  // worse than not offering one.
+  // A closed direction is refused, as in `splitSurface`: cutting a closed loop
+  // at one parameter unrolls it into a single open piece, not two.
   const { closedU, closedV } = surfaceClosure(srf);
   for (const [dir, closed] of [['u', closedU], ['v', closedV]]) {
     if (closed && list.some((f) => f.direction === dir)) {
@@ -88,7 +84,7 @@ export function applySplitFeatures(srf, features, opts = {}) {
   const vCuts = cutParamsFor(list, 'v', vMin, vMax, vEps);
   const dropped = list.length - (uCuts.length + vCuts.length);
   if (!uCuts.length && !vCuts.length) {
-    // Not a failure: a surface with no usable cuts IS the surface. Saying so
+    // Not a failure: a surface with no usable cuts is the surface. This
     // lets a caller treat "no splits yet" and "splits that all collapsed" the
     // same way without a special case.
     return { ok: true, pieces: [{ ...srf, uStations: null, vStations: null }], cuts: { u: [], v: [] }, stats: { pieces: 1, dropped, entries: list.length } };
@@ -99,8 +95,8 @@ export function applySplitFeatures(srf, features, opts = {}) {
   const uEdges = [uMin, ...uCuts, uMax];
   const vEdges = [vMin, ...vCuts, vMax];
 
-  // ONE refit per piece, always sampling the ORIGINAL — see the header. The
-  // sample counts are per PIECE, so a finely-cut surface keeps the same
+  // One refit per piece, always sampling the original — see the header. The
+  // sample counts are per piece, so a finely-cut surface keeps the same
   // per-piece fidelity rather than sharing one budget across the grid.
   function buildPatch(u0, u1, v0, v1) {
     const uParams = linspace(u0, u1, sampleCount);

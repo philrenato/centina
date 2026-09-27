@@ -1,8 +1,8 @@
-// PER-FACE SUBDIVIDE. The claim worth testing is not "it refines a face"
+// Per-face subdivide. The claim worth testing is not "it refines a face"
 // — that part is arithmetic. It is that the cage stays a legal cage: the
 // T-junction a naive local refinement leaves behind is invisible in a
 // render, silent in a face count, and only shows up later as a corrupted
-// subdivision. So every test here checks the TOPOLOGY the operation is
+// subdivision. So every test here checks the topology the operation is
 // supposed to protect, not just the counts it changes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,25 +27,25 @@ test('one selected face becomes four quads, and only its neighbors change at all
   assert.equal(r.faceCountAfter, 9); // the selected face -> 4, the other 5 stay
   const sizes = r.cage.faces.map((f) => f.length).sort();
   // 4 quads from the refined face + the untouched opposite quad, and the
-  // four side faces widened to 5-gons because each now genuinely has a
+  // four side faces widened to 5-gons because each now has a
   // midpoint on one of its own sides.
   assert.deepEqual(sizes, [4, 4, 4, 4, 4, 5, 5, 5, 5]);
   assert.equal(r.widenedNeighbours, 4);
 });
 
-test('THE POINT: no T-junction — the cage stays closed and manifold', () => {
+test('no T-junction: the cage stays closed and manifold', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const before = manifoldReport(cage);
   assert.deepEqual(before, { boundary: 0, nonManifold: 0, chi: 2 });
   const { cage: out } = subdivideFaces(cage, [0]);
   const after = manifoldReport(out);
-  // A naive local refinement fails RIGHT HERE: the new midpoints would
+  // A naive local refinement fails here: the new midpoints would
   // each be used by only one face, producing boundary edges in a cage
   // that is supposed to be closed, and chi would drift off 2.
   assert.deepEqual(after, { boundary: 0, nonManifold: 0, chi: 2 });
 });
 
-test('and the refined cage really subdivides afterwards — the actual downstream risk', () => {
+test('the refined cage subdivides afterwards — the downstream risk', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const { cage: out } = subdivideFaces(cage, [0, 1]);
   const refined = subdivideCatmullClark(out);
@@ -55,10 +55,10 @@ test('and the refined cage really subdivides afterwards — the actual downstrea
   assert.deepEqual(manifoldReport(refined), { boundary: 0, nonManifold: 0, chi: 2 });
 });
 
-test('two ADJACENT selected faces share one midpoint on their common edge, not two', () => {
+test('two adjacent selected faces share one midpoint on their common edge, not two', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const ctx = buildTopology(cage);
-  // Find a genuinely adjacent pair rather than assuming index order.
+  // Find an adjacent pair rather than assuming index order.
   let pair = null;
   for (const e of ctx.edgeMap.values()) if (e.faces.length === 2) { pair = e.faces; break; }
   assert.ok(pair);
@@ -75,7 +75,7 @@ test('two ADJACENT selected faces share one midpoint on their common edge, not t
   for (const [k, n] of coincident) assert.equal(n, 1, `two vertices at the same position (${k}) means an edge got split twice`);
 });
 
-test('a crease on a split edge transfers to BOTH halves and never dangles', () => {
+test('a crease on a split edge transfers to both halves and never dangles', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const f0 = cage.faces[0];
   const creasedKey = edgeKey(f0[0], f0[1]);
@@ -85,7 +85,7 @@ test('a crease on a split edge transfers to BOTH halves and never dangles', () =
   // The old edge is gone from the topology entirely, so its key must be
   // gone from the crease map too — a weight on a non-existent edge is
   // exactly the silent corruption this remap exists to prevent.
-  assert.equal(ctx.edgeMap.has(creasedKey), false, 'the split edge should no longer exist');
+  assert.equal(ctx.edgeMap.has(creasedKey), false, 'the split edge should be gone from the topology');
   assert.equal(out.creases[creasedKey], undefined, 'its crease key must not dangle');
   // Both halves must carry it, and both must be real edges.
   const halves = [...ctx.edgeMap.values()].filter((e) => creaseWeight(out, e.v0, e.v1) === 3);
@@ -108,7 +108,7 @@ test('an untouched crease elsewhere is left exactly alone', () => {
   assert.ok(total >= 1, 'the crease must survive somewhere');
 });
 
-test('selecting every face is equivalent in TOPOLOGY to a global refinement', () => {
+test('selecting every face is equivalent in topology to a global refinement', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const all = cage.faces.map((_, i) => i);
   const { cage: out } = subdivideFaces(cage, all);
@@ -116,8 +116,8 @@ test('selecting every face is equivalent in TOPOLOGY to a global refinement', ()
   assert.equal(out.faces.length, global.faces.length);
   assert.equal(out.vertices.length, global.vertices.length);
   assert.equal(out.faces.every((f) => f.length === 4), true, 'no widened neighbors when nothing is left unselected');
-  // Deliberately NOT asserting equal POSITIONS: the global step applies
-  // the smooth Catmull-Clark rules and genuinely moves points, while a
+  // Positions are deliberately not asserted equal: the global step applies
+  // the smooth Catmull-Clark rules and moves points, while a
   // local refine must not move anything outside the selection and so
   // uses plain midpoints and centroids. Same topology, different (and
   // correctly different) geometry — see subdivideFaces' own header.
@@ -134,7 +134,7 @@ test('an n-gon-bearing cage refines without being forced into quads', () => {
   assert.equal(out.faces.length, cage.faces.length - 1 + cage.faces[capIdx].length);
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals, and the input cage is never mutated', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const before = JSON.stringify(cage);
   assert.throws(() => subdivideFaces(cage, []), /no faces selected/);

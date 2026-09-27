@@ -1,49 +1,48 @@
-// DIFFERENTIAL VALIDATION AGAINST A SECOND, INDEPENDENT NURBS IMPLEMENTATION.
+// Differential validation against a second, independent NURBS implementation.
 //
 // Every other test in this suite was written by the same author as the code
 // under test, so a misread basis-function recursion would produce a test that
 // expects the wrong answer and passes forever. This file is the only check in
-// the repository that can catch that class of error: it evaluates the SAME
+// the repository that can catch that class of error: it evaluates the same
 // geometry through our kernel and through rhino3dm (openNURBS, McNeel) and
 // compares the numbers.
 //
-// BLACK-BOX ONLY. rhino3dm is used strictly as a behavioral oracle: same
+// Black-box only. rhino3dm is used strictly as a behavioral oracle: same
 // inputs in, outputs compared. No openNURBS source is read, and none of the
-// kernel's own algorithms were derived from it. See the BEHAVIORAL ORACLE —
-// NOT A SOURCE distinction: it is an oracle, never a source of code.
+// kernel's own algorithms were derived from it.
 //
-// WHAT THE BINDING CAN AND CANNOT ORACLE, enumerated directly rather than
-// assumed. The vendored wasm binding exposes evaluation on the BASE classes
+// What the binding can and cannot oracle, enumerated directly rather than
+// assumed. The vendored wasm binding exposes evaluation on the base classes
 // Surface and Curve, which NurbsSurface/NurbsCurve inherit:
 //
-//   surface point at (u,v)      Surface.pointAt        COVERED BELOW
-//   surface normal              Surface.normalAt       COVERED BELOW
-//   curve point                 Curve.pointAt          COVERED BELOW
-//   curve 1st/2nd derivative    Curve.derivativeAt     COVERED BELOW
-//   surface 1st/2nd derivative  (no direct method)     covered INDIRECTLY:
-//       normalAt is normalize(Su x Sv), so it constrains the DIRECTION of
+//   surface point at (u,v)      Surface.pointAt        covered below
+//   surface normal              Surface.normalAt       covered below
+//   curve point                 Curve.pointAt          covered below
+//   curve 1st/2nd derivative    Curve.derivativeAt     covered below
+//   surface 1st/2nd derivative  (no direct method)     covered indirectly:
+//       normalAt is normalize(Su x Sv), so it constrains the direction of
 //       both partials jointly, but not their magnitudes.
-//   knot insertion / refinement (absent from the binding)  NOT COVERABLE
-//   closest-point / projection  (absent from the binding)  NOT COVERABLE
+//   knot insertion / refinement (absent from the binding)  not coverable
+//   closest-point / projection  (absent from the binding)  not coverable
 //
-// The last two are genuinely unavailable, not skipped for convenience — the
+// The last two are unavailable, not skipped for convenience — the
 // evaluation for them lives in openNURBS and is not in the wasm build. Our
 // own closestPointOnSurface/closestPointOnCurve therefore still have no
 // second implementation to check against, and that gap is real.
 //
-// CONVENTIONS, each verified empirically before any assertion was written
-// rather than assumed from documentation:
-//   - normalAt agrees with normalize(su x sv) in SIGN as well as direction
+// Conventions, each verified empirically rather than assumed from
+// documentation:
+//   - normalAt agrees with normalize(su x sv) in sign as well as direction
 //     (measured: dot = 1.000000000 across a 3x3 sample grid, no flip).
 //   - derivativeAt(t, d) returns [C, C', C'' ...] in the same order as
 //     rationalCurveDerivs(crv, t, d).
-//   - our ctrlPts are EUCLIDEAN + weight; rhino3dm wants PRE-MULTIPLIED
+//   - our ctrlPts are euclidean + weight; rhino3dm wants pre-multiplied
 //     homogeneous, and its knot vector drops our first and last entry. Both
 //     conversions are handled by io3dm.mjs's own curveToRhino/surfaceToRhino,
 //     reused here rather than re-derived, and independently proven correct by
 //     test/io3dm.test.mjs.
 //
-// A DISAGREEMENT IS A FINDING, NOT AUTOMATICALLY OUR BUG. Tolerances here are
+// A disagreement is a finding, not automatically our bug. Tolerances here are
 // tight enough that anything failing is a real divergence worth reading, not
 // float noise: these are two independent evaluations of the same polynomial,
 // so agreement should be near machine precision, not merely "close".
@@ -85,40 +84,38 @@ const surfDomain = (s) => [
   s.knotsV[s.degV], s.knotsV[s.knotsV.length - 1 - s.degV],
 ];
 
-// Samples strictly INSIDE the domain plus both exact ends. `inset` pulls the
+// Samples strictly inside the domain plus both exact ends. `inset` pulls the
 // endpoints in when a fixture has a singularity there (a pole row), where the
-// quantity under test is genuinely undefined rather than merely hard.
+// quantity under test is undefined rather than merely hard.
 function paramsAcross(lo, hi, n, inset = 0) {
   const a = lo + (hi - lo) * inset;
   const b = hi - (hi - lo) * inset;
   return Array.from({ length: n + 1 }, (_, i) => a + (b - a) * i / n);
 }
 
-// ---------------------------------------------------------------------------
-// FIXTURES — deliberately the hard cases, not the easy ones.
-// ---------------------------------------------------------------------------
+// Fixtures — deliberately the hard cases, not the easy ones.
 
-// Rational, non-unit weights, CLOSED (periodic) in the sweep direction.
+// Rational, non-unit weights, closed (periodic) in the sweep direction.
 const cylinder = revolve(
   { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[5, 0, 0, 1], [5, 0, 20, 1]] },
   [0, 0, 0], [0, 0, 1], 0, Math.PI * 2,
 );
 
-// DEGENERATE POLE ROW at both ends: the meridian touches the axis, so an
+// Degenerate pole row at both ends: the meridian touches the axis, so an
 // entire control row collapses to a single point. Rational in both directions.
 const sphere = revolve(
   makeEllipsoidProfile([0, 0, 0], [1, 0, 0], [0, 0, 1], 12, 12, 2),
   [0, 0, 0], [0, 0, 1], 0, Math.PI * 2,
 );
 
-// Closed in BOTH directions, rational in both.
+// Closed in both directions, rational in both.
 const torus = revolve(
   makeCircle([30, 0, 0], [1, 0, 0], [0, 0, 1], 8, 4),
   [0, 0, 0], [0, 0, 1], 0, Math.PI * 2,
 );
 
-// TRIPLE-MULTIPLICITY INTERIOR KNOT on a degree-3 curve: multiplicity equals
-// the degree, so the curve is only C0 there — a genuine kink, and the exact
+// Triple-multiplicity interior knot on a degree-3 curve: multiplicity equals
+// the degree, so the curve is only C0 there — a real kink, and the exact
 // place a mis-set knot span would show up.
 const kinkCurve = {
   degree: 3,
@@ -130,7 +127,7 @@ const kinkCurve = {
   ],
 };
 
-// The same triple-multiplicity knot carried into a SURFACE's U direction.
+// The same triple-multiplicity knot carried into a surface's U direction.
 const kinkSurface = extrude(kinkCurve, [0, 0, 1], 15);
 
 // Fully-pinned clamped ends, non-rational, multi-span interior.
@@ -138,7 +135,7 @@ const interpCurve = globalCurveInterp(
   [[0, 0, 0], [10, 4, 2], [16, 12, 6], [8, 20, 3], [-4, 16, 9]], 3,
 );
 
-// A rational arc with genuinely non-unit interior weights.
+// A rational arc with non-unit interior weights.
 const arc = makeArc([2, -3, 1], [1, 0, 0], [0, 1, 0], 14, 0, Math.PI / 2, 1);
 
 const CURVES = [
@@ -151,15 +148,13 @@ const SURFACES = [
   ['cylinder (rational, closed in V)', cylinder, 0],
   ['torus (rational, closed in BOTH directions)', torus, 0],
   ['extruded C0-kink curve (triple-multiplicity interior knot in U)', kinkSurface, 0],
-  // A pole row makes the surface NORMAL undefined at u=uMin/uMax, so normals
-  // are sampled away from it. The POINT is still exactly defined there and is
+  // A pole row makes the surface normal undefined at u=uMin/uMax, so normals
+  // are sampled away from it. The point is still exactly defined there and is
   // checked at the exact ends by its own test below.
   ['sphere (degenerate pole row at both ends)', sphere, 0.04],
 ];
 
-// ---------------------------------------------------------------------------
-// SURFACE POINT
-// ---------------------------------------------------------------------------
+// Surface point
 
 for (const [label, srf] of SURFACES) {
   test(`surface point matches rhino3dm: ${label}`, () => {
@@ -179,10 +174,10 @@ for (const [label, srf] of SURFACES) {
   });
 }
 
-test('surface point matches rhino3dm AT a degenerate pole row', () => {
+test('surface point matches rhino3dm at a degenerate pole row', () => {
   // The pole is where a collapsed control row makes the parametrization
   // singular. The point itself is still well defined and every sample along
-  // the pole row must land on the SAME physical point in both kernels.
+  // the pole row must land on the same physical point in both kernels.
   const ns = surfaceToRhino(rhino, sphere);
   const [uLo, uHi, vLo, vHi] = surfDomain(sphere);
   for (const u of [uLo, uHi]) {
@@ -194,9 +189,7 @@ test('surface point matches rhino3dm AT a degenerate pole row', () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// SURFACE NORMAL — the only available check on our own surface partials.
-// ---------------------------------------------------------------------------
+// Surface normal — the only available check on our own surface partials.
 
 for (const [label, srf, inset] of SURFACES) {
   test(`surface normal matches rhino3dm: ${label}`, () => {
@@ -208,8 +201,8 @@ for (const [label, srf, inset] of SURFACES) {
         const { su, sv } = surfacePointAndPartials(srf, u, v);
         const ours = unit(cross(su, sv));
         const theirs = ns.normalAt(u, v);
-        // Both are unit vectors, so the chord distance IS the angle error to
-        // first order. Compared componentwise rather than by |dot| so a SIGN
+        // Both are unit vectors, so the chord distance is the angle error to
+        // first order. Compared componentwise rather than by |dot| so a sign
         // flip would fail loudly instead of being absorbed.
         const d = dist(ours, theirs);
         if (d > worst) { worst = d; at = [u, v]; }
@@ -222,9 +215,7 @@ for (const [label, srf, inset] of SURFACES) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// CURVE POINT AND DERIVATIVES
-// ---------------------------------------------------------------------------
+// Curve point and derivatives
 
 for (const [label, crv] of CURVES) {
   test(`curve point matches rhino3dm: ${label}`, () => {
@@ -243,7 +234,7 @@ for (const [label, crv] of CURVES) {
     const [lo, hi] = curveDomain(crv);
     let worst1 = 0, worst2 = 0, at1 = null, at2 = null;
     // Sampled strictly inside: at a C0 kink the two one-sided derivatives
-    // genuinely differ, so which one a given implementation reports there is a
+    // differ, so which one a given implementation reports there is a
     // convention, not a correctness question.
     for (const u of paramsAcross(lo, hi, 40, 0.01)) {
       const ours = rationalCurveDerivs(crv, u, 2);
@@ -258,11 +249,8 @@ for (const [label, crv] of CURVES) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// THE FIRST GATE, kept as a permanent regression: if THIS ever fails, the
-// harness is wrong (a conversion or a sampling-domain mistake), not the
-// kernel. It is asked for explicitly and it is cheap to keep.
-// ---------------------------------------------------------------------------
+// Harness sanity: if this fails, the harness is wrong (a conversion or a
+// sampling-domain mistake), not the kernel.
 
 test('harness sanity: a plain clamped degree-3 surface agrees to machine precision', () => {
   const flat = extrude(interpCurve, [0, 0, 1], 10);

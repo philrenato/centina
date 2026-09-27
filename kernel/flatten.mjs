@@ -1,88 +1,72 @@
-// SURFACE FLATTENING / UNROLL — TIER 1, LSCM.
-// Given a triangulation of a surface (this app's own already-proven
-// tessellation, never a second tessellator), produce a flat 2D layout of it
-// plus a REAL, MEASURED report of how much the flattening lied.
+// Surface flattening / unroll — LSCM.
+// Given a triangulation of a surface (the app's own tessellation, never a
+// second tessellator), produce a flat 2D layout of it plus a measured
+// report of the flattening's distortion.
 //
-// ================================================================
-// THE MATHEMATICAL FACT THAT BOUNDS THIS FOREVER — STATED UP FRONT,
-// NOT BURIED, BECAUSE EVERY FUNCTION BELOW IS SUBORDINATE TO IT.
-// ================================================================
-// Gaussian curvature is an intrinsic invariant of a surface under any
-// isometric (length-preserving) map. This is Gauss's Theorema Egregium.
-// It follows immediately that a surface with NONZERO Gaussian curvature
-// ANYWHERE CANNOT be flattened into the plane without local stretch or
-// tearing — not by LSCM, not by ARAP, not by any algorithm, ever, at any
-// resolution, with any amount of compute. A flattener that reports "exact"
-// for a genuinely curved input is lying.
+// Bound on every function below: Gaussian curvature is an intrinsic
+// invariant of a surface under any isometric (length-preserving) map. This
+// is Gauss's Theorema Egregium. It follows that a surface with nonzero
+// Gaussian curvature anywhere cannot be flattened into the plane without
+// local stretch or tearing — by any algorithm, at any resolution.
 //
-// So: every function here returns a real, measured distortion metric in
-// usable units alongside its result, and NEVER a claim of exactness for a
-// genuinely curved input. This is the same honest-approximation posture
-// kernel/offset.mjs and kernel/offsetcurve.mjs already established for
-// THEIR own "not exact for a curved input" limits — reused as a convention,
-// not invented fresh here.
+// So every function here returns a measured distortion metric in
+// usable units alongside its result, and never a claim of exactness for a
+// curved input — the same convention kernel/offset.mjs and
+// kernel/offsetcurve.mjs follow for their "not exact for a curved input"
+// limits.
 //
-// The one case where an EXACT answer is mathematically possible is a
-// DEVELOPABLE input (a cylinder, a cone, a plane — zero Gaussian curvature
-// everywhere). That is this module's exactness anchor, proven directly in
-// test/flatten.test.mjs against an ANALYTICALLY known unrolled shape rather
-// than against the flattener's own output.
+// The one case where an exact answer is mathematically possible is a
+// developable input (a cylinder, a cone, a plane — zero Gaussian curvature
+// everywhere). That is this module's exactness anchor, checked against an
+// analytically known unrolled shape rather than against the flattener's
+// own output.
 //
-// ================================================================
-// THE ALGORITHM — LSCM, AND WHAT IT DOES *NOT* MINIMIZE
-// ================================================================
+// Algorithm: LSCM, and what it does not minimize
 // Levy, Petitjean, Ray, Maillot, "Least Squares Conformal Maps for
 // Automatic Texture Atlas Generation," SIGGRAPH 2002 (ACM Transactions on
 // Graphics 21(3), pp. 362-371).
 //
-// LSCM minimizes the discrete CONFORMAL energy: per triangle, the squared
+// LSCM minimizes the discrete conformal energy: per triangle, the squared
 // deviation of the piecewise-linear map from satisfying the Cauchy-Riemann
-// equations. It is a SINGLE sparse linear least-squares solve — no outer
-// iteration, no convergence risk, no local minima. That boundedness is
-// exactly why it is tier 1.
+// equations. It is a single sparse linear least-squares solve — no outer
+// iteration, no convergence risk, no local minima.
 //
-// LSCM minimizes ANGLE distortion. It does NOT minimize STRETCH. A
-// flattened result can be locally correct in SHAPE while being genuinely
-// wrong in SCALE — which is the property that actually matters to anyone
-// cutting real material. Because of that, `flatteningDistortion` below
-// reports AREA and EDGE-LENGTH distortion (what LSCM was not optimizing)
-// as first-class numbers beside the angle distortion (what it was), so a
-// caller is never handed only the flattering metric.
+// LSCM minimizes angle distortion. It does not minimize stretch. A
+// flattened result can be locally correct in shape while being
+// wrong in scale, which is the property that matters when cutting
+// material. So `flatteningDistortion` below reports area and edge-length
+// distortion (what LSCM was not optimizing) beside the angle distortion
+// (what it was).
 //
-// ARAP (Liu, Zhang, Hu, Zhang, "A Local/Global Approach to Mesh
-// Parameterization," SGP 2008 / Computer Graphics Forum 27(5)) is the real
-// stretch-minimizing target and is deliberately NOT implemented here. See
-// the "SEAM LEFT FOR ARAP" note at the bottom of this header for exactly
-// which pieces below it reuses unchanged.
+// ARAP (Liu, Zhang, Xu, Gotsman, Gortler, "A Local/Global Approach to Mesh
+// Parameterization," SGP 2008 / Computer Graphics Forum 27(5)) is the
+// stretch-minimizing method and is not implemented here. See
+// "Extension point for ARAP" at the bottom of this header for the pieces
+// below it would reuse unchanged.
 //
-// ================================================================
-// UNITS
-// ================================================================
+// Units
 // Positions are in the document's own length unit (mm throughout this app).
-// The returned `uv` is in the SAME unit — the raw LSCM solution is defined
+// The returned `uv` is in the same unit — the raw LSCM solution is defined
 // only up to a global similarity, so it is rescaled by the single uniform
 // factor that best fits the true 3D edge lengths in a least-squares sense,
 // and translated so its bounding box starts at (0,0). Angles are reported
 // in degrees; the intrinsic angle defect in radians; areas in the square of
 // the length unit; every ratio-shaped error is dimensionless.
 //
-// ================================================================
-// SEAM LEFT FOR ARAP (tier 2, not built)
-// ================================================================
-// ARAP is local/global: a LOCAL step fitting a best rigid 2x2 rotation per
-// triangle, and a GLOBAL step solving one sparse linear system. Every piece
-// it needs on the way in and out already exists here and is exported:
+// Extension point for ARAP (not built)
+// ARAP is local/global: a local step fitting a best rigid 2x2 rotation per
+// triangle, and a global step solving one sparse linear system. Every piece
+// it needs on the way in and out exists here and is exported:
 //   * weldTriangulation      — non-indexed triangle soup -> indexed mesh
 //   * buildMeshTopology      — edges/boundary/components/manifoldness
-//   * validateFlattenMesh    — the honest-refusal gate, algorithm-agnostic
+//   * validateFlattenMesh    — the refusal check, algorithm-agnostic
 //   * triangleLocalFrame     — the per-triangle isometric 2D coordinates
 //                              ARAP's local step differences against
 //   * solveSparseLeastSquares — the same matrix-free CG solver ARAP's
 //                              global step needs
 //   * flatteningDistortion   — the shared measurement, unchanged
 //   * flattenLSCM            — ARAP's own required initial guess
-// An `flattenARAP(mesh, opts)` would therefore be: validate, weld (both
-// already done), call flattenLSCM for the initialization, then alternate
+// A `flattenARAP(mesh, opts)` would therefore be: validate, weld, call flattenLSCM for the initialization, then alternate
 // (local 2x2 SVD per triangle) / (global solve via solveSparseLeastSquares)
 // until the change in stretch energy falls below a tolerance, and finish by
 // calling flatteningDistortion on the result. Nothing in this file needs to
@@ -91,7 +75,7 @@
 import { surfacePointAndPartials } from './surface.mjs';
 import { tessellateTrimmedSurface } from './trimtess.mjs';
 
-// ---------------------------------------------------------------- helpers
+// Helpers
 
 function sub3(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -114,19 +98,19 @@ function bboxDiagonal(positions) {
 
 function edgeKey(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
 
-// ---------------------------------------------------------------- welding
+// Welding
 
-// WELD a non-indexed triangle soup (exactly what kernel/trimtess.mjs's
+// Weld a non-indexed triangle soup (what kernel/trimtess.mjs's
 // tessellateTrimmedSurface returns — [[vA,vB,vC], ...] with each v carrying
-// {position, normal, uv}) into an INDEXED mesh, which is what any
+// {position, normal, uv}) into an indexed mesh, which is what any
 // parametrization algorithm needs: LSCM solves for one (u,v) per shared
-// VERTEX, so two triangles meeting along an edge must genuinely reference
+// vertex, so two triangles meeting along an edge must reference
 // the same two vertex indices, not two coincident copies.
 //
 // This is welding, not tessellation — it never invents or moves a point, it
 // only decides which of the points already produced are the same point.
 //
-// `tolerance` defaults to a RELATIVE value (1e-9 of the bounding-box
+// `tolerance` defaults to a relative value (1e-9 of the bounding-box
 // diagonal) rather than an absolute one, so the same call behaves the same
 // way on a 5mm part and a 5000mm one. In practice a grid tessellation's
 // shared corners are already bit-identical (adjacent cells compute the same
@@ -152,7 +136,7 @@ export function weldTriangulation(triangles, tolerance = null) {
   const indexOf = (p) => {
     const bx = Math.floor(p[0] / cell), by = Math.floor(p[1] / cell), bz = Math.floor(p[2] / cell);
     // Search the 27 neighboring cells, not just the containing one — a pair
-    // of genuinely coincident points can straddle a cell boundary.
+    // of coincident points can straddle a cell boundary.
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
@@ -182,27 +166,26 @@ export function weldTriangulation(triangles, tolerance = null) {
   return { positions, faces, weldTolerance: tol };
 }
 
-// DROP the faces that WELDING itself collapsed. A revolve whose profile
-// touches the axis has a POLE — the whole pole row of the parameter grid is
+// Drop the faces that welding itself collapsed. A revolve whose profile
+// touches the axis has a pole — the whole pole row of the parameter grid is
 // one physical point — and `tessellateTrimmedSurface` emits two triangles
 // per grid cell unconditionally, so after welding, the pole cell's second
-// triangle names the same vertex twice. That face was manufactured by this
-// module's own NURBS entry points, and `validateFlattenMesh` then (rightly)
-// refused it, which made EVERY pole-bearing surface unflattenable: a cone
-// with its apex, a sphere, an ellipsoid — including a partial cone SECTOR
+// triangle names the same vertex twice. `validateFlattenMesh` would refuse
+// that face, making every pole-bearing surface unflattenable: a cone
+// with its apex, a sphere, an ellipsoid — including a partial cone sector
 // that is exactly developable and should unroll with zero distortion.
 //
 // Dropping is lossless, not a tolerance: a repeated-vertex triangle has
 // identically zero area and contributes no topology (the "quad" at a pole
-// is genuinely a triangle, and what remains around the pole is a proper
-// triangle fan). Positions are returned untouched — not one coordinate
-// moves — and the summed triangle area is bit-for-bit unchanged.
+// is a triangle, and what remains around the pole is a proper
+// triangle fan). Positions are returned untouched and the summed triangle
+// area is bit-for-bit unchanged.
 //
-// Deliberately NOT folded into `weldTriangulation` (a general welder must
-// not silently discard faces a caller handed it) and deliberately NOT
-// relaxing `validateFlattenMesh` (a degenerate face in a mesh a CALLER
-// supplied is a real thing to catch, and it still is). This is applied
-// only where the problem is created: the two NURBS entry points below.
+// Not folded into `weldTriangulation` (a general welder must not silently
+// discard faces a caller handed it), and `validateFlattenMesh` is not
+// relaxed (a degenerate face in a mesh a caller supplied is still caught).
+// Applied only where the problem is created: the NURBS entry points
+// (flattenNurbsSurface below, and seam.mjs).
 export function dropDegenerateFaces(mesh) {
   const kept = [];
   let dropped = 0;
@@ -213,10 +196,10 @@ export function dropDegenerateFaces(mesh) {
   return { ...mesh, faces: kept, droppedFaces: dropped };
 }
 
-// ---------------------------------------------------------------- topology
+// Topology
 
 // Edge/boundary/component structure of an indexed triangle mesh. Shared by
-// the validity gate, the distortion metrics, and (later) ARAP — one
+// the validity check, the distortion metrics, and a future ARAP — one
 // definition, never re-derived per caller.
 export function buildMeshTopology(positions, faces) {
   const edgeFaces = new Map(); // "i|j" -> [faceIndex, ...]
@@ -240,7 +223,7 @@ export function buildMeshTopology(positions, faces) {
   const boundaryVertices = new Set();
   for (const [a, b] of boundaryEdges) { boundaryVertices.add(a); boundaryVertices.add(b); }
 
-  // Connected components over FACES (adjacency through shared edges) — a
+  // Connected components over faces (adjacency through shared edges) — a
   // parametrization is only well posed on one connected piece at a time.
   const seen = new Uint8Array(faces.length);
   let componentCount = 0;
@@ -262,7 +245,7 @@ export function buildMeshTopology(positions, faces) {
       }
     }
   }
-  // Vertices genuinely referenced by a face (a welded soup can't produce an
+  // Vertices referenced by a face (a welded soup can't produce an
   // orphan, but an externally-supplied mesh can).
   const usedVertices = new Set();
   for (const [a, b, c] of faces) { usedVertices.add(a); usedVertices.add(b); usedVertices.add(c); }
@@ -274,10 +257,9 @@ export function buildMeshTopology(positions, faces) {
   };
 }
 
-// The honest-refusal gate. REFUSES BY NAME rather than returning a
-// plausible-looking wrong layout — matching this kernel's standing rule
-// that a degenerate input gets a specific message, never a silent result.
-// Deliberately algorithm-agnostic: LSCM and (later) ARAP share it.
+// Refuses by name rather than returning a plausible-looking wrong layout —
+// a degenerate input gets a specific message, never a silent result.
+// Algorithm-agnostic, so a future ARAP can share it with LSCM.
 export function validateFlattenMesh(positions, faces, opts = {}) {
   if (!Array.isArray(positions) || !Array.isArray(faces)) {
     throw new Error('validateFlattenMesh: expected {positions, faces} arrays');
@@ -327,19 +309,19 @@ export function validateFlattenMesh(positions, faces, opts = {}) {
   if (topo.boundaryEdges.length === 0) {
     throw new Error('validateFlattenMesh: refusing to flatten — the mesh is CLOSED (it has no boundary). A closed surface cannot be laid flat without first being cut open, whatever its curvature.');
   }
-  // A flattening is a map into the plane. Only a TOPOLOGICAL DISK can be
+  // A flattening is a map into the plane. Only a topological disk can be
   // mapped into the plane without self-overlap, whatever its curvature —
   // an annulus (a full revolve welded shut at its seam) or a handle has
   // nowhere for the extra topology to go. Euler characteristic V - E + F is
   // exactly 1 for a disk, so this is a cheap, exact test rather than a
-  // heuristic. Caught here by name, because LSCM will otherwise happily
+  // heuristic. Caught here by name, because LSCM will otherwise
   // return a folded-over layout that looks plausible and is not usable.
   const chi = topo.usedVertices.size - topo.edges.length + topo.faceCount;
   if (chi !== 1) {
     throw new Error(`validateFlattenMesh: refusing to flatten — the mesh is not a TOPOLOGICAL DISK (Euler characteristic V-E+F = ${chi}, a disk is 1). It has a hole or a handle; cut it open along a seam first, then flatten each piece.`);
   }
   // "Too few faces to constrain the solve": LSCM pins 2 vertices to remove
-  // the 4-dof similarity ambiguity, so there must be at least one FREE
+  // the 4-dof similarity ambiguity, so there must be at least one free
   // vertex left for the solve to have anything to determine.
   if (topo.usedVertices.size < 3) {
     throw new Error(`validateFlattenMesh: refusing to flatten — only ${topo.usedVertices.size} vertices are actually used by a face; after pinning 2 to fix the layout's own position/rotation/scale there is nothing left to solve for.`);
@@ -347,12 +329,12 @@ export function validateFlattenMesh(positions, faces, opts = {}) {
   return topo;
 }
 
-// ---------------------------------------------------------- local frames
+// Local frames
 
-// The ISOMETRIC 2D coordinates of one triangle: lay it flat in its own
+// The isometric 2D coordinates of one triangle: lay it flat in its own
 // plane with vertex 0 at the origin and vertex 1 on the +x axis. This is
 // exact (a single triangle is trivially developable) and is the per-triangle
-// reference frame BOTH LSCM (below) and ARAP (later) measure against.
+// reference frame LSCM (below) and a future ARAP measure against.
 // Returns { x1,y1, x2,y2, x3,y3, twoArea }.
 export function triangleLocalFrame(p1, p2, p3) {
   const e1 = sub3(p2, p1);
@@ -365,38 +347,36 @@ export function triangleLocalFrame(p1, p2, p3) {
   return { x1: 0, y1: 0, x2, y2: 0, x3, y3, twoArea: x2 * y3 };
 }
 
-// ---------------------------------------------------------------- solver
+// Solver
 
-// SPARSE LINEAR LEAST SQUARES, matrix-free, via CONJUGATE GRADIENT ON THE
-// NORMAL EQUATIONS (CGLS/CGNR) with Jacobi (diagonal) preconditioning.
+// Sparse linear least squares, matrix-free, via conjugate gradient on the
+// normal equations (CGLS/CGNR) with Jacobi (diagonal) preconditioning.
 //
-// WHY THIS METHOD, and why it is numerically appropriate for LSCM
-// specifically (this kernel has no dependencies, so the solver is written
-// here rather than pulled in — the choice therefore has to be justified,
-// not defaulted to):
+// Why this method suits LSCM (this kernel has no dependencies, so the
+// solver is written here):
 //
-//  * The LSCM matrix is EXTREMELY sparse and structured: each triangle
+//  * The LSCM matrix is very sparse and structured: each triangle
 //    contributes exactly 2 rows with at most 6 nonzeros each. A matrix-free
 //    Krylov method touches only those nonzeros, so one iteration is O(nnz)
 //    with no fill-in at all. A direct sparse factorization (Cholesky/QR)
-//    would be faster per solve for a fixed mesh but needs real ordering and
-//    fill-reducing machinery to beat that — a large amount of code, and a
-//    large amount of new risk, for a solve that is not the bottleneck.
-//  * A^T A is symmetric POSITIVE DEFINITE here, which is exactly what CG
-//    requires. It is positive definite BECAUSE two vertices are pinned: the
+//    would be faster per solve for a fixed mesh but needs ordering and
+//    fill-reducing machinery to beat that — a large amount of code for a
+//    solve that is not the bottleneck.
+//  * A^T A is symmetric positive definite here, which is what CG
+//    requires. It is positive definite because two vertices are pinned: the
 //    conformal energy's own nullspace is precisely the 4-parameter
 //    similarity group (translate 2, rotate 1, scale 1) of the whole layout,
 //    and pinning two vertices removes exactly those 4 degrees of freedom.
 //    So the pinning is not a convenience, it is what makes the solve
 //    well posed.
-//  * HONEST NUMERICAL CAVEAT, stated rather than hidden: forming the normal
+//  * Numerical caveat: forming the normal
 //    equations squares the condition number, cond(A^T A) = cond(A)^2. Three
 //    things keep that acceptable here: (1) each triangle's rows are scaled
 //    by 1/sqrt(2*area), which makes every matrix entry O(1) regardless of
 //    triangle size, so a mesh with wildly varying triangle areas does not
 //    have its conditioning wrecked by the largest ones; (2) Jacobi
 //    preconditioning divides out the remaining per-column scale spread;
-//    (3) the achieved residual is MEASURED and RETURNED, and a genuine
+//    (3) the achieved residual is measured and returned, and a
 //    failure to converge throws by name instead of returning a
 //    plausible-looking wrong answer.
 //
@@ -481,12 +461,11 @@ export function solveSparseLeastSquares(triplets, rhs, nCols, opts = {}) {
   return { x: Array.from(x), iterations: iter, residual: resid, converged: resid <= Math.max(relTol, 1e-6) };
 }
 
-// ---------------------------------------------------------------- metrics
+// Metrics
 
-// MEASURE the flattening. This is the honest half of the module: it is
-// computed from the 3D mesh and the 2D layout INDEPENDENTLY of how that
-// layout was produced, so it is a real measurement rather than a
-// self-consistency check on the solver.
+// Measure the flattening. Computed from the 3D mesh and the 2D layout
+// independently of how that layout was produced, so it is a measurement
+// rather than a self-consistency check on the solver.
 //
 // Returned units:
 //   angle.maxDeg / rmsDeg / meanDeg    degrees        (per-corner |2D - 3D|)
@@ -499,12 +478,11 @@ export function solveSparseLeastSquares(triplets, rhs, nCols, opts = {}) {
 //   intrinsic.*AngleDefect             radians        (discrete Gaussian curvature)
 //   flippedTriangles                   count          (2D orientation reversals)
 //
-// intrinsic.maxAbsInteriorAngleDefect is the DISCRETE GAUSSIAN CURVATURE
+// intrinsic.maxAbsInteriorAngleDefect is the discrete Gaussian curvature
 // (2*pi minus the incident angle sum at an interior vertex). By Theorema
-// Egregium it is exactly the quantity that decides, BEFORE any flattening
-// is attempted, whether zero distortion is even possible: it is zero
-// everywhere on a developable and nonzero on anything genuinely
-// doubly-curved. It is reported so a caller can tell "this flattening is
+// Egregium it is the quantity that decides, before any flattening
+// is attempted, whether zero distortion is possible: it is zero
+// everywhere on a developable and nonzero on anything doubly-curved. It is reported so a caller can tell "this flattening is
 // good" apart from "this surface was flattenable in the first place."
 export function flatteningDistortion(positions, faces, uv) {
   const angleErrs = [];
@@ -519,15 +497,14 @@ export function flatteningDistortion(positions, faces, uv) {
     const Q = [uv[a], uv[b], uv[c]];
     const twoA3 = len3(cross3(sub3(P[1], P[0]), sub3(P[2], P[0])));
     const sa2 = 0.5 * ((Q[1][0] - Q[0][0]) * (Q[2][1] - Q[0][1]) - (Q[2][0] - Q[0][0]) * (Q[1][1] - Q[0][1]));
-    // ORIENTATION, measured against a canonical reference rather than a
+    // Orientation, measured against a canonical reference rather than a
     // majority vote among the triangles themselves: triangleLocalFrame
     // always lays a triangle out counter-clockwise in its own isometric
-    // frame, so an orientation-PRESERVING (holomorphic) map must give every
-    // triangle a positive signed 2D area. A negative one is a genuine
+    // frame, so an orientation-preserving (holomorphic) map must give every
+    // triangle a positive signed 2D area. A negative one is a
     // reversal — either a local fold, or (if every triangle is negative) a
-    // globally mirrored layout, which for anyone cutting real material is
-    // the difference between a left part and a right one. Both are real
-    // failures worth counting, so neither is voted away.
+    // globally mirrored layout, which for cut material is the difference
+    // between a left part and a right one. Both are counted.
     if (!(sa2 > 0)) flipped++;
     area3dTotal += 0.5 * twoA3;
     area2dTotal += Math.abs(sa2);
@@ -611,7 +588,7 @@ export function flatteningDistortion(positions, faces, uv) {
   };
 }
 
-// ---------------------------------------------------------------- LSCM
+// LSCM
 
 // Pick the two pinned vertices: the (approximate) diameter pair of the
 // mesh, found by two farthest-point passes. Pinning two vertices that are
@@ -640,19 +617,19 @@ function choosePins(positions, used) {
   return { pinA: a, pinB: b, pinDistance: best };
 }
 
-// FLATTEN an indexed triangle mesh into the plane via LSCM.
+// Flatten an indexed triangle mesh into the plane via LSCM.
 //
 // mesh: { positions: [[x,y,z], ...], faces: [[i,j,k], ...] }
 // opts: { tolerance, maxIterations, pinA, pinB }
 //
 // Returns:
 //   { uv, positions, faces, pins, solver, distortion, developable }
-// where `uv` is one [u,v] per input vertex in the SAME length unit as the
+// where `uv` is one [u,v] per input vertex in the same length unit as the
 // input positions, `distortion` is the full measured report from
 // flatteningDistortion, and `developable` is a plain-language summary of
-// whether an exact answer was even possible for this input.
+// whether an exact answer was possible for this input.
 //
-// NEVER claims exactness for a curved input: `distortion` is always
+// Never claims exactness for a curved input: `distortion` is always
 // populated and always measured.
 export function flattenLSCM(mesh, opts = {}) {
   const { positions, faces } = mesh || {};
@@ -666,7 +643,7 @@ export function flattenLSCM(mesh, opts = {}) {
   }
 
   // The two pinned vertices fix the layout's translation (2), rotation (1)
-  // and scale (1) — exactly the 4-dimensional nullspace of the conformal
+  // and scale (1) — the 4-dimensional nullspace of the conformal
   // energy. Their pinned distance is arbitrary (the whole layout is
   // rescaled below to best fit true edge lengths); the true 3D chord
   // distance is used simply so the intermediate numbers stay near unit
@@ -742,13 +719,13 @@ export function flattenLSCM(mesh, opts = {}) {
     uv[v] = [solved.x[2 * freeIndex[v]], solved.x[2 * freeIndex[v] + 1]];
   }
 
-  // A conformal map is only defined up to a global SIMILARITY, so the raw
+  // A conformal map is only defined up to a global similarity, so the raw
   // solution has an arbitrary overall scale. Fix it with the single uniform
   // factor s minimizing sum over mesh edges of (s*L2d - L3d)^2, i.e.
   //   s = sum(L2d*L3d) / sum(L2d^2).
-  // This is the honest normalization to measure length/area distortion
-  // against: it never hides distortion (a genuinely curved input still
-  // cannot match every edge), it only removes the meaningless global scale
+  // This is the normalization to measure length/area distortion
+  // against: it never hides distortion (a curved input still
+  // cannot match every edge), it only removes the arbitrary global scale
   // the algorithm itself does not determine.
   let num = 0, den = 0;
   for (const [a, b] of topo.edges) {
@@ -781,8 +758,8 @@ export function flattenLSCM(mesh, opts = {}) {
 
   const distortion = flatteningDistortion(positions, faces, uv);
 
-  // A plain-language, honest verdict — never "exact" unless the input's own
-  // discrete Gaussian curvature says an exact answer was possible at all.
+  // A plain-language verdict — never "exact" unless the input's own
+  // discrete Gaussian curvature says an exact answer was possible.
   const defect = distortion.intrinsic.maxAbsInteriorAngleDefect;
   const developableTol = opts.developableTolerance != null ? opts.developableTolerance : 1e-9;
   const developable = defect <= developableTol;
@@ -803,12 +780,11 @@ export function flattenLSCM(mesh, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------- NURBS entry
+// NURBS entry
 
 // Convenience entry point: flatten a NURBS surface by reusing this kernel's
-// OWN already-proven trimmed-surface tessellator (kernel/trimtess.mjs),
-// welding its output, and running LSCM. Deliberately does NOT contain any
-// tessellation of its own.
+// trimmed-surface tessellator (kernel/trimtess.mjs), welding its output,
+// and running LSCM. Contains no tessellation of its own.
 //
 // opts: { uRes, vRes, trimLoop, holes, ...flattenLSCM opts }
 export function flattenNurbsSurface(srf, opts = {}) {
@@ -822,11 +798,10 @@ export function flattenNurbsSurface(srf, opts = {}) {
   const mesh = dropDegenerateFaces(weldTriangulation(tris, opts.weldTolerance));
   const result = flattenLSCM(mesh, opts);
   result.tessellation = { uRes, vRes, triangleCount: tris.length, vertexCount: mesh.positions.length, weldTolerance: mesh.weldTolerance, droppedPoleFaces: mesh.droppedFaces };
-  // Honest accounting of the OTHER loss: how much area the tessellation
-  // itself already gave up before the flattening ever ran. Only meaningful
-  // for an untrimmed patch (the exact integral below covers the whole
-  // parametric rectangle, not a trimmed sub-region), so it is reported only
-  // then rather than quietly reported wrong.
+  // The other loss: how much area the tessellation itself gave up before
+  // the flattening ran. Only meaningful for an untrimmed patch (the exact
+  // integral below covers the whole parametric rectangle, not a trimmed
+  // sub-region), so it is reported only then.
   if (!opts.trimLoop && !(opts.holes && opts.holes.length)) {
     const trueArea = nurbsSurfaceArea(srf, opts.areaCellsPerSpan || 8, opts.areaCellsPerSpan || 8);
     result.tessellation.trueSurfaceArea = trueArea;
@@ -837,8 +812,8 @@ export function flattenNurbsSurface(srf, opts = {}) {
   return result;
 }
 
-// A small, honest convenience for a caller that wants to know whether an
-// exact unrolling is even possible BEFORE paying for a solve. Uses the same
+// For a caller that wants to know whether an exact unrolling is possible
+// before paying for a solve. Uses the same
 // discrete Gaussian curvature (angle defect) the distortion report exposes.
 export function isDevelopable(positions, faces, tolerance = 1e-9) {
   const topo = buildMeshTopology(positions, faces);
@@ -861,29 +836,26 @@ export function isDevelopable(positions, faces, tolerance = 1e-9) {
   return { developable: maxDefect <= tolerance, maxAbsInteriorAngleDefect: maxDefect };
 }
 
-// The TRUE area of an untrimmed NURBS surface patch, from its own first
+// The true area of an untrimmed NURBS surface patch, from its own first
 // fundamental form: dA = |Su x Sv| du dv, integrated with 3-point
-// Gauss-Legendre using the already-proven surfacePointAndPartials.
+// Gauss-Legendre using surfacePointAndPartials.
 //
-// The integration grid is subdivided AT EVERY DISTINCT KNOT VALUE first,
-// then `cellsPerSpan` cells inside each span. This matters and is not
-// cosmetic: a NURBS surface is only piecewise smooth, and its derivative is
-// genuinely discontinuous across a full-multiplicity interior knot (a
-// revolve's own arc-span joints, for instance). A naive uniform grid whose
-// cells straddle such a joint integrates a kinked function inside one cell
-// and loses several orders of magnitude of accuracy — measured directly:
-// on a 200-degree revolve of a line, a straddling grid was 1.0e-4 off the
-// analytic area while a knot-aligned grid of the SAME cell count was
+// The integration grid is subdivided at every distinct knot value first,
+// then `cellsPerSpan` cells inside each span. A NURBS surface is only
+// piecewise smooth, and its derivative is discontinuous across a
+// full-multiplicity interior knot (a revolve's own arc-span joints, for
+// instance). A uniform grid whose cells straddle such a joint integrates a
+// kinked function inside one cell and loses orders of magnitude of
+// accuracy: on a 200-degree revolve of a line, a straddling grid is 1.0e-4
+// off the analytic area while a knot-aligned grid of the same cell count is
 // 1.9e-6 off.
 //
-// WHY THIS IS HERE, and not decoration: a flattening pipeline loses area
-// TWICE, and a caller cutting real material deserves both numbers
-// separately. First the TESSELLATION loses area (a chord always undercuts
-// its arc, so a triangulated curved patch is always slightly SMALLER than
-// the true surface). Only then does the FLATTENING lose area. Reporting
-// only the flattened-vs-tessellated ratio would quietly hide the first
-// loss inside an otherwise flattering number. `flattenNurbsSurface` below
-// reports both.
+// A flattening pipeline loses area twice, and the two losses are reported
+// separately. First the tessellation loses area (a chord always undercuts
+// its arc, so a triangulated curved patch is always slightly smaller than
+// the true surface). Then the flattening loses area. Reporting only the
+// flattened-vs-tessellated ratio would hide the first loss.
+// `flattenNurbsSurface` above reports both.
 export function nurbsSurfaceArea(srf, cellsPerSpanU = 8, cellsPerSpanV = 8) {
   if (!srf || !srf.ctrlNet) throw new Error('nurbsSurfaceArea: expected a NURBS surface with a control net');
   const cellEdges = (knots, cellsPerSpan) => {

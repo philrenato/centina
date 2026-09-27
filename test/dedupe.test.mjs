@@ -12,55 +12,55 @@ function samplesOf(crv, uStart, uEnd) {
   return adaptiveArcLengthSamples(crv, uStart ?? crv.knots[0], uEnd ?? crv.knots[crv.knots.length - 1], 0.01).map((s) => s.pt);
 }
 
-test('curvesCoincident: two identical lines (same points, same direction) ARE coincident', () => {
+test('curvesCoincident: two identical lines (same points, same direction) are coincident', () => {
   const a = makeLine([0, 0, 0], [10, 0, 0]);
   const b = makeLine([0, 0, 0], [10, 0, 0]);
   assert.ok(curvesCoincident(samplesOf(a), samplesOf(b), TOL));
 });
 
-test('curvesCoincident: two identical lines, one REVERSED, are still coincident (direction-agnostic)', () => {
+test('curvesCoincident: two identical lines, one reversed, are still coincident (direction-agnostic)', () => {
   const a = makeLine([0, 0, 0], [10, 0, 0]);
   const b = makeLine([10, 0, 0], [0, 0, 0]);
   assert.ok(curvesCoincident(samplesOf(a), samplesOf(b), TOL));
 });
 
-test('curvesCoincident: two lines offset by less than tolerance ARE coincident (near-duplicate)', () => {
+test('curvesCoincident: two lines offset by less than tolerance are coincident (near-duplicate)', () => {
   const a = makeLine([0, 0, 0], [10, 0, 0]);
   const b = makeLine([0, 0.0002, 0], [10, 0.0002, 0]); // 0.0002mm offset, well inside 0.001mm TOL
   assert.ok(curvesCoincident(samplesOf(a), samplesOf(b), TOL));
 });
 
-test('curvesCoincident: two lines offset by MORE than tolerance are NOT coincident', () => {
+test('curvesCoincident: two lines offset by more than tolerance are not coincident', () => {
   const a = makeLine([0, 0, 0], [10, 0, 0]);
   const b = makeLine([0, 1, 0], [10, 1, 0]); // 1mm offset, well outside 0.001mm TOL
   assert.equal(curvesCoincident(samplesOf(a), samplesOf(b), TOL), false);
 });
 
-test('curvesCoincident: a curve that is a real SUB-SEGMENT of a much longer curve is NOT flagged as a duplicate', () => {
+test('curvesCoincident: a curve that is a real sub-segment of a much longer curve is not flagged as a duplicate', () => {
   const full = makeLine([0, 0, 0], [10, 0, 0]);
   const sub = makeLine([2, 0, 0], [4, 0, 0]); // lies exactly on `full`'s own path, but spans only 2 of 10 units
   assert.equal(curvesCoincident(samplesOf(full), samplesOf(sub), TOL), false);
 });
 
-test('curvesCoincident: a curve that is a sub-segment starting AT the same origin point is still NOT flagged (extent, not just endpoint, must match)', () => {
+test('curvesCoincident: a curve that is a sub-segment starting at the same origin point is still not flagged (extent, not just endpoint, must match)', () => {
   const full = makeLine([0, 0, 0], [10, 0, 0]);
   const sub = makeLine([0, 0, 0], [3, 0, 0]); // shares an endpoint with `full`, but is only 30% of its length
   assert.equal(curvesCoincident(samplesOf(full), samplesOf(sub), TOL), false);
 });
 
-test('curvesCoincident: two genuinely different curves (a line and a perpendicular arc through a shared point) are NOT flagged', () => {
+test('curvesCoincident: two different curves (a line and a perpendicular arc through a shared point) are not flagged', () => {
   const line = makeLine([0, 0, 0], [10, 0, 0]);
   const arc = makeArc([0, 0, 0], [0, 0, 1], [0, 1, 0], 5, 0, Math.PI); // shares the origin, otherwise nothing like the line
   assert.equal(curvesCoincident(samplesOf(line), samplesOf(arc), TOL), false);
 });
 
-test('curvesCoincident: two identical arcs ARE coincident', () => {
+test('curvesCoincident: two identical arcs are coincident', () => {
   const a = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   const b = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   assert.ok(curvesCoincident(samplesOf(a), samplesOf(b), TOL));
 });
 
-test('curvesCoincident: an arc and a shorter sub-arc of the SAME circle are NOT flagged as a duplicate', () => {
+test('curvesCoincident: an arc and a shorter sub-arc of the same circle are not flagged as a duplicate', () => {
   const full = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   const partial = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI / 3);
   assert.equal(curvesCoincident(samplesOf(full), samplesOf(partial), TOL), false);
@@ -71,13 +71,11 @@ test('curvesCoincident: empty sample chains are never coincident (defensive, not
   assert.equal(curvesCoincident([], [], TOL), false);
 });
 
-// ---------------------------------------------------------------------------
 // curveCoincidenceGap — the same test read backwards. These assert the
-// CONTRACT that makes a refusal able to name a value that would work: the
+// contract that makes a refusal able to name a value that would work: the
 // returned gap is the exact boundary of curvesCoincident's own answer, so a
 // tolerance just above it passes and a tolerance just below it fails. A gap
 // that were merely "some proximity measure" would satisfy neither.
-// ---------------------------------------------------------------------------
 
 // Asserts the boundary property directly against curvesCoincident, which is
 // the only claim callers rely on. Multiplicative nudges (not additive) so the
@@ -86,8 +84,8 @@ test('curvesCoincident: empty sample chains are never coincident (defensive, not
 function assertGapIsTheBoundary(a, b) {
   const gap = curveCoincidenceGap(a, b);
   assert.ok(Number.isFinite(gap) && gap > 0, `gap should be a finite positive number, got ${gap}`);
-  assert.equal(curvesCoincident(a, b, gap * 1.001), true, `should be coincident just ABOVE the gap (${gap})`);
-  assert.equal(curvesCoincident(a, b, gap * 0.999), false, `should NOT be coincident just BELOW the gap (${gap})`);
+  assert.equal(curvesCoincident(a, b, gap * 1.001), true, `should be coincident just above the gap (${gap})`);
+  assert.equal(curvesCoincident(a, b, gap * 0.999), false, `should not be coincident just below the gap (${gap})`);
   return gap;
 }
 
@@ -111,20 +109,20 @@ test('curveCoincidenceGap: the gap is exactly the boundary of curvesCoincident (
   assertGapIsTheBoundary(samplesOf(a), samplesOf(b));
 });
 
-test('curveCoincidenceGap: the gap is exactly the boundary for a REVERSED near-duplicate too (direction-agnostic)', () => {
+test('curveCoincidenceGap: the gap is exactly the boundary for a reversed near-duplicate too (direction-agnostic)', () => {
   const a = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   const b = makeArc([0, 0.05, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   const rev = samplesOf(b).slice().reverse();
   assertGapIsTheBoundary(samplesOf(a), rev);
 });
 
-test('curveCoincidenceGap: the gap is exactly the boundary for the sub-segment case, where the EXTENT term is what binds', () => {
+test('curveCoincidenceGap: the gap is exactly the boundary for the sub-segment case, where the extent term is what binds', () => {
   const full = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI);
   const partial = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 5, 0, Math.PI / 3);
   assertGapIsTheBoundary(samplesOf(full), samplesOf(partial));
 });
 
-test('curveCoincidenceGap: two genuinely unrelated curves report a large finite gap, never Infinity', () => {
+test('curveCoincidenceGap: two unrelated curves report a large finite gap, never Infinity', () => {
   const line = makeLine([0, 0, 0], [10, 0, 0]);
   const arc = makeArc([0, 0, 0], [0, 0, 1], [0, 1, 0], 5, 0, Math.PI);
   const gap = curveCoincidenceGap(samplesOf(line), samplesOf(arc));

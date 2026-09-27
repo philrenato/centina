@@ -1,4 +1,4 @@
-// A BVH IS ONLY WORTH HAVING IF IT AGREES WITH BRUTE FORCE.
+// A BVH is only worth having if it agrees with brute force.
 //
 // Every assertion here compares the tree against testing every triangle. That is
 // the only oracle available: a tree can be well-formed, well-balanced, cheap by
@@ -48,7 +48,7 @@ function scatterTriangles(n, spread) {
   return out;
 }
 
-// STRUCTURE: every triangle appears exactly once, leaves are never empty, and
+// Structure: every triangle appears exactly once, leaves are never empty, and
 // interior nodes contain their children. An empty leaf reads as an interior node
 // pointing at garbage, which is why the count field can never be zero on a leaf.
 function checkStructure(bvh, label) {
@@ -77,7 +77,7 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   const pos = scatterTriangles(tris, spread);
   const bvh = buildBVH(pos);
   checkStructure(bvh, label);
-  // AGREEMENT WITH BRUTE FORCE, on rays aimed from all around.
+  // Agreement with brute force, on rays aimed from all around.
   let checked = 0, agreed = 0;
   for (let r = 0; r < 400; r += 1) {
     const o = [(rnd() - 0.5) * spread * 3, (rnd() - 0.5) * spread * 3, (rnd() - 0.5) * spread * 3];
@@ -92,10 +92,9 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
     agreed += 1;
   }
   assert.equal(agreed, checked);
-  console.log(`  ${label.padEnd(15)} ${String(bvh.nodeCount).padStart(5)} nodes  depth ${String(bvh.maxDepth).padStart(2)}  ${String(bvh.leaves).padStart(4)} leaves  SAH cost ${bvhCost(bvh).toFixed(1)}  ${checked} rays agree`);
 }
 
-/* ⚠ DEGENERATE INPUT MUST NOT HANG. Triangles whose centroids all coincide give
+/* Degenerate input must not hang. Triangles whose centroids all coincide give
    a split that separates nothing; recursing on it never terminates, and the
    symptom is a frozen tab rather than an error. */
 {
@@ -104,7 +103,6 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   const bvh = buildBVH(same);
   checkStructure(bvh, 'coincident');
   assert.ok(bvh.nodeCount > 0);
-  console.log(`  ${'coincident 64'.padEnd(15)} ${String(bvh.nodeCount).padStart(5)} nodes  (a split that separates nothing becomes a leaf)`);
 }
 {
   const flat = new Float32Array(200 * 9);
@@ -117,7 +115,6 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   const hit = bvhIntersect(bvh, flat, [50, 5, 0.1], [0, -1, 0]);
   const ref = brute(flat, [50, 5, 0.1], [0, -1, 0]);
   assert.equal(!!hit, !!ref, 'coplanar: a flat sheet must still be hit');
-  console.log(`  ${'coplanar 200'.padEnd(15)} ${String(bvh.nodeCount).padStart(5)} nodes  (a zero-thickness slab still intersects)`);
 }
 {
   assert.equal(buildBVH(new Float32Array(0)).nodeCount, 0, 'an empty scene builds an empty tree');
@@ -125,43 +122,39 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   const b1 = buildBVH(one);
   assert.equal(b1.nodeCount, 1);
   assert.ok(bvhIntersect(b1, one, [0.2, 0.2, 1], [0, 0, -1]), 'a one-triangle tree still hits');
-  console.log('  empty and single-triangle trees behave');
 }
 
-/* ⚠⚠ AXIS-ALIGNED RAYS, WHICH ARE THE COMMON CASE AND THE ONE THAT BREAKS.
+/* Axis-aligned rays, which are the common case and the one that breaks.
    `1/0` is Infinity, and where a box face lies exactly on the ray's origin the
    slab test computes `0 * Infinity` = NaN. Comparisons against NaN are all
-   false, so the node is not rejected — it is silently MISSED. Every one of these
+   false, so the node is not rejected — it is silently missed. Every one of these
    rays is aimed straight down an axis and originates on a coordinate a box face
    sits on, which is exactly the alignment a modeling app produces constantly
    and a random ray never does. */
 {
   const pos = scatterTriangles(600, 12);
   const bvh = buildBVH(pos);
-  let checked = 0;
   for (const axis of [0, 1, 2]) {
     for (const sign of [1, -1]) {
       for (let k = 0; k < 40; k += 1) {
         const o = [0, 0, 0];
         const d = [0, 0, 0];
         d[axis] = sign;
-        // origin placed ON a vertex coordinate, which is where the NaN appears
+        // origin placed on a vertex coordinate, which is where the NaN appears
         const src = (k * 7) % (pos.length / 3);
         o[(axis + 1) % 3] = pos[src * 3 + ((axis + 1) % 3)];
         o[(axis + 2) % 3] = pos[src * 3 + ((axis + 2) % 3)];
         o[axis] = -40 * sign;
         const a2 = bvhIntersect(bvh, pos, o, d);
         const b2 = brute(pos, o, d);
-        checked += 1;
         assert.equal(!!a2, !!b2, `axis-aligned: tree and brute force disagree on axis ${axis} sign ${sign} ray ${k}`);
         if (a2 && b2) assert.ok(Math.abs(a2.t - b2.t) < 1e-4, `axis-aligned: hit at ${a2.t} against ${b2.t}`);
       }
     }
   }
-  console.log(`  axis-aligned:   ${checked} rays down the three axes, all agree with brute force`);
 }
 
-/* THE TREE MUST BE WORTH ITS COST. A structurally perfect BVH that puts every
+/* The tree must be worth its cost. A structurally perfect BVH that puts every
    triangle in one leaf agrees with brute force on every ray and saves nothing —
    so quality is asserted, not assumed. */
 {
@@ -171,9 +164,8 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   assert.ok(bvhCost(bvh) < flatCost * 0.05,
     `SAH cost ${bvhCost(bvh).toFixed(1)} is not meaningfully better than testing all ${flatCost}`);
   assert.ok(bvh.maxDepth < 64, `depth ${bvh.maxDepth} is too deep to walk with a fixed stack`);
-  console.log(`  quality: 4000 triangles, SAH cost ${bvhCost(bvh).toFixed(1)} against ${flatCost} flat, depth ${bvh.maxDepth}`);
 }
-/* ⚠⚠ THE TWO CHILDREN MUST BE ADJACENT. A traversal reads the left index and
+/* The two children must be adjacent. A traversal reads the left index and
    takes the right as `left + 1` without storing it — so building the left
    subtree entirely before allocating the right, which is the obvious recursive
    order, separates them and every interior node then points at whatever the left
@@ -194,25 +186,20 @@ for (const [label, tris, spread] of [['scattered 200', 200, 20], ['scattered 200
   }
   assert.ok(interior > 100, `only ${interior} interior nodes — not enough to be checking anything`);
 
-  /* THE SHADER'S STACK IS FORTY DEEP AND HAS NO OVERFLOW PATH: past that it
+  /* The shader's stack is forty deep and has no overflow path: past that it
      silently drops a subtree, which is missing geometry with nothing to blame. */
   assert.ok(bvh.maxDepth < 40, `depth ${bvh.maxDepth} would overrun a shader stack of 40`);
 
-  /* AND THE INDICES SURVIVE THE TRIP AS INTEGERS. A float cannot carry an index
+  /* And the indices survive the trip as integers. A float cannot carry an index
      past 2^24; written as a float it works on every scene small enough to test
      by hand and starts losing consecutive integers at sixteen million. */
   const packed = packBVHForGPU(bvh);
   const asU32 = new Uint32Array(packed.buffer);
-  let checked = 0;
   for (let i = 0; i < bvh.nodeCount; i += 1) {
     const b = i * 8;
     assert.equal(asU32[b + 3], bvh.nodes[b + 3], `node ${i}: index field did not survive packing`);
     assert.equal(asU32[b + 7], bvh.nodes[b + 7], `node ${i}: count field did not survive packing`);
     assert.equal(packed[b], bvh.nodes[b], `node ${i}: bounds changed in packing`);
-    checked += 1;
   }
   assert.equal(packed.length, bvh.nodeCount * 8, 'the packed buffer is two vec4 per node');
-  console.log(`  contract:       ${interior} interior nodes all have adjacent children, depth ${bvh.maxDepth} < 40, ${checked} nodes pack as u32 bits`);
 }
-
-console.log('bvh: ok');

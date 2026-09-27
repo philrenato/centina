@@ -6,7 +6,7 @@ import { makeArc, makeLine, makeCircle, revolve, extrude } from '../kernel/primi
 import { extractIsocurveU, extractIsocurveV, extractBorderCurves, extractWireframeCurves } from '../kernel/isocurve.mjs';
 import { grevilleAbscissae } from '../kernel/curve.mjs';
 
-// A fully RATIONAL surface (both U and V direction have non-unit alternating
+// A fully rational surface (both U and V direction have non-unit alternating
 // weights) — a revolve of a 270deg arc profile revolved 270deg itself —
 // deliberately the harshest stress case: if isocurve extraction only
 // happened to work for a non-rational (Line/Polyline) profile or a
@@ -54,7 +54,7 @@ test('extractIsocurveV: the extracted curve exactly reproduces the surface at ev
   }
 });
 
-test('extractIsocurveU at an exact boundary (u = domain start/end) reproduces the surface\'s own edge control ROW verbatim, not an approximation', () => {
+test('extractIsocurveU at an exact boundary (u = domain start/end) reproduces the surface\'s own edge control row verbatim, not an approximation', () => {
   const srf = makeTestSurface();
   const uStart = srf.knotsU[0];
   const uEnd = srf.knotsU[srf.knotsU.length - 1];
@@ -94,7 +94,7 @@ test('extractIsocurveU/V produce a curve with no NaN/Infinity anywhere across th
   }
 });
 
-// ExtractBorder — a surface open in BOTH directions (this file's own
+// ExtractBorder — a surface open in both directions (this file's own
 // rational stress surface: a 270deg arc profile, itself only revolved
 // 270deg) gets all 4 borders, each bit-for-bit reproducing an independent
 // extractIsocurveU/V call at the exact same domain boundary — a real
@@ -106,7 +106,7 @@ test('extractBorderCurves: a surface open in both directions returns all 4 edges
   assert.equal(closedU, false);
   assert.equal(closedV, false);
   const borders = extractBorderCurves(srf);
-  assert.equal(borders.length, 4, 'all 4 parametric sides are genuinely free');
+  assert.equal(borders.length, 4, 'all 4 parametric sides are free');
   assert.deepEqual(borders.map((b) => b.edge), ['uMin', 'uMax', 'vMin', 'vMax'], 'a stable, documented edge order');
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
@@ -119,8 +119,8 @@ test('extractBorderCurves: a surface open in both directions returns all 4 edges
   }
 });
 
-// A FULL revolve of an OPEN profile (a cylinder) wraps in V (the sweep),
-// so the vMin/vMax boundary curves would be IDENTICAL (the same seam) —
+// A full revolve of an open profile (a cylinder) wraps in V (the sweep),
+// so the vMin/vMax boundary curves would be identical (the same seam) —
 // correctly excluded rather than returned as a duplicate pair. The two
 // remaining uMin/uMax edges are the cylinder's own real top/bottom rims.
 test('extractBorderCurves: a full revolve of an open profile (cylinder, closed in V) returns only the 2 naked uMin/uMax rim edges, never the seam', () => {
@@ -135,7 +135,7 @@ test('extractBorderCurves: a full revolve of an open profile (cylinder, closed i
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   assert.deepEqual(borders[0].crv, extractIsocurveU(srf, uMin));
   assert.deepEqual(borders[1].crv, extractIsocurveU(srf, uMax));
-  // Each rim is a genuine circle of radius 5 at its own fixed Z (0 and 20).
+  // Each rim is a real circle of radius 5 at its own fixed Z (0 and 20).
   for (const [i, expectedZ] of [[0, 0], [1, 20]]) {
     const { crv } = borders[i];
     for (let t = 0; t <= 1.0001; t += 0.1) {
@@ -147,7 +147,7 @@ test('extractBorderCurves: a full revolve of an open profile (cylinder, closed i
   }
 });
 
-// An extrude of a CLOSED profile (a circle) is a tube, closed in U (the
+// An extrude of a closed profile (a circle) is a tube, closed in U (the
 // profile itself), open in V (the extrude direction) — the mirror image
 // of the cylinder case above: uMin/uMax would coincide (the tube's own
 // vertical seam), so only the 2 real rim-circle edges (vMin/vMax) return.
@@ -165,12 +165,12 @@ test('extractBorderCurves: extrude of a closed profile (a tube, closed in U) ret
   assert.deepEqual(borders[1].crv, extractIsocurveV(srf, vMax));
 });
 
-// A surface closed in BOTH directions (a torus: a full revolve of an
-// already-closed circle profile) genuinely has NO naked edges at all —
+// A surface closed in both directions (a torus: a full revolve of an
+// already-closed circle profile) has no naked edges at all —
 // extractBorderCurves correctly returns an empty array, not a crash or a
 // spurious seam pair, matching nakedEdgeCount's own identical 0 result
 // for the same real geometric reason.
-test('extractBorderCurves: a torus (closed in both U and V) has zero naked edges — an honestly empty array, not a bug', () => {
+test('extractBorderCurves: a torus (closed in both U and V) has zero naked edges — an empty array, not a bug', () => {
   const profile = makeCircle([5, 0, 0], [0, 0, 1], [1, 0, 0], 1, 4);
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -180,12 +180,12 @@ test('extractBorderCurves: a torus (closed in both U and V) has zero naked edges
   assert.deepEqual(borders, []);
 });
 
-// EXTRACTWIREFRAME — the batch EXTRACTISOCURVE command, reusing
+// ExtractWireframe — the batch ExtractIsocurve command, reusing
 // the Wireframe overlay's own Greville-abscissae density convention (see
 // extractWireframeCurves' own header comment for the full reasoning). This
 // app's rational stress surface again (open in both U and V), so the
-// count is exactly ctrlNet.length U-rows + ctrlNet[0].length V-rows, no
-// closed-seam special case to worry about in this first test.
+// count is exactly ctrlNet.length U-rows + ctrlNet[0].length V-rows, with no
+// closed-seam special case.
 test('extractWireframeCurves: total curve count is exactly ctrlNet.length (U rows) + ctrlNet[0].length (V rows) for a surface open in both directions', () => {
   const srf = makeTestSurface();
   const wires = extractWireframeCurves(srf);
@@ -194,7 +194,7 @@ test('extractWireframeCurves: total curve count is exactly ctrlNet.length (U row
   assert.equal(wires.filter((w) => w.dir === 'V').length, srf.ctrlNet[0].length);
 });
 
-// Cross-check against DIRECTLY calling grevilleAbscissae + extractIsocurveU/V
+// Cross-check against directly calling grevilleAbscissae + extractIsocurveU/V
 // ourselves, curve-for-curve, bit-for-bit — not a self-consistency
 // tautology, the same "prove it against already-proven kernel machinery"
 // technique extractBorderCurves' own test above already uses.
@@ -229,14 +229,13 @@ test('extractWireframeCurves: every curve in the batch is finite everywhere, no 
   }
 });
 
-// A cylinder (full revolve of an open profile, closed in V) is NOT
+// A cylinder (full revolve of an open profile, closed in V) is not
 // filtered for the seam the way extractBorderCurves would filter it —
-// this function deliberately matches the Wireframe OVERLAY's own
+// this function deliberately matches the Wireframe overlay's own
 // convention (no closure filtering at all), so the closed direction's own
 // first/last Greville values (both landing on the same physical seam
-// row) both still appear, a real, named, already-accepted duplicate-seam
-// cosmetic quirk, not a bug.
-test('extractWireframeCurves: a closed-V cylinder does NOT filter the seam (matches the Wireframe overlay\'s own no-filtering convention, not ExtractBorder\'s stricter one)', () => {
+// row) both still appear: a known, cosmetic duplicate seam, by design.
+test('extractWireframeCurves: a closed-V cylinder does not filter the seam (matches the Wireframe overlay\'s own no-filtering convention, not ExtractBorder\'s stricter one)', () => {
   const profile = makeLine([5, 0, 0], [5, 0, 20]);
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);

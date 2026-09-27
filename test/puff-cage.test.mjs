@@ -1,4 +1,4 @@
-// A PUFF IS A CAGE, AND THE CAGE IS THE CLAIM.
+// A puff is a cage, and the cage is the claim.
 //
 // Every assertion here is about the thing handed to the subdivider: all quads,
 // closed, genus 0, few faces, and a limit surface that lands on the line that
@@ -40,39 +40,39 @@ for (const [name, poly] of [['circle', circle], ['ellipse 1.5', ellipse(1.5)], [
   const r = puffCage(poly, opts);
   assert.equal(r.ok, true, `${name}: ${r.why || r.reason}`);
 
-  // EVERY FACE A QUAD. The subdivider takes other arities, the NURBS conversion
+  // Every face a quad. The subdivider takes other arities, the NURBS conversion
   // does not — `referenceMeshToSuperBCage` accepts quads and nothing else, so a
   // stray triangle is a puff that cannot become a surface.
   assert.ok(r.cage.faces.every((f) => f.length === 4), `${name}: not all quads`);
 
-  // CLOSED, GENUS 0, WATERTIGHT — one number, and the one a shared equator
+  // Closed, genus 0, watertight — one number, and the one a shared equator
   // either satisfies or does not.
   assert.equal(euler(r.cage), 2, `${name}: Euler ${euler(r.cage)}, not 2`);
 
-  // NO VALENCE-2 VERTEX. A ring cage that lost its cap produces them, they
+  // No valence-2 vertex. A ring cage that lost its cap produces them, they
   // subdivide into a pinch, and Euler alone cannot see it.
   const deg = valences(r.cage);
   assert.ok(![...deg.values()].some((v) => v < 3), `${name}: a vertex of valence < 3`);
 
-  // AS FEW FACES AS THE SILHOUETTE ALLOWS. The ceiling is the whole point of the
+  // As few faces as the silhouette allows. The ceiling is the whole point of the
   // density ladder; without it "solved density" would quietly mean "dense".
   assert.ok(r.quads <= 54, `${name}: ${r.quads} quads quads is not a cage anyone edits by hand`);
 
-  // AND THE LIMIT SURFACE LANDS ON THE DRAWN LINE. Deviation is signed and
+  // And the limit surface lands on the drawn line. Deviation is signed and
   // measured against the polygon, not against a radius — a mean radius is an
   // oracle for a circle and reports nonsense on anything else.
-  /* WORST, NOT MEAN. A rim that scallops between control points has a small
+  /* Worst, not mean. A rim that scallops between control points has a small
      average error and a large local one; asserting the mean passes the shape
      that most needs catching. */
   assert.ok(r.worstDeviation <= 0.25, `${name}: silhouette locally off by ${(r.worstDeviation * 100).toFixed(2)}%`);
 
-  /* ⚠ AND THE RIM IS SMOOTH. Creasing it also puts the silhouette on the drawn
-     curve, at a quarter of the faces — by making the equator SHARP, which turns
+  /* And the rim is smooth. Creasing it also puts the silhouette on the drawn
+     curve, at a quarter of the faces — by making the equator sharp, which turns
      a closed form into a saucer with a lip. The cheaper answer is the wrong
      object, so the absence of creases is asserted rather than assumed. */
   assert.equal(Object.keys(r.cage.creases || {}).length, 0, `${name}: the rim was creased — that is a flange, not a form`);
 
-  // ⚠ AND THE CAGE STILL CONVERTS. A creased rim makes every face beside it
+  // And the cage still converts. A creased rim makes every face beside it
   // irregular, and an isolation budget that cannot clear the weight would leave
   // holes around the entire outline. This is the assertion that would catch it.
   const out = subdToPatches(r.cage, {});
@@ -81,11 +81,8 @@ for (const [name, poly] of [['circle', circle], ['ellipse 1.5', ellipse(1.5)], [
   assert.equal(capped, 0, `${name}: ${capped} of ${list.length} patches are caps — NURBS coverage has holes at the silhouette`);
 
   assert.ok(r.aspect <= 8, `${name}: worst face edge ratio ${r.aspect.toFixed(1)}:1 — that is a sliver, not a face you can grab`);
-  console.log(`  ${name.padEnd(12)} ${String(r.quads).padStart(3)} quads  aspect ${r.aspect.toFixed(1)}:1  worst dev ${(r.worstDeviation * 100).toFixed(1)}%  ${list.length} patches`);
 }
 
-// AN OPEN OR EMPTY STROKE IS A REFUSAL WITH A REASON, never a throw.
+// An open or empty stroke is a refusal with a reason, never a throw.
 assert.equal(puffCage([], opts).ok, false);
 assert.equal(puffCage(circle, {}).ok, false, 'no subdivider must refuse, not throw');
-console.log('  refusals carry a reason');
-console.log('puff-cage: ok');

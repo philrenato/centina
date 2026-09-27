@@ -5,12 +5,11 @@ import { surfacePoint } from '../kernel/surface.mjs';
 import { extrude, makeCircle, makeSquircle2D } from '../kernel/primitives.mjs';
 import { globalCurveInterp } from '../kernel/interpolate.mjs';
 
-// ADDING CONTROL POINTS IS FREE, and this file is the reason that sentence is
-// allowed to be said. Knot insertion rewrites a surface's DESCRIPTION and moves
-// no point of the surface — so bringing a coarse side up to a fine one to make
-// two edges meet costs a denser net and nothing else. If that is ever untrue,
-// forcing a match silently deforms the student's model, which is far worse than
-// the refusal it replaces.
+// Adding control points is free: knot insertion rewrites a surface's
+// description and moves no point of the surface — so bringing a coarse side up
+// to a fine one to make two edges meet costs a denser net and nothing else. If
+// that ever failed, forcing a match would silently deform the student's model,
+// which is worse than the refusal it replaces.
 const profile = (n) => {
   const pts = [];
   for (let i = 0; i < n; i++) pts.push([i * 10, Math.sin(i) * 4, 0]);
@@ -69,7 +68,7 @@ test('harmonizeDirections refuses by default and says the refusal can be forced'
   const a = extrude(profile(5), [0, 0, 1], 20);
   const b = extrude(profile(7), [0, 0, 1], 20);
   const ok = harmonizeDirections(a, 'u', b, 'u');
-  assert.equal(ok.ok, true, 'an ordinary pair still harmonises without forcing');
+  assert.equal(ok.ok, true, 'an ordinary pair still harmonizes without forcing');
   assert.equal(countIn(ok.a, 'u'), countIn(ok.b, 'u'));
   assert.ok(!ok.forced, 'and it did not need to be forced');
 });

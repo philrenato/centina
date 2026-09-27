@@ -2,13 +2,13 @@
 // (surface of revolution), plus the simple ruled/extruded surface (Ch. 8).
 //
 // The circle/arc technique: split the sweep into spans of at most 90°, and
-// for each span use the CLOSED-FORM tangent-intersection point — no general
+// for each span use the closed-form tangent-intersection point — no general
 // line-line intersection needed, because in the span's own local (xHat,yHat)
 // basis the middle control point is always P0 + r*tan(dtheta/2)*tangentAtP0,
 // a fact that's rotation-invariant so it works for every 90°-or-less span at
 // any starting angle. This is the same construction that produces the
-// standard 9-control-point unit circle (degree 2, weights 1/(root2/2)
-// alternating) verified against curve.mjs in test/curve-surface.test.mjs.
+// standard 9-control-point unit circle (degree 2, weights 1 and root2/2
+// alternating), checked against curve.mjs in test/curve-surface.test.mjs.
 
 import { add, sub, scale, dot, cross, length, normalize, anyPerpendicular } from './vec3.mjs';
 import { degreeElevateCurve, joinCurvesC0, insertKnot } from './knots.mjs';
@@ -41,14 +41,12 @@ export function makeLine(p0, p1) {
 
 // Exact rational arc: center + orthonormal in-plane basis (xAxis, yAxis) +
 // radius + start angle + signed sweep (radians). A full circle is sweep=2*PI.
-// `minSegments` forces MORE arc spans than the sweep alone would need (each
+// `minSegments` forces more arc spans than the sweep alone would need (each
 // span is still <=90 deg, so the closed-form construction stays exact
-// regardless of span size) — this is how a circle gets "rebuilt" with more
-// control points (Rhino's own Rebuild vocabulary) WITHOUT ever
-// leaving the exact rational representation: more spans means more
-// (still-exactly-on-the-true-circle) control points, not an approximating
-// refit. Default 1 (no forced extra subdivision) keeps every existing
-// caller's behavior byte-identical.
+// regardless of span size). This is how a circle is rebuilt with more control
+// points without leaving the exact rational representation: more spans means
+// more control points, not an approximating refit. Default 1: no forced extra
+// subdivision.
 export function makeArc(center, xAxis, yAxis, radius, angleStart, sweep, minSegments = 1) {
   const narcs = Math.max(minSegments, Math.ceil(Math.abs(sweep) / MAX_ARC_SPAN));
   const dtheta = sweep / narcs;
@@ -65,47 +63,39 @@ export function makeArc(center, xAxis, yAxis, radius, angleStart, sweep, minSegm
   return { degree: 2, knots: arcKnots(narcs), ctrlPts };
 }
 
-// `segments` (default 4, the natural minimum for a full 360 deg sweep at
-// MAX_ARC_SPAN=90 deg) can be raised to "rebuild" the circle with more
-// control points — still an EXACT circle at any segment count, never an
-// approximation, so it stays fully usable as a Sweep1/Extrude/Loft/Revolve
-// profile at any rebuild level (unlike a closed-curve-interpolation
-// refit, which would need real domain-restriction machinery this kernel
-// doesn't have — see getProfileCrv's own closed-SketchCurve comment).
+// `segments` (default 4, the minimum for a full 360 deg sweep at
+// MAX_ARC_SPAN=90 deg) can be raised to rebuild the circle with more control
+// points — still an exact circle at any segment count, so it stays usable as
+// a Sweep1/Extrude/Loft/Revolve profile at any rebuild level.
 export function makeCircle(center, xAxis, yAxis, radius, segments = 4) {
   return makeArc(center, xAxis, yAxis, radius, 0, 2 * Math.PI, segments);
 }
 
-// ELLIPSE — a NON-UNIFORM scale of a unit circle. A NURBS rational curve is
-// EXACTLY preserved under any affine map applied per control point (the same
-// "affine maps commute with affine combinations" identity Shear's own doc
-// comments and revolve() already rely on): the rational basis functions sum
-// to 1, so C(t) = sum(R_i(t) P_i) is an affine combination of its control
+// Ellipse — a non-uniform scale of a unit circle. A NURBS rational curve is
+// exactly preserved under any affine map applied per control point: the
+// rational basis functions sum to 1, so C(t) = sum(R_i(t) P_i) is an affine combination of its control
 // points, and any affine T satisfies T(sum(R_i P_i)) = sum(R_i T(P_i)).
 // makeArc/makeCircle builds each control point as
 //   center + xHat*r*cos + yHat*r*sin  (positions)  and  weight = cos(dtheta/2)
-// with r=1 here, so passing a NON-UNIT in-plane basis (xAxis scaled by
+// with r=1 here, so passing a non-unit in-plane basis (xAxis scaled by
 // radiusX, yAxis scaled by radiusY) applies exactly the affine map
 // (u,v) -> center + u*radiusX*xAxis + v*radiusY*yAxis to every unit-circle
-// control point — the exact ellipse, never an approximation. arcSpanPoints'
-// own tangent-line intersection point p1 (a control point, not a curve
+// control point — the exact ellipse. arcSpanPoints'
+// tangent-line intersection point p1 (a control point, not a curve
 // point) transforms correctly for the same reason (an affine map preserves
-// the tangent-line intersection). Verified numerically against the ellipse
-// equation to float precision, and the degenerate radiusX===radiusY case is
-// bit-for-bit identical to makeCircle (see test/ellipse.test.mjs) — so the
-// weight formula's own implicit "|xAxis|==|yAxis|" assumption never actually
-// bites, because those magnitudes only ever scale the POSITION terms, never
-// the (dtheta-only) weights.
+// the tangent-line intersection). The radiusX===radiusY case is bit-for-bit
+// identical to makeCircle (test/ellipse.test.mjs). The weight formula does
+// not assume |xAxis|==|yAxis|: those magnitudes scale only the position
+// terms, never the (dtheta-only) weights.
 export function makeEllipse(center, xAxis, yAxis, radiusX, radiusY, segments = 4) {
   return makeCircle(center, scale(xAxis, radiusX), scale(yAxis, radiusY), 1, segments);
 }
 
-// ELLIPSOID PROFILE — the HALF-ELLIPSE meridian arc (pole to pole) whose
-// surface of revolution around `polarAxis` is an exact ellipsoid, the direct
-// generalization of makeEllipse's own "scale a unit arc's control points"
-// affine trick (an ellipse is a non-uniform scale of a unit circle; a
-// meridian is a non-uniform scale of a unit half-circle). Reuses makeArc's
-// exact conic-arc construction for a HALF sweep (angleStart=-PI/2, sweep=PI),
+// Ellipsoid profile — the half-ellipse meridian arc (pole to pole) whose
+// surface of revolution around `polarAxis` is an exact ellipsoid, by the same
+// per-control-point affine map as makeEllipse (a meridian is a non-uniform
+// scale of a unit half-circle). Reuses makeArc's
+// exact conic-arc construction for a half sweep (angleStart=-PI/2, sweep=PI),
 // with the arc's own local x-axis (scaled by `equatorialRadius`) mapped to the
 // equatorial/radial direction and its local y-axis (scaled by `polarRadius`)
 // to the polar direction (the revolve axis). Because a NURBS curve is exactly
@@ -114,7 +104,7 @@ export function makeEllipse(center, xAxis, yAxis, radiusX, radiusY, segments = 4
 // exact map (u,v) -> center + u*eR*equatorialAxis + v*pR*polarAxis to every
 // control point — the true half-ellipse, never an approximation.
 //
-// BOTH endpoints land on the revolve axis (the two poles) to machine
+// Both endpoints land on the revolve axis (the two poles) to machine
 // precision: the equatorial component of an endpoint is r*cos(-PI/2) and
 // r*cos(+PI/2), each ~1e-16*r (cos of a floating-point PI/2), well under
 // revolve()'s own 1e-9 pole-detection threshold, so revolve collapses each
@@ -122,18 +112,17 @@ export function makeEllipse(center, xAxis, yAxis, radiusX, radiusY, segments = 4
 // equatorial radius. Revolving 2*PI: for axis=z, equatorialAxis=x, a surface
 // point is (eR*cosθ*cosφ, eR*cosθ*sinφ, pR*sinθ), satisfying the true
 // ellipsoid equation (x/eR)^2+(y/eR)^2+(z/pR)^2 = cos²θ+sin²θ = 1 exactly at
-// every (θ,φ) including the poles — proven numerically in test/ellipsoid.test.mjs.
+// every (θ,φ) including the poles (test/ellipsoid.test.mjs).
 export function makeEllipsoidProfile(center, equatorialAxis, polarAxis, equatorialRadius, polarRadius, minSegments = 2) {
   return makeArc(center, scale(equatorialAxis, equatorialRadius), scale(polarAxis, polarRadius), 1, -Math.PI / 2, Math.PI, minSegments);
 }
 
-// SQUIRCLE (2D) — a real, closed, degree-3 (cubic) NURBS curve from an
-// 8-control-point corner-pull cage: a superellipse-like family smoothly
-// parameterized by `softness` ∈ [0,1], from a square-ish rounded shape (0)
-// toward a near-ellipse (1). NOT ellipse-adjacent — a genuinely different
-// construction (a periodic uniform cubic B-spline over a control cage, where
-// the curve stays INSIDE its cage and rounds the corners, rather than an
-// exact conic arc). The 8 cage points are the 4 edge midpoints (±hw,0),
+// Squircle (2D) — a closed, degree-3 NURBS curve from an 8-control-point
+// corner-pull cage: a superellipse-like family parameterized by
+// `softness` ∈ [0,1], from a square-ish rounded shape (0) toward a
+// near-ellipse (1). It is a periodic uniform cubic B-spline over a control
+// cage, where the curve stays inside its cage and rounds the corners, not an
+// exact conic arc. The 8 cage points are the 4 edge midpoints (±hw,0),
 // (0,±hh) plus the 4 corners at (±cs*hw, ±cs*hh), where `cs` (the corner
 // control-point radial scale) is the single softness knob:
 //   cs = 1.25 - 0.5*softness  (softness 0 -> 1.25, softness 1 -> 0.75)
@@ -142,27 +131,23 @@ export function makeEllipsoidProfile(center, equatorialAxis, polarAxis, equatori
 // a smaller cs pulls them in toward the round of a circle. cs=1.25 places the
 // corner curve-point at ~the true square corner (the most square-reading
 // smooth member without corner overshoot); cs≈0.71 would be a numeric circle.
-// The default 0.75 range keeps every member safely convex, simple (no
-// self-intersection), and cusp-free at both extremes.
+// The 0.75 range keeps every member convex, simple (no self-intersection),
+// and cusp-free at both extremes.
 //
-// CLOSED-AND-SMOOTH REPRESENTATION — the real subtlety, done carefully rather
-// than rushed: a periodic B-spline's seam must stay C2 and its two ends must
-// coincide exactly, but this kernel evaluates only CLAMPED curves. So the
-// cage is wrapped into an OVER-PADDED uniform periodic B-spline (n+4p control
-// points, so one full central period has a full valid p-control-point
-// neighborhood on BOTH sides — clamping AT an unclamped curve's own validity
-// boundary silently pulls in the invalid tail control points, the trap that
-// makes a naive extraction produce a zero-speed seam cusp), then that central
-// period is CLAMPED at both its interior boundaries via the proven exact
-// insertKnot (Boehm A5.1, geometry-preserving) up to multiplicity degree+1
-// and sliced out as a standalone clamped curve, its domain renormalized to
-// [0, n]. Because the source is a genuine periodic B-spline, the extracted
-// curve's first control point equals its last (closed, zero gap) and the
-// seam carries the same tangent/curvature as everywhere else (no cusp).
-// Verified numerically in test/squircle.test.mjs at many softness values:
-// closed to zero gap, simple (angle-monotone/star-shaped, winds exactly
-// once), cusp-free (curve speed bounded away from zero everywhere), and a
-// smooth monotone square→circle progression, isFiniteNet at every extreme.
+// Closed-and-smooth representation: a periodic B-spline's seam must stay C2
+// and its two ends must coincide exactly, but this kernel evaluates only
+// clamped curves. So the cage is wrapped into an over-padded uniform periodic
+// B-spline (n+4p control points, so one full central period has a full valid
+// p-control-point neighborhood on both sides — clamping at an unclamped
+// curve's own validity boundary pulls in the invalid tail control points and
+// produces a zero-speed seam cusp), then that central period is clamped at
+// both its interior boundaries via insertKnot (Boehm A5.1,
+// geometry-preserving) up to multiplicity degree+1 and sliced out as a
+// standalone clamped curve, its domain renormalized to [0, n]. Because the
+// source is periodic, the extracted curve's first control point equals its
+// last (closed, zero gap) and the seam carries the same tangent/curvature as
+// everywhere else. test/squircle.test.mjs checks closure, simplicity,
+// cusp-freedom and a monotone square→circle progression across softness.
 function squircleCageToClosedCubic(Q) {
   const p = 3, n = Q.length;
   const M = n + 4 * p; // heavy both-sides padding so the extracted period has full valid support
@@ -199,40 +184,26 @@ export function makeSquircle2D(center, xAxis, yAxis, halfWidth, halfHeight, soft
 
 // Surface of revolution (A8.1). `profile` is a NurbsCrv (degree/knots become
 // the surface's U direction); axisPoint+axisDir define the rotation axis;
-// angleStart/sweep are radians. Handles profile control points that lie ON
+// angleStart/sweep are radians. Handles profile control points that lie on
 // the axis (a degenerate "pole" row, e.g. a revolve profile that touches its
-// own axis — the teapot lid's dome apex is exactly this case).
+// own axis, such as a dome apex).
 //
-// EXACTNESS AT A POLE ROW — root-caused, not guessed. A8.1's own
-// exactness proof only holds if every row's own V-direction WEIGHT function
-// (as a function of the sweep parameter v, ignoring the row's own radius)
-// is the IDENTICAL shape for every row blended together at a given U — the
-// same alternating (1, cos(dtheta/2), 1, cos(dtheta/2), ...) column pattern
-// `arcSpanPoints` already builds for an ordinary row. The OLD pole branch
-// broke that: it returned a UNIFORM weight (the raw profile weight `pw`) at
-// every column instead of that alternating pattern — fine for the pole ROW
-// evaluated in isolation (any constant point/weight column blends back to
-// exactly that point, regardless of weight shape), but it desyncs the
-// SURFACE's own row-blend identity the moment a pole row is combined with
-// its non-pole neighbors at a non-knot-corner U — which is exactly the
-// "exact only at knot corners, ~1-5% off between them" bug. The fix: run
-// the pole row through the SAME `arcSpanPoints` construction every other
-// row uses, with radius=0 (any perpendicular basis works — it's multiplied
-// by zero, so direction can't matter) rather than a hand-rolled uniform-
-// weight stand-in. A zero-radius arc still collapses every column to the
-// pole point exactly (arcSpanPoints scales every position term by
-// `radius`), but now carries the CORRECT alternating weight shape, so the
-// row-blend identity `S(u,v) = O(u) + Rotate(Q(u), v)` (Q(u) the profile's
-// own true radial offset at u) holds at every (u,v), not just U corners —
-// verified in test/revolve-pole-exactness.test.mjs against the analytic
-// sphere (a semicircle profile revolved through both its own poles) to
-// 1e-9 relative error at many non-corner (u,v) samples, including a
-// profile that also crosses to the axis's OTHER side (a genuine sign
-// change in the radial direction) combined with a pole in the same net —
-// that combined case turns out to need NO separate handling once the pole
-// weight-shape bug above is fixed, since the underlying row-blend identity
-// never actually depended on any two rows sharing a "consistent" local
-// basis direction (only on the correct, row-independent V-weight shape).
+// Exactness at a pole row. A8.1's exactness holds only if every row's
+// V-direction weight function (as a function of the sweep parameter v,
+// ignoring the row's radius) has the identical shape for every row blended
+// together at a given U — the alternating (1, cos(dtheta/2), 1,
+// cos(dtheta/2), ...) column pattern `arcSpanPoints` builds for an ordinary
+// row. A pole row with a uniform weight at every column evaluates correctly
+// in isolation but breaks the surface's row-blend identity between knot
+// corners (errors of ~1-5%). So the pole row runs through the same
+// `arcSpanPoints` construction with radius=0 (any perpendicular basis works;
+// it is multiplied by zero). A zero-radius arc collapses every column to the
+// pole point exactly, and carries the alternating weight shape, so
+// `S(u,v) = O(u) + Rotate(Q(u), v)` (Q(u) the profile's radial offset at u)
+// holds at every (u,v). The identity does not depend on rows sharing a local
+// basis direction, so a profile that also crosses to the axis's other side
+// needs no separate handling. test/revolve-pole-exactness.test.mjs checks
+// the analytic sphere to 1e-9 relative error at non-corner samples.
 export function revolve(profile, axisPoint, axisDir, angleStart, sweep) {
   const axis = normalize(axisDir);
   const narcs = Math.max(1, Math.ceil(Math.abs(sweep) / MAX_ARC_SPAN));
@@ -249,8 +220,8 @@ export function revolve(profile, axisPoint, axisDir, angleStart, sweep) {
     let xHat;
     if (r < 1e-9) {
       // Pole: point is on the axis. Radius 0 collapses every column of the
-      // SAME construction below to the pole point exactly, regardless of
-      // the (otherwise-meaningless) basis direction chosen here.
+      // construction below to the pole point exactly, regardless of the
+      // basis direction chosen here.
       r = 0;
       xHat = anyPerpendicular(axis);
     } else {
@@ -276,38 +247,25 @@ export function revolve(profile, axisPoint, axisDir, angleStart, sweep) {
 // Ruled/extruded surface (Ch. 8): profile translated along a direction.
 // Degree-1 in V — a straight translation needs no arcs, and the weight of a
 // translated point is unchanged (translation is an affine, not projective,
-// move on the homogeneous form). Still a genuine ruled surface (straight
-// lines between corresponding U-parameter points on the two rows) with a
-// nonzero draftAngleDeg too — only the TOP row's own coordinates change,
-// not the surface's own construction — so degV stays exactly 1 either way.
+// move on the homogeneous form). Still a ruled surface (straight lines
+// between corresponding U-parameter points on the two rows) with a nonzero
+// draftAngleDeg — only the top row's coordinates change — so degV stays 1.
 //
-// draftAngleDeg (default 0, unchanged behavior): a molding-style taper.
-// Honest, STATED simplification, same spirit as loft()'s own relative-
-// parameter-fraction seam-matching note below — a true draft angle offsets
-// the profile by a perpendicular curve OFFSET before extruding it
-// (OffsetCrv, not built in this app's toolset yet), which is exact for any
-// profile shape including concave ones. This instead grows/shrinks each
-// control point RADIALLY from the profile's own centroid by
-// distance*tan(angle) — exact for a circle/regular polygon (every point is
-// equidistant from the centroid, so a uniform radial grow IS the true
-// offset), a close visual match for most ordinary convex profiles, but not
-// a true offset for a concave or highly irregular curve.
-// `vDegree` — an extrusion defaults to a higher
-// degree than 2 in the direction of extrusion") — OPTIONAL, defaults to
-// 1 (the ORIGINAL, unchanged behavior: exactly 2 control points per row,
-// a literal ruled surface) so every EXISTING caller/test that doesn't
-// pass it is byte-for-byte unaffected. When higher, each U-row's own
-// straight bottom-to-top ruling LINE (a trivial degree-1, 2-point curve)
-// is degree-ELEVATED via kernel/knots.mjs's own degreeElevateCurve — a
-// real, exact, shape-preserving NURBS operation (elevating a straight
-// line's degree redistributes MORE control points along the SAME exact
-// line, never bending it) — giving real, directly-draggable intermediate
-// control points along the extrusion height, which a plain 2-point ruled
-// surface structurally cannot offer at all. The app's own creation code
-// (its own Extrude operator) is what actually raises this
-// default for NEW user-created extrudes; the kernel function itself
-// stays conservative so other callers (the teapot builder, any future
-// kernel consumer) keep their own exact prior behavior unless they ask.
+// draftAngleDeg (default 0): a molding-style taper, simplified. A true draft
+// angle offsets the profile by a perpendicular curve offset before extruding
+// it, which is exact for any profile shape including concave ones. This
+// instead grows/shrinks each control point radially from the profile's
+// centroid by distance*tan(angle) — exact for a circle/regular polygon
+// (every point is equidistant from the centroid, so a uniform radial grow is
+// the true offset), close for most convex profiles, but not a true offset
+// for a concave or highly irregular curve.
+//
+// `vDegree` (default 1: exactly 2 control points per row, a literal ruled
+// surface). When higher, each U-row's straight bottom-to-top ruling line is
+// degree-elevated via kernel/knots.mjs's degreeElevateCurve — exact and
+// shape-preserving (elevating a straight line's degree adds control points
+// along the same line) — giving draggable intermediate control points along
+// the extrusion height.
 export function extrude(profile, direction, distance, draftAngleDeg = 0, vDegree = 1) {
   const d = scale(normalize(direction), distance);
   let topPts = profile.ctrlPts;
@@ -320,7 +278,7 @@ export function extrude(profile, direction, distance, draftAngleDeg = 0, vDegree
     topPts = profile.ctrlPts.map(([x, y, z, w]) => {
       const rx = x - cx, ry = y - cy, rz = z - cz;
       const r = Math.hypot(rx, ry, rz);
-      if (r < 1e-9) return [x, y, z, w]; // a control point AT the centroid has no radial direction to grow along — left untapered rather than dividing by zero
+      if (r < 1e-9) return [x, y, z, w]; // a control point at the centroid has no radial direction to grow along — left untapered
       const s = (r + delta) / r;
       return [cx + rx * s, cy + ry * s, cz + rz * s, w];
     });
@@ -337,66 +295,52 @@ export function extrude(profile, direction, distance, draftAngleDeg = 0, vDegree
     const bottom = [x, y, z, w];
     const top = [topPts[i][0] + d[0], topPts[i][1] + d[1], topPts[i][2] + d[2], w];
     const elevated = degreeElevateCurve({ degree: 1, knots: [0, 0, 1, 1], ctrlPts: [bottom, top] }, vDegree);
-    knotsV = elevated.knots; // identical for every row by construction (same input degree/knots each time) — captured once, reused
+    knotsV = elevated.knots; // identical for every row (same input degree/knots each time)
     return elevated.ctrlPts;
   });
   return { degU: profile.degree, knotsU: profile.knots, degV: vDegree, knotsV, ctrlNet };
 }
 
-// FILLET (polygon corner rounding) — reuses the EXACT SAME closed-form
-// conic-arc construction as arcSpanPoints/makeArc above (P&T Ch.7's "two
-// tangent points + their tangent-line intersection point + weight =
-// cos(halfSweep)" recipe), just parametrized differently. arcSpanPoints
-// starts from a known CENTER + start angle and derives the tangent-line
-// intersection (its own `p1`) from them; a polygon corner already gives
-// us that tangent-line intersection FOR FREE — it's the vertex itself, by
-// construction, since the two tangent lines to the fillet arc are the two
-// polygon edges meeting exactly at that vertex — so this goes the other
-// direction: apex (a known point) + the two edge directions -> the two
-// tangent points + the rational weight, with no separate center/angle
-// derivation needed at all. Same formula (trim = radius*tan(halfSweep/2)
-// swept over the halfSweep... — see below), same conic identity, just
-// evaluated from the opposite set of knowns.
+// Fillet (polygon corner rounding) — the same closed-form conic-arc
+// construction as arcSpanPoints/makeArc above (P&T Ch.7: two tangent points,
+// their tangent-line intersection point, weight = cos(halfSweep)), solved
+// from the other set of knowns. arcSpanPoints starts from a center and start
+// angle and derives the tangent-line intersection (`p1`); at a polygon corner
+// that intersection is the vertex itself, since the two tangent lines to the
+// fillet arc are the two polygon edges. So this goes apex + the two edge
+// directions -> the two tangent points + the rational weight, with trim =
+// radius*tan(halfPhi).
 //
-// Works for both CONVEX and REFLEX corners (needed once a Star polygon's
-// alternating inner vertices are filleted too) via the SIGNED turn angle
-// (atan2 of a 2D cross/dot against the polygon's own plane normal) rather
-// than an interior-angle formula that only holds for a convex turn (whose
-// tan() would go negative/wrap past a reflex corner's own interior angle
-// exceeding 180deg). `planeNormal` must be a unit vector normal to the
-// polygon's own plane (e.g. cross(xAxis,yAxis) for this app's own Circle/
-// Polygon convention) — it only fixes the SIGN convention for which way a
-// "left" vs "right" turn reads, not which side of the plane the corner is
-// on (both dIn/dOut/vertex are assumed to already lie in that plane).
+// Works for both convex and reflex corners (a Star polygon's inner vertices)
+// via the signed turn angle (atan2 of a cross/dot against the polygon's plane
+// normal) rather than an interior-angle formula that only holds for a convex
+// turn. `planeNormal` must be a unit vector normal to the polygon's plane
+// (e.g. cross(xAxis,yAxis)); it fixes only the sign convention for a left vs
+// right turn. dIn/dOut/vertex are assumed to lie in that plane.
 export function filletCornerArc(vertex, prevPt, nextPt, radius, planeNormal) {
-  const dIn = normalize(sub(vertex, prevPt)); // direction of travel ARRIVING at vertex
-  const dOut = normalize(sub(nextPt, vertex)); // direction of travel LEAVING vertex
+  const dIn = normalize(sub(vertex, prevPt)); // direction of travel arriving at vertex
+  const dOut = normalize(sub(nextPt, vertex)); // direction of travel leaving vertex
   const sinPhi = dot(cross(dIn, dOut), planeNormal); // signed sine of the turn angle
   const cosPhi = dot(dIn, dOut);
   const phi = Math.atan2(sinPhi, cosPhi); // signed turn angle in (-PI, PI]; >0 = convex/left turn, <0 = reflex/right turn (CCW loop convention)
   const halfPhi = Math.abs(phi) / 2;
   if (halfPhi < 1e-7) return { ok: false, reason: 'the path is straight here — nothing to round' };
   if (Math.abs(phi) > Math.PI - 1e-6) return { ok: false, reason: 'a near-180° reversal has no well-defined fillet' };
-  const trim = radius * Math.tan(halfPhi); // same tangent-length formula as arcSpanPoints' own `tanScale`
-  const weight = Math.cos(halfPhi); // same rational weight formula as arcSpanPoints' own `w1`
-  const p0 = sub(vertex, scale(dIn, trim)); // trimmed back along the INCOMING edge
-  const p2 = add(vertex, scale(dOut, trim)); // trimmed forward along the OUTGOING edge
+  const trim = radius * Math.tan(halfPhi); // same tangent length as arcSpanPoints' p1 offset
+  const weight = Math.cos(halfPhi); // same rational weight as arcSpanPoints' `w1`
+  const p0 = sub(vertex, scale(dIn, trim)); // trimmed back along the incoming edge
+  const p2 = add(vertex, scale(dOut, trim)); // trimmed forward along the outgoing edge
   return { ok: true, p0, apex: vertex, p2, weight, trim, turnAngle: phi };
 }
 
-// Builds a filleted CLOSED vertex loop (a regular/star Polygon's own
-// vertex array, in order) — every corner rounded by the SAME radius,
-// alternating LINE/ARC segments (never a single degree-elevated curve —
-// this app's own PolyCurve type already represents a mixed straight+
-// curved chain as a plain segment LIST, not one unified NURBS curve, so
-// that's the shape returned here too: `{type:'line', a, b}` /
-// `{type:'arc', p0, apex, p2, weight}` segments, in path order, forming a
-// closed loop). Refuses honestly (never silently overlaps) when the
-// requested radius is geometrically too large for the polygon's OWN edge
-// lengths/turn angles to support: two neighboring corners sharing one
-// edge would trim past each other (or exactly meet, a genuine zero-length
-// remaining straight run) — `maxSafeRadius` is reported alongside the
-// refusal so a caller can clamp instead of just failing outright.
+// Builds a filleted closed vertex loop (a regular/star Polygon's vertex
+// array, in order) — every corner rounded by the same radius — as a segment
+// list, not one NURBS curve: `{type:'line', a, b}` /
+// `{type:'arc', p0, apex, p2, weight}` in path order, forming a closed loop.
+// Refuses when the radius is too large for the polygon's edge lengths and
+// turn angles: two neighboring corners sharing one edge would trim past each
+// other (or exactly meet). `maxSafeRadius` is reported with the refusal so a
+// caller can clamp.
 export function filletPolygon(points, radius, planeNormal) {
   const n = points.length;
   if (n < 3) return { ok: false, reason: 'need at least 3 points to fillet a closed loop' };
@@ -409,13 +353,10 @@ export function filletPolygon(points, radius, planeNormal) {
     const needed = corners[i].trim + corners[(i + 1) % n].trim;
     worstRatio = Math.max(worstRatio, needed / edgeLens[i]);
   }
-  /* ⚠ `maxSafeRadius` IS null, NOT 0, WHEN NOTHING COULD BE MEASURED. A
+  /* `maxSafeRadius` is null, not 0, when nothing could be measured. A
      zero-length edge makes `needed / edgeLen` Infinity, and `radius / Infinity`
-     is 0 — which reads back at the call site as "the largest radius these
-     corners allow is 0.0000mm", a measured-sounding figure for a corner spacing
-     that was never measurable. null says there is no retriable radius here at
-     all, which is the honest answer and the one the callers' own `> 1e-6` /
-     `> 0` clamp guards already act on correctly. */
+     is 0, which would read as a measured largest radius of 0. null means there
+     is no retriable radius; callers' `> 1e-6` / `> 0` clamp guards act on it. */
   if (worstRatio >= 1 - 1e-9) {
     return { ok: false, reason: 'fillet radius is too large for this polygon — neighboring corners would overlap', maxSafeRadius: Number.isFinite(worstRatio) ? radius / worstRatio * 0.999 : null };
   }
@@ -429,128 +370,69 @@ export function filletPolygon(points, radius, planeNormal) {
   return { ok: true, segments };
 }
 
-// OPEN-RAIL-AWARE FILLET — live-tested against the corner-mitering fix,
-// which left a non-uniform swept radius along some sections and no option
-// for soft corners (wanted especially for MultiPipe). The non-uniform
-// radius root-caused to a
-// SEPARATE bug from mitering itself, confirmed directly against
-// kernel/sweep.mjs's own `buildParallelTransportFrames`/`sweep1Rigid`
-// before writing anything here: a degree<=1 rail's free sweep path is a
-// PLAIN RULED (linear) blend between exactly two rings per control-point
-// span; the interior-corner miter (shipped the same week) sets BOTH end
-// rings of a span to a shared bisector orientation, and a linear ruled
-// blend between two same-radius circles at DIFFERENT (mutually tilted)
-// orientations contracts mid-span by ~cos(half the relative tilt) — a
-// real, measured ~4.58/5.0 waist (see test/sweep-interior-corner-miter.test.mjs
-// for the numeric proof), not a rendering
-// artifact and not fixable by tweaking the miter itself: representing a
-// sharp C0 join as one shared frame per corner inside a single continuous
-// ruled surface structurally cannot stay round mid-span. THE FIX
-// asked for, and confirmed structurally correct rather than just
-// a preference: round the corner INTO THE RAIL before sweeping at all — a
-// genuinely curved (degree-2) rail routes through `sweep1RigidResampled`
-// (the dense arc-length-resample path; see `railFrameOriginsExact`),
-// which was never taught to treat a corner specially at all, eliminating
-// the waist as a structural side effect of no longer having a shared-frame
-// C0 join anywhere along the rail.
+// Open-rail fillet. A degree<=1 rail's sweep path (kernel/sweep.mjs,
+// `sweep1Rigid`) is a ruled (linear) blend between two rings per
+// control-point span. A mitered interior corner sets both end rings of a span
+// to a shared bisector orientation, and a linear blend between two
+// same-radius circles at mutually tilted orientations contracts mid-span by
+// ~cos(half the relative tilt) (test/sweep-interior-corner-miter.test.mjs
+// measures a 4.58/5.0 waist). No choice of miter frame avoids this while the
+// corner is a C0 join inside one ruled surface. Rounding the corner into the
+// rail before sweeping gives a degree-2 rail, which routes through
+// `sweep1RigidResampled` (the arc-length-resample path; see
+// `railFrameOriginsExact`) and has no shared-frame C0 join anywhere.
 //
-// This is a NEW, separate sibling of `filletPolygon` above, not a
-// generalization of it in place, because `filletPolygon` has THREE real
-// assumptions this rail case breaks: (1) closed-loop-only indexing
-// (`(i-1+n)%n`/`(i+1)%n` on every vertex, no concept of an open end with
-// only one adjacent edge); (2) all-or-nothing refusal (`for (const c of
-// corners) if (!c.ok) return {ok:false...}` aborts the WHOLE polygon the
-// instant ANY one corner is a genuine collinear straight run — routine and
-// expected for an arbitrary rail, never for a regular/star Polygon's own
-// vertex set, which is why this never bit that caller); (3) ONE shared
-// `planeNormal` argument, correct only because a Circle/Polygon's own
-// vertices are already known-planar — a general 3D pipe rail has no such
-// guarantee, and a genuinely non-planar rail needs a DIFFERENT plane
-// normal at each corner (its own local turn axis) to fillet correctly at
-// all.
+// A separate function from `filletPolygon` because that one assumes (1)
+// closed-loop indexing (`(i-1+n)%n`/`(i+1)%n` on every vertex, no open end);
+// (2) all-or-nothing refusal (any one collinear corner aborts the whole
+// polygon — routine on an arbitrary rail, never on a regular/star Polygon);
+// (3) one shared `planeNormal`, correct only for a planar vertex set — a
+// non-planar rail needs a different plane normal at each corner.
 //
-// PER-CORNER LOCAL NORMAL (point 2 above, the load-bearing new idea):
-// `planeNormal = normalize(cross(dIn, dOut))` computed FRESH at each
-// corner from that corner's own two edge directions, instead of one
-// normal shared across every corner. This makes `filletCornerArc`'s own
-// `sinPhi = dot(cross(dIn,dOut), planeNormal)` reduce to EXACTLY
-// `dot(crossVec, crossVec/|crossVec|) = |crossVec| = sin(turnAngle)` (the
-// correct, always non-negative, turn-angle MAGNITUDE) at every corner,
-// nothing degenerate — confirmed directly against `filletCornerArc`'s own
-// formula above, not assumed. Provably produces IDENTICAL arc geometry
-// (p0/apex/p2/weight/trim) to `filletPolygon`'s own shared-global-normal
-// convention on a genuinely PLANAR closed loop: `filletCornerArc` only
-// ever uses `Math.abs(phi)/2` (`halfPhi`) to build the arc — flipping
-// `planeNormal`'s sign (which per-corner local normals can do, relative to
-// one fixed global choice, at a REFLEX corner) only flips the SIGN of the
-// reported `turnAngle`, never `halfPhi`'s magnitude — proven directly in
-// test/fillet-open-polyline.test.mjs's own planar cross-check against
-// `filletPolygon` on the identical input.
+// Per-corner local normal: `planeNormal = normalize(cross(dIn, dOut))`,
+// computed at each corner from its own two edge directions. This makes
+// `filletCornerArc`'s `sinPhi = dot(cross(dIn,dOut), planeNormal)` reduce to
+// `|crossVec| = sin(turnAngle)`, the non-negative turn-angle magnitude, at
+// every corner. On a planar closed loop it produces the same arc geometry
+// (p0/apex/p2/weight/trim) as `filletPolygon`'s shared normal:
+// `filletCornerArc` builds the arc from `Math.abs(phi)/2` only, so a flipped
+// normal at a reflex corner flips only the sign of the reported `turnAngle`
+// (test/fillet-open-polyline.test.mjs cross-checks against `filletPolygon`).
 //
-// COLLINEAR / NEAR-180 GUARD, checked BEFORE any bisector/fillet math runs
-// (matching this app's own established "collinear no-op checked first"
-// discipline — see buildParallelTransportFrames' own identical-in-spirit
-// guard): `filletCornerArc` itself never normalizes `cross(dIn,dOut)` (it
-// only ever takes `dot(cross(dIn,dOut), planeNormal)`, safe even when that
-// cross product is the zero vector), but THIS function's own per-corner
-// `planeNormal` computation DOES need to normalize that same cross
-// product — a collinear vertex (dIn parallel to dOut, turn=0) or a
-// near-180 fold-back (dIn nearly opposite dOut, turn=~PI) both make
-// `cross(dIn,dOut)` nearly the zero vector, so `normalize` on it would be
-// NaN/garbage. Guarded by checking `length(cross(dIn,dOut))` against a
-// small epsilon BEFORE calling `normalize` or `filletCornerArc` at all —
-// both cases are treated identically: the vertex passes straight through
-// UNFILLETED (an honest, deliberate skip, never an abort of the whole
-// rail — see point (2)'s all-or-nothing contrast above).
+// Collinear / near-180 guard, checked before any fillet math. The per-corner
+// normal needs `normalize(cross(dIn,dOut))`, and a collinear vertex (turn=0)
+// or a near-180 fold-back (turn=~PI) makes that cross product nearly zero,
+// so its normalization would be NaN. Both cases are detected by
+// `length(cross(dIn,dOut))` against a small epsilon, and the vertex passes
+// through unfilleted rather than aborting the rail.
 //
-// OPEN vs CLOSED, AND THE EDGE-BUDGET DIFFERENCE (point 3): an OPEN rail's
-// first/last vertex has only ONE adjacent edge and is never itself a
-// corner (endpoints pass straight through, `{p0:v, p2:v}`, zero trim) —
-// which means every edge's own trim-budget check (`needed = tanHalf[i] +
-// tanHalf[i+1]` at radius=1, scaled by the real requested radius) already
-// gets this right FOR FREE, with no separate open-vs-closed branch: an
-// edge touching an open rail's own endpoint always has that endpoint's
-// own trim contribute exactly 0 to the sum, correctly budgeting the
-// WHOLE edge against its one real interior-corner neighbor alone, never
-// double-counting a second neighbor that doesn't exist. A CLOSED rail
-// (every vertex a genuine corner) reduces to `filletPolygon`'s own
-// identical two-corner-per-edge budget.
+// Open vs closed edge budget: an open rail's first/last vertex has one
+// adjacent edge and is never a corner (it passes through, `{p0:v, p2:v}`,
+// zero trim). Every edge's trim-budget check (`needed = tanHalf[i] +
+// tanHalf[i+1]` at radius=1, scaled by the requested radius) therefore
+// budgets an end edge against its one interior corner with no separate
+// branch. A closed rail reduces to `filletPolygon`'s two-corner-per-edge
+// budget.
 //
-// AUTO-CLAMP, not hard refusal (point 4, matching `filletPolygon`'s own
-// existing clamp-not-refuse precedent, `applyPolygonEvaluation`'s own
-// established caller pattern): on a genuinely too-large requested radius,
-// reports a real, retriable `maxSafeRadius` (the identical
-// `radius/worstRatio*0.999` formula `filletPolygon` already uses) rather
-// than only failing — there is no genuinely unsolvable case for a fillet,
-// shrinking toward 0 always eventually fits.
+// Auto-clamp: on a too-large radius, reports a retriable `maxSafeRadius`
+// (`radius/worstRatio*0.999`, as `filletPolygon`); shrinking toward 0 always
+// eventually fits.
 //
-// ZERO-LENGTH REMAINDER (point 4, a genuinely NEW degenerate case
-// `filletPolygon` never had to handle, since a closed loop's every edge
-// always sits between two real corners): when a requested radius trims
-// exactly up to (or past, before the auto-clamp catches it) an open
-// rail's own first/last edge full length, the remaining straight run on
-// that side can come out zero-length even at a SAFE radius (its far end's
-// own trim alone can legitimately consume the whole edge). Any resulting
-// line segment shorter than a tiny tolerance is OMITTED entirely from the
-// segment chain, never passed to `joinCurvesC0`/`filletSegmentsToCurve` as
-// a degenerate zero-length span (which would risk NaN/garbage there).
+// Zero-length remainder: on an open rail an end edge has only one corner
+// trimming it, so its remaining straight run can be zero-length even at a
+// safe radius. Any line segment shorter than FILLET_ZERO_LEN_EPS is omitted
+// from the segment chain rather than passed to `joinCurvesC0` /
+// `filletSegmentsToCurve` as a zero-length span.
 //
-// V1 SCOPE, stated honestly (matching this kernel's own recurring
-// "shared, not per-element" precedent — `filletPolygon` itself already
-// applies ONE shared radius to every corner of a polygon): ONE shared
-// radius for the WHOLE rail, not a per-corner individual radius — real,
-// separate v2 scope, not attempted here.
+// Scope: one radius for the whole rail, as `filletPolygon` applies one
+// radius to every corner; no per-corner radius.
 //
-// `opts.cornerFilter` (TRUE MITER round): an optional `Set` of
-// vertex indices — when present, any corner NOT in the set is treated
-// EXACTLY like a collinear/near-180 skip (`isCorner: false`, passes straight
-// through unfilleted), reusing the identical branch that already exists for
-// that case rather than a new one. Default `undefined` = fillet every real
-// corner, today's exact behavior, byte-identical for every existing caller.
-// This is what `sweep1Rigid`'s own miter-limit fallback (kernel/sweep.mjs)
-// needed: fillet ONLY the one (or few) corner(s) whose true-miter stretch
-// would exceed the limit, leaving every other corner on the same rail
-// completely untouched by this function, to be true-mitered instead.
+// `opts.cornerFilter`: an optional `Set` of vertex indices; a corner not in
+// the set passes through unfilleted, through the same branch as the
+// collinear skip. Default: fillet every corner. `sweep1Rigid`'s miter-limit
+// fallback (kernel/sweep.mjs) uses it to fillet only the corners whose
+// true-miter stretch would exceed the limit, leaving the rest to be
+// true-mitered.
 const FILLET_COLLINEAR_EPS = 1e-9; // on |cross(dIn,dOut)|, both unit vectors — catches turn=0 (collinear) and turn=PI (fold-back) alike
 const FILLET_ZERO_LEN_EPS = 1e-9;
 export function filletOpenPolyline(points, radius, opts = {}) {
@@ -564,21 +446,17 @@ export function filletOpenPolyline(points, radius, opts = {}) {
   }
   if (!(radius > 0)) return { ok: false, reason: 'fillet radius must be positive' };
 
-  // Pass 1 — pure geometry, radius-independent: which vertices are real
-  // corners (has two neighbors, genuinely turns), which pass straight
-  // through (an open rail's own endpoints, or a collinear/near-180
-  // vertex), and each real corner's own `tanHalf` (its trim-per-unit-
-  // radius, i.e. `filletCornerArc`'s own `trim` at radius=1 exactly,
-  // reused rather than re-derived so this function carries zero duplicate
-  // trig — the SAME formula stays the single source of truth either way).
+  // Pass 1 — radius-independent geometry: which vertices are corners (two
+  // neighbors, a real turn), which pass straight through (an open rail's
+  // endpoints, or a collinear/near-180 vertex), and each corner's `tanHalf`
+  // (trim per unit radius, i.e. `filletCornerArc`'s `trim` at radius=1).
   const eff = points.map((v, i) => {
     if (!closed && (i === 0 || i === n - 1)) {
       return { isCorner: false, p0: v, p2: v, tanHalf: 0 };
     }
     if (cornerFilter && !cornerFilter.has(i)) {
-      // Explicitly excluded from THIS fillet pass (e.g. handled by
-      // true-miter instead) — an honest per-corner skip, same shape as the
-      // collinear/near-180 skip below, never an abort of the whole rail.
+      // Excluded from this fillet pass (e.g. handled by true-miter instead);
+      // same shape as the collinear/near-180 skip below.
       return { isCorner: false, p0: v, p2: v, tanHalf: 0 };
     }
     const prev = points[(i - 1 + n) % n];
@@ -591,21 +469,19 @@ export function filletOpenPolyline(points, radius, opts = {}) {
       // Collinear (turn~0) or a near-180 fold-back (turn~PI) — either way
       // `cross(dIn,dOut)` is too close to the zero vector to normalize
       // into a well-defined local plane normal. Both pass straight
-      // through unfilleted, an honest per-corner skip, never an abort of
-      // the whole rail.
+      // through unfilleted.
       return { isCorner: false, p0: v, p2: v, tanHalf: 0 };
     }
     const planeNormal = scale(crossVec, 1 / crossLen);
     const unit = filletCornerArc(v, prev, next, 1, planeNormal); // radius=1 probe: unit.trim === tan(halfPhi), the shape-only quantity
-    if (!unit.ok) return { isCorner: false, p0: v, p2: v, tanHalf: 0 }; // defensive — the crossLen guard above should already have caught every case filletCornerArc itself would refuse
+    if (!unit.ok) return { isCorner: false, p0: v, p2: v, tanHalf: 0 }; // defensive: the crossLen guard above covers every case filletCornerArc refuses
     return { isCorner: true, v, prev, next, planeNormal, tanHalf: unit.trim };
   });
 
-  // Pass 2 — the trim-budget check, exactly `filletPolygon`'s own
-  // worstRatio construction, generalized so an edge missing one of its two
-  // neighbors (an open rail's first/last edge) naturally budgets against
-  // only the one real neighbor it has (the missing side's own `tanHalf`
-  // is always 0, contributing nothing to `needed`).
+  // Pass 2 — the trim-budget check, `filletPolygon`'s worstRatio
+  // construction, generalized so an edge missing one of its two corners (an
+  // open rail's first/last edge) budgets against the one it has (the missing
+  // side's `tanHalf` is 0).
   const edgeCount = closed ? n : n - 1;
   let worstRatio = 0;
   for (let i = 0; i < edgeCount; i++) {
@@ -618,11 +494,9 @@ export function filletOpenPolyline(points, radius, opts = {}) {
     worstRatio = Math.max(worstRatio, needed / edgeLen);
   }
   if (worstRatio >= 1 - 1e-9) {
-    /* SAME RULE AS `filletPolygon`'s OWN: a degenerate (zero-length) edge sets
-       worstRatio to Infinity, and 0 handed back for it is a fabricated
-       measurement — "the largest radius these corners allow is 0.0000mm" reads
-       as a number somebody took, not as the absence of one. null is what "no
-       radius fits here" actually looks like. */
+    /* As in `filletPolygon`: a zero-length edge sets worstRatio to Infinity,
+       and 0 returned for it would read as a measured largest radius. null
+       means no radius fits here. */
     return {
       ok: false,
       reason: 'fillet radius is too large for this rail — neighboring corners would overlap',
@@ -630,15 +504,13 @@ export function filletOpenPolyline(points, radius, opts = {}) {
     };
   }
 
-  // Pass 3 — build the real arcs at the actual requested radius (now
-  // proven safe), then interleave with the trimmed straight runs,
-  // omitting any that collapse to zero length (the genuinely new open-
-  // rail degenerate case `filletPolygon` never had to handle — see header
-  // comment).
+  // Pass 3 — build the arcs at the requested radius (safe after pass 2),
+  // then interleave with the trimmed straight runs, omitting any that
+  // collapse to zero length (see the header comment).
   const corners = eff.map((c) => {
     if (!c.isCorner) return { p0: c.p0, p2: c.p2 };
     const real = filletCornerArc(c.v, c.prev, c.next, radius, c.planeNormal);
-    return real; // .ok guaranteed true here — pass 2 already proved this radius safe for every real corner
+    return real; // .ok is true here: pass 2 established this radius fits every corner
   });
 
   const segments = [];
@@ -659,20 +531,12 @@ export function filletOpenPolyline(points, radius, opts = {}) {
   return { ok: true, segments, closed, cornerCount };
 }
 
-// Converts a `filletPolygon`/`filletOpenPolyline` segment list (plain
-// `{type:'line', a, b}` / `{type:'arc', p0, apex, p2, weight}` objects,
-// the SAME shape either function returns) into ONE composed NurbsCrv —
-// pure kernel-side mirror of the app layer's own established
-// `buildPolygonFilletSegments` -> `getProfileCrv`'s PolyCurve branch ->
-// `joinCurvesC0` pipeline (in the app), reused here so a kernel
-// caller (Pipe/MultiPipe's own `evaluate()`) never needs to round-trip
-// through app-side THREE.Vector3/PolyCurve pseudo-objects just to get a
-// single sweepable rail curve back. An all-degree-1 segment list (no arcs
-// at all — e.g. every corner was collinear/skipped, or radius<=0) still
-// goes through `joinCurvesC0` rather than getProfileCrv's own separate
-// degree-1 fast path; `joinCurvesC0` itself reduces to the identical
-// concatenation in that case (proven in test/knots.test.mjs already, not
-// re-proven here) — one code path, not two, for this kernel-side use.
+// Converts a `filletPolygon`/`filletOpenPolyline` segment list
+// (`{type:'line', a, b}` / `{type:'arc', p0, apex, p2, weight}`) into one
+// C0-joined NurbsCrv via `joinCurvesC0`, the kernel-side equivalent of the
+// app's PolyCurve -> `joinCurvesC0` path, for kernel callers such as
+// Pipe/MultiPipe. An all-line list (every corner skipped) takes the same
+// path; `joinCurvesC0` reduces to plain concatenation there.
 export function filletSegmentsToCurve(segments) {
   if (!segments.length) return null;
   const crvs = segments.map((s) => (
@@ -683,28 +547,24 @@ export function filletSegmentsToCurve(segments) {
   return joinCurvesC0(crvs);
 }
 
-// ===========================================================================
-// GEAR (Spur) + RACK — involute-tooth mechanical primitives
-// (reconciled scope: Spur + Rack;
-// Helical / Internal-ring / Bevel / Worm+wheel deferred, see gear.test.mjs
-// header). All 2D profiles in the local XY plane, z=0; the app layer maps
-// them into a picked frame and EXTRUDEs them (reusing extrude()) into a solid.
-// ===========================================================================
+// Gear (spur) and rack — involute-tooth mechanical primitives. Helical,
+// internal-ring, bevel and worm gears are not built. All 2D profiles in the
+// local XY plane, z=0; the app layer maps them into a picked frame and
+// extrudes them (extrude()) into a solid.
 
-// The INVOLUTE OF A CIRCLE — the standard gear-tooth flank curve. Exact
+// The involute of a circle — the standard gear-tooth flank curve. Exact
 // closed form for base-circle radius `baseRadius` and involute parameter `t`
 // (radians), unwound off the base circle, rotated by `startAngle`, with
 // `handed` selecting the base involute (+1) or its mirror image across the
 // generating radial (-1, the opposite-turning flank of a tooth):
 //   x0(t) = rb*(cos t + t*sin t)
 //   y0(t) = rb*(sin t - t*cos t)   (negated when handed = -1)
-// then rotated by startAngle. This is NOT an approximation — it traces the
-// true involute exactly. Two checkable identities (verified numerically in
-// test/gear.test.mjs, not eyeballed): |P| == rb*sqrt(1+t^2) exactly, and the
-// NORMAL to the involute at any point is at distance exactly rb from the base
-// center (i.e. is tangent to the base circle — the taut-string property; note
-// it is the NORMAL, not the tangent, that is tangent to the base circle for
-// this parametrization, since dP/dt = rb*t*(cos t, sin t) is radial).
+// then rotated by startAngle. This is the true involute, not an
+// approximation. Two identities (checked in test/gear.test.mjs):
+// |P| == rb*sqrt(1+t^2), and the normal to the involute at any point is at
+// distance exactly rb from the base center (tangent to the base circle — the
+// taut-string property; for this parametrization it is the normal, not the
+// tangent, that touches the base circle, since dP/dt = rb*t*(cos t, sin t)).
 export function involutePoint(baseRadius, t, startAngle = 0, handed = 1) {
   const x0 = baseRadius * (Math.cos(t) + t * Math.sin(t));
   const y0 = handed * baseRadius * (Math.sin(t) - t * Math.cos(t));
@@ -712,18 +572,14 @@ export function involutePoint(baseRadius, t, startAngle = 0, handed = 1) {
   return [x0 * ca - y0 * sa, x0 * sa + y0 * ca, 0];
 }
 
-// makeInvoluteFlank — sample the analytic involute densely over a parameter
-// range and INTERPOLATE a real NURBS curve through those samples (reusing
-// this kernel's own already-proven globalCurveInterp / A9.1, the same honest
-// "interpolated, exact AT its sample points, dense enough to look and behave
-// smooth" standard used for SketchCurve). An involute is not itself an exact
-// NURBS curve the way an arc is, so this is a genuine (dense) approximation —
-// its deviation from the true analytic involute between samples is bounded and
-// proven under a stated tolerance in test/gear.test.mjs, not claimed exact.
-// Returns { crv, points, tParams } — `points` are the RAW analytic samples
-// (exactly on the involute), which buildSpurGearProfile threads into the whole
-// gear outline; `crv` is the fitted flank NURBS, verified against the analytic
-// curve.
+// makeInvoluteFlank — sample the analytic involute over a parameter range
+// and interpolate a NURBS curve through the samples (globalCurveInterp,
+// A9.1): exact at the sample points only. An involute is not an exact NURBS
+// curve the way an arc is, so this is an approximation; test/gear.test.mjs
+// bounds its deviation between samples.
+// Returns { crv, points, tParams } — `points` are the raw analytic samples
+// (exactly on the involute), which buildSpurGearProfile threads into the
+// gear outline; `crv` is the fitted flank.
 export function makeInvoluteFlank(baseRadius, startAngle, tParams, handed = 1, degree = 3) {
   const points = tParams.map((t) => involutePoint(baseRadius, t, startAngle, handed));
   const crv = globalCurveInterp(points, Math.min(degree, points.length - 1));
@@ -763,13 +619,12 @@ function sampleRationalArc(f, n) {
   return out;
 }
 
-// buildSpurGearProfile — assemble N repeated involute-tooth profiles into ONE
-// closed, periodic 2D curve (degree-3, interpolated through a dense ordered
-// ring of boundary points). Each tooth = involute flank out (makeInvoluteFlank
-// samples), an addendum-circle tip arc, the mirrored flank in, and a ROOT
-// FILLET connecting to the next tooth built with this kernel's own proven
-// filletCornerArc (the Tier-1 fillet consumer the doc calls for — NOT a third
-// parallel arc implementation). Returns { crv, ring, metrics }.
+// buildSpurGearProfile — assemble N repeated involute-tooth profiles into one
+// closed 2D curve (degree-3, interpolated through a dense ordered ring of
+// boundary points). Each tooth = involute flank out (makeInvoluteFlank
+// samples), an addendum-circle tip arc, the mirrored flank in, and a root
+// fillet to the next tooth built with filletCornerArc.
+// Returns { crv, ring, metrics }.
 export function buildSpurGearProfile(module, teethCount, pressureAngleDeg = 20, opts = {}) {
   const g = gearMetrics(module, teethCount, pressureAngleDeg);
   const { teethCount: N, rb, ra, rf, invAlpha } = g;
@@ -780,12 +635,12 @@ export function buildSpurGearProfile(module, teethCount, pressureAngleDeg = 20, 
   const NF = opts.flankSamples ?? 12;
   const NTIP = opts.tipSamples ?? 6;
   const NROOT = opts.rootSamples ?? 3;
-  // COSINE (Chebyshev-like) spacing clusters flank samples toward BOTH ends —
-  // where the flank meets the root and the addendum arc at a genuine corner.
-  // A single global cubic through a corner otherwise overshoots there; dense
-  // samples bracketing each corner hold the interpolated outline tight to the
-  // true involute (proven in test/gear.test.mjs: whole-outline deviation stays
-  // well under 0.03mm, the isolated flank fit under 0.01mm).
+  // Cosine (Chebyshev-like) spacing clusters flank samples toward both ends,
+  // where the flank meets the root and the addendum arc at a corner. A single
+  // global cubic through a corner otherwise overshoots there; dense samples
+  // bracketing each corner hold the outline to the involute
+  // (test/gear.test.mjs: whole-outline deviation under 0.03mm, the isolated
+  // flank fit under 0.01mm).
   const tParams = [];
   for (let i = 0; i < NF; i++) { const s = (1 - Math.cos(Math.PI * i / (NF - 1))) / 2; tParams.push(tStart + (tTip - tStart) * s); }
   // half tooth-angle at radius r (>= rb), from the involute function
@@ -796,15 +651,15 @@ export function buildSpurGearProfile(module, teethCount, pressureAngleDeg = 20, 
   const ring = [];
   for (let k = 0; k < N; k++) {
     const tc = 2 * Math.PI * k / N;
-    // RIGHT flank (base involute), base -> tip, angle increasing:
+    // Right flank (base involute), base -> tip, angle increasing:
     const rightPts = makeInvoluteFlank(rb, tc - halfBaseAngle, tParams, +1).points;
     for (const p of rightPts) ring.push(p);
-    // TIP arc across the addendum circle, right tip -> left tip (interior samples):
+    // Tip arc across the addendum circle, right tip -> left tip (interior samples):
     for (let i = 1; i < NTIP; i++) { const a = (tc - psiTip) + 2 * psiTip * (i / NTIP); ring.push([ra * Math.cos(a), ra * Math.sin(a), 0]); }
-    // LEFT flank (mirror involute), tip -> base, angle increasing:
+    // Left flank (mirror involute), tip -> base, angle increasing:
     const leftPts = makeInvoluteFlank(rb, tc + halfBaseAngle, tParams, -1).points;
     for (let i = leftPts.length - 1; i >= 0; i--) ring.push(leftPts[i]);
-    // ROOT / gap to the next tooth's right flank base:
+    // Root / gap to the next tooth's right flank base:
     const leftBase = leftPts[0];
     const leftBaseAng = tc + halfBaseAngle;
     const nextRightBaseAng = 2 * Math.PI * (k + 1) / N - halfBaseAngle;
@@ -822,7 +677,7 @@ export function buildSpurGearProfile(module, teethCount, pressureAngleDeg = 20, 
       for (let i = 1; i < NTIP; i++) { const a = leftBaseAng + (nextRightBaseAng - leftBaseAng) * (i / NTIP); ring.push([rStart * Math.cos(a), rStart * Math.sin(a), 0]); }
     }
   }
-  // Interpolate ONE closed degree-3 curve through the ring. Duplicating the
+  // Interpolate one closed degree-3 curve through the ring. Duplicating the
   // first point at the end makes it a clamped cubic whose whole knot domain is
   // the closed loop (start == end, zero gap) — directly usable by extrude(),
   // the same shape makeCircle's output has (start point == end point).
@@ -830,15 +685,14 @@ export function buildSpurGearProfile(module, teethCount, pressureAngleDeg = 20, 
   return { crv, ring, metrics: g };
 }
 
-// buildRackProfile — a RACK is a spur gear of infinite radius (a straight
-// "linear gear"). The involute of an infinite-radius base circle degenerates
-// to a STRAIGHT LINE inclined at the pressure angle (verified in
-// test/gear.test.mjs against the finite-gear flank as radius grows) — so a
-// rack tooth is genuinely a straight-sided trapezoid, NOT a curved involute:
-// a real, correct simplification, not a shortcut. Lays `teethCount` teeth along
-// +x, pitch line at y=0, teeth pointing +y; closes the toothed top edge into a
-// solid bar cross-section (flat bottom) so it can be extruded. `teethLength` is
-// the number of teeth. Returns { crv, ring, metrics }.
+// buildRackProfile — a rack is a spur gear of infinite radius. The involute
+// of an infinite-radius base circle degenerates to a straight line inclined
+// at the pressure angle (test/gear.test.mjs checks the finite-gear flank
+// approaching it as radius grows), so a rack tooth is a straight-sided
+// trapezoid. Lays `teethLength` teeth (a count) along +x, pitch line at y=0,
+// teeth pointing +y; closes the toothed top edge into a solid bar
+// cross-section (flat bottom) so it can be extruded.
+// Returns { crv, ring, metrics }.
 export function buildRackProfile(module, teethLength, pressureAngleDeg = 20, opts = {}) {
   const m = module, N = Math.max(1, Math.round(teethLength)), alpha = pressureAngleDeg * Math.PI / 180;
   const p = Math.PI * m;               // circular pitch (tooth spacing along the pitch line)

@@ -1,14 +1,14 @@
-// A BOOLEAN'S CLOSED EDGE, MEASURED AS A CLOSED CURVE.
+// A boolean's closed edge, measured as a closed curve.
 //
 // `fitSolidEdgeCurves` is the second caller of `fitCurveToPoints`' closed
 // branch — the first is Text. An intersection loop with no branch point
 // anywhere on it walks as one chain marked `closed`, and every property that
 // branch gets wrong lands on a solid's own boundary rather than on a letter.
 //
-// ⚠ THE OBVIOUS FIXTURE CANNOT SEE IT. `two_tori_seam_straddle_sew_open.3dm`,
+// The obvious fixture cannot see it. `two_tori_seam_straddle_sew_open.3dm`,
 // which the rest of the brepfit suite runs on, sews into 50 fitted edges and
-// NOT ONE of them is closed: every chain there runs corner to corner, so the
-// closed branch is never entered and the whole file stays green whatever that
+// not one of them is closed: every chain there runs corner to corner, so the
+// closed branch is never entered and the whole file passes whatever that
 // branch does. The offset pair below yields exactly one edge and it is the
 // closed one, which is what makes this a control rather than a repetition.
 import { test } from 'node:test';
@@ -68,14 +68,14 @@ function chainLength(points) {
   return L;
 }
 
-test('THE FIXTURE REACHES THE CLOSED BRANCH AT ALL — which the rest of the suite does not', () => {
+test('The fixture reaches the closed branch at all — which the rest of the suite does not', () => {
   assert.ok(union.ok, `union refused: ${union.reason}`);
   assert.equal(closedEdges.length, 1, `exactly one fitted edge, and it is the closed intersection loop (got ${closedEdges.length} of ${fitted.edges.length})`);
   assert.equal(closedEdges[0].kind, 'nurbs',
     'and it is a least-squares fit, not a recognized circle or ellipse — the primitive path would sidestep the branch entirely');
 });
 
-test('A CLOSED EDGE IS NOT LONGER THAN THE CHAIN IT FITS', () => {
+test('A closed edge is not longer than the chain it fits', () => {
   for (const e of closedEdges) {
     const ratio = arcLength(e.curve) / chainLength(e.points);
     // The marched chain is inscribed in the true intersection, so the curve is
@@ -85,7 +85,7 @@ test('A CLOSED EDGE IS NOT LONGER THAN THE CHAIN IT FITS', () => {
   }
 });
 
-test('A CLOSED EDGE ACTUALLY CLOSES — an open loop is a hole in the exported boundary', () => {
+test('A closed edge closes — an open loop is a hole in the exported boundary', () => {
   for (const e of closedEdges) {
     const cp = e.curve.ctrlPts;
     const gap = Math.hypot(cp[0][0] - cp[cp.length - 1][0], cp[0][1] - cp[cp.length - 1][1], cp[0][2] - cp[cp.length - 1][2]);
@@ -94,7 +94,7 @@ test('A CLOSED EDGE ACTUALLY CLOSES — an open loop is a hole in the exported b
   }
 });
 
-test('AND IT STILL HOLDS ITS BOUND — the closure is not bought with accuracy', () => {
+test('And it still holds its bound — the closure is not bought with accuracy', () => {
   for (const e of closedEdges) {
     const dev = maxDeviationFromCurve(e.points, e.curve, { closed: true });
     assert.ok(dev <= TOL, `re-measured deviation ${dev.toExponential(3)} exceeds the ${TOL} it was fitted to`);

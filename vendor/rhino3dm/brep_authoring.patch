@@ -57,11 +57,11 @@ index 676861c..296e38e 100644
 +  if (vertex1 < 0 || vertex1 >= m_brep->m_V.Count()) return -1;
 +  if (curve3dIndex < 0 || curve3dIndex >= m_brep->m_C3.Count()) return -1;
 +  ON_BrepEdge& e = m_brep->NewEdge(m_brep->m_V[vertex0], m_brep->m_V[vertex1], curve3dIndex, nullptr, tolerance);
-+  // ⚠ SET IT AGAIN, EXPLICITLY. NewEdge takes an edge_tolerance argument and
-+  // the edge still comes back with m_tolerance = ON_UNSET_VALUE
-+  // (-1.23432e+308), which ON_Brep::IsValid rejects by name: "edge.m_tolerance
++  // Set it again explicitly. NewEdge takes an edge_tolerance argument, yet
++  // the edge comes back with m_tolerance = ON_UNSET_VALUE
++  // (-1.23432e+308), which ON_Brep::IsValid rejects: "edge.m_tolerance
 +  // ... should be >= 0.0". An unset tolerance is not a small tolerance, and a
-+  // brep carrying one is invalid however good its geometry is.
++  // brep carrying one is invalid whatever its geometry.
 +  e.m_tolerance = tolerance;
 +  return e.m_edge_index;
 +}

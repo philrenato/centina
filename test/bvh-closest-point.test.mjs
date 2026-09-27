@@ -1,13 +1,13 @@
-// A CLOSEST-POINT WALK IS ONLY WORTH HAVING IF IT AGREES WITH BRUTE FORCE, AND
-// A SIGN IS ONLY WORTH HAVING IF SOMETHING INDEPENDENT AGREES ABOUT INSIDE.
+// A closest-point walk is only worth having if it agrees with brute force, and
+// a sign is only worth having if something independent agrees about inside.
 //
 // Two separate oracles, because the query answers two separate questions and a
 // single fixture can hide a failure in either:
 //
-//   * the DISTANCE and the point are checked against testing every triangle, so
+//   * the distance and the point are checked against testing every triangle, so
 //     what is under test is the descent and its pruning, not the point-triangle
 //     math both halves share;
-//   * the SIGN is checked against RAY PARITY — an odd number of crossings means
+//   * the sign is checked against ray parity — an odd number of crossings means
 //     inside — which shares no code with the pseudonormal at all. That matters,
 //     because the whole reason the pseudonormal exists is that the obvious
 //     answer (the nearest triangle's own face normal) is wrong over most of
@@ -21,11 +21,9 @@ import { buildBVH, bvhClosestPoint, buildMeshPseudonormals, closestPointOnTriang
 let seed = 0x2545f491;
 const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return ((seed >>> 0) / 4294967296); };
 
-// ---------------------------------------------------------------------------
-// FIXTURES — closed triangle soups, built by INDEX WRAP rather than by emitting
+// Fixtures — closed triangle soups, built by index wrap rather than by emitting
 // a duplicate seam column, so nothing depends on two trig results agreeing to
 // the last bit before the mesh counts as watertight.
-// ---------------------------------------------------------------------------
 
 function sphereSoup(center, radius, nu = 32, nv = 16) {
   const at = (i, j) => {
@@ -43,7 +41,7 @@ function sphereSoup(center, radius, nu = 32, nv = 16) {
     for (let i = 0; i < nu; i += 1) {
       const i1 = (i + 1) % nu;
       const a = at(i, j), b = at(i1, j), c = at(i1, j + 1), d = at(i, j + 1);
-      // Wound so the face normals point OUT. A sphere is the one fixture where
+      // Wound so the face normals point out. A sphere is the one fixture where
       // an inverted winding is invisible to every check except the sign.
       if (j === 0) push(a, d, c);            // north cap: one triangle per column
       else if (j === nv - 1) push(a, c, b);  // south cap
@@ -71,7 +69,7 @@ function torusSoup(center, R, r, nu = 48, nv = 24) {
 }
 
 // A cube whose quads are split the ordinary way, so its corners are shared by
-// UNEQUAL numbers of triangles — two from one face, one from another. That
+// unequal numbers of triangles — two from one face, one from another. That
 // asymmetry is the whole point of the fixture: see the angle-weight test.
 function cubeSoup(half) {
   const h = half;
@@ -88,9 +86,7 @@ function cubeSoup(half) {
   return new Float32Array(tris);
 }
 
-// ---------------------------------------------------------------------------
-// ORACLES
-// ---------------------------------------------------------------------------
+// Oracles
 
 function bruteClosest(positions, p) {
   const q = [0, 0, 0];
@@ -146,9 +142,7 @@ function insideByParity(positions, p) {
   return null; // the rays disagree; the sample sits on an edge and is undecidable
 }
 
-// ---------------------------------------------------------------------------
-// TEST 1 — the point-triangle routine itself, on answers computed by hand.
-// ---------------------------------------------------------------------------
+// Test 1 — the point-triangle routine itself, on answers computed by hand.
 {
   const a = [0, 0, 0], b = [4, 0, 0], c = [0, 3, 0];
   const q = [0, 0, 0];
@@ -174,18 +168,15 @@ function insideByParity(positions, p) {
   // against everything and would silently win no comparison anywhere.
   closestPointOnTriangle([1, 1, 1], [0, 0, 0], [1, 0, 0], [2, 0, 0], q);
   assert.ok(q.every(Number.isFinite), 'a zero-area triangle still answers with a finite point');
-  console.log('  triangle:       face, three edge and vertex regions, and a degenerate sliver');
 }
 
-// ---------------------------------------------------------------------------
-// TEST 2 — the descent agrees with testing every triangle.
-// ---------------------------------------------------------------------------
+// Test 2 — the descent agrees with testing every triangle.
 {
   const positions = torusSoup([0, 0, 0], 30, 10, 48, 24);
   const bvh = buildBVH(positions);
   assert.ok(bvh.maxDepth > 5, `tree is only ${bvh.maxDepth} deep — not enough to be pruning anything`);
 
-  let worstDistance = 0, worstPoint = 0, checked = 0;
+  let worstDistance = 0, worstPoint = 0;
   for (let n = 0; n < 400; n += 1) {
     const p = [(rnd() - 0.5) * 140, (rnd() - 0.5) * 140, (rnd() - 0.5) * 140];
     const got = bvhClosestPoint(bvh, positions, p);
@@ -195,11 +186,9 @@ function insideByParity(positions, p) {
     worstPoint = Math.max(worstPoint, Math.hypot(
       got.point[0] - want.point[0], got.point[1] - want.point[1], got.point[2] - want.point[2],
     ));
-    checked += 1;
   }
   assert.ok(worstDistance <= 1e-6, `distance disagrees with brute force by ${worstDistance}`);
   assert.ok(worstPoint <= 1e-6, `the closest point disagrees with brute force by ${worstPoint}`);
-  console.log(`  brute control:  ${checked} queries on ${bvh.triangleCount} triangles, worst distance gap ${worstDistance.toExponential(2)}`);
 
   // maxDistance is a real bound, not a hint: past it the answer is null, and
   // inside it the answer is unchanged.
@@ -208,12 +197,9 @@ function insideByParity(positions, p) {
   const near = bvhClosestPoint(bvh, positions, [35, 0, 0]);
   const bounded = bvhClosestPoint(bvh, positions, [35, 0, 0], { maxDistance: 100 });
   assert.ok(Math.abs(near.distance - bounded.distance) < 1e-9, 'a generous bound changes nothing');
-  console.log('  bound:          rejects past maxDistance, unchanged within it');
 }
 
-// ---------------------------------------------------------------------------
-// TEST 3 — the sign agrees with ray parity, on a shape with real concavity.
-// ---------------------------------------------------------------------------
+// Test 3 — the sign agrees with ray parity, on a shape with real concavity.
 {
   const positions = torusSoup([0, 0, 0], 30, 10, 48, 24);
   const bvh = buildBVH(positions);
@@ -223,14 +209,14 @@ function insideByParity(positions, p) {
   assert.ok(pn.closed, 'the torus fixture does not read as closed');
 
   const regions = { face: 0, edge: 0, vertex: 0 };
-  let agreed = 0, undecidable = 0, insideSeen = 0;
+  let agreed = 0, insideSeen = 0;
   for (let n = 0; n < 600; n += 1) {
     const p = [(rnd() - 0.5) * 100, (rnd() - 0.5) * 100, (rnd() - 0.5) * 40];
     const got = bvhClosestPoint(bvh, positions, p, { pseudonormals: pn });
     assert.ok(got.signed, 'a closed mesh must give a signed answer');
     if (got.distance < 1e-4) continue; // sitting on the surface: neither answer means anything
     const want = insideByParity(positions, p);
-    if (want === null) { undecidable += 1; continue; }
+    if (want === null) continue;
     assert.equal(
       got.inside, want,
       `sign disagrees with ray parity at ${p.map((v) => v.toFixed(3))}: pseudonormal says ${got.inside ? 'inside' : 'outside'}, parity says ${want ? 'inside' : 'outside'} (closest feature: ${got.region})`,
@@ -241,17 +227,14 @@ function insideByParity(positions, p) {
   }
   assert.ok(agreed > 400, `only ${agreed} decidable samples — the fixture is not being exercised`);
   assert.ok(insideSeen > 10, `only ${insideSeen} samples landed inside the torus — the inside case is untested`);
-  /* ⚠ IF NO SAMPLE EVER LANDS ON AN EDGE OR A VERTEX, THIS TEST PASSES WITHOUT
-     TESTING THE PSEUDONORMAL AT ALL — a plain face normal is correct in the
+  /* If no sample ever lands on an edge or a vertex, this test passes without
+     testing the pseudonormal at all — a plain face normal is correct in the
      face interior. The region tally is what keeps that from being invisible. */
   assert.ok(regions.edge > 0, 'no query landed on an edge; the edge pseudonormal went untested');
   assert.ok(regions.vertex > 0, 'no query landed on a vertex; the vertex pseudonormal went untested');
-  console.log(`  sign vs parity: ${agreed} samples agree (${insideSeen} inside), features ${regions.face} face / ${regions.edge} edge / ${regions.vertex} vertex, ${undecidable} undecidable`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 4 — magnitude on a shape whose distance is known in closed form.
-// ---------------------------------------------------------------------------
+// Test 4 — magnitude on a shape whose distance is known in closed form.
 {
   const R = 20;
   const positions = sphereSoup([0, 0, 0], R, 64, 32);
@@ -259,10 +242,10 @@ function insideByParity(positions, p) {
   const pn = buildMeshPseudonormals(positions);
   assert.ok(pn.closed, 'the sphere fixture is not closed');
 
-  /* The mesh is INSCRIBED in the sphere it samples, so a measured distance is
+  /* The mesh is inscribed in the sphere it samples, so a measured distance is
      never the analytic one — it is short by up to the chord sagitta on the
-     inside and long by it on the outside. The tolerance is that sagitta, not a
-     number picked until the test went green. */
+     inside and long by it on the outside. The tolerance is that sagitta,
+     derived rather than tuned. */
   const sagitta = R * (1 - Math.cos(Math.PI / 32));
   let worst = 0, signErrors = 0;
   for (let n = 0; n < 300; n += 1) {
@@ -276,17 +259,14 @@ function insideByParity(positions, p) {
   }
   assert.equal(signErrors, 0, `${signErrors} points got the wrong side of a sphere`);
   assert.ok(worst < sagitta * 1.5, `worst magnitude error ${worst} exceeds the chord sagitta ${sagitta}`);
-  console.log(`  sphere:         worst |d| error ${worst.toFixed(4)} against a chord sagitta of ${sagitta.toFixed(4)}, 0 sign errors`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 5 — the weight in "angle-weighted" is load-bearing.
-// ---------------------------------------------------------------------------
+// Test 5 — the weight in "angle-weighted" is load-bearing.
 {
   /* A cube corner is shared by three faces, and every face contributes exactly
-     a right angle there however its quad happens to be split. So the ANGLE-
+     a right angle there however its quad happens to be split. So the angle-
      weighted normal at every corner is exactly (±1,±1,±1)/sqrt(3) — while a
-     plain sum of incident TRIANGLE normals is not, because this cube's corners
+     plain sum of incident triangle normals is not, because this cube's corners
      sit in unequal numbers of triangles. The exact diagonal is therefore proof
      the weighting is applied and not merely written down. */
   const positions = cubeSoup(10);
@@ -306,12 +286,9 @@ function insideByParity(positions, p) {
     for (let d = 0; d < 3; d += 1) worst = Math.max(worst, Math.abs(Math.abs(u[d]) - 1 / Math.sqrt(3)));
   }
   assert.ok(worst < 1e-12, `a corner normal is off the cube diagonal by ${worst} — the angle weight is not being applied`);
-  console.log(`  angle weight:   8 corners on the exact body diagonal (worst ${worst.toExponential(2)}), incident counts ${[...new Set(incident)].sort().join('/')}`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 6 — an open mesh has no inside, and says so.
-// ---------------------------------------------------------------------------
+// Test 6 — an open mesh has no inside, and says so.
 {
   const positions = new Float32Array([0, 0, 0, 10, 0, 0, 0, 10, 0, 10, 0, 0, 10, 10, 0, 0, 10, 0]);
   const bvh = buildBVH(positions);
@@ -322,7 +299,4 @@ function insideByParity(positions, p) {
   assert.equal(got.signed, false, 'an open mesh must not claim a sign');
   assert.ok(got.signedDistance > 0, 'and must report the unsigned distance');
   assert.ok(Math.abs(got.distance - 3) < 1e-6, `distance to the quad should be 3, got ${got.distance}`);
-  console.log('  open mesh:      no sign claimed, unsigned distance still correct');
 }
-
-console.log('bvh closest point: ok');

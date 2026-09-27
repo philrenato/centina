@@ -1,40 +1,34 @@
-// PLANAR ARRANGEMENT — a five-stage algorithm: given a
+// Planar arrangement — a five-stage algorithm: given a
 // set of 2D polylines (already-flattened curves, in a shared plane's own
 // (u,v) coordinates — this module knows nothing about NURBS or 3D at all,
-// exactly the same "kernel is curve-agnostic 2D math" posture kernel/
-// trim.mjs's own polygon helpers already have), find every CLOSED BOUNDED
-// REGION the polylines form together — including regions that exist only
-// because two curves happen to cross, never individually drawn closed.
+// the same curve-agnostic 2D posture kernel/trim.mjs's polygon helpers
+// have), find every closed bounded region the polylines form together —
+// including regions that exist only because two curves happen to cross,
+// never individually drawn closed.
 //
-// Reference technique: planar straight-line graph (PSLG) -> half-edge
-// (DCEL) structure -> leftmost-turn face traversal -> hole-to-face
-// assignment via point-in-polygon containment. Standard, present under some
-// name in every computational-geometry reference and in OCCT's own 2D
-// face-building code (CGAL's Arrangement_2 solves the identical problem) —
-// read for TECHNIQUE, written fresh here in this kernel's own idiom. Those
-// sources are a REFERENCE for the technique, never transcribed code.
-// The five-stage shape below is deliberate. Two of the
-// stages are correctness requirements rather than conveniences and are easy to
-// leave out: hole assignment (Stage 5), without which a region containing an
-// island reports the island's area as its own, and dangling-edge pruning
-// (Stage 3), without which an edge with a free end joins no face and the walk
-// never closes.
+// Reference technique: planar straight-line graph (PSLG) -> half-edge (DCEL)
+// structure -> leftmost-turn face traversal -> hole-to-face assignment via
+// point-in-polygon containment. Standard, present under some name in every
+// computational-geometry reference and in OCCT's own 2D face-building code
+// (CGAL's Arrangement_2 solves the identical problem) — read for technique and
+// written fresh here in this kernel's own idiom; no code is transcribed. Two
+// of the stages are correctness requirements rather than conveniences and are
+// easy to leave out: hole assignment (Stage 5), without which a region
+// containing an island reports the island's area as its own, and dangling-edge
+// pruning (Stage 3), without which an edge with a free end joins no face and
+// the walk never closes.
 
 import { signedArea2D, pointInUVPolygon } from './trim.mjs';
 
-// ----------------------------------------------------------------
-// STAGE 2 (part 1): robust segment-segment intersection, including the
-// cases kernel/trim.mjs's own `segmentsIntersect` explicitly excludes
-// (its own comment: "collinear/touching edge cases are a real, separate
-// robustness concern — not silently claimed handled here") — that
-// review named these as the COMMON case for Shapereason's real inputs
-// (T-junctions from ordinary endpoint snapping; exactly-coincident
-// segments from a zero-offset Copy/Paste), not a rare edge case worth
-// deferring. Returns every real intersection point between segment
+// Stage 2 (part 1): robust segment-segment intersection, including the
+// collinear and touching cases kernel/trim.mjs's `segmentsIntersect`
+// excludes. These are common inputs, not rare edge cases: T-junctions from
+// ordinary endpoint snapping, and exactly-coincident segments from a
+// zero-offset copy. Returns every intersection point between segment
 // A=(p0,p1) and B=(p2,p3) as {t, s} pairs (parameters along each segment,
-// 0..1) — ONE point for a proper crossing or a single T-junction touch,
-// TWO points (the overlap interval's own two ends) for a genuine
-// collinear overlap, zero for no intersection at all.
+// 0..1) — one point for a proper crossing or a single T-junction touch,
+// two points (the overlap interval's own two ends) for a collinear
+// overlap, zero for no intersection at all.
 function segmentIntersections(p0, p1, p2, p3, tol) {
   const ax = p1[0] - p0[0], ay = p1[1] - p0[1];
   const bx = p3[0] - p2[0], by = p3[1] - p2[1];
@@ -52,10 +46,10 @@ function segmentIntersections(p0, p1, p2, p3, tol) {
     return [];
   }
   // Parallel (denom ~ 0) — either collinear (real overlap possible) or
-  // genuinely separate parallel lines (no intersection at all). Test
+  // separate parallel lines (no intersection at all). Test
   // collinearity via the cross product of (p2-p0) against A's own
   // direction — zero (within tolerance, scaled by A's own length) means
-  // p2 lies ON the infinite line through p0/p1.
+  // p2 lies on the infinite line through p0/p1.
   const dx0 = p2[0] - p0[0], dy0 = p2[1] - p0[1];
   const aLen = Math.hypot(ax, ay) || 1;
   if (Math.abs(cross(dx0, dy0, ax, ay)) > tol * aLen) return []; // parallel, not collinear
@@ -63,7 +57,7 @@ function segmentIntersections(p0, p1, p2, p3, tol) {
   // direction (a 1D parametrization shared by both segments since they
   // sit on the same line) and intersect the two resulting 1D intervals.
   // `projB` (B's own t-along-B parametrization) is defined up front so
-  // BOTH the single-touch and genuine-overlap branches below can convert
+  // both the single-touch and overlap branches below can convert
   // any point on the shared line back to B's own parameter the same way.
   const aLenSq = ax * ax + ay * ay || 1;
   const bLenSq = bx * bx + by * by || 1;
@@ -79,8 +73,7 @@ function segmentIntersections(p0, p1, p2, p3, tol) {
     const px = p0[0] + ax * t, py = p0[1] + ay * t;
     return [{ t, s: Math.max(0, Math.min(1, projB(px, py))) }];
   }
-  // A genuine overlap SPAN — return both ends as real split points on
-  // EACH segment.
+  // An overlap span — return both ends as split points on each segment.
   const out = [];
   for (const t of [lo, hi]) {
     const px = p0[0] + ax * t, py = p0[1] + ay * t;
@@ -89,27 +82,24 @@ function segmentIntersections(p0, p1, p2, p3, tol) {
   return out;
 }
 
-// ----------------------------------------------------------------
-// STAGES 1-2: flatten (the caller's own job — this function takes already-
+// Stages 1-2: flatten (the caller's own job — this function takes already-
 // flattened 2D polylines) -> intersect every segment pair -> split into a
-// PLANAR STRAIGHT-LINE GRAPH (PSLG): a shared vertex list (welded within
+// planar straight-line graph (PSLG): a shared vertex list (welded within
 // `weldTolerance`) plus an edge list where no two edges cross except at a
 // shared, recorded vertex.
-// ----------------------------------------------------------------
+//
 // `sources` (optional) is a tag per input polyline. When supplied, the
 // returned `edgeSources[i]` is the set of tags that produced `edges[i]` —
-// a SET rather than a single tag because two coincident input segments
+// a set rather than a single tag because two coincident input segments
 // dedupe into one edge, and a consumer splitting a trimmed face needs to
 // know when an intersection curve runs exactly along a trim boundary
 // rather than crossing the interior. Omitting `sources` leaves every
-// downstream result byte-identical to before this existed.
+// downstream result unchanged.
 function buildPSLG(polylines, weldTolerance, sources) {
   // Vertex welding: a plain spatial-bucket hash keyed by rounded
-  // coordinate, matching this kernel's own "simple until proven
-  // insufficient" posture (the same call Stage 2 makes about
-  // brute-force segment testing being fine until a real scale test says
-  // otherwise) — a grid cell wide enough that any two points within
-  // weldTolerance of each other land in the SAME or an ADJACENT cell, so
+  // coordinate (Stage 2 likewise tests segment pairs by brute force) — a
+  // grid cell wide enough that any two points within
+  // weldTolerance of each other land in the same or an adjacent cell, so
   // only the 3x3 neighborhood around a candidate cell needs checking.
   const cellSize = Math.max(weldTolerance * 4, 1e-6);
   const buckets = new Map(); // "cx,cy" -> [vertexIdx, ...]
@@ -137,7 +127,7 @@ function buildPSLG(polylines, weldTolerance, sources) {
 
   // Raw segments, one per consecutive pair within each input polyline —
   // each carries its own split-parameter list (starts with just {0,1},
-  // grows as intersections are found against every OTHER segment).
+  // grows as intersections are found against every other segment).
   const rawSegs = [];
   polylines.forEach((poly, pi) => {
     for (let i = 0; i < poly.length - 1; i++) {
@@ -167,7 +157,7 @@ function buildPSLG(polylines, weldTolerance, sources) {
       if (vA === vB) continue; // welded to the same vertex — degenerate, drop
       const key = vA < vB ? `${vA}_${vB}` : `${vB}_${vA}`;
       if (edgeSet.has(key)) {
-        // A duplicate edge is dropped, but its SOURCE still counts — this is
+        // A duplicate edge is dropped, but its source still counts — this is
         // exactly the "an intersection curve runs along a trim boundary" case.
         if (edgeSources) edgeSources[edgeSet.get(key)].add(seg.src);
         continue;
@@ -180,15 +170,13 @@ function buildPSLG(polylines, weldTolerance, sources) {
   return { vertices, edges, edgeSources };
 }
 
-// ----------------------------------------------------------------
-// STAGE 3: prune dangling edges — a real, missing stage in the first
-// draft (found by review). An open curve with no closing partner
+// Stage 3: prune dangling edges. An open curve with no closing partner
 // leaves a degree-1 vertex; a face walk reaching it would otherwise
 // traverse the edge out and immediately back (stitching a zero-width
 // spur into a boundary). Iteratively strip every degree-1 vertex (and
 // its one edge) until none remain.
-// ----------------------------------------------------------------
-// Returns the SURVIVING INDICES into the original edge list rather than the
+//
+// Returns the surviving indices into the original edge list rather than the
 // edges themselves, so a caller carrying anything parallel to that list (per-
 // edge source tags) can filter it in lockstep instead of re-deriving it.
 function pruneDanglingEdgeIndices(vertexCount, edges) {
@@ -202,15 +190,13 @@ function pruneDanglingEdgeIndices(vertexCount, edges) {
   }
 }
 
-// ----------------------------------------------------------------
-// STAGE 4: half-edge (DCEL) construction + leftmost-turn face traversal.
+// Stage 4: half-edge (DCEL) construction + leftmost-turn face traversal.
 // Every undirected PSLG edge becomes two directed half-edges; each
 // vertex's own outgoing half-edges are sorted by angle. Walking each
 // half-edge's own "next" pointer traces every cycle in the arrangement —
 // CCW (positive signed area) cycles are bounded faces, CW (negative
 // signed area) cycles occur once per connected component and are handled
 // by Stage 5 below, not discarded here.
-// ----------------------------------------------------------------
 function buildHalfEdgesAndWalkCycles(vertices, edges) {
   // Each half-edge: { origin, target, twin: idx of its own twin }.
   const halfEdges = [];
@@ -221,7 +207,7 @@ function buildHalfEdgesAndWalkCycles(vertices, edges) {
     outgoing[a].push(hAB);
     outgoing[b].push(hBA);
   }
-  // Sort each vertex's own outgoing half-edges by angle, INCREASING
+  // Sort each vertex's own outgoing half-edges by angle, increasing
   // (standard math convention — CCW as angle grows).
   for (const v of outgoing) {
     v.sort((h1, h2) => {
@@ -231,9 +217,9 @@ function buildHalfEdgesAndWalkCycles(vertices, edges) {
       return a1 - a2;
     });
   }
-  // next(h): arriving at h.target via h, the SAME face's boundary
-  // continues via the half-edge at h.target that sits IMMEDIATELY
-  // CLOCKWISE (i.e., the entry immediately BEFORE, in the increasing-
+  // next(h): arriving at h.target via h, the same face's boundary
+  // continues via the half-edge at h.target that sits immediately
+  // clockwise (i.e., the entry immediately before, in the increasing-
   // angle/CCW-sorted list) from twin(h) — the standard "hug the interior,
   // smallest possible turn" DCEL rule. Precomputed once, over the whole
   // structure.
@@ -263,15 +249,11 @@ function buildHalfEdgesAndWalkCycles(vertices, edges) {
   return { halfEdges, cycles };
 }
 
-// ----------------------------------------------------------------
-// STAGE 5: assign each CW (hole) cycle to its true containing CCW
-// (bounded-face) cycle via point-in-polygon containment — the real
-// correctness fix that review caught: a CW cycle is NOT "the one
-// unbounded face," it occurs once per connected component, and belongs
-// to whichever face genuinely contains it (possibly the true unbounded
-// outside). A CW cycle contained by no CCW cycle IS the true outside and
-// is discarded.
-// ----------------------------------------------------------------
+// Stage 5: assign each CW (hole) cycle to its containing CCW
+// (bounded-face) cycle via point-in-polygon containment. A CW cycle is not
+// "the one unbounded face": it occurs once per connected component, and
+// belongs to whichever face contains it (possibly the unbounded outside).
+// A CW cycle contained by no CCW cycle is the outside and is discarded.
 function assignHolesToFaces(cycles) {
   const ccw = cycles.filter((c) => c.area > 1e-9);
   const cw = cycles.filter((c) => c.area < -1e-9);
@@ -292,14 +274,12 @@ function assignHolesToFaces(cycles) {
   return faces;
 }
 
-// ----------------------------------------------------------------
-// CONTIGUITY: two faces are adjacent (for shift-select-union) iff they
+// Contiguity: two faces are adjacent (for shift-select-union) iff they
 // share at least one PSLG edge — i.e. some half-edge's own twin belongs
-// to the OTHER face's boundary. Computed directly from the half-edge
+// to the other face's boundary. Computed directly from the half-edge
 // ownership already recorded per face (outer + hole boundaries both
 // count — a hole's own boundary is shared with whichever face sits
 // inside it, if any).
-// ----------------------------------------------------------------
 function computeAdjacency(faces, halfEdges) {
   const faceOfHalfEdge = new Map();
   faces.forEach((face, faceIdx) => {
@@ -314,21 +294,19 @@ function computeAdjacency(faces, halfEdges) {
   return adjacency.map((s) => [...s]);
 }
 
-// ----------------------------------------------------------------
-// TOP-LEVEL ENTRY POINT
-// ----------------------------------------------------------------
+// Top-level entry point.
 // `polylines`: array of arrays of [x,y] pairs — each one an already-
-// flattened, NOT-necessarily-closed 2D curve sample chain (the caller's
+// flattened, not-necessarily-closed 2D curve sample chain (the caller's
 // own job to flatten real NURBS curves into this shape via
 // sampleCurveAdaptive or equivalent — this module is deliberately
 // curve-type-agnostic). `opts.weldTolerance` — the "gap tolerance /
 // near-miss closure" knob, deliberately left open; defaults to a
 // small but non-zero value so ordinary snapped-endpoint T-junctions
-// (floating-point-adjacent, not genuinely far apart) always weld.
+// (floating-point-adjacent, not far apart) always weld.
 // `opts.sources` (optional) is a tag per input polyline. Supplying it adds a
 // `sources` field to every returned face — per boundary edge, the set of tags
 // that produced it, in the same order as that loop's own points. Omitting it
-// leaves the result byte-identical to before this option existed.
+// leaves the result unchanged.
 export function buildPlanarArrangement(polylines, opts = {}) {
   const weldTolerance = opts.weldTolerance ?? 1e-4;
   const { vertices, edges: rawEdges, edgeSources: rawEdgeSources } = buildPSLG(polylines, weldTolerance, opts.sources);
@@ -347,31 +325,24 @@ export function buildPlanarArrangement(polylines, opts = {}) {
       ? { outer: f.outer, holes: f.holes, sources: { outer: tagsOf(f.outerHalfEdges), holes: f.holeHalfEdges.map(tagsOf) } }
       : { outer: f.outer, holes: f.holes })),
     adjacency, // adjacency[i] = array of face indices sharing an edge with face i
-    // Internal detail, deliberately exposed (not a private closure) so
-    // mergeFaces (below) can operate on the SAME already-built half-edge
-    // structure rather than re-deriving it from raw geometry — a plain
-    // JS convention this kernel already uses elsewhere for "expose the
-    // module-scoped internal directly" (matching __unreasonObjectInfo's
-    // own precedent in the app layer, one level down in the kernel here).
+    // Internal detail, exposed (not a private closure) so mergeFaces
+    // (below) can operate on the same already-built half-edge structure
+    // rather than re-deriving it from raw geometry.
     _internal: { halfEdges, faces },
   };
 }
 
-// ----------------------------------------------------------------
-// MERGE — shift-select gets all of them
-// together as one area since they are contiguous... That creates a dup
-// of all those border areas, joins them together." Given a set of face
-// INDICES (the caller's own job to only ever pass genuinely contiguous
+// Merge: the union of several contiguous faces as one region. Given a set
+// of face indices (the caller's own job to only ever pass contiguous
 // ones — checked against `adjacency` before calling this, not re-
-// validated here), computes their UNION's own boundary: every half-edge
-// belonging to ANY included face, MINUS any edge whose two half-edges
-// both belong to DIFFERENT included faces (an internal boundary between
+// validated here), computes their union's own boundary: every half-edge
+// belonging to any included face, minus any edge whose two half-edges
+// both belong to different included faces (an internal boundary between
 // two merged regions — it cancels, exactly like two adjacent trim loops
 // dissolving their shared edge). The remaining "external" edges are
-// re-walked through the SAME Stage 4/5 machinery (buildHalfEdgesAndWalkCycles
-// + assignHolesToFaces) already proven correct above — reused wholesale,
-// not reimplemented, so a merge result is held to the identical
-// correctness bar (including real hole handling) as a fresh arrangement.
+// re-walked through the same Stage 4/5 machinery (buildHalfEdgesAndWalkCycles
+// + assignHolesToFaces), so a merge result gets the same hole handling as
+// a fresh arrangement.
 export function mergeFaces(arrangement, faceIndices) {
   const { halfEdges, faces } = arrangement._internal;
   const included = new Set(faceIndices);
@@ -397,7 +368,7 @@ export function mergeFaces(arrangement, faceIndices) {
     keptEdges.push([a, b]);
   }
   const prunedEdges = pruneDanglingEdgeIndices(arrangement.vertices.length, keptEdges).map((i) => keptEdges[i]);
-  const { halfEdges: mergedHalfEdges, cycles } = buildHalfEdgesAndWalkCycles(arrangement.vertices, prunedEdges);
+  const { cycles } = buildHalfEdgesAndWalkCycles(arrangement.vertices, prunedEdges);
   const mergedFaces = assignHolesToFaces(cycles);
   return mergedFaces.map((f) => ({ outer: f.outer, holes: f.holes }));
 }

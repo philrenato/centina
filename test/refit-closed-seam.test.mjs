@@ -4,23 +4,21 @@ import { makeEllipsoidProfile, makeCircle, revolve } from '../kernel/primitives.
 import { surfacePointAndPartials, isFiniteNet } from '../kernel/surface.mjs';
 import { refitSurfaceUV } from '../kernel/loft.mjs';
 
-// REBUILDING A CLOSED SURFACE MUST NOT CREASE ITS SEAM.
+// Rebuilding a closed surface must not crease its seam.
 //
-// Reported as a NURBS sphere at degree 3 showing a hard crease down the seam
-// where the same edit in Rhino stays smooth. The cause was not closure itself —
-// a natively revolved sphere is smooth across its seam — but Rebuild:
-// refitSurfaceUV interpolated the sample grid with a CLAMPED knot vector in
-// each direction, so the first and last rows were independent of one another.
-// On a closed surface the sample at fraction 1 is the same point as the one at
-// 0, so closure came back as a coincidence of position with nothing at all
-// holding the tangent across it — C0, which IS the crease.
+// A natively revolved sphere is smooth across its seam. If refitSurfaceUV
+// interpolates the sample grid with a clamped knot vector in each direction,
+// the first and last rows are independent of one another. On a closed surface
+// the sample at fraction 1 is the same point as the one at 0, so closure comes
+// back as a coincidence of position with nothing at all holding the tangent
+// across it — C0, which is the crease.
 //
-// Every assertion here is stated against an INTERIOR CONTROL measured on the
+// Every assertion here is stated against an interior control measured on the
 // same surface with the same method. A bare threshold on the seam angle would
 // pass a build whose surfaces had gone globally wrong, and would need re-tuning
 // for every degree and station count; "the seam is no more discontinuous than
 // an ordinary interior parameter" is the property actually wanted, and it is
-// scale- and parameterisation-free.
+// scale- and parameterization-free.
 
 const unit = (v) => { const L = Math.hypot(...v); return L > 0 ? v.map((c) => c / L) : v; };
 const angleDeg = (a, b) => {
@@ -49,11 +47,11 @@ function interiorTurn(srf, dir, mid, other, eps = 1e-6) {
   const a = at(mid - eps), b = at(mid + eps);
   return angleDeg(dir === 'u' ? a.su : a.sv, dir === 'u' ? b.su : b.sv);
 }
-// A sphere by revolution: closed in one direction, genuinely curved in both,
+// A sphere by revolution: closed in one direction, curved in both,
 // and rational — not a cylinder or a flat patch that could pass by accident.
 const sphere = () => revolve(makeEllipsoidProfile([0, 0, 0], [1, 0, 0], [0, 0, 1], 25, 25), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 
-test('the source sphere really is closed in exactly one direction — otherwise every seam assertion below is measuring an open edge', () => {
+test('the source sphere is closed in exactly one direction — otherwise every seam assertion below is measuring an open edge', () => {
   const c = closure(sphere());
   assert.equal(c.u !== c.v, true, `expected exactly one closed direction, got u=${c.u} v=${c.v}`);
 });
@@ -79,9 +77,9 @@ test('a rebuilt closed surface is no more discontinuous at its seam than at an o
   for (const f of [0.3, 0.5, 0.7]) {
     const turn = seamTurn(out, dir, lo + (hi - lo) * f);
     // Generous against the control rather than absolute: the point is that the
-    // seam is ordinary, not that it hits a particular number. Before the fix
-    // this read 4.91 degrees against a control of 0.0011 — four orders out, so
-    // no plausible slack here lets the old behavior through.
+    // seam is ordinary, not that it hits a particular number. A clamped refit
+    // reads 4.91 degrees against a control of 0.0011 — four orders out, so
+    // this slack cannot let it through.
     assert.ok(turn < Math.max(control * 20, 0.02),
       `seam turns ${turn.toFixed(4)} deg at ${f} along, against an interior control of ${control.toFixed(4)} deg`);
   }
@@ -108,12 +106,12 @@ test('the rebuild still reproduces the source surface at the seam itself, not me
 });
 
 // The closed direction can play either role, and both must work — a sphere
-// closes in the REVOLVE direction with an open profile; a closed circle on a
-// partial revolve closes in the PROFILE direction with an open revolve. Testing
+// closes in the revolve direction with an open profile; a closed circle on a
+// partial revolve closes in the profile direction with an open revolve. Testing
 // only the first would leave half the mechanism unexercised.
 const closedProfile = () => revolve(makeCircle([30, 0, 0], [1, 0, 0], [0, 0, 1], 8, 4), [0, 0, 0], [0, 0, 1], 0, Math.PI * 0.8);
 
-test('a closed PROFILE with an open revolve rebuilds smooth too — the closed direction is not always the revolve one', () => {
+test('a closed profile with an open revolve rebuilds smooth too — the closed direction is not always the revolve one', () => {
   const src = closedProfile();
   const c = closure(src);
   assert.equal(c.u !== c.v, true, `fixture must close in exactly one direction, got u=${c.u} v=${c.v}`);
@@ -128,13 +126,13 @@ test('a closed PROFILE with an open revolve rebuilds smooth too — the closed d
   assert.ok(turn < Math.max(control * 20, 0.02), `seam turns ${turn.toFixed(4)} deg against an interior control of ${control.toFixed(4)}`);
 });
 
-// THE PARAMETERISATION MUST STAY HEALTHY, not merely the geometry. A seam can
+// The parameterization must stay healthy, not merely the geometry. A seam can
 // be made smooth on paper while the surface's speed collapses to zero there,
 // which reads as degenerate to normals and tessellation and makes the tangent
-// DIRECTION — what the continuity tests above compare — numerically meaningless.
-// This is the check that caught the doubly-closed regression: the tangent
-// magnitude fell from 218 to 0.013 at one seam while every angle still looked
-// fine, and a 1e-4 nudge then swung that direction by 24 degrees.
+// direction — what the continuity tests above compare — numerically
+// meaningless. On a doubly-closed surface the tangent magnitude can fall from
+// 218 to 0.013 at one seam while every angle still looks fine, and a 1e-4
+// nudge then swings that direction by 24 degrees.
 function tangentMagnitudes(srf, dir) {
   const K = dir === 'u' ? srf.knotsU : srf.knotsV;
   const oK = dir === 'u' ? srf.knotsV : srf.knotsU;
@@ -146,7 +144,7 @@ function tangentMagnitudes(srf, dir) {
 }
 
 for (const [label, make, count] of [['sphere (revolve direction closed)', sphere, 16], ['closed profile, partial revolve', closedProfile, 18]]) {
-  test(`${label}: the rebuilt seam is not a stalled parameterisation — tangent magnitude stays comparable to the interior`, () => {
+  test(`${label}: the rebuilt seam is not a stalled parameterization — tangent magnitude stays comparable to the interior`, () => {
     const out = refitSurfaceUV(make(), 16, count, 3, 3);
     const dir = closure(out).u ? 'u' : 'v';
     const m = tangentMagnitudes(out, dir);
@@ -157,15 +155,14 @@ for (const [label, make, count] of [['sphere (revolve direction closed)', sphere
   });
 }
 
-// A TORUS IS CLOSED IN BOTH DIRECTIONS, and it is the only fixture here whose
-// two counts also DIFFER — which is what makes it the one case able to catch a
-// sub-range cut that misses its own knot. It did: the v cut wanted
-// 0.800000000000000044 while the knot present was 0.800000000000000155, so the
-// insertion left a span 1.1e-16 wide and the two control points spanning it
-// collapsed. Geometry stayed right, parameterisation stalled. The u direction
-// escaped only because its arithmetic happened to land bit-exact, which is
-// precisely why a symmetric single-closed fixture could never have found it.
-test('a surface closed in BOTH directions rebuilds smooth in both, with no stalled parameterisation', () => {
+// A torus is closed in both directions, and it is the only fixture here whose
+// two counts also differ — the one case able to catch a sub-range cut that
+// misses its own knot. A v cut at 0.800000000000000044 against a knot present
+// at 0.800000000000000155 leaves a span 1.1e-16 wide, and the two control
+// points spanning it collapse: the geometry stays right while the
+// parameterization stalls. A direction whose arithmetic lands bit-exact
+// escapes this, so a symmetric single-closed fixture cannot find it.
+test('a surface closed in both directions rebuilds smooth in both, with no stalled parameterization', () => {
   const torus = revolve(makeCircle([30, 0, 0], [1, 0, 0], [0, 0, 1], 8, 4), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
   const c0 = closure(torus);
   assert.equal(c0.u && c0.v, true, 'fixture must be closed in both directions or this test proves nothing');
@@ -181,9 +178,8 @@ test('a surface closed in BOTH directions rebuilds smooth in both, with no stall
     const turn = seamTurn(out, dir, other);
     assert.ok(turn < Math.max(control * 20, 0.02),
       `${dir} seam turns ${turn.toFixed(4)} deg against an interior control of ${control.toFixed(4)} deg`);
-    // The magnitude check is the one that caught the sliver: the ANGLE looked
-    // fine while the surface's speed had fallen to 0.013 against an interior
-    // 218, which makes the angle itself meaningless.
+    // The magnitude check catches a sliver the angle misses: a speed of 0.013
+    // against an interior 218 makes the angle itself meaningless.
     const m = tangentMagnitudes(out, dir);
     for (const end of ['start', 'end']) {
       assert.ok(m[end] > m.interior * 0.25,
@@ -192,7 +188,7 @@ test('a surface closed in BOTH directions rebuilds smooth in both, with no stall
   }
 });
 
-test('an OPEN surface is left on the ordinary path — the closed handling must not change what already worked', () => {
+test('an open surface is left on the ordinary path — the closed handling does not change it', () => {
   const open = revolve(makeEllipsoidProfile([0, 0, 0], [1, 0, 0], [0, 0, 1], 25, 25), [0, 0, 0], [0, 0, 1], 0, Math.PI * 0.8);
   const c = closure(open);
   assert.equal(c.u || c.v, false, 'fixture is not open in both directions, so this test proves nothing');

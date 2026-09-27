@@ -7,7 +7,7 @@ import {
 } from '../kernel/subdreflect.mjs';
 
 // A facets=1 box cage centered at the origin (8 verts, 6 faces, 12 edges) —
-// genuinely symmetric about EVERY one of its 3 axis planes, the same real
+// symmetric about EVERY one of its 3 axis planes, the same
 // primitive the app layer's own SuperBBox command builds.
 const box = () => superbBoxCage([0, 0, 0], [25, 25, 25], 1);
 
@@ -54,7 +54,7 @@ test('findCageMirrorPartners pairs every vertex of a symmetric box cage about it
     const d = Math.hypot(back[0] - cage.vertices[j][0], back[1] - cage.vertices[j][1], back[2] - cage.vertices[j][2]);
     assert.ok(d < 1e-6, `vertex ${i}'s partner ${j} is not actually its mirror image (dist ${d})`);
   }
-  // A genuine involution: applying partner twice returns the original vertex.
+  // An involution: applying partner twice returns the original vertex.
   for (let i = 0; i < cage.vertices.length; i++) assert.equal(partner[partner[i]], i);
 });
 
@@ -78,7 +78,7 @@ test('findCageMirrorPartners classifies an on-plane vertex correctly (partner ==
   assert.equal(partner[3], 5); // x=0 <-> x=2, other row
 });
 
-test('findCageMirrorPartners refuses honestly when the cage is not actually symmetric about the given plane', () => {
+test('findCageMirrorPartners refuses when the cage is not actually symmetric about the given plane', () => {
   const cage = box();
   // Nudge ONE vertex off its own symmetric position — now nothing on the
   // other side reflects back to it within tolerance.
@@ -86,28 +86,26 @@ test('findCageMirrorPartners refuses honestly when the cage is not actually symm
   assert.throws(() => findCageMirrorPartners(cage, [0, 0, 0], [1, 0, 0]), /no mirror partner within tolerance/);
 });
 
-test('findCageMirrorPartners refuses honestly on an ambiguous (too-coarse-relative-to-tolerance) pairing', () => {
+test('findCageMirrorPartners refuses on an ambiguous (too-coarse-relative-to-tolerance) pairing', () => {
   // A small, purpose-built fixture (not the box — a box's own minimum
   // vertex separation equals its own self-reflection distance, so no
   // tolerance can ever force an ambiguity on it without ALSO making every
   // vertex trivially self-pair; see this file's own on-plane test above
   // for that distinct case): vertex 0 at x=-5 reflects EXACTLY to [5,0,0],
   // which sits almost exactly between two REAL candidate vertices at
-  // [5,0.05,0] and [5,-0.05,0] — both genuinely within a 0.1 tolerance of
-  // the reflected point, a real, deliberately-constructed ambiguity, not a
-  // contrived crash.
+  // [5,0.05,0] and [5,-0.05,0] — both within a 0.1 tolerance of the
+  // reflected point, a deliberately-constructed ambiguity.
   const cage = { vertices: [[-5, 0, 0], [5, 0.05, 0], [5, -0.05, 0]], faces: [], creases: {} };
   assert.throws(() => findCageMirrorPartners(cage, [0, 0, 0], [1, 0, 0], { tolerance: 0.1 }), /ambiguous candidate mirror partners/);
 });
 
-test('findCageMirrorPartners pairs a genuine, DISTINCT close-to-plane mirror pair instead of silently self-pairing both (review-caught regression)', () => {
+test('findCageMirrorPartners pairs a DISTINCT close-to-plane mirror pair instead of silently self-pairing both', () => {
   // Two real, distinct vertices straddling the plane by only 0.006 units
   // total (0.003 each side) alongside a box whose own vertices are 50
-  // units apart — a real reachable case (fine detail near the seam), not
-  // a contrived one. The OLD algorithm checked "is my own reflection
-  // within tolerance of MYSELF" first and got both of these self-paired
-  // (silently wrong: reported as on-plane when neither vertex is actually
-  // on the plane, and they simply stopped mirroring each other).
+  // units apart — a reachable case (fine detail near the seam). Checking
+  // "is my own reflection within tolerance of MYSELF" first would self-pair
+  // both of these (silently wrong: reported as on-plane when neither vertex
+  // is on the plane, and they would stop mirroring each other).
   const vertices = [
     [25, 25, 25], [-25, 25, 25], [25, -25, 25], [-25, -25, 25],
     [25, 25, -25], [-25, 25, -25], [25, -25, -25], [-25, -25, -25],
@@ -118,8 +116,7 @@ test('findCageMirrorPartners pairs a genuine, DISTINCT close-to-plane mirror pai
   assert.equal(partner[8], 9, 'vertex 8 should pair with its real, exact mirror partner 9, not itself');
   assert.equal(partner[9], 8, 'vertex 9 should pair with its real, exact mirror partner 8, not itself');
   assert.equal(onPlaneCount, 0, 'neither vertex 8 nor 9 is actually on the plane');
-  // Reproduced with an OFF-CENTER plane too, per the review's own second
-  // repro — not an origin-only artifact.
+  // Repeated with an OFF-CENTER plane too — not an origin-only artifact.
   const vertices2 = [
     [35, 25, 25], [-15, 25, 25], [35, -25, 25], [-15, -25, 25],
     [35, 25, -25], [-15, 25, -25], [35, -25, -25], [-15, -25, -25],

@@ -1,57 +1,36 @@
-// LOFT — the spec: "ordered section curves; seam/direction
-// arrows shown at each closed section with click-to-flip. Options:
-// Style=Normal/Straight/Loose, Closed=Yes/No." This is v1: a genuine
-// SMOOTH tensor-product NURBS surface (P&T 9.2.5 "Global Surface
-// Interpolation," the 2D analog of curve.mjs's own Global Curve
-// Interpolation, A9.1) skinned through N ordered section curves — but with
-// an honest, stated simplification in place of the real thing's seam-
-// alignment UI and the Normal/Straight/Loose style choices: cross-sections
-// correspond by RELATIVE PARAMETER FRACTION (uniform samples of each
-// curve's own domain), not by a user-adjustable seam pick, and there is
-// only ONE style (not three). Closed=Yes/No (looping the last section back
-// to the first) is also not built yet. All stated honestly, not silently
-// dropped — matching this kernel's other v1-scoped simplifications (SubD's
-// deferred ToNURBS, Boolean's SDF-mesh fallback).
+// Loft: a smooth tensor-product NURBS surface skinned through N ordered
+// section curves by global surface interpolation (P&T 9.2.5 "Global Surface
+// Interpolation," the 2D analog of curve.mjs's Global Curve Interpolation,
+// A9.1).
 //
-// The correspondence-by-fraction rule means sections with very different
-// shapes/point distributions can loft oddly at the seam — a real, known
-// limitation, not a bug; Rhino's own seam-alignment arrows exist precisely
-// because this correspondence problem has no single universally-right
-// answer. A future round can let the user drag each section's own seam
-// marker; ships the honest default.
+// Known limitations: cross-sections correspond by relative parameter
+// fraction (uniform samples of each curve's own domain), not by a
+// user-adjustable seam pick; there is one style, not Normal/Straight/Loose;
+// Closed (looping the last section back to the first) is not built. Sections
+// with very different shapes or point distributions can loft oddly at the
+// seam, because correspondence by fraction has no single right answer.
 
 import { curvePoint, closestPointOnCurve, reverseCurve } from './curve.mjs';
 import { chordLengthParams, averagingKnotVector, interpAtParams } from './interpolate.mjs';
 import { surfacePoint } from './surface.mjs';
 import { extractSubCurve } from './knots.mjs';
 
-// SURFACE REBUILD — surfaces need to
-// be rebuildable just like curves, in both directions with varying
-// degrees. resettable" — the surface analog of SketchCurve's own
-// already-shipped point-count/degree Rebuild. Unlike a curve's own Rebuild
-// (which decimates/inserts among a stored working POINT SET, kernel/
-// simplify.mjs), a surface has no equivalent "list of picks" to resample —
-// so this refits the surface's OWN CURRENT SHAPE (whatever it is right
-// now, from any construction) through a fresh uCount x vCount parameter
-// grid, reusing networkCorrectionSurface's own already-proven two-pass
-// global-interpolation machinery wholesale rather than inventing a second
-// grid-fit routine. Exact at every one of the uCount*vCount grid stations
-// (the same "a global interpolation reproduces its own data exactly"
-// guarantee this file already relies on for loft()/gordonNetworkSurface),
-// a close, smooth approximation of the true surface in between — an
-// honest "high-density resample," not a claim of exact shape preservation
-// everywhere (Circle's own Rebuild is exact everywhere specifically
-// because a circle's closed-form construction allows it; a general
-// Revolve/Extrude/Loft/Sweep1 result has no such shortcut).
+// Surface rebuild (refitSurfaceUV, below), in both directions with any
+// degree. A curve's Rebuild resamples a stored working point set
+// (kernel/simplify.mjs); a surface has no such set, so this refits the
+// surface's current shape, from any construction, through a fresh
+// uCount x vCount parameter grid, using networkCorrectionSurface's two-pass
+// global interpolation. The result is exact at every one of the
+// uCount*vCount grid stations (a global interpolation reproduces its own
+// data) and a close, smooth approximation in between; it does not preserve
+// shape exactly everywhere.
 
 // sectionCurves: ordered array of 2+ NurbsCrv ({degree, knots, ctrlPts}),
-// the loft's own V direction, in pick order. uSampleCount: how densely
-// each section is resampled to build the shared U (profile) direction —
-// higher is smoother/costlier, no different in spirit from Revolve's own
-// uRes/vRes display-tessellation knobs, except this one bakes INTO the
-// stored control net itself (there is no separate "exact analytic profile"
-// to fall back on for an arbitrary hand-picked curve the way Revolve has
-// its own exact profile.degree/knots to reuse directly).
+// the loft's V direction, in pick order. uSampleCount: how densely each
+// section is resampled to build the shared U (profile) direction; higher is
+// smoother and costlier. The samples are baked into the control net, since
+// an arbitrary curve has no exact analytic profile to reuse the way
+// Revolve reuses profile.degree/knots.
 export function loft(sectionCurves, uSampleCount = 24, degU = 3, degV = 3) {
   if (!Array.isArray(sectionCurves) || sectionCurves.length < 2) throw new Error('loft: expected an array of at least two section curves');
   const n = sectionCurves.length;
@@ -59,7 +38,7 @@ export function loft(sectionCurves, uSampleCount = 24, degU = 3, degV = 3) {
   const dV = Math.min(degV, n - 1);
   const dU = Math.min(degU, uSampleCount - 1);
 
-  // grid[i][j] = a sample point on section j, at the SAME relative
+  // grid[i][j] = a sample point on section j, at the same relative
   // parameter fraction i/(uSampleCount-1) of section j's own domain.
   const grid = [];
   for (let i = 0; i < uSampleCount; i++) {
@@ -72,8 +51,7 @@ export function loft(sectionCurves, uSampleCount = 24, degU = 3, degV = 3) {
 
   // Shared U parametrization (P&T 9.2.5): average the chord-length
   // parameters of every V-row (one row per section), so every row shares
-  // the SAME knotsU — a real tensor-product surface, not n independent
-  // curves that happen to sit side by side.
+  // the same knotsU and the result is one tensor-product surface.
   const ubarSum = new Array(uSampleCount).fill(0);
   for (let j = 0; j < n; j++) {
     const col = grid.map((row) => [...row[j], 1]);
@@ -108,36 +86,20 @@ export function loft(sectionCurves, uSampleCount = 24, degU = 3, degV = 3) {
   return { degU: dU, knotsU, degV: dV, knotsV, ctrlNet };
 }
 
-// RULED LOFT — lofting between two same-vertex-count
-// polygons (e.g. two Star-mode Polygons) with loft() below is precisely
-// the wrong tool whenever the two curves' own sharp corners ARE the
-// point: loft() is exact for the reason it exists (a genuine smooth
-// NURBS skin, honestly approximating cross-section correspondence by
-// relative parameter fraction), but a smooth tensor-product fit rounds
-// every sharp corner over instead of preserving it.
+// Ruled loft. loft() rounds over every sharp corner, because a smooth
+// tensor-product fit cannot hold one. For two polygons with the same vertex
+// count (open or closed, matched 1:1 by index, so no correspondence by
+// parameter fraction is needed), the exact construction is N ruled
+// (bilinear, degree-1 x degree-1) panels, one per corresponding edge pair,
+// reproducing every input vertex and edge exactly. This is the ruled-surface
+// identity extrude() (primitives.mjs) uses, applied per polygon edge instead
+// of per whole-profile translate.
 //
-// For two SAME-vertex-count polygons (open or closed, matched 1:1 by
-// index — no relative-parameter-fraction guessing needed here, unlike
-// loft()'s own honest simplification, since polygon vertices already
-// correspond exactly by construction), the honest, EXACT construction is
-// N independent ruled (bilinear, degree-1 x degree-1) panels, one per
-// corresponding edge pair — flat by construction (2 straight lines),
-// reproducing every input vertex and every input edge exactly, never
-// smoothing a single corner. This is the SAME ruled-surface identity
-// extrude() (primitives.mjs) already uses (a straight line between two
-// corresponding points, degree-1 in the ruled direction) — applied per
-// polygon EDGE here instead of per whole-profile translate.
-//
-// pointsA/pointsB: ordered arrays of N world points ([x,y,z], plain
-// arrays — same convention as every other kernel entry point), each
-// either both OPEN or both CLOSED (the caller's own job to have already
-// matched — see the app layer's loftRuledEligible). closed=true: edge i
-// connects pointsA[i] to pointsA[(i+1)%N] (the last edge wraps back to
-// vertex 0); closed=false: edge i connects i to i+1, for i in 0..N-2 (no
-// wraparound edge). Re-validates its own inputs defensively (never
-// actually reachable with mismatched length from the app layer's own
-// eligibility gate, but a kernel function should refuse honestly on its
-// own, not just trust its caller — this project's own standing rule).
+// pointsA/pointsB: ordered arrays of N world points ([x,y,z]), both open or
+// both closed (the caller matches them; see the app layer's
+// loftRuledEligible). closed=true: edge i connects pointsA[i] to
+// pointsA[(i+1)%N]; closed=false: edge i connects i to i+1, for i in
+// 0..N-2. Inputs are re-validated here rather than trusted to the caller.
 export function ruledLoftPanels(pointsA, pointsB, closed) {
   const n = pointsA.length;
   if (pointsB.length !== n) throw new Error(`ruledLoftPanels: pointsA (${n} points) and pointsB (${pointsB.length} points) must have the same vertex count`);
@@ -158,22 +120,17 @@ export function ruledLoftPanels(pointsA, pointsB, closed) {
   return panels;
 }
 
-// SUPER SWEEP TIER C — the real Gordon/network-surface construction,
-// fully scoped: S(u,v) =
-// Lu(u,v) + Lv(u,v) - T(u,v), where Lu = loft(rails) (the U-family),
-// Lv = loft(profiles) evaluated with u/v swapped (the V-family), and T is
-// a small correction surface built from the SAME two-pass interpAtParams
-// technique loft() itself uses, fed the n-by-m grid of curve-family
-// station "near-intersections" directly instead of resampling curves.
+// Network (Gordon) surface: S(u,v) = Lu(u,v) + Lv(u,v) - T(u,v), where
+// Lu = loft(rails) (the U family), Lv = loft(profiles) evaluated with u/v
+// swapped (the V family), and T is a correction surface built from the n-by-m
+// grid of curve-family station near-intersections.
 //
-// networkCorrectionSurface is that correction-surface builder — genuinely
-// no new algorithmic risk, just loft()'s own Pass-1/Pass-2 machinery
-// generalized from "resample n curves into a grid" to "here is the grid
-// already, at EXPLICIT parameters, not internally re-derived by chord
-// length." `grid[j][i]` = a 3D point ([x,y,z]) at (uParams[j], vParams[i])
-// — j indexes the U-family stations (0..m-1, m = uParams.length), i
-// indexes the V-family stations (0..n-1, n = vParams.length) — matching
-// loft()'s own ctrlNet[uIndex][vIndex] convention exactly.
+// networkCorrectionSurface builds T with loft()'s two-pass interpolation,
+// from a grid given at explicit parameters instead of one resampled from
+// curves and parametrized by chord length. `grid[j][i]` = a 3D point
+// ([x,y,z]) at (uParams[j], vParams[i]) — j indexes the U-family stations
+// (0..m-1, m = uParams.length), i indexes the V-family stations (0..n-1,
+// n = vParams.length) — matching loft()'s ctrlNet[uIndex][vIndex] convention.
 export function networkCorrectionSurface(grid, uParams, vParams, degU = 3, degV = 3) {
   const m = uParams.length, n = vParams.length;
   if (m < 2 || n < 2) throw new Error('networkCorrectionSurface needs at least 2 stations in each direction');
@@ -195,42 +152,32 @@ export function networkCorrectionSurface(grid, uParams, vParams, degU = 3, degV 
   return { degU: dU, knotsU, degV: dV, knotsV, ctrlNet };
 }
 
-// refitSurfaceUV — the actual Surface Rebuild entry point (see the header
-// comment above this file's own import block). Samples `srf` (ANY valid
-// NurbsSrf — rational or not, any degree/knots) at a uniform uCount x
-// vCount grid of DOMAIN-FRACTION parameters (0..1 in each direction,
-// mapped onto srf's own real knot domain) via the already-proven
-// `surfacePoint`, then feeds that grid straight into
-// networkCorrectionSurface — no different, mechanically, from feeding it
-// a Gordon surface's own P_ij near-intersection grid, except every grid
-// point here is already an EXACT point of the real input surface (not a
-// near-intersection stand-in), so the exactness guarantee is stronger:
-// the returned surface reproduces `srf`'s own true value at all
-// uCount*vCount grid stations exactly, not just approximately.
-// A REBUILT CLOSED SURFACE USED TO COME BACK CREASED. The plain path below
-// interpolates the sample grid with a CLAMPED knot vector in each direction,
-// which makes the first and last rows independent of one another. On a closed
-// surface the sample at fraction 1 is the same point as the sample at 0, so
-// closure survives as a coincidence of position and nothing at all constrains
-// the tangent across it: the rebuilt surface is C0 at its seam. Measured on a
-// natively revolved sphere rebuilt to 16x16 degree 3 — the seam turned 4.91
-// degrees against an interior control of 0.0007, and the un-rebuilt original
-// read 0.0002 at the same place. So it was Rebuild that introduced the crease,
-// not closure itself.
+// refitSurfaceUV: the Surface Rebuild entry point (see the note above the
+// imports). Samples `srf` (any valid NurbsSrf, rational or not, any
+// degree/knots) at a uniform uCount x vCount grid of domain fractions, mapped
+// onto srf's knot domain, and interpolates that grid with
+// networkCorrectionSurface. Every grid point is a true point of `srf`, so the
+// result reproduces `srf` exactly at all uCount*vCount stations.
 //
-// The cure is the surface analog of closedCurveInterp, and the same one:
-// sample the closed direction at DISTINCT stations (the endpoint duplicate is
-// dropped), wrap-pad by the degree at both ends so the solver sees a genuinely
-// periodic sequence, interpolate, then keep the middle. What comes back is
-// tangent-continuous across the seam because the interpolation never saw a
-// boundary there.
+// Closed directions. Interpolating with a clamped knot vector makes the first
+// and last rows independent of one another. On a closed surface the sample at
+// fraction 1 is the same point as the sample at 0, so closure survives only as
+// a coincidence of position and nothing constrains the tangent across it: the
+// result is C0 at its seam (a revolved sphere rebuilt to 16x16 degree 3 turns
+// 4.91 degrees there, against 0.0007 in the interior).
+//
+// The remedy is the surface analog of closedCurveInterp: sample the closed
+// direction at distinct stations (the endpoint duplicate is dropped),
+// wrap-pad by the degree at both ends so the solver sees a periodic sequence,
+// interpolate, then keep the middle. The result is tangent-continuous across
+// the seam because the interpolation never saw a boundary there.
 //
 // Extraction is exact rather than resampled. splitSurface is the wrong tool
 // twice over: it refuses a closed direction by name, and it works by
 // re-sampling, which would reintroduce approximation error into the very thing
-// being corrected. Knot insertion to degree+1 is exact on a CLAMPED curve, and
+// being corrected. Knot insertion to degree+1 is exact on a clamped curve, and
 // the padded interpolation is clamped at its own extended ends while the range
-// being cut out sits strictly inside — so the cut moves nothing.
+// being cut out sits strictly inside, so the cut moves nothing.
 function seamClosedIn(srf, dir) {
   const net = srf.ctrlNet;
   const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9;
@@ -241,18 +188,16 @@ function seamClosedIn(srf, dir) {
 // every control row that shares that direction's knot vector. Each row yields
 // the identical knot vector (insertion depends only on knots and parameters),
 // so the rows reassemble into a surface without further reconciliation.
-// THE CUT MUST LAND ON THE KNOT IT IS MEANT TO BE, BIT FOR BIT. Both sub-range
-// boundaries are station parameters, and every station is already a knot — but
-// the boundary is computed as pad/span while the knot came out of averaging the
-// same parameters, and those two routes to the same real number do not always
-// produce the same double. Measured on a torus: the v cut wanted
-// 0.800000000000000044 while the knot present was 0.800000000000000155, one ulp
-// apart. insertKnotToMultiplicity matches within 1e-9, so it inserts at the
-// requested value anyway and leaves a span 1.1e-16 wide between the two — and
-// the pair of control points spanning a sliver collapses onto each other. That
-// is the whole defect: |dS/dv| fell from 218 to 0.013 at that end, the surface
-// still positionally correct but with a stalled parameterisation. The u
-// direction escaped only because its own arithmetic happened to land bit-exact.
+// The cut must land exactly on the knot it targets. Both sub-range
+// boundaries are station parameters, and every station is already a knot, but
+// the boundary is computed as pad/span while the knot comes from averaging the
+// same parameters, and the two routes can differ by one ulp (on a torus,
+// 0.800000000000000044 against a knot of 0.800000000000000155).
+// insertKnotToMultiplicity matches within 1e-9, so it would insert at the
+// requested value and leave a span 1.1e-16 wide; the control points spanning
+// that sliver collapse onto each other and the parameterization stalls at that
+// end (|dS/dv| 218 → 0.013) while position stays correct. So the cut snaps to
+// any knot within 1e-9 of the domain scale.
 function snapCutToKnot(knots, t) {
   const scale = Math.max(1, Math.abs(knots[knots.length - 1] - knots[0]));
   let best = t, bestD = Infinity;
@@ -273,22 +218,6 @@ function extractSurfaceRange(srf, dir, a, b) {
   if (dir === 'v') return { ...srf, knotsV: outKnots, ctrlNet: outRows };
   return { ...srf, knotsU: outKnots, ctrlNet: outRows[0].map((_, j) => outRows.map((r) => r[j])) };
 }
-// Make a closed direction's two end rows literally identical, at their average.
-function tieSeam(srf, dir) {
-  const net = srf.ctrlNet.map((r) => r.map((p) => p.slice()));
-  if (dir === 'u') {
-    const a = net[0], b = net[net.length - 1];
-    for (let j = 0; j < a.length; j++) {
-      for (let k = 0; k < a[j].length; k++) { const m = (a[j][k] + b[j][k]) / 2; a[j][k] = m; b[j][k] = m; }
-    }
-  } else {
-    for (const row of net) {
-      const a = row[0], b = row[row.length - 1];
-      for (let k = 0; k < a.length; k++) { const m = (a[k] + b[k]) / 2; a[k] = m; b[k] = m; }
-    }
-  }
-  return { ...srf, ctrlNet: net };
-}
 export function refitSurfaceUV(srf, uCount, vCount, degU = 3, degV = 3) {
   if (uCount < 2 || vCount < 2) throw new Error('refitSurfaceUV needs at least 2 points in each direction');
   const dU = Math.min(degU, uCount - 1);
@@ -296,31 +225,29 @@ export function refitSurfaceUV(srf, uCount, vCount, degU = 3, degV = 3) {
   const u0 = srf.knotsU[0], u1 = srf.knotsU[srf.knotsU.length - 1];
   const v0 = srf.knotsV[0], v1 = srf.knotsV[srf.knotsV.length - 1];
   const closedU = seamClosedIn(srf, 'u'), closedV = seamClosedIn(srf, 'v');
-  // Stations in a closed direction are i/n over n DISTINCT samples and are then
+  // Stations in a closed direction are i/n over n distinct samples and are then
   // padded outward by the degree; in an open one they are the ordinary
   // i/(count-1) spanning the domain end to end.
   // interpAtParams/averagingKnotVector both require a [0,1]-normalized params
-  // array, so the padded stations are normalized across the WHOLE padded span
+  // array, so the padded stations are normalized across the whole padded span
   // rather than left running from -deg/n to (n+deg)/n. The real surface is then
   // the sub-range covering stations 0..n of that span, which is where lo/hi
-  // come from. Sampling still uses the wrapped fraction in the ORIGINAL
+  // come from. Sampling still uses the wrapped fraction in the original
   // surface's own domain, which normalization does not touch.
   const stations = (count, deg, closed) => {
     if (!closed) return { params: Array.from({ length: count }, (_, i) => i / (count - 1)), pick: (i) => i / (count - 1) };
-    // PADDED BY 2*degree, AND THE PAD IS A TOLERANCE, NOT A THRESHOLD. The wrap
+    // The pad is 2*degree, and it is a tolerance, not a threshold. The wrap
     // makes the solver see a periodic sequence; what remains is the clamped
-    // padded END leaking inward. That leak is not confined to degree+1 control
-    // points — interpolation is global — it decays geometrically through the
-    // inverse at the Euler-Frobenius rate, which for cubics is 2-sqrt(3) ~
-    // 0.268 per station. That predicts 4.91 deg (no wrap) * 0.268^3 = 0.094 at
-    // a pad of degree, and it is what was measured; at twice the pad the
-    // predicted residual falls below the noise floor, measured 0.0011, equal to
-    // the interior control. So no finite pad is ever exact — and since higher
-    // degrees decay SLOWER, 2*degree is not guaranteed to suffice forever. The
-    // exact construction is a genuine periodic solve (uniform unclamped knots,
-    // a cyclic banded system, control points wrapped rather than duplicated,
-    // then clamped for storage) — what OpenNURBS and Open CASCADE do. That is
-    // the right eventual replacement for this whole padding machinery.
+    // padded end leaking inward. Interpolation is global, so the leak is not
+    // confined to degree+1 control points: it decays geometrically through the
+    // inverse at the Euler-Frobenius rate, 2-sqrt(3) ~ 0.268 per station for
+    // cubics. A pad of degree leaves 4.91 deg * 0.268^3 = 0.094 deg at the seam;
+    // a pad of 2*degree leaves 0.0011, equal to the interior control. No finite
+    // pad is exact, and higher degrees decay more slowly, so 2*degree is not
+    // guaranteed to suffice for them. Known limitation: the exact construction
+    // is a periodic solve (uniform unclamped knots, a cyclic banded system,
+    // control points wrapped rather than duplicated, then clamped for storage),
+    // as OpenNURBS and Open CASCADE do; it would replace this padding.
     const pad = 2 * deg, n = count, span = n + 2 * pad;
     const params = [], pick = [];
     for (let i = -pad; i <= n + pad; i++) { params.push((i + pad) / span); pick.push((((i % n) + n) % n) / n); }
@@ -332,15 +259,14 @@ export function refitSurfaceUV(srf, uCount, vCount, degU = 3, degV = 3) {
   let out = networkCorrectionSurface(grid, su.params, sv.params, dU, dV);
   if (su.padded) out = extractSurfaceRange(out, 'u', su.lo, su.hi);
   if (sv.padded) out = extractSurfaceRange(out, 'v', sv.lo, sv.hi);
-  // WHERE THIS SURFACE IS EXACT, as fractions of its own domain — exposed
-  // because the answer differs by direction and a caller cannot infer it.
-  // An open direction is exact at i/(count-1), spanning end to end. A CLOSED
-  // one is exact at i/count, because the station at fraction 1 is the same
-  // point as the one at 0 and spending a station on the duplicate is what
-  // creased the seam in the first place. Verified: a rebuilt radius-20
-  // cylinder is exact to 1.4e-14 at i/count and 1.0e-2 off it, so a caller
-  // assuming the open convention on a closed surface measures BETWEEN
-  // stations and reads a real-looking error that is only its own sampling.
+  // Where this surface is exact, as fractions of its own domain, exposed
+  // because the answer differs by direction and a caller cannot infer it. An
+  // open direction is exact at i/(count-1), end to end. A closed one is exact
+  // at i/count, because the station at fraction 1 is the same point as the one
+  // at 0 and spending a station on the duplicate creases the seam. A caller
+  // assuming the open convention on a closed surface measures between stations
+  // (a rebuilt radius-20 cylinder is exact to 1.4e-14 at i/count and 1.0e-2
+  // off it).
   const fractions = (count, closed) => (closed
     ? Array.from({ length: count + 1 }, (_, i) => i / count)
     : Array.from({ length: count }, (_, i) => i / (count - 1)));
@@ -348,59 +274,32 @@ export function refitSurfaceUV(srf, uCount, vCount, degU = 3, degV = 3) {
   return out;
 }
 
-// GORDON NETWORK SURFACE — the full Tier C construction, orchestrating
-// Lu/Lv/T and the doc's own "dense-sample combine, then ONE final global
-// interpolation" recipe.
+// Gordon network surface: builds Lu, Lv and T, combines them on a dense
+// sample grid, then runs one final global interpolation.
 //
-// STATIONING (v1, with no real curve-curve
-// intersection in this kernel): each PROFILE's rail-direction station
-// u_j is found via closestPointOnCurve against a REPRESENTATIVE rail
-// (rails[0]) — the exact technique sweepNProfiles already uses to
-// station its own cross-sections, expressed as a relative fraction of
-// rails[0]'s own domain (matching loft()'s own "relative parameter
-// fraction" correspondence convention). Each RAIL's own V-station v_i is
-// simply its uniform index fraction i/(n-1) — rails have no independent
-// "closest point against a curve" mechanism to station them by (only
-// profiles do); this matches loft()'s own V direction being fundamentally
-// ORDER-based across a small discrete family, not geometrically searched.
+// Stationing is by closest point, not by curve-curve intersection. Each
+// profile's rail-direction station u_j is closestPointOnCurve of the
+// profile's centroid against a representative rail (rails[0]), as a fraction
+// of rails[0]'s domain — the technique sweepNProfiles uses to station its
+// cross-sections. Each rail's station v_i is its index fraction i/(n-1):
+// rails have no curve to be searched against, and loft()'s V direction is
+// order-based across a small discrete family.
 //
-// THE GRID / EXACTNESS, made concrete: at
-// each station (u_j, v_i), define P_ij as the MIDPOINT of what the two
-// independently-built families already give there — Lu(u_j,v_i) and
-// Lv(u_j,v_i) — an honest "near-intersection" target since this kernel
-// has no real curve-curve intersection (a TRUE Gordon surface would have
-// Lu(u_j,v_i) = Lv(u_j,v_i) = P_ij already, because P_ij is a genuine
-// shared point both curve families actually pass through; ours only
-// station NEAR each other, so Lu(u_j,v_i) and Lv(u_j,v_i) are merely
-// close, and the midpoint is the honest v1 stand-in for their true
-// meeting point). T_srf is built (networkCorrectionSurface above) FROM
-// this exact P_ij grid at these exact (u_j,v_i) parameters — so, by
-// interpAtParams' own global-interpolation guarantee, T(u_j,v_i) = P_ij
-// EXACTLY, at every station, unconditionally. Algebraically this makes
-// S_sample(u_j,v_i) = Lu(u_j,v_i) + Lv(u_j,v_i) - T(u_j,v_i) =
-// Lu(u_j,v_i) + Lv(u_j,v_i) - [Lu(u_j,v_i)+Lv(u_j,v_i)-P_ij] = P_ij,
-// EXACTLY, at every one of the n*m grid stations — REGARDLESS of what
-// Lu(u_j,v_i) and Lv(u_j,v_i) individually happen to be. This is the same
-// exactness this kernel already proves for loft()/sweepNProfiles (a
-// global interpolation reproduces its own data exactly at its own data
-// parameters), applied one level higher: T's own data here IS the
-// station grid, not resampled curve points.
+// The grid: at each station (u_j, v_i), P_ij is the midpoint of Lu(u_j,v_i)
+// and Lv(u_j,v_i). In a true Gordon surface both families pass through a
+// shared P_ij; here they only station near each other, and the midpoint
+// stands in for their meeting point. T_srf (networkCorrectionSurface) is
+// interpolated from this P_ij grid at these (u_j,v_i), so T(u_j,v_i) = P_ij
+// exactly, and S_sample(u_j,v_i) = Lu(u_j,v_i) + Lv(u_j,v_i) - P_ij = P_ij,
+// since P_ij is their midpoint, at every one of the n*m stations.
 //
-// THE FINAL SURFACE: a DENSE (u,v) sample grid — every station u_j/v_i
-// exactly, plus `interiorSamplesPerSpan` genuinely in-between samples per
-// gap (sweepNProfiles' own established pattern, reused not reinvented) —
-// is built, S_sample(u,v) = Lu(u,v) + Lv(u,v) - T(u,v) (a plain vector
-// add/subtract of 3D points, never combined as control nets) is evaluated
-// at every dense sample, and ONE final global interpolation (the same
-// two-pass technique, a third time) through this dense grid produces the
-// returned NurbsSrf. Because every station u_j/v_i is included in the
-// dense grid exactly, and S_sample is proven exact AT those stations
-// above, the final surface reproduces every one of the n*m grid stations
-// exactly too (the same "final re-interpolation reproduces every dense
-// sample exactly" guarantee loft()/sweepNProfiles already rely on) — NOT
-// the input curves' full continuous extent between samples, the same
-// honest limitation loft()/sweepNProfiles already state for their own
-// correspondence-by-sampling.
+// The final surface: S_sample(u,v) = Lu(u,v) + Lv(u,v) - T(u,v) (a vector
+// sum of evaluated 3D points, never of control nets) is evaluated on a dense
+// (u,v) grid containing every station u_j/v_i plus `interiorSamplesPerSpan`
+// samples per gap (the sweepNProfiles pattern), and one final two-pass global
+// interpolation through that grid is the returned NurbsSrf. It reproduces
+// every station exactly; between samples it approximates the input curves'
+// continuous extent, as loft() and sweepNProfiles do.
 const NETWORK_INTERIOR_SAMPLES_PER_SPAN = 6;
 function curveCentroid(crv) {
   const sum = crv.ctrlPts.reduce((acc, [x, y, z]) => [acc[0] + x, acc[1] + y, acc[2] + z], [0, 0, 0]);
@@ -438,22 +337,15 @@ export function gordonNetworkSurface(rails, profiles, opts = {}) {
 
   let uStations, profileOrder;
   if (opts.uStations) {
-    // EXPLICIT STATION OVERRIDE (boundSurfaceFromLoop's own use)
-    // — for a caller that ALREADY KNOWS the true correspondence (profiles
-    // genuinely touching a rail at known parameter fractions — an EdgeSrf-
-    // style closed 4-curve loop — not merely stationed NEAR it), this skips
-    // the closest-point search below entirely. That search stations by a
-    // profile's own CENTROID (curveCentroid), which is a real, deliberate
-    // choice for the "profile merely runs near the rail" case this
-    // function's own header comment scopes — but checked directly, not
-    // assumed, a profile's centroid is generically NOT at its own touching
-    // endpoint, so it would silently produce an approximate, not exact,
-    // station even when the two curves genuinely touch exactly at a known
-    // parameter. `profiles` must already be given in the SAME order as
-    // `opts.uStations` (unlike the auto-search path below, which re-sorts
-    // by inferred station regardless of pick order) — the caller owns that
-    // correspondence here, this override trusts it rather than re-deriving
-    // it a second, redundant way.
+    // Explicit stations (boundSurfaceFromLoop). For a caller that knows the
+    // true correspondence (profiles touching a rail at known parameter
+    // fractions, as in a closed 4-curve loop), this skips the closest-point
+    // search below. That search stations by a profile's centroid
+    // (curveCentroid), which is generically not at its touching endpoint, so it
+    // gives an approximate station even when the curves touch exactly.
+    // `profiles` must be in the same order as `opts.uStations`; unlike the
+    // search path, which re-sorts by station, this path trusts the caller's
+    // order.
     if (opts.uStations.length !== m) throw new Error(`gordonNetworkSurface: opts.uStations must have exactly one entry per profile (${m}), got ${opts.uStations.length}`);
     uStations = opts.uStations.slice();
     profileOrder = profiles.map((_, idx) => idx);
@@ -481,8 +373,8 @@ export function gordonNetworkSurface(rails, profiles, opts = {}) {
     profileOrder = ordered.map((s) => s.idx); // original profile index, in station order
   }
 
-  // The P_ij grid (honest "near-intersection" midpoint — see header
-  // comment) and the correction surface T built from it.
+  // The P_ij grid (the near-intersection midpoint; see the header comment)
+  // and the correction surface T built from it.
   const grid = uStations.map((u) => vStations.map((v) => {
     const pu = surfacePoint(Lu_srf, u, v);
     const pv = surfacePoint(Lv_srf, v, u);
@@ -521,64 +413,36 @@ export function gordonNetworkSurface(rails, profiles, opts = {}) {
   };
 }
 
-// BOUND SURFACE (Rhino: EdgeSrf; our own name "Bound Surface"). It is a
-// Coons patch built from N boundary curves, and it shares the N-rail Sweep
-// family's machinery rather than carrying its own: a surface bounded by exactly 4
-// curves forming a closed loop, in order (c0.end==c1.start==...==
-// c3.end==c0.start, within CLOSE_LOOP_TOL) — the classic Rhino EdgeSrf
-// "golden path." v1 SCOPE, stated honestly: exactly 4 edges only. A
-// 2-edge "bound surface" is already just `loft([c0,c1])`, not a distinct
-// feature; a 3-edge triangular patch needs a genuinely different
-// degenerate-corner construction (one side collapsing to a point) this
-// round doesn't attempt — a real, separate follow-up if ever wanted.
+// Bound surface (Rhino: EdgeSrf). A Coons patch from 4 boundary curves
+// forming a closed loop, in order (c0.end==c1.start==...==c3.end==c0.start,
+// within CLOSE_LOOP_TOL), built with the N-rail Sweep family's machinery.
+// Known limitation: exactly 4 edges. A 2-edge bound surface is
+// `loft([c0,c1])`; a 3-edge triangular patch needs a degenerate-corner
+// construction (one side collapsing to a point) that is not built.
 //
-// THE CONSTRUCTION IS LITERALLY gordonNetworkSurface WITH 2 RAILS + 2
-// PROFILES, opposite edges paired and reversed so both members of each
-// pair run the SAME direction (loft()'s own V-direction convention,
-// same reasoning `sweep1Rigid`'s frame-continuity already relies on):
-// rails = [c0, reverse(c2)] (c0 runs c0.start->c0.end; c2 runs backward
-// around the loop, so reversing it makes it run the SAME way, start-
-// side to end-side); profiles = [reverse(c3), c1] (c3 connects c2's end
-// back to c0's start, so reversed it runs c0-side to c2-side, matching
-// c1 which already runs c0-side to c2-side directly).
+// The construction is gordonNetworkSurface with 2 rails and 2 profiles,
+// opposite edges paired and reversed so both members of each pair run the
+// same direction (loft()'s V-direction convention): rails = [c0, reverse(c2)]
+// (c2 runs backward around the loop, so reversed it runs start-side to
+// end-side like c0); profiles = [reverse(c3), c1] (c3 connects c2's end back
+// to c0's start, so reversed it runs c0-side to c2-side, as c1 does).
 //
-// A REAL, PROVABLE EXACTNESS RESULT FOR THIS SPECIFIC 2-RAIL/2-PROFILE
-// CASE, worked out by hand THEN checked by direct numerical probe before
-// trusting it (a first version of this module's own test compared the
-// wrong thing and looked like a real bug until diagnosed — see below).
-// With only 2 rails, loft(rails)'s own V-direction is degree-1 (a
-// straight ruled blend), so at the v=0 station (rail 0's own row),
-// Lu(u,0) = c0(u) EXACTLY for every u (loft's own domain-end exactness,
-// not just at v-station corners) — the same is true of Lv(0,u)
-// restricted to that same edge: with only 2 profiles, profiles' own
-// "which-profile" direction is ALSO degree-1, so Lv(0,u) traces the
-// exact STRAIGHT CHORD between the loop's two corner points at that
-// edge as u sweeps 0..1. T(u,0) is built from a station grid whose own
-// u-direction is likewise only 2 points wide, so T(u,0) is ALSO the
-// same straight chord between the identical two corner points. Lv(0,u)
-// and T(u,0) are therefore the SAME degree-1 curve through the SAME two
-// points — they cancel EXACTLY, leaving the CONTINUOUS combination
-// S_sample(u,0) = Lu(u,0) + 0 = c0(u) exactly, for every u.
+// Edge exactness for this 2-rail/2-profile case. With 2 rails, loft(rails) is
+// degree 1 in V, so at v=0, Lu(u,0) = c0(u) for every u (loft's domain-end
+// exactness). With 2 profiles, Lv's which-profile direction is also degree 1,
+// so Lv(0,u) is the straight chord between the loop's two corner points on
+// that edge. T(u,0), built from a station grid 2 points wide in u, is the same
+// chord between the same two points. They cancel, so
+// S_sample(u,0) = c0(u) exactly, for every u.
 //
-// THE ACTUAL RETURNED SURFACE, stated honestly, promises SHAPE exactness,
-// not parametrization exactness — a real, found-via-testing distinction,
-// not a rounding error. gordonNetworkSurface's own FINAL surface is a
-// fresh global re-interpolation THROUGH a dense (u,v) sample grid of
-// S_sample (this kernel's own already-documented "reproduces its data
-// points exactly, approximates continuously in between" limitation,
-// stated in this same function's header above) — so the RETURNED edge
-// curve traces the identical 3D PATH as c0 (confirmed directly: every
-// sampled point on the returned edge lands within ~1e-4mm of c0 via
-// closestPointOnCurve, at any density), but its own internal parameter
-// no longer runs at exactly c0's own original speed (a denser/different-
-// degree re-interpolation has no reason to reproduce the SAME arc-length-
-// vs-parameter mapping, only the same shape). A first draft of this
-// module's own test compared "same raw parameter fraction" on both
-// curves and saw a spurious ~0.5mm gap that LOOKED like a real bug —
-// re-diagnosed via closestPointOnCurve before trusting it, which showed
-// the true shape-match error is actually ~1e-4mm; fixed the test to
-// compare shape (closest point), not parametrization speed.
-const CLOSE_LOOP_TOL = 0.001; // mm — matches this app's own JOIN_TOLERANCE value (not imported; this module has no app-layer dependency)
+// The returned surface is exact in shape, not in parameterization.
+// gordonNetworkSurface's final surface is a fresh global interpolation
+// through a dense (u,v) sample grid of S_sample, so its edge traces c0's path
+// (every sampled point within ~1e-4 mm of c0 by closestPointOnCurve, at any
+// density) but does not run at c0's parameter speed. Compare such edges by
+// closest point, not by equal parameter fraction, which reads a spurious
+// ~0.5 mm gap.
+const CLOSE_LOOP_TOL = 0.001; // mm — equals the app's JOIN_TOLERANCE (not imported: the kernel has no app-layer dependency)
 export function boundSurfaceFromLoop(c0, c1, c2, c3) {
   const loop = [c0, c1, c2, c3];
   for (let i = 0; i < 4; i++) {
@@ -592,11 +456,8 @@ export function boundSurfaceFromLoop(c0, c1, c2, c3) {
   }
   const rails = [c0, reverseCurve(c2)];
   const profiles = [reverseCurve(c3), c1];
-  // uStations FORCED to the exact [0,1] this construction's own exactness
-  // proof (above) depends on — gordonNetworkSurface's own default auto-
-  // stationing (closestPointOnCurve against a profile's CENTROID) does NOT
-  // give exactly 0/1 even for genuinely touching curves (checked directly,
-  // not assumed — an earlier draft of this function's own test caught a
-  // real ~0.5mm deviation from relying on the default path instead).
+  // uStations forced to [0, 1], which the edge-exactness argument above
+  // depends on: the default search stations by a profile's centroid and does
+  // not give exactly 0 and 1 even for curves that touch.
   return gordonNetworkSurface(rails, profiles, { uStations: [0, 1] });
 }

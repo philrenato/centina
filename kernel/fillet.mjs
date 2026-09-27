@@ -1,16 +1,14 @@
-/* ROLLING-BALL EDGE BLENDING — the cross-section, and the conditions under
+/* Rolling-ball edge blending — the cross-section, and the conditions under
    which it exists at all.
-   ==================================================================
 
-   PRIOR ART, cited before this file was written, per the standing rule that
-   a citation lands before the code — read for TECHNIQUE, never transcribed:
+   Prior art (read for technique, not transcribed):
 
      · Rossignac, J. R. & Requicha, A. A. G., "Constant-Radius Blending in
        Solid Modeling." ASME Computers in Mechanical Engineering (CIME) 3,
        pp. 65-73, 1984. The rolling-sphere formulation itself.
      · Choi, B. K. & Ju, S. Y., "Constant-radius blending in surface
        modeling." Computer-Aided Design 21(4), pp. 213-220, 1989.
-       DOI 10.1016/0010-4485(89)90046-8. The FEASIBILITY precondition, from
+       DOI 10.1016/0010-4485(89)90046-8. The feasibility precondition, from
        its own abstract: two surfaces can be blended at radius r as long as
        their offset surfaces at distance r are smooth, so that the
        intersection between those offsets is well defined. That intersection
@@ -20,12 +18,13 @@
        1997. DOI 10.1006/jsco.1996.0087. The variable-radius existence
        condition used in `variableRadiusFeasible` below.
 
-   WHAT THIS MODULE IS NOT. It does not compute the maximum buildable radius.
+   This module does not compute the maximum buildable radius.
    The true bound is the smaller principal radius of curvature on the concave
-   side (Wallner et al. 2001), which needs SECOND derivatives of the supporting
-   surfaces; this kernel computes first partials only, by an earlier deliberate
-   decision. Anything this module returns about size is a NECESSARY condition,
-   never a sufficient one, and it says so in the field names.
+   side (Wallner, Sakkalis, Maekawa, Pottmann & Yu, "Self-Intersections of
+   Offset Curves and Surfaces", Int. J. Shape Modeling 7(1), 2001), which needs second derivatives of the supporting
+   surfaces; this kernel computes first partials only. Anything this module
+   returns about size is a necessary condition, never a sufficient one, and it
+   says so in the field names.
 
    Plain data throughout: a point is [x, y, z], and nothing here imports a
    vector library or reaches the DOM. */
@@ -48,26 +47,26 @@ function norm(a) {
 }
 
 /**
- * THE CROSS-SECTION OF A ROLLING-BALL BLEND AT ONE POINT ALONG AN EDGE.
+ * The cross-section of a rolling-ball blend at one point along an edge.
  *
- * ⚠ THE SETBACK IS GOVERNED BY THE ANGLE BETWEEN THE CO-NORMALS, NOT BY THETA,
- * and writing it against theta gives a NEGATIVE setback on every concave edge.
+ * The setback is governed by the angle between the co-normals, not by theta;
+ * written against theta it would be negative on every concave edge.
  *
  *     phi = acos(coNormalA . coNormalB)          always in [0, pi]
  *     setback d     = r / tan(phi / 2)
  *     center offset = r / sin(phi / 2)
  *
- * theta is the angle measured through the MATERIAL and runs to 2*pi; phi is the
- * angle between the two directions the faces actually extend in. They agree on
+ * theta is the angle measured through the material and runs to 2*pi; phi is the
+ * angle between the two directions the faces extend in. They agree on
  * a convex edge and are supplementary about 2*pi on a concave one, so
  * tan(theta/2) flips sign at theta = pi while the geometry does not.
  *
- * Worked both ways by hand, which is how the sign error surfaced:
- *   · BOX EDGE, theta = phi = 90 degrees, ball of radius r in a right-angled
+ * Worked both ways:
+ *   · Box edge, theta = phi = 90 degrees, ball of radius r in a right-angled
  *     corner at the origin with cA = +y and cB = +x. Tangency at (0, r) and
  *     (r, 0), center at (r, r). So d = r and the center sits r*sqrt(2) along the
  *     45-degree bisector. r/tan(45) = r and r/sin(45) = r*sqrt(2). Agree.
- *   · CONCAVE EDGE of an L-shaped solid, theta = 270 degrees, cA = +x and
+ *   · Concave edge of an L-shaped solid, theta = 270 degrees, cA = +x and
  *     cB = +y so phi is still 90. The ball rounds the inside corner: tangency
  *     at (edge + r*cA) and (edge + r*cB), center at edge + (r, r). The setback
  *     is +r, exactly as in the convex case. Against theta it would have been
@@ -75,11 +74,11 @@ function norm(a) {
  *     edge and the blend inside the solid.
  *
  * theta is still carried, and still needed: it is what says whether the blend
- * REMOVES material or ADDS it, which decides which side gets trimmed.
+ * removes material or adds it, which decides which side gets trimmed.
  *
- * THE SETBACK IS WHY theta HAS TO BE CARRIED ALONG THE EDGE RATHER THAN
- * SAMPLED ONCE. Where theta varies — every S-shaped or blob-derived edge — d
- * varies with it, so the two tangency curves are NOT constant-distance offsets
+ * The setback is why theta has to be carried along the edge rather than
+ * sampled once. Where theta varies — every S-shaped or blob-derived edge — d
+ * varies with it, so the two tangency curves are not constant-distance offsets
  * of the edge, and a blend built by offsetting the edge by a fixed distance is
  * wrong everywhere the angle moves.
  *
@@ -92,21 +91,19 @@ function norm(a) {
  */
 export function rollingBallSection({ point, coNormalA, coNormalB, theta, radius, minAngleRad = 0.5 * Math.PI / 180 }) {
   if (!(radius > 0)) return { ok: false, reason: 'radius must be positive', radius };
-  // NO SEPARATE GUARD ON A DEGENERATE ANGLE VALUE. Every way theta can be a
-  // degenerate ANGLE shows up in phi and is caught below, with a message that
-  // says what actually happened: theta near 0 is a knife edge (phi near 0),
-  // theta near pi is a smooth junction (phi near pi), theta near 2*pi is a thin
-  // slot (phi near 0 again). Guarding those here as well duplicated the cases
-  // and described them wrongly — a knife edge comes back from that duplicate
-  // path labeled "too nearly tangent", which is the opposite condition.
+  // No separate guard on a degenerate angle value. Every way theta can be a
+  // degenerate angle shows up in phi and is caught below, with a message that
+  // says what happened: theta near 0 is a knife edge (phi near 0), theta near
+  // pi is a smooth junction (phi near pi), theta near 2*pi is a thin slot (phi
+  // near 0 again). A second guard on theta would label a knife edge "too
+  // nearly tangent", which is the opposite condition.
   //
-  // ⚠ BUT THETA BEING ABSENT OR IN THE WRONG UNITS IS NOT AN ANGLE DEGENERACY,
-  // and phi genuinely cannot see it: phi is derived from the co-normals alone.
-  // `convex` is read from theta and from nothing else, so an omitted theta, a
-  // NaN, or a value handed over in DEGREES all returned ok:true with
-  // convex:false — every convex edge silently classified concave, which tells
-  // the caller to add material where it must remove it. Wrong and quiet is the
-  // worst pair, so this is a refusal rather than a default.
+  // Theta being absent or in the wrong units is not an angle degeneracy, and
+  // phi cannot see it: phi is derived from the co-normals alone. `convex` is
+  // read from theta and from nothing else, so an omitted theta, a NaN, or a
+  // value in degrees would classify every convex edge as concave, telling the
+  // caller to add material where it must remove it. So this is a refusal
+  // rather than a default.
   if (!Number.isFinite(theta)) return { ok: false, reason: 'the dihedral angle theta is missing or not a number, and the convex/concave decision is read from it' };
   if (!(theta > 0 && theta < 2 * Math.PI)) return { ok: false, reason: `the dihedral angle theta must be in radians within (0, 2*pi); got ${theta}` };
   const cA = norm(coNormalA), cB = norm(coNormalB);
@@ -126,27 +123,27 @@ export function rollingBallSection({ point, coNormalA, coNormalB, theta, radius,
     phi, theta,
     setback, centreOffset,
     // The two points where the ball touches, one on each face's tangent plane.
-    // A CURVED face needs these projected onto the surface afterwards; on a
+    // A curved face needs these projected onto the surface afterwards; on a
     // planar face they are already exact.
     tangencyA: add(point, mul(cA, setback)),
     tangencyB: add(point, mul(cB, setback)),
     centre: add(point, mul(bisector, centreOffset)),
     bisector,
-    // Convex blends REMOVE material, concave blends ADD it. The caller needs
+    // Convex blends remove material, concave blends add it. The caller needs
     // this to know which side to trim, and it falls straight out of theta.
     convex: theta < Math.PI,
   };
 }
 
 /**
- * THE NECESSARY CONDITION ON RADIUS THAT IS ACTUALLY CHECKABLE HERE.
+ * The necessary condition on radius that is checkable here.
  *
- * Choi & Ju's precondition is about the OFFSET surfaces, and the honest part of
- * it reachable without second derivatives is this: the setback must not exceed
+ * Choi & Ju's precondition is about the offset surfaces, and the part of it
+ * reachable without second derivatives is this: the setback must not exceed
  * how much face there is to set back into. A ball whose tangency point would
  * land beyond the far side of a face has rolled off it — the "ball falls off
- * the surface rails" case, which is the single most common blend failure and
- * the one a local algorithm cannot see at all.
+ * the surface rails" case, the most common blend failure and one a local
+ * algorithm cannot see.
  *
  * `widthA`/`widthB` are how far each face extends from the edge, measured
  * along its own co-normal. Returns the largest radius that still fits, so a
@@ -154,8 +151,8 @@ export function rollingBallSection({ point, coNormalA, coNormalB, theta, radius,
  */
 export function maxRadiusForSetback({ phi, widthA, widthB }) {
   // phi comes from an acos and is therefore in [0, pi]; anything else is a
-  // caller error, and `Math.abs(tan(phi/2))` was laundering it into a plausible
-  // answer (phi = 4.2 returned rMax = 17.1, ok:true).
+  // caller error, which `Math.abs(tan(phi/2))` would turn into a plausible
+  // answer.
   if (!(phi > 0) || !(phi < Math.PI)) return { ok: false, reason: `phi must lie strictly between 0 and pi — got ${phi}`, phi };
   const tanHalf = Math.tan(phi / 2);
   if (!(Math.abs(tanHalf) > EPS)) return { ok: false, reason: 'degenerate half-angle', phi };
@@ -166,7 +163,7 @@ export function maxRadiusForSetback({ phi, widthA, widthB }) {
   return {
     ok: true,
     rMax,
-    // NAMED AS WHAT IT IS. This bounds the radius by how much FACE there is,
+    // This bounds the radius by how much face there is,
     // not by curvature. A face wide enough to hold the setback can still be too
     // curved to hold the ball, and that bound needs second derivatives this
     // kernel does not compute.
@@ -176,7 +173,7 @@ export function maxRadiusForSetback({ phi, widthA, widthB }) {
 }
 
 /**
- * VARIABLE RADIUS — WHEN THE ENVELOPE EXISTS AT ALL.
+ * Variable radius — when the envelope exists at all.
  *
  * Peternell & Pottmann 1997: a canal surface swept by a ball of varying radius
  * r(t) along a spine m(t) has a real envelope exactly if
@@ -185,8 +182,8 @@ export function maxRadiusForSetback({ phi, widthA, widthB }) {
  *
  * — if the radius changes faster than the spine advances, there is no surface
  * to build, and at equality the characteristic circle degenerates to a point.
- * Unlike the curvature bound this is computable from FIRST derivatives, so it
- * is a refusal this app can actually make honestly.
+ * Unlike the curvature bound this is computable from first derivatives, so
+ * this kernel can refuse on it.
  *
  * `spine` is a polyline of ball centers, `radii` the radius at each. Returns
  * the worst margin and where it occurs, so a refusal can point at the span that
@@ -194,16 +191,15 @@ export function maxRadiusForSetback({ phi, widthA, widthB }) {
  */
 export function variableRadiusFeasible(spine, radii) {
   if (!Array.isArray(spine) || !Array.isArray(radii) || spine.length < 2 || spine.length !== radii.length) {
-    // ⚠ `radii` is checked BEFORE its length is read. Reading it first threw a
-    // TypeError straight through a function whose whole contract is to return
-    // {ok, reason} — a refusal path that crashes is not a refusal path.
+    // `radii` is checked before its length is read, so a missing array
+    // returns {ok, reason} rather than throwing a TypeError.
     return { ok: false, reason: 'spine and radii must be matching arrays of at least two samples' };
   }
   let worst = Infinity, worstAt = -1;
   for (let i = 0; i + 1 < spine.length; i++) {
     const ds = len(sub(spine[i + 1], spine[i]));
     const dr = radii[i + 1] - radii[i];
-    // Both sides are per-step, so the parameterisation cancels and no
+    // Both sides are per-step, so the parameterization cancels and no
     // derivative estimate is needed beyond the differences themselves.
     const margin = ds * ds - dr * dr;
     if (margin < worst) { worst = margin; worstAt = i; }
@@ -234,7 +230,7 @@ export function sectionArc(section) {
   if (!(sweep > EPS)) return null;
   const w = Math.cos(sweep / 2);
   if (!(w > EPS)) return null; // a half-sweep at or past 90 degrees is not representable as one rational quadratic
-  // The middle control point is where the two end TANGENTS meet, which for a
+  // The middle control point is where the two end tangents meet, which for a
   // circular arc lies on the bisector at radius / cos(halfSweep).
   const bis = norm(add(uA, uB));
   if (!bis) return null;
@@ -243,19 +239,16 @@ export function sectionArc(section) {
   return {
     degree: 2,
     knots: [0, 0, 0, 1, 1, 1],
-    /* ⚠ CARTESIAN COORDINATES WITH THE WEIGHT APPENDED, NOT PREMULTIPLIED.
+    /* Cartesian coordinates with the weight appended, not premultiplied.
        This project's evaluators do the premultiplication themselves —
        `curvePoint`/`surfacePoint` read [x, y, z, w] and accumulate x*w — and
        `makeArc` stores `[...point, weight]` to match. Premultiplying here
-       applied the weight twice and displaced the middle control point by a
+       would apply the weight twice and displace the middle control point by a
        factor of w.
 
-       It survived the straight-edge test because that test measured PERPENDICULAR
-       distance to a spine running parallel to z, and the displacement is along
-       the very axis such a measurement cannot see: at z = 0 the two forms are
-       numerically identical, and at z = 10 the point moved to 7.07 without
-       changing its distance from the line by anything at all. The instrument
-       could not express the defect. */
+       A perpendicular-distance check against a spine parallel to z cannot
+       see that displacement, since it runs along the spine: at z = 0 the two
+       forms are numerically identical. */
     ctrlPts: [
       [tangencyA[0], tangencyA[1], tangencyA[2], 1],
       [mid[0], mid[1], mid[2], w],
@@ -267,68 +260,57 @@ export function sectionArc(section) {
 }
 
 /**
- * SKIN A RUN OF SECTION ARCS INTO THE BLEND SURFACE.
+ * Skin a run of section arcs into the blend surface.
  *
- * Every section produced by `sectionArc` is a rational quadratic on the SAME
- * degree and the SAME knot vector, which is what makes this exact rather than a
- * fit: the sections' control points ARE the surface's control net in U, so the
+ * Every section produced by `sectionArc` is a rational quadratic on the same
+ * degree and the same knot vector, which is what makes this exact rather than a
+ * fit: the sections' control points are the surface's control net in U, so the
  * blend's cross-section stays a true circular arc everywhere instead of a
  * polynomial approximation of one. The general `loft` in kernel/loft.mjs
- * resamples each section onto a shared parameterisation, which is the right
+ * resamples each section onto a shared parameterization, which is the right
  * thing for arbitrary hand-picked curves and the wrong thing here — it would
- * discard the exact conic form the rolling ball just handed us.
+ * discard the exact conic form of the rolling-ball section.
  *
- * ⚠⚠ THIS IS A SLIDING-DISC CONSTRUCTION, NOT THE EXACT ROLLING-BALL ENVELOPE,
- * and the difference is real wherever the dihedral varies. The sections are laid
- * in planes perpendicular to the EDGE; the true envelope's characteristic circle
- * lies perpendicular to the SPINE. Those coincide only while the spine runs
+ * This is a sliding-disc construction, not the exact rolling-ball envelope,
+ * and the two differ wherever the dihedral varies. The sections are laid
+ * in planes perpendicular to the edge; the true envelope's characteristic circle
+ * lies perpendicular to the spine. Those coincide only while the spine runs
  * parallel to the edge, which it does exactly when the dihedral angle is
  * constant — as theta varies, the center moves within the cross-section plane
  * too, and the spine tilts away.
  *
- * What this construction DOES guarantee, exactly and at every section:
+ * What this construction does guarantee, exactly and at every section:
  *   · the cross-section is a true circular arc of the requested radius;
  *   · it meets each supporting face tangentially, because the arc's radius at
  *     each tangency point runs along that face's normal by construction;
  *   · the tangency curves lie in the faces, which is what the supports must be
  *     trimmed back to.
- * What it does NOT guarantee is that every point is exactly `radius` from the
- * spine BETWEEN sections. On a straight edge of constant angle that holds to
- * machine precision; across a varying dihedral the departure falls at FOURTH
+ * What it does not guarantee is that every point is exactly `radius` from the
+ * spine between sections. On a straight edge of constant angle that holds to
+ * machine precision; across a varying dihedral the departure falls at fourth
  * order in the section spacing with cubic interpolation in V, which is why
  * `blendRadiusDeviation` measures what was achieved rather than assuming it.
- *
- * ⚠ AN EARLIER VERSION OF THIS PARAGRAPH SAID THE DEPARTURE WAS ABOUT 3% AND
- * "CONVERGES RATHER THAN FALLING WITH SECTION COUNT". Both were the measuring
- * instrument, not the surface: distance was taken to a POLYLINE through the ball
- * centers, whose own chord error is second order, so every surface at every
- * degree reported O(h^2) and appeared to stall. Struck rather than softened,
- * because a stale claim in a comment outlives the code it describes and leaves
- * the next reader choosing between two paragraphs that disagree.
  *
  * U is the cross-section (degree 2, rational, 3 control points).
  * V runs along the edge, degree `degV` clamped to what the section count
  * supports, with a chord-length knot vector so an unevenly sampled edge is not
- * silently reparameterised.
+ * reparameterized.
  *
- * ⚠ V IS AN APPROXIMATION AND SAYS SO. Taking the section control points as the
- * net makes the surface pass exactly through the FIRST and LAST sections and
- * approximate the ones between. On a straight edge of constant dihedral every
- * section is a translate of its neighbors, so the approximation is exact and
- * the result is a true cylindrical patch; on a curved edge or a varying angle
- * the error falls with section count and is what
- * `blendRadiusDeviation` measures. Nothing here claims it is zero.
+ * V interpolates the sections: the surface passes through every section and
+ * is approximate between them. On a straight edge of constant dihedral every
+ * section is a translate of its neighbors, so the result is a true
+ * cylindrical patch; on a curved edge or a varying angle the error between
+ * sections falls with section count and is what `blendRadiusDeviation`
+ * measures.
  */
 export function blendSurfaceFromSections(arcs, degV = 3) {
   if (!Array.isArray(arcs) || arcs.length < 2) return { ok: false, reason: 'a blend needs at least two sections' };
-  /* ⚠ ONE SHAPE OF SECTION PER SURFACE, WHATEVER THAT SHAPE IS. This required a
-     rational quadratic outright, which is what `sectionArc` produces and is
-     right for a rolling ball and for a chamfer's chord. It is not right for a
-     CURVATURE-CONTINUOUS section, which needs a quintic to carry zero curvature
-     at both ends, and the restriction was the only thing standing between this
-     builder and one. What actually has to hold is that the sections agree —
-     they are interpolated control point by control point, so a surface cannot
-     be made from sections with different degrees or different counts of them. */
+  /* One shape of section per surface, whatever that shape is: a rational
+     quadratic for a rolling ball or a chamfer's chord, a quintic for a
+     curvature-continuous section. What has to hold is that the sections
+     agree — they are interpolated control point by control point, so a
+     surface cannot be made from sections with different degrees or different
+     counts of them. */
   const first = arcs[0];
   if (!first || !Array.isArray(first.ctrlPts) || first.ctrlPts.length < 3) {
     return { ok: false, reason: 'a section needs at least three control points' };
@@ -341,18 +323,12 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
   const dV = Math.min(degV, n - 1);
   // Chord length along the edge, from the sections' own midpoints, so a run
   // sampled densely at one end and sparsely at the other keeps its shape.
-  /* ⚠ NO DIVISION BY THE WEIGHT. Control points here are stored CARTESIAN with
+  /* No division by the weight. Control points here are stored cartesian with
      the weight appended — `sectionArc` says so and `surfacePoint` premultiplies
-     for itself — so dividing by w deprojects something that was never projected
-     and displaces every arc's midpoint radially by 1/w.
-
-     It was invisible to every test because `blendRadiusDeviation` is
-     parameterisation-free and the straight-edge fixture has CONSTANT weight,
-     where a uniform chord scaling cancels in the normalization. What it broke
-     was real: two sections 2.9992 apart whose distorted midpoints coincided were
-     refused as "all at the same place", and three such sections produced
-     duplicate parameters that made `solveLinearSystem` THROW straight through
-     the ok/reason contract. */
+     for itself — so dividing by w would deproject something that was never
+     projected and displace every arc's midpoint radially by 1/w. With varying
+     weights, that can make distinct sections' midpoints coincide and produce
+     duplicate parameters that `solveLinearSystem` cannot solve. */
   // A consistent interior point per section, used only to space the sections
   // along the edge by chord length; which one it is matters less than that it
   // is the same one on every section.
@@ -367,16 +343,14 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
   // parameter set), so the basis is well conditioned rather than uniform over
   // an uneven set.
   const knotsV = averagingKnotVector(t, dV);
-  /* INTERPOLATED IN V, NOT APPROXIMATED — and the difference runs the opposite
-     way to intuition, which is why it is worth stating. Taking the section
-     control points AS the net makes a degree-3 surface that does not pass
-     through the sections between the ends, and it measured consistently WORSE
-     than degree 1: 0.094% against 0.011% on the same fixture at 97 sections. A
-     higher degree approximating is beaten by a lower degree interpolating.
-     Solving for control points that make the surface pass through every section
-     gets both — smooth in V and exact at each section.
+  /* Interpolated in V, not approximated. Taking the section control points as
+     the net makes a degree-3 surface that does not pass through the sections
+     between the ends, and it is less accurate than degree 1 through the same
+     sections (0.094% against 0.011% at 97 sections). Solving for control
+     points that make the surface pass through every section gets both —
+     smooth in V and exact at each section.
 
-     Solved in HOMOGENEOUS coordinates (x*w, y*w, z*w, w) and projected back, so
+     Solved in homogeneous coordinates (x*w, y*w, z*w, w) and projected back, so
      the weights are interpolated as part of the geometry rather than separately;
      interpolating cartesian points and weights independently does not reproduce
      the rational curve. kernel/interpolate.mjs's own `interpAtParams` is 3-D and
@@ -397,12 +371,12 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
     const row = [];
     for (let j = 0; j < n; j++) {
       const wj = sol[3][j];
-      /* ⚠ POSITIVE, not merely non-zero. Data weights are cos(halfSweep) and lie
-         in (0,1], but the INTERPOLANT is not bounded by its data: sections whose
+      /* Positive, not merely non-zero. Data weights are cos(halfSweep) and lie
+         in (0,1], but the interpolant is not bounded by its data: sections whose
          sweeps alternate sharply overshoot to control weights like
-         [0.940, -1.516, 3.399, -1.523, 0.940]. An |w| > EPS test accepts those,
-         and the surface comes back ok:true while this project's own
-         `isFiniteNet` rejects the net for w <= 0. A negative control weight also
+         [0.940, -1.516, 3.399, -1.523, 0.940]. An |w| > EPS test would accept
+         those, while this project's own `isFiniteNet` rejects the net for
+         w <= 0. A negative control weight also
          destroys the convex-hull and variation-diminishing properties the rest
          of the evaluation assumes. */
       if (!(wj > EPS)) return { ok: false, reason: `the weight interpolation overshot to ${wj.toFixed(4)} — sections whose sweep changes too sharply between neighbors cannot be interpolated at this degree; add sections or lower degV` };
@@ -422,24 +396,22 @@ export function blendSurfaceFromSections(arcs, degV = 3) {
 }
 
 /**
- * HOW FAR THE BUILT SURFACE STRAYS FROM THE BALL THAT DEFINED IT.
+ * How far the built surface strays from the ball that defined it.
  *
  * The defining property of a constant-radius blend is that every point on it is
- * exactly `radius` from the SPINE — the locus of ball centers. Anything else is
- * a surface that merely looks like a fillet.
+ * exactly `radius` from the spine — the locus of ball centers.
  *
- * ⚠ MEASURED TO THE NEAREST POINT ON THE SPINE, not to the spine "at the same
- * parameter". Those are different questions and only the first one is the
- * definition. The surface carries a chord-length knot vector, so its v and a
- * spine sampled evenly by index do not name the same place along the edge; a
- * first version of this compared them anyway and reported a 37% error on a
- * blend whose real error is a small fraction of a percent. The parameterisation
- * is free to be whatever it likes — what must hold is the distance.
+ * Measured to the nearest point on the spine, not to the spine "at the same
+ * parameter". Only the first is the definition. The surface carries a
+ * chord-length knot vector, so its v and a spine sampled evenly by index do
+ * not name the same place along the edge, and comparing them reports a large
+ * error on an accurate blend. The parameterization is free; what must hold
+ * is the distance.
  *
  * `spine` is a polyline of ball centers. `evalSrf(srf, u, v)` is the caller's
  * own surface evaluator, kept as a parameter so this module stays independent
  * of the rest of the kernel. `vFrom`/`vTo` trim the sampled span, because the
- * nearest point on a FINITE polyline clamps at its ends and would report an end
+ * nearest point on a finite polyline clamps at its ends and would report an end
  * effect as a surface defect.
  */
 function distToPolyline(p, poly) {
@@ -457,19 +429,15 @@ function distToPolyline(p, poly) {
 }
 export function blendRadiusDeviation(srf, spine, radius, evalSrf, uSteps = 9, vSteps = 17, vFrom = 0.05, vTo = 0.95) {
   if (!Array.isArray(spine) || spine.length < 2) return { worst: Infinity, worstAt: null, reason: 'a spine needs at least two centers' };
-  /* ⚠⚠ THE SPINE POLYLINE IS THE RULER, AND ITS OWN ERROR IS SECOND ORDER.
+  /* The spine polyline is the ruler, and its own error is second order.
 
-     Distance is measured to a POLYLINE through the ball centers, and a polyline
+     Distance is measured to a polyline through the ball centers, and a polyline
      cuts the chord off a curving spine by roughly sagitta = L^2 / (8*rho) per
      segment. Sample the spine at the same density as the sections and that
-     chord error DOMINATES: every surface, at every V degree, measures O(h^2) —
-     which is the ruler's convergence being reported as the surface's.
-
-     It cost a wrong conclusion. Sampling the spine 40x finer on the SAME
-     surfaces turned 1.796e-3mm at 97 sections into 1.176e-6mm, and the observed
-     order from 2.01 into roughly 4 — cubic interpolation behaving exactly as
-     cubic interpolation should. The earlier reading that "raising the V degree
-     cannot fix a second-order departure" was measuring the instrument.
+     chord error dominates: every surface, at every V degree, measures O(h^2) —
+     the ruler's convergence reported as the surface's. With a spine sampled
+     well below the section spacing, the observed order of cubic interpolation
+     is about 4.
 
      `spineSagitta` is returned so a caller can see when it is instrument-bound:
      if it is not far below `worst`, the number is about the ruler. */
@@ -494,52 +462,51 @@ export function blendRadiusDeviation(srf, spine, radius, evalSrf, uSteps = 9, vS
 }
 
 /**
- * THE SECTION, BUILT FROM THE FACE NORMALS RATHER THAN FROM A SETBACK.
+ * The section, built from the face normals rather than from a setback.
  *
  * `rollingBallSection` locates the tangency points by measuring a setback along
  * each co-normal from the edge. That is correct, and it puts the section in the
- * plane perpendicular to the EDGE — which is the sliding-disc construction, and
+ * plane perpendicular to the edge — which is the sliding-disc construction, and
  * departs from the true envelope wherever the dihedral varies.
  *
- * This does the same job the other way round and gets the envelope for free. A
- * sphere of radius r centered at m is tangent to a face with OUTWARD unit normal
- * n exactly where it touches, and that point is simply
+ * This does the same job the other way round and gets the envelope directly. A
+ * sphere of radius r centered at m is tangent to a face with outward unit normal
+ * n exactly where it touches, and that point is
  *
  *     tangency = m + r * n
  *
  * (outward, so the touch point is on the far side of the center from the
  * material — checked on a box: material in x>0, y>0, center (r, r), face x = 0
  * whose outward normal is -x, giving (r,r) + r*(-1,0) = (0, r), which is where
- * the ball actually touches).
+ * the ball touches).
  *
  * The two tangency points and the center then span the section plane, and that
  * plane is the characteristic one: the envelope condition for a constant-radius
  * canal surface is (p - m) . m' = 0, so the contact points lie in the plane
  * through m perpendicular to the spine tangent. Building the section from the
- * normals therefore lands in the right plane WITHOUT ever computing m' — the
+ * normals therefore lands in the right plane without ever computing m' — the
  * derivative is implied by the geometry rather than estimated from samples.
  *
- * No setback appears anywhere here, which is the point: the setback was only
- * ever a way of finding the tangency from the edge, and finding it from the
- * normal instead removes the one approximation that made the disc slide.
+ * No setback appears here: the setback is a way of finding the tangency from
+ * the edge, and finding it from the normal instead removes the approximation
+ * that makes the disc slide.
  */
 export function envelopeSection({ centre, radius, toTouchA, toTouchB, normalA, normalB }) {
   if (!(radius > 0)) return { ok: false, reason: 'radius must be positive' };
-  /* ⚠ THESE POINT FROM THE CENTER TOWARDS THE TOUCH POINT, and they are NOT
+  /* These point from the center toward the touch point, and they are not
      "the face's outward normal" in general — the parameters are named for the
-     direction rather than for the normal precisely because that distinction is
-     invisible when it is wrong.
+     direction rather than for the normal because a radius check cannot tell
+     the two apart.
 
-     On a CONVEX edge the ball sits inside the material, so center-to-touch and
-     the outward normal coincide and either name works. On a CONCAVE edge the
-     ball sits in the void and they are OPPOSITE, so passing an outward normal
+     On a convex edge the ball sits inside the material, so center-to-touch and
+     the outward normal coincide and either name works. On a concave edge the
+     ball sits in the void and they are opposite, so passing an outward normal
      puts the tangency point 2r away on the far side of the ball. It is still
-     exactly `radius` from the center, so any check that only measures the radius
-     reports a perfect blend that touches neither face — measured here at 6mm
-     from the plane it was meant to sit on, with the radius reading 3.000000000.
+     exactly `radius` from the center, so a check that only measures the radius
+     reports a perfect blend that touches neither face.
 
-     `normalA`/`normalB` stay accepted as the older spelling so no caller breaks
-     silently, but the new names are the contract. */
+     `normalA`/`normalB` are accepted as alternate names; `toTouchA`/`toTouchB`
+     are the contract. */
   const nA = norm(toTouchA || normalA), nB = norm(toTouchB || normalB);
   if (!nA || !nB) return { ok: false, reason: 'a face normal has no direction' };
   const cosBetween = Math.max(-1, Math.min(1, dot(nA, nB)));
@@ -558,8 +525,8 @@ export function envelopeSection({ centre, radius, toTouchA, toTouchB, normalA, n
 
 /**
  * The same rational-quadratic arc as `sectionArc`, from an envelope section.
- * Kept separate rather than overloaded because the two carry different fields
- * and silently accepting either is how one gets used where the other was meant.
+ * Kept separate rather than overloaded because the two carry different fields,
+ * and accepting either would let one be used where the other was meant.
  */
 export function envelopeSectionArc(section) {
   if (!section || !section.ok) return null;
@@ -567,34 +534,33 @@ export function envelopeSectionArc(section) {
 }
 
 /**
- * BUILD TO A TOLERANCE, AND REPORT WHAT WAS ACHIEVED.
+ * Build to a tolerance, and report what was achieved.
  *
- * The departure of a skinned blend from the true tube falls at FOURTH order in
+ * The departure of a skinned blend from the true tube falls at fourth order in
  * the section spacing, with cubic interpolation in V. Density is the control,
- * and the honest way to set it is to aim, measure, and correct rather than to
- * pick a number.
+ * set by aiming, measuring, and correcting rather than by picking a number.
  *
  * From err ~ C*h^4 with h ~ 1/N, one measurement predicts the count that would
  * meet the target: N_needed = N * (err / target)^(1/4). That prediction is then
- * VERIFIED by measuring again — the law is used to aim, never to certify. A
+ * verified by measuring again — the law aims and never certifies. A
  * blend that cannot reach the target inside `maxRounds` returns its best effort
- * WITH the deviation it actually achieved, so a caller can say "accurate to
- * 0.004mm" instead of implying an exactness it does not have.
+ * with the deviation it achieved, so a caller can say "accurate to 0.004mm"
+ * instead of implying an exactness it does not have.
  *
  * `sectionAt(t)` for t in [0,1] returns { centre, radius, normalA, normalB } —
  * the caller owns the geometry, this owns the density.
  *
- * TWO HOOKS, AND WHAT THEY ARE FOR. The aim-measure-correct loop is not specific
- * to a constant radius, but everything it does INSIDE the loop is:
+ * Two hooks. The aim-measure-correct loop is not specific to a constant
+ * radius, but everything it does inside the loop is:
  *   · `opts.sectionArcFor(spec)` -> { ok, arc } | { ok: false, reason } replaces
  *     the envelope section builder, for a section that is not a great circle of
  *     the ball — a variable-radius contact circle is offset along the spine and
  *     shrunk (kernel/varradius.mjs).
  *   · `opts.measure(srf, n)` -> { worst, instrumentBound, floor } replaces the
- *     deviation measure, and supplying it is what LIFTS the one-radius refusal
- *     below. The refusal stays the default on purpose: a caller who did not mean
+ *     deviation measure, and supplying it lifts the one-radius refusal
+ *     below. The refusal stays the default: a caller who did not mean
  *     to vary the radius must still be told, rather than handed a number
- *     measured against whichever radius happened to come last.
+ *     measured against whichever radius came last.
  */
 export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
   const startSections = opts.startSections || 17;
@@ -604,8 +570,8 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
   const evalSrf = opts.evalSrf;
   if (typeof evalSrf !== 'function') return { ok: false, reason: 'an evaluator is required to measure what was built' };
   const measure = typeof opts.measure === 'function' ? opts.measure : null;
-  /* A SECOND DEVIATION THE LOOP MUST ALSO DRIVE DOWN. `measure` replaces how the
-     blend judges ITSELF — a chamfer swaps radius error for flatness error. This
+  /* A second deviation the loop must also drive down. `measure` replaces how the
+     blend judges itself — a chamfer swaps radius error for flatness error. This
      one is additive and orthogonal: a caller that knows something the builder
      cannot see, typically how far the blend's borders have drifted off the faces
      they must stay tangent to, contributes it here and refinement answers to
@@ -623,20 +589,14 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
     const arc = envelopeSectionArc(e);
     return arc ? { ok: true, arc } : { ok: false, reason: 'a section produced no arc' };
   };
-  /* ⭐⭐ A CLOSED RUN IS SAMPLED ON A CYCLE, NOT ON AN INTERVAL.
+  /* A closed run is sampled on a cycle, not on an interval.
      `i / (n - 1)` walks 0 to 1 inclusive, which is right for an edge that has
      two ends and wrong for one that has none: on a loop, t=0 and t=1 name the
-     SAME station, so the run either duplicates a section there or leaves the
-     wrap unsampled — and the band cannot close.
-     Measured on a filleted extruded circle before this existed: the band spanned
-     about 1,237mm of a 1,257mm circumference and THREE small filler faces
-     bridged the remaining 20mm at the seam, every one of them lying flat in the
-     seam plane with all its control columns at the same angle. That trio is what
-     a reader sees as a dart in the round, reported four times, and it is a B-rep
-     defect rather than a shading one — which is why it survived every change of
-     material, environment, mesh density and build.
+     same station, so the run either duplicates a section there or leaves the
+     wrap unsampled — and the band cannot close, leaving a gap at the seam that
+     filler faces would have to bridge.
      On a cycle the stations are `i / n`, so no station is repeated, and the
-     FIRST section is appended again as the last so the skin closes on itself
+     first section is appended again as the last so the skin closes on itself
      exactly rather than nearly. `closed` is the caller's to declare: only the
      caller knows whether the edge it is walking comes back to where it began. */
   const closedRun = !!opts.closed;
@@ -649,11 +609,11 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
       const made = arcFor(spec);
       if (!made || !made.ok) return { failed: (made && made.reason) || 'a section produced no arc' };
       arcs.push(made.arc); centres.push(spec.centre);
-      /* ⚠ CONSTANT RADIUS ONLY UNLESS A MEASURE WAS SUPPLIED, AND IT REFUSES
-         RATHER THAN AVERAGING. Keeping the LAST section's radius and measuring
+      /* Constant radius only unless a measure was supplied, and it refuses
+         rather than averaging. Keeping the last section's radius and measuring
          the whole surface against it would report a meaningless deviation for a
-         variable-radius run — the number would look fine and mean nothing. The
-         default deviation measure's whole premise is that one radius describes
+         variable-radius run. The default deviation measure's premise is that
+         one radius describes
          the surface, so varying it is caller error until the caller has replaced
          that measure with one that can express a varying radius. */
       if (measure) continue;
@@ -662,24 +622,23 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
         return { failed: `this builder measures against ONE radius and the sections vary (${radius} then ${spec.radius}) — a variable-radius blend needs its own deviation measure` };
       }
     }
-    /* THE WRAP SECTION, on a closed run only: the first station again, so the
-       skin's last column IS its first and the band closes exactly rather than
+    /* The wrap section, on a closed run only: the first station again, so the
+       skin's last column is its first and the band closes exactly rather than
        within a tolerance. Appended rather than sampled, because sampling t=1
-       would re-solve the same ball and could land a hair off it — and a hair is
-       the whole defect this exists to remove. */
+       would re-solve the same ball and could land slightly off it. */
     if (closedRun && arcs.length) { arcs.push(arcs[0]); centres.push(centres[0]); }
     const built = blendSurfaceFromSections(arcs, degV);
     if (!built.ok) return { failed: built.reason };
     if (measure) {
       const m = measure(built.srf, n);
-      /* A MEASURE THAT COULD NOT MEASURE SAYS SO, AND ITS REASON IS THE ONE
-         WORTH REPORTING. Flattening every such case to "returned no number"
+      /* A measure that could not measure says so, and its reason is the one
+         reported. Flattening every such case to "returned no number"
          loses the distinction between a measure that is absent and a surface
          that could not be sampled at all. */
       if (!m || !Number.isFinite(m.worst)) return { failed: (m && m.reason) || 'the supplied deviation measure returned no number' };
       return fold({ built, dev: m.worst, n, instrumentBound: !!m.instrumentBound, measureFloor: m.floor, deviationSigned: m.signed });
     }
-    /* MEASURED AGAINST A SPINE SAMPLED FAR FINER THAN THE SECTIONS. Using the
+    /* Measured against a spine sampled far finer than the sections. Using the
        section centers themselves makes the ruler's own chord error the thing
        being reported — see blendRadiusDeviation. A 12x denser spine puts the
        instrument roughly two orders below the surface it is judging. */
@@ -696,9 +655,9 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
   };
   let n = startSections;
   let best = null;
-  /* WHAT REFINEMENT ACTUALLY DID, kept on the result. A builder that can return
+  /* What refinement did, kept on the result. A builder that can return
      "closer than this is not reachable" owes the caller the sequence it tried:
-     a deviation that FALLS and stops short is a section ceiling, one that RISES
+     a deviation that falls and stops short is a section ceiling, one that rises
      is a construction that does not converge, and the two want opposite fixes. */
   const trace = [];
   for (let round = 0; round < maxRounds; round++) {
@@ -712,26 +671,24 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
         sections: a.n, deviation: a.dev, tolerance, metTolerance: true, rounds: round + 1, trace,
         instrumentBound: !!a.instrumentBound, spineSagitta: a.spineSagitta, measureFloor: a.measureFloor,
         deviationSigned: a.deviationSigned,
-        /* ⚠ A CLOSED RUN HAS NO ENDS, AND A CALLER CANNOT SEE THAT FROM THE
-           SURFACE. The two boundary rows of a closed band are the same row, so
+        /* A closed run has no ends, and a caller cannot see that from the
+           surface. The two boundary rows of a closed band are the same row, so
            a caller that treats them as two open ends caps a hole that is not
            there. Reported rather than re-derived, because the caller would have
-           to compare rows against a tolerance nobody chose to get back the
-           answer this function was handed. */
+           to compare rows against an arbitrary tolerance to recover it. */
         closed: closedRun,
-        /* ⚠ WHAT THE CERTIFICATE ACTUALLY COVERS. The deviation is sampled over
-           the middle of the run, because the nearest point on a FINITE spine
+        /* What the certificate covers. The deviation is sampled over the
+           middle of the run, because the nearest point on a finite spine
            polyline clamps at its ends and would report an end effect as a
            surface defect. So `metTolerance` says nothing about the outer 5% at
-           each end — where, on a real edge, a corner patch takes over anyway.
-           Stated in the result rather than left in a comment nobody reads. */
+           each end — where, on an edge with neighbors, a corner patch takes
+           over anyway. Stated in the result. */
         certifiedSpan: [0.05, 0.95] };
     }
-    // Aim with the second-order law, then verify by measuring again.
-    // FOURTH ORDER, not second: err ~ C*h^4 with cubic interpolation in V, so the
-    // count that meets the target is n * (err/target)^(1/4). Aiming with the
-    // second-order law overshot by a large factor — 138 sections where about 30
-    // reach the same tolerance.
+    // Aim with the convergence law, then verify by measuring again.
+    // Fourth order, not second: err ~ C*h^4 with cubic interpolation in V, so the
+    // count that meets the target is n * (err/target)^(1/4). Aiming with a
+    // second-order law overshoots by a large factor.
     const predicted = Math.ceil(n * Math.pow(a.dev / tolerance, 0.25));
     const next = Math.min(maxSections, Math.max(n + 2, predicted));
     if (next === n) break;
@@ -744,48 +701,47 @@ export function blendSurfaceToTolerance(sectionAt, tolerance, opts = {}) {
     instrumentBound: !!best.instrumentBound, measureFloor: best.measureFloor,
     deviationSigned: best.deviationSigned,
     closed: closedRun,
-    // NOT A FAILURE, AND NOT A SILENT PASS EITHER. The surface is real and
-    // usable; it simply is not as close as was asked for, and the caller is
-    // handed the number so it can say so rather than imply otherwise.
+    // Not a failure, and not a silent pass. The surface is usable; it is not
+    // as close as was asked for, and the caller is handed the number.
     metTolerance: false, rounds: maxRounds,
   };
 }
 
 /**
- * SPLICE A TANGENCY CHAIN INTO A FACE'S TRIM LOOP.
+ * Splice a tangency chain into a face's trim loop.
  *
  * Trimming a face back to a blend means replacing part of its boundary with the
  * tangency curve. Both live in the same (u,v) space, and the chain's two ends
- * land ON the existing loop — so the operation is: find where each end meets the
+ * land on the existing loop — so the operation is: find where each end meets the
  * loop, then keep one of the two arcs between those points and replace the other
  * with the chain.
  *
- * WHICH ARC IS DROPPED IS NOT A GUESS, AND THE CONTRACT IS NARROWER THAN IT
- * FIRST LOOKS. `dropNear` must lie IN THE SPAN OF LOOP BEING REMOVED — between
+ * Which arc is dropped is not a guess, and the contract is narrow.
+ * `dropNear` must lie in the span of loop being removed — between
  * the two places the chain lands, measured along the loop. The arc containing it
  * is the one that goes.
  *
- * ⚠ "A POINT ON THE EDGE BEING FILLETED" IS NOT SUFFICIENT. A chain landing at
+ * "A point on the edge being filleted" is not sufficient. A chain landing at
  * 0.3 and 0.7 along the bottom of a unit square, with a reference at 0.05 —
- * still on that same edge — names the arc going the LONG way round, so the
+ * still on that same edge — names the arc going the long way round, so the
  * splice keeps the 0.04 notch and discards the 0.96 face. The result is a
- * correctly-formed, completely inverted trim. Nothing about the inputs is
+ * correctly-formed, inverted trim. Nothing about the inputs is
  * malformed; the reference simply points at loop the blend is not replacing.
  *
  * The two arcs partition the loop, so a reference outside the removed span
- * cannot be rescued by being cleverer — it genuinely names the other side. What
- * a caller wants is a point on the removed span, and for a fillet that is the
- * midpoint of the edge BETWEEN its two tangency landings. Deciding by area or by
+ * cannot be rescued — it names the other side. What a caller wants is a point
+ * on the removed span, and for a fillet that is the midpoint of the edge
+ * between its two tangency landings. Deciding by area or by
  * winding instead would be a heuristic that fails on the first L-shaped face.
  *
  * A reference too close to being equidistant between the two arcs is refused
- * with the margin, rather than tie-broken by segment index in silence — a point
+ * with the margin, rather than tie-broken by segment index — a point
  * at the center of a square would otherwise take segment 0 and drop the bottom.
  *
  * Returns the new loop, and the two splice parameters so a caller can tell
- * whether the ends landed where it expected rather than trusting that they did.
+ * whether the ends landed where it expected.
  */
-/* WHERE TWO SEGMENTS CROSS, in (u,v), or null. Endpoints count as crossings, so
+/* Where two segments cross, in (u,v), or null. Endpoints count as crossings, so
    a run that merely touches the loop is one too. */
 function segCrossUV(p0, p1, a0, a1) {
   const rx = p1[0] - p0[0], ry = p1[1] - p0[1];
@@ -798,29 +754,26 @@ function segCrossUV(p0, p1, a0, a1) {
   if (t < -1e-12 || t > 1 + 1e-12 || u < -1e-12 || u > 1 + 1e-12) return null;
   return { t, point: [p0[0] + rx * t, p0[1] + ry * t] };
 }
-/* ⚠⚠ A TANGENCY RUN MAY CROSS ITS FACE'S BOUNDARY RATHER THAN END ON IT, and
-   that is the ORDINARY case wherever the boundary it runs into is curved.
-   The run spans its own EDGE, so where the neighboring boundary curves away
-   from that edge's end the run simply carries on past it. Measured on the
-   plainest solid a person can draw with one curved side: a 4mm round left the
-   run 1.172mm beyond the cap's boundary, and every rim of the shape refused with
-   "a chain end does not reach the loop" — a true sentence about the run's
-   endpoint and the wrong conclusion about the geometry.
-   Such a run is not floating free. It CROSSES the loop, and where it crosses IS
-   the junction. Clipping it there puts its ends on the loop, which is what the
-   caller's tolerance was always asking for — so that tolerance stays exactly as
-   tight as it was, and a run that genuinely floats free still refuses.
-   Returns null unless the run crosses at BOTH ends, so anything that already
-   met its loop takes the same path it always did. */
+/* A tangency run may cross its face's boundary rather than end on it, and
+   that is the ordinary case wherever the boundary it runs into is curved.
+   The run spans its own edge, so where the neighboring boundary curves away
+   from that edge's end the run carries on past it, and its endpoint does not
+   reach the loop.
+   Such a run is not floating free. It crosses the loop, and where it crosses
+   is the junction. Clipping it there puts its ends on the loop, so the
+   caller's tolerance stays as tight as it was, and a run that floats free
+   still refuses.
+   Returns null unless the run crosses at both ends, so anything that already
+   met its loop takes the unclipped path. */
 function clipChainToLoop(loop, chain, reach) {
   const n = loop.length;
-  /* ⚠ EXTENDED FIRST, THEN CLIPPED, because a run can miss its boundary in
-     EITHER direction and the two are the same question. Where the neighboring
-     boundary curves AWAY the run overshoots and wants clipping; where it curves
-     TOWARDS, the run stops short and wants extending — measured at 1.172mm short
-     on a cap whose boundary bulges past the end of the edge being rounded.
+  /* Extended first, then clipped, because a run can miss its boundary in
+     either direction and the two are the same question. Where the neighboring
+     boundary curves away the run overshoots and wants clipping; where it curves
+     toward it (a boundary bulging past the end of the edge being rounded), the
+     run stops short and wants extending.
      Both are answered by growing each end along its own direction by the reach
-     the caller allows — the blend's own width, which is exactly how far a run
+     the caller allows — the blend's own width, which is how far a run
      may legitimately be from where its edge ended — and then taking the
      outermost crossing. A run that meets its loop already crosses inside the
      original span and is unaffected. */
@@ -865,12 +818,11 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
   if (!Array.isArray(loop) || loop.length < 3) return { ok: false, reason: 'a trim loop needs at least three points' };
   if (!Array.isArray(chain) || chain.length < 2) return { ok: false, reason: 'a tangency chain needs at least two points' };
   const n = loop.length;
-  /* ⚠ THE ENDS MUST ACTUALLY MEET THE LOOP. `nearest()` always returns a
-     segment, so the old `head.seg < 0` guard was dead code and a chain floating
-     free in the middle of the face spliced anyway — both ends snapping to
-     whichever walls happened to be closest, cutting the face along a line the
-     chain never described. It reported headGap 0.4 on a unit square and nobody
-     read it. The gap is now the test, not a field. */
+  /* The ends must meet the loop. `nearest()` always returns a segment, so
+     without a gap test a chain floating free in the middle of the face would
+     splice anyway — both ends snapping to whichever walls are closest,
+     cutting the face along a line the chain never described. The gap is the
+     test, not only a reported field. */
   const meetTol = opts.meetTolerance != null ? opts.meetTolerance : 1e-6;
   // Nearest point on the loop to a given (u,v), as {seg, t, d}.
   const nearest = (p) => {
@@ -887,8 +839,8 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
     }
     return best;
   };
-  /* A POLYLINE COVERS MORE THAN ONE PLACE — measured from its first point over
-     ALL of them, so a run that closes on itself is judged by where it went and
+  /* A polyline covers more than one place — measured from its first point over
+     all of them, so a run that closes on itself is judged by where it went and
      not by where it finished. `meetTol` is this function's own standard for two
      points being the same place, so no new constant is introduced. */
   const spansTwoPlaces = (pts) => {
@@ -898,16 +850,14 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
     }
     return false;
   };
-  // Clipped to where it actually meets the boundary, when it runs past it.
+  // Clipped to where it meets the boundary, when it runs past it.
   const clipped = clipChainToLoop(loop, chain, opts.reach || 0);
-  /* ⚠⚠ A CLIP IS ACCEPTED ON ITS EXTENT, NOT ON ITS POINT COUNT. `length >= 2`
-     reads as "this is still a segment" — but it counts ARRAY ENTRIES, and a
-     clip can come back as three copies of ONE place: measured at 4.16e-17
-     across, and it replaced a real 111-point chain. Everything after follows
-     mechanically. `head` and `tail` land on the same loop parameter, so the
-     forward interval is empty, `dropIsForward` is false, the kept arc is empty,
-     and the else branch discards the face's entire boundary — leaving a
-     zero-area trim loop and taking its four neighboring faces naked with it. */
+  /* A clip is accepted on its extent, not on its point count. `length >= 2`
+     counts array entries, and a clip can come back as several copies of one
+     place. If such a clip replaced the chain, `head` and `tail` would land on
+     the same loop parameter, the forward interval would be empty,
+     `dropIsForward` false, the kept arc empty, and the else branch would
+     discard the face's entire boundary, leaving a zero-area trim loop. */
   if (spansTwoPlaces(clipped)) chain = clipped;
   const head = nearest(chain[0]);
   const tail = nearest(chain[chain.length - 1]);
@@ -917,36 +867,33 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
   // A position along the loop as one number, so the two arcs are easy to name.
   const pos = (h) => h.seg + h.t;
   const pHead = pos(head), pTail = pos(tail);
-  /* ⚠ dropNear IS A POSITION ALONG THE LOOP, NOT A POINT NEAR THE FACE. "A
+  /* dropNear is a position along the loop, not a point near the face. "A
      point on the edge being filleted" is only right when that point falls in
-     the SUB-SPAN between the two splice parameters. A chain landing at 0.3 and
+     the sub-span between the two splice parameters. A chain landing at 0.3 and
      0.7 along the bottom edge with a reference at 0.05 — still on the filleted
      edge — keeps 0.04 of a unit square instead of 0.96, and the face inverts.
      Same-segment chains are what every partial-edge fillet produces, so that
      input is the ordinary one, not an exotic one.
 
      Refused when the reference does not land inside either arc unambiguously,
-     and the MARGIN to the runner-up is returned so a caller can see a near-tie
-     rather than be handed a coin toss. A reference equidistant from every side
-     of a square would otherwise take segment 0 in silence. */
+     and the margin to the runner-up is returned so a caller can see a near-tie.
+     A reference equidistant from every side of a square would otherwise take
+     segment 0. */
   const drop = nearest(dropNear);
   const pDrop = pos(drop);
   {
-    /* ⚠⚠ THE TWO SEGMENTS MEETING AT A VERTEX ARE NOT TWO SIDES TO CHOOSE FROM.
+    /* The two segments meeting at a vertex are not two sides to choose from.
        This margin exists so a reference equidistant from every side of a square
-       is refused rather than silently assigned to segment 0. But a reference
-       sitting ON a loop vertex is equidistant from the two segments that share
-       it BY CONSTRUCTION, and picking either yields the SAME position along the
-       loop — so there is nothing ambiguous about it and nothing downstream can
-       tell the two choices apart.
+       is refused rather than assigned to segment 0. But a reference sitting on
+       a loop vertex is equidistant from the two segments that share it by
+       construction, and picking either yields the same position along the
+       loop — so there is nothing ambiguous about it.
 
        That is the ordinary case, not a corner one: a reference is sampled at a
-       point of the edge being dropped, and where that edge is CURVED the loop
+       point of the edge being dropped, and where that edge is curved the loop
        carries it as many short segments, so the sample lands on one of their
        shared vertices. A straight edge is one long segment and the sample falls
-       in its interior, which is why only a curved edge reaches this. Measured at
-       9.49e-18 against a 1e-7 margin — a tie to the last bit, refused as a
-       coin toss.
+       in its interior, which is why only a curved edge reaches this.
 
        Neighbors are therefore skipped and every other segment still counted,
        so the square keeps its refusal: its opposite side is not adjacent. */
@@ -967,11 +914,11 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
       return { ok: false, reason: `the reference point is ${margin.toExponential(2)} from being equidistant between two arcs — which side to drop is ambiguous`, dropMargin: margin };
     }
   }
-  // Walking FORWARD from head to tail wraps or does not; the dropped arc is
+  // Walking forward from head to tail wraps or does not; the dropped arc is
   // whichever of the two contains pDrop.
   const inForward = (x) => (pHead <= pTail ? (x >= pHead && x <= pTail) : (x >= pHead || x <= pTail));
   const dropIsForward = inForward(pDrop);
-  // Keep the arc that does NOT contain the drop point, walking from tail back
+  // Keep the arc that does not contain the drop point, walking from tail back
   // round to head (or head round to tail), then close with the chain.
   const kept = [];
   const pushVertexRange = (from, to) => {
@@ -999,11 +946,10 @@ export function spliceLoopWithChain(loop, chainIn, dropNear, opts = {}) {
     out.push(pointAtLoop(loop, tail));
     out.push(...chainRev.slice(1, -1));
   }
-  /* ⚠ AND THE COLLAPSE GUARD HAS TO ASK THE SAME QUESTION. `out.length < 3`
-     is the last net here, and it counts points too — the degenerate output above
-     has exactly three of them, one from `head`, one from `tail` and one from the
-     reversed chain, so `3 < 3` never fired. A loop needs three distinct PLACES,
-     not three entries. */
+  /* The collapse guard asks the same question. `out.length < 3` counts points,
+     and a degenerate output can have exactly three of them, one from `head`,
+     one from `tail` and one from the reversed chain. A loop needs three
+     distinct places, not three entries. */
   if (out.length < 3 || !spansTwoPlaces(out)) return { ok: false, reason: 'the splice collapsed the loop' };
   return { ok: true, loop: out, headAt: pHead, tailAt: pTail, droppedForward: dropIsForward, headGap: head.d, tailGap: tail.d };
 }
@@ -1013,9 +959,9 @@ function pointAtLoop(loop, h) {
 }
 
 /**
- * THE CHAMFER CROSS-SECTION — the same section, cut straight instead of round.
+ * The chamfer cross-section — the same section, cut straight instead of round.
  *
- * A chamfer takes the ARC's two endpoints and joins them with a line. That is
+ * A chamfer takes the arc's two endpoints and joins them with a line. That is
  * the whole difference, and building it from the same `envelopeSection` is what
  * makes toggling between the two non-destructive: identical tangency points,
  * identical setback, identical footprint on both supporting faces, so switching
@@ -1054,28 +1000,28 @@ export function chamferSectionArc(section) {
 }
 
 /**
- * THE CHAMFER'S SECTION BUILDER, AS A `blendSurfaceToTolerance` HOOK.
+ * The chamfer's section builder, as a `blendSurfaceToTolerance` hook
+ * (`chamferSectionArcFor`, below).
  *
- * The completed section has to be built FIRST and cut second: `chamferSectionArc`
+ * The completed section has to be built first and cut second: `chamferSectionArc`
  * needs `tangencyA`/`tangencyB`, which only `envelopeSection` derives, while the
- * generator handed to the builder yields a raw ball SPEC. Composing them in the
+ * generator handed to the builder yields a raw ball spec. Composing them in the
  * wrong order returns null for every station, which the builder reports as "the
- * caller could not supply a section" — a total refusal that looks nothing like the
- * missing shape it actually is.
+ * caller could not supply a section".
  */
 /**
- * A CURVATURE-CONTINUOUS SECTION — the "smooth" third state beside the rolling
+ * A curvature-continuous section — the "smooth" third state beside the rolling
  * ball and the chamfer.
  *
- * A circular fillet is G1: the blend meets each flat with a matching TANGENT and
+ * A circular fillet is G1: the blend meets each flat with a matching tangent and
  * a curvature that jumps from 0 on the face to 1/r on the blend, at a line you
  * can find on any reflective surface. G2 removes that jump by giving the section
- * ZERO curvature where it lands on each face.
+ * zero curvature where it lands on each face.
  *
  * A rational quadratic cannot do it — a conic's end curvature is never zero — so
- * the section is a QUINTIC. The condition is purely a statement about control
+ * the section is a quintic. The condition is purely a statement about control
  * points: a Bezier's curvature at an end vanishes exactly when the first three
- * (or last three) control points are COLLINEAR, so
+ * (or last three) control points are collinear, so
  *
  *     P0 = A,  P1 = A + a*t,  P2 = A + 2a*t
  *     P5 = B,  P4 = B + b*u,  P3 = B + 2b*u
@@ -1084,26 +1030,26 @@ export function chamferSectionArc(section) {
  * `u` the in-plane directions from each tangency point toward the sharp corner
  * the blend replaces.
  *
- * ⚠ AND THE SURFACE STAYS G2 BETWEEN THE SECTIONS, which is not obvious and is
- * the reason this can be skinned at all. `blendSurfaceFromSections` interpolates
- * each control ROW independently along the edge. Collinearity survives that
- * because it is LINEAR in the data: row2 - row0 = 2*(row1 - row0) holds at every
+ * The surface stays G2 between the sections, which is what allows it to be
+ * skinned. `blendSurfaceFromSections` interpolates each control row
+ * independently along the edge. Collinearity survives that because it is
+ * linear in the data: row2 - row0 = 2*(row1 - row0) holds at every
  * station, the two differences are interpolated by the same basis over the same
  * knots, and a basis applied to twice a data set gives twice the result. So the
  * relation holds at every v, exactly, not to a tolerance.
  *
- * THE FOOTPRINT IS THE BALL'S. `A` and `B` are the same tangency points a
+ * The footprint is the ball's. `A` and `B` are the same tangency points a
  * rolling ball of that radius would produce, so "radius" keeps meaning the same
  * thing on screen — how far onto each face the blend reaches — and only the
  * profile between them changes.
  */
 
 /**
- * HOW FULL THE PROFILE IS, and it is NOT one number.
+ * How full the profile is; it is not one number.
  *
  * `alpha` places the inner control points along each leg toward the corner, and
  * the value that makes the quintic sit closest to the circular arc of the same
- * radius — which is what keeps a smooth blend the same SIZE on screen as the
+ * radius — which is what keeps a smooth blend the same size on screen as the
  * fillet it replaces — depends on how sharp the corner is. Searched at 0.001
  * resolution against the exact circle, and the result is scale free: the same
  * alpha wins at r = 1, 10 and 100, and the residual scales with r exactly.
@@ -1120,8 +1066,8 @@ export function chamferSectionArc(section) {
  * blend that reads as the wrong size rather than as a smoother one. The
  * quadratic below reproduces every row above to within 0.005 of alpha.
  *
- * ⚠ A WIDE CORNER GETS A THINNER PROFILE, which is the opposite of the intuition
- * that a flatter corner needs more filling. It falls out of the footprint being
+ * A wide corner gets a thinner profile, although a flatter corner might be
+ * expected to need more filling. It follows from the footprint being
  * fixed: at 150 degrees the tangency points are already most of the way around
  * the ball, so the legs toward the corner are long and a large alpha throws the
  * curve far outside the circle it is meant to match.
@@ -1179,20 +1125,20 @@ export function smoothSectionArcFor(spec, alpha) {
 }
 
 /**
- * HOW FAR A BUILT SMOOTH BLEND DEPARTS FROM ITS OWN EXACT SECTIONS.
+ * How far a built smooth blend departs from its own exact sections.
  *
  * Same reasoning as `chamferFlatnessDeviation`, and for the same reason: the
  * default radius measure reports |distance-to-spine - radius|, and a smooth
- * section is deliberately NOT at constant distance from the spine, so a perfect
+ * section is not at constant distance from the spine, so a perfect
  * one measures as a large failure that refinement can never reduce.
  *
- * ⚠ MEASURED AGAINST THE SURFACE'S OWN ISOCURVE, not against a section looked up
+ * Measured against the surface's own isocurve, not against a section looked up
  * by parameter — sections are interpolated at chord-length parameters, so a
  * caller's `sectionAt(t)` and the surface's own v do not name the same station.
  * Everything the exact section needs is recoverable from the isocurve itself:
  * its two endpoints, and its two end tangents, which are the directions the
  * supporting faces impose. So the section is rebuilt from the surface and the
- * surface is compared against it, and neither the parameterisation nor the
+ * surface is compared against it, and neither the parameterization nor the
  * caller's generator is in the measure.
  */
 export function smoothProfileDeviation(srf, evalSrf, alpha, uSteps = 9, vSteps = 33, vFrom = 0.05, vTo = 0.95) {
@@ -1248,12 +1194,11 @@ export function smoothProfileDeviation(srf, evalSrf, alpha, uSteps = 9, vSteps =
       if (best > worst) { worst = best; worstAt = { u, v }; }
     }
   }
-  /* ⚠ SAME RULE AS `chamferFlatnessDeviation`'s OWN: an unmeasured surface must
+  /* Same rule as `chamferFlatnessDeviation`'s own: an unmeasured surface must
      not certify as an exact one. Every station here can `continue` too — a
-     tangent that will not normalise, two end tangents too nearly parallel to
+     tangent that will not normalize, two end tangents too nearly parallel to
      locate a corner, a corner behind the start — and `worst` left at its initial
-     0 would report a smooth blend that matches its exact profile perfectly, off
-     no samples at all, which stops refinement dead. */
+     0 would report a perfect match off no samples, which stops refinement. */
   if (measured === 0) {
     return { ok: false, reason: 'no station on this surface could be measured — no isocurve yielded a usable pair of end tangents, so its departure from the exact profile is UNKNOWN rather than zero' };
   }
@@ -1277,22 +1222,20 @@ export function chamferSectionArcFor(spec) {
 }
 
 /**
- * HOW FAR A BUILT CHAMFER DEPARTS FROM ITS OWN EXACT CHORDS.
+ * How far a built chamfer departs from its own exact chords.
  *
- * ⚠ THE DEFAULT DEVIATION MEASURE CANNOT JUDGE A CHAMFER, and it fails in the
- * direction that looks like success. `blendRadiusDeviation` reports
- * |distance-to-spine - radius|; a chamfer's chord midpoint sits at
- * r*cos(sweep/2) from the ball center, so a PERFECT chamfer on a 90 degree edge
+ * The default deviation measure cannot judge a chamfer. `blendRadiusDeviation`
+ * reports |distance-to-spine - radius|; a chamfer's chord midpoint sits at
+ * r*cos(sweep/2) from the ball center, so an exact chamfer on a 90 degree edge
  * measures r*(1-cos45) ~ 0.293r of "deviation" — about 1.46mm on a 5mm chamfer
  * against a 0.01mm tolerance. The refinement loop then chases a number that can
  * never fall, ramps to `maxSections`, and returns its best effort with
- * `metTolerance: false` and a figure that means nothing. Any panel reporting that
- * figure calls a correct chamfer a failed one.
+ * `metTolerance: false` and a figure that means nothing.
  *
- * What IS exact for a chamfer: at every station the true surface is the straight
+ * What is exact for a chamfer: at every station the true surface is the straight
  * segment between the two tangency points. A single section is therefore exact by
  * construction (degree 2, unit weights, midpoint at the true midpoint), and the
- * only error left is the interpolation BETWEEN stations — which is the same
+ * only error left is the interpolation between stations — which is the same
  * quantity the radius measure captures for a fillet, and the only one worth
  * reporting.
  *
@@ -1308,22 +1251,18 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
   if (!srf || typeof evalSrf !== 'function') {
     return { ok: false, reason: 'a chamfer measure needs a surface and an evaluator' };
   }
-  /* ⚠⚠ MEASURED AGAINST THE SURFACE'S OWN SECTION, NOT AGAINST A SECTION LOOKED
-     UP BY PARAMETER. This asked the caller's `sectionAt(t)` for the chord to
-     compare against and then evaluated the SURFACE at that same t — which is only
-     the same station while the two parameterisations agree. They do not: sections
-     are interpolated at CHORD-LENGTH parameters, so on any run where the stations
-     are unevenly spaced the measure compares one place on the surface against the
-     chord belonging to another.
+  /* Measured against the surface's own section, not against a section looked
+     up by parameter. Asking the caller's `sectionAt(t)` for the chord and
+     evaluating the surface at that same t compares the same station only
+     while the two parameterizations agree. They do not: sections are
+     interpolated at chord-length parameters, so on any run where the stations
+     are unevenly spaced that would compare one place on the surface against
+     the chord belonging to another — an error that does not shrink with
+     refinement, because it is not in the surface.
 
-     The error that produces does not shrink with refinement, because it is not an
-     error in the surface: a freeform rim floored at 2.6mm through 106, 426 and
-     1601 sections while the fillet on the same rim reached 0.0098mm. It reads
-     exactly like a chamfer that will not converge.
-
-     A section is flat if it is straight between ITS OWN two ends, which is a
+     A section is flat if it is straight between its own two ends, which is a
      question about the surface alone. Taking the endpoints from the same isocurve
-     being sampled removes the parameterisation from the measure entirely, and
+     being sampled removes the parameterization from the measure entirely, and
      removes the caller's section generator from it too. */
   const ku = srf.knotsU, kv = srf.knotsV;
   const uLo = ku[0], uHi = ku[ku.length - 1];
@@ -1343,7 +1282,7 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
       const p = evalSrf(srf, u, v);
       if (!p) continue;
       const q = [p[0], p[1], p[2]];
-      // Distance to the SEGMENT, clamped: past either end the nearest point on
+      // Distance to the segment, clamped: past either end the nearest point on
       // the true chamfer is its endpoint, and an unclamped line distance would
       // read zero for a point that has run off the end of the chord entirely.
       let sPar = dot(sub(q, a), ab) / abLen2;
@@ -1353,13 +1292,12 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
       if (d > worst) worst = d;
     }
   }
-  /* ⚠ A SURFACE NOBODY COULD MEASURE IS NOT A FLAT ONE. Every station above can
-     `continue` — an evaluator that returns nothing, a chord that degenerates —
-     and with `worst` still sitting at its initial 0 the loop then falls out and
-     reports `ok: true, worst: 0`: a PERFECTLY flat chamfer, certified, from zero
-     samples. `blendSurfaceToTolerance` reads that as tolerance met on the first
-     attempt and stops refining, so the one surface that most needed another look
-     is the only one that gets none. Unknown must not read as perfect. */
+  /* A surface that could not be measured is not a flat one. Every station
+     above can `continue` — an evaluator that returns nothing, a chord that
+     degenerates — and with `worst` still at its initial 0 the loop would
+     report `ok: true, worst: 0` from zero samples. `blendSurfaceToTolerance`
+     would read that as tolerance met on the first attempt and stop refining.
+     Unknown must not read as perfect. */
   if (measured === 0) {
     return { ok: false, reason: 'no station on this surface could be measured — every sample either failed to evaluate or had a degenerate chord, so its flatness is UNKNOWN rather than perfect' };
   }
@@ -1367,16 +1305,16 @@ export function chamferFlatnessDeviation(srf, evalSrf, uSteps = 9, vSteps = 33, 
 }
 
 /**
- * IS A BUILT BLEND ROUND OR FLAT? THE ORACLE A RECORD CANNOT PROVIDE.
+ * Is a built blend round or flat? The check a record cannot provide.
  *
  * A fillet and a chamfer differ only in the shape spanning the gap, and every
  * other observable — tangency points, setback, footprint, the record's own type
  * field — is identical between them. So a check that reads the record, or the
  * parameters, or the footprint, passes for both and distinguishes neither.
  *
- * This reads the SURFACE. Three points across one section determine a circle;
+ * This reads the surface. Three points across one section determine a circle;
  * the residual of the remaining samples against that circle says whether the
- * section is really an arc, and the fitted radius says which arc. A chord returns
+ * section is an arc, and the fitted radius says which arc. A chord returns
  * a vanishing curvature and a radius that runs away to infinity.
  *
  * Returns `curvature` (1/radius, zero for a straight section) rather than the
@@ -1396,7 +1334,7 @@ export function blendSectionCurvature(srf, evalSrf, v = 0.5, samples = 9) {
   const n = cross(ab, ac);
   const nLen = len(n);
   const chord = len(sub(c, a));
-  // Three collinear points span no plane, which IS the flat answer rather than a
+  // Three collinear points span no plane, which is the flat answer rather than a
   // failure — a chamfer's section is exactly this case.
   if (!(nLen > EPS) || !(chord > EPS)) return { ok: true, curvature: 0, radius: Infinity, residual: 0, flat: true };
   // Circumradius from the triangle: R = |ab||ac||bc| / (4*area).
@@ -1431,24 +1369,24 @@ export function blendSectionCurvature(srf, evalSrf, v = 0.5, samples = 9) {
 }
 
 /**
- * THE AREA OF A CORNER PATCH, BY TWO INDEPENDENT ROUTES.
+ * The area of a corner patch, by two independent routes.
  *
  * The spherical triangle bounded by three touch directions has area
  * r^2 * (A + B + C - pi) — Girard's excess — where A, B, C are the triangle's
- * INTERIOR angles.
+ * interior angles.
  *
- * ⚠ THE INTERIOR ANGLE IS NOT THE DIHEDRAL, and a cube cannot tell the
+ * The interior angle is not the dihedral, and a cube cannot tell the
  * difference. On three perpendicular faces both are 90 degrees, so an octant
  * result confirms nothing about which quantity the formula wants. On a skewed
  * trihedron they separate plainly: interior angles 88.52 / 68.99 / 100.87
  * against dihedrals 78.92 / 87.38 / 111.12. The interior angle is measured
- * between the two arcs LEAVING a vertex — each other direction projected into
+ * between the two arcs leaving a vertex — each other direction projected into
  * the tangent plane there — which is what this computes and what Girard needs.
  *
  * The dihedral is the supplement of the angle between two touch directions, and
  * is a different number again; it belongs to the edge, not to the corner.
  *
- * CHECKED AGAINST VAN OOSTEROM & STRACKEE, "The solid angle of a plane
+ * Checked against van Oosterom & Strackee, "The solid angle of a plane
  * triangle", IEEE Transactions on Biomedical Engineering BME-30(2):125-126,
  * 1983 — tan(omega/2) = |a.(b x c)| / (1 + a.b + b.c + c.a), which shares no
  * algebra with the excess-of-angles route. They agree to the last digit on both
@@ -1476,9 +1414,9 @@ export function sphericalTriangleArea(dirs, radius) {
     interiorAngles: interior,
     excess,
     area: radius * radius * excess,
-    // The second opinion, and the gap between them. Not a formality: the two
-    // share no algebra, so a drift in either shows up here before it shows up
-    // in a surface.
+    // The second opinion, and the gap between them: the two share no
+    // algebra, so a drift in either shows up here before it shows up in a
+    // surface.
     solidAngle: vanOosterom,
     agreement: Math.abs(excess - vanOosterom),
   };

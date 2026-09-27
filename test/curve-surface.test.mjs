@@ -59,8 +59,8 @@ test('unit circle: tangent is perpendicular to the radius vector', () => {
 });
 
 test('curvature (2nd derivative) of the unit circle points inward, magnitude ~1', () => {
-  // For a unit-speed... actually this parametrization isn't unit-speed, so
-  // just check the 2nd derivative has a negative component along the radius
+  // This parametrization isn't unit-speed, so just check
+  // the 2nd derivative has a negative component along the radius
   // (curving toward the center) at a sample point deep inside a span.
   const [C0, , C2] = rationalCurveDerivs(unitCircle, 0.5, 2);
   const radial = C0[0] * C2[0] + C0[1] * C2[1];
@@ -154,7 +154,7 @@ test('divideByArcLength on a straight line lands on exact evenly-spaced points',
   }
 });
 
-test('divideByArcLength on an OPEN curve (a straight line — start/end control points genuinely distinct) always returns count+1 points including BOTH exact curve endpoints', () => {
+test('divideByArcLength on an OPEN curve (a straight line — start/end control points distinct) always returns count+1 points including BOTH exact curve endpoints', () => {
   const line = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [10, 0, 0, 1]] };
   assert.equal(isCurveClosed(line), false, 'a straight line is never closed');
   const divs = divideByArcLength(line, 7);
@@ -170,9 +170,9 @@ test('divideByArcLength on an OPEN curve (a straight line — start/end control 
 // The unit circle's own first/last control point are the IDENTICAL point
 // ([1,0,0,1], the seam), so isCurveClosed must recognize it as closed —
 // dividing it into `count` must give exactly `count` points, never count+1
-// (the old behavior emitted the seam point twice: once at u=uMin, once at
-// u=uMax, the same physical location on a closed curve — real Rhino's own
-// Divide on a closed curve gives exactly N points, not N+1).
+// (emitting the seam point at both u=uMin and u=uMax would repeat the same
+// physical location on a closed curve — Rhino's own Divide on a closed curve
+// gives exactly N points, not N+1).
 test('divideByArcLength on a CLOSED curve (the unit circle) returns exactly `count` points, all DISTINCT (no seam duplicate)', () => {
   assert.equal(isCurveClosed(unitCircle), true, 'the unit circle\'s own first/last control point coincide — a real seam');
   const divs = divideByArcLength(unitCircle, 7);
@@ -186,7 +186,7 @@ test('divideByArcLength on a CLOSED curve (the unit circle) returns exactly `cou
   }
 });
 
-// The full REAL point of the closed-curve fix: the `count` points must be
+// On a closed curve the `count` points must be
 // evenly spaced around the FULL closed arc length, including the
 // WRAPAROUND step from the last point back to the first — not just the
 // interior chain up to a dropped seam.
@@ -204,10 +204,10 @@ test('divideByArcLength on a CLOSED curve places points evenly spaced around the
   assert.ok(Math.abs(wrap - Math.PI / 6) < 1e-4, `wraparound step (last point back to first) ${wrap} vs ${Math.PI / 6}`);
 });
 
-// The REAL point of arc-length (not raw-parameter) division: the standard
+// The point of arc-length (not raw-parameter) division: the standard
 // rational quadratic circle has non-uniform angular speed in its own
-// parameter (that's WHY the spec calls out "bunches on unevenly-
-// parametrized curves" as the bug this avoids) — but arc-length-even
+// parameter (which is why raw-parameter division bunches on unevenly-
+// parametrized curves) — but arc-length-even
 // division of a circle must still be angularly EQUAL, since arc length and
 // angle are directly proportional on a circle of constant radius. A
 // raw-parameter-uniform sample would fail this check (bunches near each
@@ -223,7 +223,7 @@ test('divideByArcLength on the rational circle produces ANGULARLY EQUAL steps (p
   }
 });
 
-test('divideByArcLength produces genuinely EQUAL chord lengths between consecutive division points, including the wraparound chord back to the first point', () => {
+test('divideByArcLength produces EQUAL chord lengths between consecutive division points, including the wraparound chord back to the first point', () => {
   const divs = divideByArcLength(unitCircle, 9);
   assert.equal(divs.length, 9); // closed curve: exactly `count` points
   const dists = [];
@@ -247,17 +247,15 @@ test('divideByArcLength rejects a non-positive or non-integer count', () => {
   assert.throws(() => divideByArcLength(unitCircle, 2.5));
 });
 
-// ---------------------------------------------------------------------------
-// POINT-SYMMETRIC SPANS — the case a one-sample chord-deviation test cannot
+// Point-symmetric spans — the case a one-sample chord-deviation test cannot
 // see. On a span with C(m+s) = 2C(m) - C(m-s) the midpoint lies EXACTLY on
 // the endpoint chord, so the single deviation sample reads exactly zero even
-// though the curve genuinely bows away everywhere else. Guarded in
+// though the curve bows away everywhere else. Guarded in
 // adaptiveArcLengthSamples by DIVIDE_MIN_DEPTH.
 //
 // Every check below measures against an INDEPENDENT dense-sampling arc
 // length, never against the table under test — comparing the table to
-// itself would prove nothing about the property that actually broke.
-// ---------------------------------------------------------------------------
+// itself would prove nothing about the property under test.
 
 // Independent ground truth: a very dense uniform-parameter polyline. Slow and
 // crude on purpose — it shares no code path with the adaptive refinement, so
@@ -285,9 +283,9 @@ const symmetricS = globalCurveInterp([[0, 0, 0], [40, 0, 20], [80, 0, 0], [120, 
 // not get materially more expensive.
 const asymmetricS = globalCurveInterp([[0, 0, 0], [80, 0, 40], [150, 0, -10], [240, 0, 50]], 3);
 // NEAR-symmetric, not exactly so: one endpoint nudged by a fraction of a
-// millimeter. This is where a PARTIAL version of the bug lives — the
-// midpoint deviation is tiny but nonzero, so whether the old code saw it at
-// all depended entirely on how it compared against the auto-tolerance.
+// millimeter. This is the partial case — the midpoint deviation is tiny but
+// nonzero, so whether a single-sample test sees it at all depends entirely
+// on how it compares against the auto-tolerance.
 const nearSymmetricS = globalCurveInterp([[0, 0, 0], [40, 0, 20], [80, 0, 0], [120.00002, 0, 20.00002]], 3);
 // The symmetric S bracketed by two further points, so it becomes ONE SPAN
 // among several inside an otherwise ordinary hand-drawn-shaped curve. Proves
@@ -299,8 +297,8 @@ const symmetricSpanInsideLongerCurve = globalCurveInterp(
 test('a POINT-SYMMETRIC curve measures its true arc length (the midpoint deviation sample reads exactly zero there, so a single-sample test terminates at depth 0 and returns the straight chord)', () => {
   const uMin = symmetricS.knots[0], uMax = symmetricS.knots[symmetricS.knots.length - 1];
   const trueLen = wholeCurveDenseLength(symmetricS);
-  // The property that makes this fixture discriminating: the midpoint really
-  // IS on the chord, so a one-sample test genuinely cannot tell the curve
+  // The property that makes this fixture discriminating: the midpoint IS on
+  // the chord, so a one-sample test cannot tell the curve
   // from its own chord. Asserted directly so a future fixture edit that
   // accidentally breaks the symmetry fails loudly instead of passing for the
   // wrong reason.
@@ -312,7 +310,7 @@ test('a POINT-SYMMETRIC curve measures its true arc length (the midpoint deviati
     'fixture sanity: this curve must be genuinely point-symmetric about its own midpoint, or it does not exercise the defect at all',
   );
   const chordLen = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-  assert.ok(trueLen > chordLen * 1.1, `fixture sanity: the curve must genuinely bow away from its chord (true ${trueLen}, chord ${chordLen})`);
+  assert.ok(trueLen > chordLen * 1.1, `fixture sanity: the curve must bow away from its chord (true ${trueLen}, chord ${chordLen})`);
 
   const table = buildArcLengthTable(symmetricS, uMin, uMax);
   assert.ok(
@@ -321,7 +319,7 @@ test('a POINT-SYMMETRIC curve measures its true arc length (the midpoint deviati
   );
 });
 
-test('a POINT-SYMMETRIC curve inverts length->parameter to genuinely non-uniform parameters (a chord-only table returns exactly the uniform fractions, so every arc-length-even consumer silently gets parameter-even stations)', () => {
+test('a POINT-SYMMETRIC curve inverts length->parameter to non-uniform parameters (a chord-only table returns exactly the uniform fractions, so every arc-length-even consumer silently gets parameter-even stations)', () => {
   const uMin = symmetricS.knots[0], uMax = symmetricS.knots[symmetricS.knots.length - 1];
   const table = buildArcLengthTable(symmetricS, uMin, uMax);
   let maxOffUniform = 0;
@@ -342,14 +340,14 @@ test('DIVIDE on a POINT-SYMMETRIC curve places points whose successive TRUE arc-
   for (const g of gaps) {
     assert.ok(Math.abs(g - mean) / mean < 5e-3, `every true arc-length gap must match the mean ${mean}; gaps were ${gaps.map((x) => x.toFixed(4)).join(', ')}`);
   }
-  // And they are genuinely NOT the parameter-even stations, which is what a
-  // chord-only table would have produced.
+  // And they are NOT the parameter-even stations, which is what a chord-only
+  // table produces.
   const uniformGaps = [];
   for (let i = 1; i <= COUNT; i++) {
     uniformGaps.push(denseArcLength(symmetricS, symmetricS.knots[0] + ((i - 1) / COUNT), symmetricS.knots[0] + (i / COUNT), 20000));
   }
   const uniformSpread = (Math.max(...uniformGaps) - Math.min(...uniformGaps)) / mean;
-  assert.ok(uniformSpread > 0.05, `fixture sanity: parameter-even stations must be measurably UNEVEN in true arc length on this curve (spread ${uniformSpread}), or this test could pass without the fix`);
+  assert.ok(uniformSpread > 0.05, `fixture sanity: parameter-even stations must be measurably UNEVEN in true arc length on this curve (spread ${uniformSpread}), or this test could pass without the minimum depth`);
 });
 
 test('a NEAR-symmetric curve (one endpoint nudged a fraction of a millimeter) measures its true arc length too — the partial case, where the midpoint deviation is nonzero but below the auto-tolerance', () => {
@@ -358,7 +356,7 @@ test('a NEAR-symmetric curve (one endpoint nudged a fraction of a millimeter) me
   const mid = curvePoint(nearSymmetricS, (uMin + uMax) / 2);
   const chordMid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
   const midDev = Math.hypot(mid[0] - chordMid[0], mid[1] - chordMid[1], mid[2] - chordMid[2]);
-  assert.ok(midDev > 0, 'fixture sanity: this curve must NOT be exactly symmetric — its midpoint deviation is small but genuinely nonzero');
+  assert.ok(midDev > 0, 'fixture sanity: this curve must NOT be exactly symmetric — its midpoint deviation is small but nonzero');
   assert.ok(midDev < 1e-4, `fixture sanity: the midpoint deviation must still fall below the auto-tolerance band, got ${midDev}`);
   const trueLen = wholeCurveDenseLength(nearSymmetricS);
   const table = buildArcLengthTable(nearSymmetricS, uMin, uMax);
@@ -368,18 +366,18 @@ test('a NEAR-symmetric curve (one endpoint nudged a fraction of a millimeter) me
 test('a symmetric SPAN inside an otherwise ordinary multi-span curve is measured correctly (the defect is per-span, so it does not need a wholly symmetric curve to be reachable)', () => {
   const crv = symmetricSpanInsideLongerCurve;
   const uMin = crv.knots[0], uMax = crv.knots[crv.knots.length - 1];
-  assert.ok(crv.knots.length > 8, 'fixture sanity: this curve must have genuine interior knots, i.e. several spans');
+  assert.ok(crv.knots.length > 8, 'fixture sanity: this curve must have interior knots, i.e. several spans');
   const trueLen = wholeCurveDenseLength(crv);
   const table = buildArcLengthTable(crv, uMin, uMax);
   assert.ok(Math.abs(table.total - trueLen) / trueLen < 1e-4, `multi-span total ${table.total} vs true ${trueLen}`);
 });
 
-test('a NON-symmetric curve stays exact and does not get materially more expensive (the minimum depth is free wherever a span genuinely curves — it subdivides past that depth on its own merits)', () => {
+test('a NON-symmetric curve stays exact and does not get materially more expensive (the minimum depth is free wherever a span curves — it subdivides past that depth on its own merits)', () => {
   const uMin = asymmetricS.knots[0], uMax = asymmetricS.knots[asymmetricS.knots.length - 1];
   const trueLen = wholeCurveDenseLength(asymmetricS);
   const table = buildArcLengthTable(asymmetricS, uMin, uMax);
   assert.ok(Math.abs(table.total - trueLen) / trueLen < 1e-5, `non-symmetric total ${table.total} vs true ${trueLen}`);
-  // A minimum depth of n can at worst quadruple a genuinely FLAT span. This
+  // A minimum depth of n can at worst quadruple a FLAT span. This
   // curve is not flat anywhere, so the count must stay in the same league as
   // the tolerance alone demands, not multiply.
   const seedSpans = new Set([uMin, uMax]);
@@ -387,7 +385,7 @@ test('a NON-symmetric curve stays exact and does not get materially more expensi
   assert.ok(table.samples.length < 4000, `sample count must stay bounded, got ${table.samples.length}`);
 });
 
-test('a DEGREE-1 curve is exempt from the minimum depth and keeps its exact previous sample count — its span basis functions are non-negative and sum to one, so the chord IS the curve and subdividing can reveal nothing', () => {
+test('a DEGREE-1 curve is exempt from the minimum depth and keeps exactly one sample per vertex — its span basis functions are non-negative and sum to one, so the chord IS the curve and subdividing can reveal nothing', () => {
   const polyPts = [];
   for (let i = 0; i <= 20; i++) polyPts.push([i * 7, (i % 2) * 3, 0]);
   const poly = globalCurveInterp(polyPts, 1);

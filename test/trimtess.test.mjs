@@ -5,24 +5,23 @@ import { makeLine, makeArc, extrude } from '../kernel/primitives.mjs';
 import { trivialTrimLoop, signedArea2D, pointInUVPolygon } from '../kernel/trim.mjs';
 
 // A flat, fully bilinear 10x10 plane — extrude() of a degree-1 Line is a
-// ruled (degV=1) surface over a degree-1 (degU=1) profile, i.e. a genuine
+// ruled (degV=1) surface over a degree-1 (degU=1) profile, i.e. a true
 // bilinear patch: S(u,v) = (10u, 10v, 0) exactly, domain [0,1]x[0,1] on
 // both axes (makeLine's own knots). Deliberately chosen because its
 // UV->XYZ Jacobian is an exact, constant 100 (10 * 10) everywhere — any
-// UV-space area, multiplied by 100, is the EXACT real-world triangle area,
+// UV-space area, multiplied by 100, is the exact world-space triangle area,
 // with zero curvature-driven approximation error to account for. This is
-// what makes an exact (not merely convergent) area proof possible below.
+// what makes an exact (not merely convergent) area check possible below.
 function makeFlatPlane() {
   return extrude(makeLine([0, 0, 0], [10, 0, 0]), [0, 1, 0], 10);
 }
 
 // A regular N-gon inscribed in a circle of radius r centered at (cx,cy) in
-// UV space — the trim data model's own real shape (kernel/trim.mjs: "trim
-// curves are POLYLINES, not interpolated smooth NURBS curves"), not an
-// idealized circle. Its own true analytic area (shoelace, computed via
-// signedArea2D — the SAME function trimLoopsValid already trusts) is the
-// honest ground truth here, not the circle's pi*r^2 (which the polygon
-// only approaches as N grows).
+// UV space — the trim data model's own shape (kernel/trim.mjs: trim curves
+// are polylines, not interpolated smooth NURBS curves), not an idealized
+// circle. Its own analytic area (shoelace, computed via signedArea2D — the
+// same function trimLoopsValid uses) is the ground truth here, not the
+// circle's pi*r^2 (which the polygon only approaches as N grows).
 function makeUVPolygon(cx, cy, r, n) {
   const loop = [];
   for (let i = 0; i < n; i++) {
@@ -47,7 +46,7 @@ test('loop=null and loop=trivialTrimLoop(srf) (the full parametric rectangle) gi
   assert.ok(Math.abs(untrimmed - 100) < 1e-9);
 });
 
-test('a real trim polygon cuts the flat plane to EXACTLY its own analytic area, independent of grid resolution', () => {
+test('a trim polygon cuts the flat plane to exactly its own analytic area, independent of grid resolution', () => {
   const srf = makeFlatPlane();
   const loop = makeUVPolygon(0.5, 0.5, 0.3, 64); // safely interior to the [0,1]x[0,1] domain
   const expectedArea = 100 * Math.abs(signedArea2D(loop)); // exact Jacobian (100) times the polygon's own true UV area
@@ -55,8 +54,8 @@ test('a real trim polygon cuts the flat plane to EXACTLY its own analytic area, 
   const fine = tessellationArea(tessellateTrimmedSurface(srf, loop, 40, 40));
   assert.ok(Math.abs(coarse - expectedArea) < 1e-6, `coarse grid: expected ${expectedArea}, got ${coarse}`);
   assert.ok(Math.abs(fine - expectedArea) < 1e-6, `fine grid: expected ${expectedArea}, got ${fine}`);
-  // Real proof this is exact clipping, not a coarse "count whole cells"
-  // approximation converging toward the truth: a genuinely approximate
+  // This shows exact clipping, not a coarse "count whole cells"
+  // approximation converging toward the truth: an approximate
   // method would disagree between 8x8 and 40x40 resolution; an exact
   // per-cell clip does not, since the union of (loop ∩ cell) over every
   // cell in a partition of the domain is exactly (loop ∩ domain) = loop.
@@ -102,17 +101,17 @@ test('analytic normals are exact for a flat plane — every vertex normal is the
   }
 });
 
-test('clipPolygonToRect: two adjacent cells clipping the SAME loop agree exactly along their shared edge (no crack)', () => {
+test('clipPolygonToRect: two adjacent cells clipping the same loop agree exactly along their shared edge (no crack)', () => {
   // A triangle straddling the vertical seam u=1 between cell A [0,1]x[0,1]
-  // and cell B [1,2]x[0,1] — a real boundary-crossing case for BOTH cells,
-  // sharing one real edge of the trim loop along the way.
+  // and cell B [1,2]x[0,1] — a boundary-crossing case for both cells,
+  // sharing one edge of the trim loop along the way.
   const loop = [[0.2, 0.2], [1.8, 0.2], [1.0, 1.8]];
   const clippedA = clipPolygonToRect(loop, 0, 1, 0, 1);
   const clippedB = clipPolygonToRect(loop, 1, 2, 0, 1);
   const onSeam = (poly, expectedU) => poly.filter((p) => Math.abs(p[0] - expectedU) < 1e-9).map((p) => p[1]).sort((x, y) => x - y);
   const seamA = onSeam(clippedA, 1);
   const seamB = onSeam(clippedB, 1);
-  assert.ok(seamA.length >= 2, 'cell A should have real points on the shared u=1 seam');
+  assert.ok(seamA.length >= 2, 'cell A should have points on the shared u=1 seam');
   assert.equal(seamA.length, seamB.length, 'both cells should report the same number of seam points');
   for (let i = 0; i < seamA.length; i++) {
     assert.ok(Math.abs(seamA[i] - seamB[i]) < 1e-12, `seam point ${i} disagrees: A=${seamA[i]} B=${seamB[i]}`);
@@ -120,7 +119,7 @@ test('clipPolygonToRect: two adjacent cells clipping the SAME loop agree exactly
 });
 
 test('triangulatePolygon2D handles a non-convex (reflex-corner) polygon correctly, no triangle escapes the polygon', () => {
-  // An "L" shape — genuinely non-convex, the exact case a naive centroid
+  // An "L" shape — non-convex, the exact case a naive centroid
   // fan would get wrong.
   const poly = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
   const tris = triangulatePolygon2D(poly);
@@ -134,15 +133,13 @@ test('triangulatePolygon2D handles a non-convex (reflex-corner) polygon correctl
   assert.ok(Math.abs(totalArea - expectedArea) < 1e-9, `triangulated area ${totalArea} should equal the polygon's true area ${expectedArea}`);
 });
 
-/* ================================================================
-   TRIM HOLES — the keyhole/bridge merge. Holes always wind
-   OPPOSITE the outer loop, matching trimLoopsValid's own real convention
-   — makeUVPolygon's own +CCW loop needs its point ORDER reversed to wind
-   CW for a hole (a plain .reverse(), not a different construction).
-   ================================================================ */
+/* Trim holes — the keyhole/bridge merge. Holes always wind
+   opposite the outer loop, matching trimLoopsValid's own convention
+   — makeUVPolygon's own +CCW loop needs its point order reversed to wind
+   CW for a hole (a plain .reverse(), not a different construction). */
 function makeUVHole(cx, cy, r, n) { return makeUVPolygon(cx, cy, r, n).reverse(); }
 
-test('mergeLoopsKeyhole: a single interior hole reduces the merged polygon\'s own signed area by EXACTLY the hole\'s true area (the bridge itself contributes zero)', () => {
+test('mergeLoopsKeyhole: a single interior hole reduces the merged polygon\'s own signed area by exactly the hole\'s true area (the bridge itself contributes zero)', () => {
   const outer = makeUVPolygon(0, 0, 1, 4); // a unit-radius square-ish quad, CCW
   const hole = makeUVHole(0.3, 0.3, 0.1, 24);
   const merged = mergeLoopsKeyhole(outer, [hole]);
@@ -150,7 +147,7 @@ test('mergeLoopsKeyhole: a single interior hole reduces the merged polygon\'s ow
   assert.ok(Math.abs(signedArea2D(merged) - expected) < 1e-9, `merged area ${signedArea2D(merged)} should equal outer+hole=${expected}`);
 });
 
-test('mergeLoopsKeyhole: two well-separated holes both merge in, area is outer minus BOTH holes exactly', () => {
+test('mergeLoopsKeyhole: two well-separated holes both merge in, area is outer minus both holes exactly', () => {
   const outer = makeUVPolygon(0, 0, 1, 4);
   const holeA = makeUVHole(0.4, 0.4, 0.1, 16);
   const holeB = makeUVHole(-0.4, -0.4, 0.12, 16);
@@ -159,27 +156,22 @@ test('mergeLoopsKeyhole: two well-separated holes both merge in, area is outer m
   assert.ok(Math.abs(signedArea2D(merged) - expected) < 1e-9, `merged area ${signedArea2D(merged)} should equal ${expected}`);
 });
 
-test('mergeLoopsKeyhole: refuses honestly (throws) rather than silently mis-merging when a hole genuinely has no valid bridge', () => {
-  // A hole whose own boundary entirely SURROUNDS the outer loop's only
+test('mergeLoopsKeyhole: refuses (throws) rather than silently mis-merging when a hole has no valid bridge', () => {
+  // A hole whose own boundary entirely surrounds the outer loop's only
   // reachable region from every angle is contrived to construct directly;
-  // instead, prove the honesty contract the cheap way — a hole placed
-  // OUTSIDE the outer loop's own bbox has every candidate bridge crossing
-  // the outer loop's boundary itself (the bridge must cross OUT of the
+  // instead, check the refusal the cheap way — a hole placed
+  // outside the outer loop's own bbox has every candidate bridge crossing
+  // the outer loop's boundary itself (the bridge must cross out of the
   // outer loop to reach a hole that isn't inside it at all).
   const outer = makeUVPolygon(0, 0, 0.2, 4);
   const farHole = makeUVHole(5, 5, 0.1, 8);
   assert.throws(() => mergeLoopsKeyhole(outer, [farHole]), /no valid non-crossing bridge/);
 });
 
-test('tessellateTrimmedSurface with a real hole cuts the flat plane to EXACTLY outer-minus-hole area, independent of grid resolution', () => {
+test('tessellateTrimmedSurface with a hole cuts the flat plane to exactly outer-minus-hole area, independent of grid resolution', () => {
   const srf = makeFlatPlane();
-  // A real, off-center hole (NOT concentric with the outer loop) — this
-  // matters: an EXACTLY-concentric hole/outer pair (tried first) hits a
-  // real, narrow, honestly-named residual case (see the dedicated
-  // "bounded residual" test below) where a cell's own clip result can
-  // leave a tiny, safety-net-caught ear-clip gap; a realistic, non-
-  // adversarial hole placement (what a student would actually draw) does
-  // not, and achieves genuine machine-precision exactness here.
+  // An off-center hole, not concentric with the outer loop; the exactly
+  // concentric pair is a narrow residual case with its own tests below.
   const outer = makeUVPolygon(0.5, 0.5, 0.4, 37);
   const hole = makeUVHole(0.35, 0.65, 0.1, 23);
   const expectedArea = 100 * (Math.abs(signedArea2D(outer)) - Math.abs(signedArea2D(hole)));
@@ -190,7 +182,7 @@ test('tessellateTrimmedSurface with a real hole cuts the flat plane to EXACTLY o
   assert.ok(Math.abs(coarse - fine) < 1e-8, `coarse (${coarse}) and fine (${fine}) should agree exactly on a flat surface`);
 });
 
-test('tessellateTrimmedSurface: THE MOTIVATING CASE — a hole small enough to sit entirely inside ONE grid cell is still correctly excluded (this is exactly what per-cell subtraction cannot do)', () => {
+test('tessellateTrimmedSurface: a hole small enough to sit entirely inside one grid cell is still excluded (per-cell subtraction cannot do this)', () => {
   const srf = makeFlatPlane();
   const outer = makeUVPolygon(0.5, 0.5, 0.45, 40); // nearly the whole [0,1]x[0,1] domain
   // A coarse 4x4 grid means each cell spans 0.25 UV units — this hole's
@@ -198,34 +190,32 @@ test('tessellateTrimmedSurface: THE MOTIVATING CASE — a hole small enough to s
   // touching that cell's own boundary.
   const hole = makeUVHole(0.625, 0.625, 0.05, 24);
   const holeBox = { uMin: 0.575, uMax: 0.675, vMin: 0.575, vMax: 0.675 };
-  assert.ok(holeBox.uMin > 0.5 && holeBox.uMax < 0.75, 'SETUP: the hole genuinely sits within a single 4x4 grid cell [0.5,0.75]x[0.5,0.75], never touching its edges');
+  assert.ok(holeBox.uMin > 0.5 && holeBox.uMax < 0.75, 'setup: the hole sits within a single 4x4 grid cell [0.5,0.75]x[0.5,0.75], never touching its edges');
   const expectedArea = 100 * (Math.abs(signedArea2D(outer)) - Math.abs(signedArea2D(hole)));
   const tris = tessellateTrimmedSurface(srf, outer, 4, 4, [hole]);
   const area = tessellationArea(tris);
-  assert.ok(Math.abs(area - expectedArea) < 1e-4, `expected ${expectedArea}, got ${area} (a naive per-cell approach would have gotten the FULL cell's own area here, not excluded the hole at all)`);
+  assert.ok(Math.abs(area - expectedArea) < 1e-4, `expected ${expectedArea}, got ${area} (a naive per-cell approach would get the full cell's own area here, not excluding the hole at all)`);
   for (const [a, b, c] of tris) {
     const cu = (a.uv[0] + b.uv[0] + c.uv[0]) / 3, cv = (a.uv[1] + b.uv[1] + c.uv[1]) / 3;
     assert.notEqual(pointInUVPolygon(hole, cu, cv), 'inside', `triangle centroid (${cu},${cv}) must never be classified inside the hole`);
   }
 });
 
-test('tessellateTrimmedSurface with a hole: the TOTAL area of any triangle whose centroid reads as misclassified is vanishingly small — no real, unbounded leak', () => {
+test('tessellateTrimmedSurface with a hole: the total area of any triangle whose centroid reads as misclassified is vanishingly small — no unbounded leak', () => {
   const srf = makeFlatPlane();
   const outer = makeUVPolygon(0.5, 0.5, 0.4, 37);
   const hole = makeUVHole(0.35, 0.65, 0.1, 23);
   const tris = tessellateTrimmedSurface(srf, outer, 20, 20, [hole]);
   assert.ok(tris.length > 0);
-  // A real, honestly-named residual class, not silently hidden: a rare
-  // boundary-adjacent cell (the same one the ear-clip safety net already
-  // logs) can leave a sliver-thin triangle whose CENTROID reads a hair on
-  // the wrong side of a curve (the same "boundary" ambiguity the single-
-  // loop suite's own equivalent test allows for, just occasionally tipping
-  // into 'inside'/'outside' instead of a clean 'boundary' read). The real
-  // invariant that matters — proven directly, not assumed — is that any
-  // such triangle's own AREA is negligible, never a genuine unbounded leak;
-  // the whole-tessellation AREA test above is this mechanism's own primary,
-  // resolution-independent correctness proof, matching every other test in
-  // this file's own established convention.
+  // A known residual class: a rare boundary-adjacent cell (the same one the
+  // ear-clip safety net logs) can leave a sliver-thin triangle whose
+  // centroid reads a hair on the wrong side of a curve (the same "boundary"
+  // ambiguity the single-loop suite's own equivalent test allows for, just
+  // occasionally tipping into 'inside'/'outside' instead of a clean
+  // 'boundary' read). The invariant checked here is that any such
+  // triangle's own area is negligible, never an unbounded leak; the
+  // whole-tessellation area test above is the primary,
+  // resolution-independent correctness check, as elsewhere in this file.
   let misclassifiedArea = 0;
   const totalArea = tessellationArea(tris);
   for (const tri of tris) {
@@ -238,7 +228,7 @@ test('tessellateTrimmedSurface with a hole: the TOTAL area of any triangle whose
   assert.ok(misclassifiedArea / totalArea < 1e-4, `misclassified area fraction ${misclassifiedArea / totalArea} should be negligible, got absolute ${misclassifiedArea} of ${totalArea}`);
 });
 
-test('tessellateTrimmedSurface: an exactly-concentric hole/outer pair (a real, narrow, honestly-named residual case) still produces a BOUNDED, near-exact area — the safety net catches the real degeneracy, it never silently corrupts the whole result', () => {
+test('tessellateTrimmedSurface: an exactly-concentric hole/outer pair (a narrow residual case) still produces a bounded, near-exact area — the safety net catches the degeneracy instead of corrupting the whole result', () => {
   const srf = makeFlatPlane();
   const outer = makeUVPolygon(0.5, 0.5, 0.35, 48);
   const hole = makeUVHole(0.5, 0.5, 0.12, 32);
@@ -252,7 +242,7 @@ test('tessellateTrimmedSurface: an exactly-concentric hole/outer pair (a real, n
   assert.ok(relErr < 0.001, `an exactly-concentric hole/outer pair should still land within 0.1% of the true area, got relErr ${relErr}`);
 });
 
-test('tessellateTrimmedSurface: calling with no holes argument at all is BYTE-IDENTICAL to the pre-existing single-loop behavior (zero regression)', () => {
+test('tessellateTrimmedSurface: calling with no holes argument at all is byte-identical to passing an empty holes array', () => {
   const srf = makeFlatPlane();
   const loop = makeUVPolygon(0.5, 0.5, 0.3, 24);
   const withoutHolesArg = tessellationArea(tessellateTrimmedSurface(srf, loop, 10, 10));
@@ -261,11 +251,11 @@ test('tessellateTrimmedSurface: calling with no holes argument at all is BYTE-ID
 });
 
 test('a curved (revolve/extrude-adjacent) surface: trivial-loop area matches the untrimmed area closely', () => {
-  // A real curved surface (an extruded arc, not planar) — the diagonal
+  // A curved surface (an extruded arc, not planar) — the diagonal
   // choice for a non-planar quad can differ (very slightly) between the
   // fast emitQuad path and a clipped-then-ear-clipped quad, since a
   // non-planar quad's two possible diagonals don't split it into exactly
-  // equal-area triangle pairs the way a planar quad's do — a real, second-
+  // equal-area triangle pairs the way a planar quad's do — a second-
   // order geometric effect, not a bug, so this check uses a relative
   // tolerance rather than exact equality (unlike the flat-plane tests above).
   const profile = makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], 5, 0.2, 1.0);
@@ -278,20 +268,17 @@ test('a curved (revolve/extrude-adjacent) surface: trivial-loop area matches the
   assert.ok(relErr < 0.02, `expected close agreement, untrimmed=${untrimmed} trivial=${trivial} relErr=${relErr}`);
 });
 
-// ================================================================
-// MANIFOLDNESS. Every test above measures AREA, and area is
-// exactly what the defect these tests were added for does not disturb: a
-// zero-width collinear needle spliced in by Sutherland-Hodgman contributes
-// nothing to the shoelace sum, so the trimmed area stayed right while the
-// welded mesh was genuinely non-manifold. These tests measure TOPOLOGY of
-// the welded result directly, which is what a renderer, an STL export and a
-// watertightness check actually consume.
-// ================================================================
+// Manifoldness. Every test above measures area, and area is exactly what
+// a zero-width collinear needle spliced in by Sutherland-Hodgman does not
+// disturb: the needle contributes nothing to the shoelace sum, so the
+// trimmed area stays right while the welded mesh is non-manifold. These
+// tests measure the topology of the welded result directly, which is what
+// a renderer, an STL export and a watertightness check consume.
 
 // Weld the non-indexed triangle soup by exact-ish 3D position. Deliberately
-// a TIGHT tolerance: loosening the weld is how a structural defect becomes
+// a tight tolerance: loosening the weld is how a structural defect becomes
 // an invisible one, so anything that only welds at a sloppy tolerance must
-// be treated as a real crack, not smoothed over here.
+// be treated as a crack, not smoothed over here.
 function weldMesh(tris, tol = 1e-7) {
   const verts = [];
   const map = new Map();
@@ -321,7 +308,7 @@ function weldMesh(tris, tol = 1e-7) {
   return { verts, faces, edgeUse, V, E, F, chi: V - E + F, nonManifold };
 }
 
-// A vertex lying strictly in the interior of some OTHER face's edge. This is
+// A vertex lying strictly in the interior of some other face's edge. This is
 // the crack a renderer shows as a hairline and an exporter shows as a leak.
 function countTJunctions(welded, tol = 1e-6) {
   const { verts, edgeUse } = welded;
@@ -343,10 +330,10 @@ function countTJunctions(welded, tol = 1e-6) {
   return n;
 }
 
-test('MANIFOLD: an ordinary OFF-CENTER hole welds into a real annulus — chi == 0, zero non-manifold edges, zero T-junctions, exact area', () => {
+test('manifold: an ordinary off-center hole welds into an annulus — chi == 0, zero non-manifold edges, zero T-junctions, exact area', () => {
   const srf = makeFlatPlane();
   const outer = trivialTrimLoop(srf);          // the full parametric rectangle: a plane
-  const hole = makeUVHole(0.38, 0.44, 0.22, 32); // genuinely off-center, the reported fixture
+  const hole = makeUVHole(0.38, 0.44, 0.22, 32); // off-center
   const expectedArea = 100 * (Math.abs(signedArea2D(outer)) - Math.abs(signedArea2D(hole)));
   const tris = tessellateTrimmedSurface(srf, outer, 10, 10, [hole]);
   const w = weldMesh(tris);
@@ -354,13 +341,13 @@ test('MANIFOLD: an ordinary OFF-CENTER hole welds into a real annulus — chi ==
   assert.equal(countTJunctions(w), 0, 'no vertex may lie in the interior of another face\'s edge');
   // A disk with exactly one hole is an annulus: V - E + F == 0, exactly.
   assert.equal(w.chi, 0, `a disk-with-one-hole must have Euler characteristic 0, got ${w.chi} (V=${w.V} E=${w.E} F=${w.F})`);
-  // A manifold mesh with the wrong area is not a fix — the flat plane's
+  // A manifold mesh with the wrong area is not a pass — the flat plane's
   // Jacobian is an exact constant 100, so this is an exact claim.
   const area = tessellationArea(tris);
   assert.ok(Math.abs(area - expectedArea) < 1e-8, `expected ${expectedArea}, got ${area}`);
 });
 
-test('MANIFOLD: a hole crossing grid lines at a SHALLOW angle (where seam artifacts are worst) is still manifold and exact', () => {
+test('manifold: a hole crossing grid lines at a shallow angle (where seam artifacts are worst) is still manifold and exact', () => {
   const srf = makeFlatPlane();
   const outer = trivialTrimLoop(srf);
   // Deliberately irrational-looking center and a radius that puts long,
@@ -379,25 +366,24 @@ test('MANIFOLD: a hole crossing grid lines at a SHALLOW angle (where seam artifa
   }
 });
 
-test('MANIFOLD: an UNTRIMMED-rectangle trim (no holes) welds into a plain disk — chi == 1, and the repair passes leave it alone', () => {
+test('manifold: an untrimmed-rectangle trim (no holes) welds into a plain disk — chi == 1, and the repair passes leave it alone', () => {
   const srf = makeFlatPlane();
   const w = weldMesh(tessellateTrimmedSurface(srf, trivialTrimLoop(srf), 10, 10));
   assert.equal(w.nonManifold, 0);
   assert.equal(countTJunctions(w), 0);
   assert.equal(w.chi, 1, `a plain disk must have Euler characteristic 1, got ${w.chi}`);
-  /* ⚠ THE CLAIM IS THE SHAPE, NOT THE GRID. This asserted `w.F === 200` — the
-     10x10 grid's own triangle count — which stopped being true when a PLANAR
-     face started being triangulated from its trim loop instead of sampled on a
-     grid it has no curvature to justify. Two triangles is the same surface,
-     exactly, and is the point of that change. What the test is named for, and
-     what actually protects the repair passes, is that the result stays one
-     manifold disk of the right area with nothing welded or split. */
+  /* The claim is the shape, not the grid. A planar face is triangulated from
+     its trim loop rather than sampled on a 10x10 grid it has no curvature to
+     justify, so the triangle count is not the grid's 200; two triangles are
+     the same surface, exactly. What protects the repair passes is that the
+     result stays one manifold disk of the right area with nothing welded or
+     split. */
   assert.ok(w.F >= 2, `a rectangle must survive as at least two triangles, got ${w.F}`);
   const area = tessellationArea(tessellateTrimmedSurface(srf, trivialTrimLoop(srf), 10, 10));
   assert.ok(Math.abs(area - 100) < 1e-9, `and it must still be the whole 10x10 plane, got ${area}`);
 });
 
-test('MANIFOLD: the ear-clip residual warning no longer fires for an ordinary single-loop trim', () => {
+test('manifold: the ear-clip residual warning does not fire for an ordinary single-loop trim', () => {
   const srf = makeFlatPlane();
   const loop = makeUVPolygon(0.5, 0.5, 0.3, 37);
   const origError = console.error;
@@ -407,12 +393,12 @@ test('MANIFOLD: the ear-clip residual warning no longer fires for an ordinary si
   assert.equal(residuals, 0, 'a plain trim with no holes must not report an ear-clip residual');
 });
 
-test('MANIFOLD: removeCollinearSpikes\' own case — the area-neutral needle S-H splices in is what broke the weld, so removing it must not move the area at all', () => {
+test('manifold: removeCollinearSpikes\' own case — the area-neutral needle S-H splices in breaks the weld, so removing it must not move the area at all', () => {
   const srf = makeFlatPlane();
   const outer = trivialTrimLoop(srf);
   const hole = makeUVHole(0.38, 0.44, 0.22, 32);
   const expectedArea = 100 * (Math.abs(signedArea2D(outer)) - Math.abs(signedArea2D(hole)));
-  // Resolution-independence is the real proof this is exact clipping and not
+  // Resolution-independence shows this is exact clipping and not
   // a repair that happens to cancel out at one grid size.
   const areas = [6, 10, 16, 24].map((r) => tessellationArea(tessellateTrimmedSurface(srf, outer, r, r, [hole])));
   for (let i = 0; i < areas.length; i++) {
@@ -420,7 +406,7 @@ test('MANIFOLD: removeCollinearSpikes\' own case — the area-neutral needle S-H
   }
 });
 
-test('MANIFOLD: an EXACTLY-CONCENTRIC hole (the pre-existing honestly-named residual case) is improved, not regressed — and is now manifold too', () => {
+test('manifold: an exactly concentric hole (the residual case above) welds manifold, with exact area', () => {
   const srf = makeFlatPlane();
   const outer = makeUVPolygon(0.5, 0.5, 0.35, 48);
   const hole = makeUVHole(0.5, 0.5, 0.12, 32);
@@ -430,12 +416,12 @@ test('MANIFOLD: an EXACTLY-CONCENTRIC hole (the pre-existing honestly-named resi
   let tris;
   try { tris = tessellateTrimmedSurface(srf, outer, 40, 40, [hole]); } finally { console.error = origError; }
   const w = weldMesh(tris);
-  // Topology is now genuinely clean for this case, which it was not before.
+  // Topology is clean for this case too.
   assert.equal(w.nonManifold, 0, `concentric pair: ${w.nonManifold} non-manifold edges`);
   assert.equal(countTJunctions(w), 0, 'concentric pair: T-junctions present');
-  // Area for this fixture is now exact rather than merely "bounded under
-  // 0.1%". That 0.1% bound remains a property of THIS fixture and grid
-  // resolution, not a general guarantee — see the module header.
+  // Area for this fixture is exact, tighter than the 0.1% bound asserted
+  // above. That bound is a property of this fixture and grid resolution,
+  // not a general guarantee — see the module header.
   const area = tessellationArea(tris);
   assert.ok(Math.abs(area - expectedArea) < 1e-6, `concentric pair: expected ${expectedArea}, got ${area}`);
 });

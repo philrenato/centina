@@ -1,16 +1,15 @@
-// TOUCHING BOTH SEAMS IS NOT THE SAME AS WRAPPING BOTH, and the difference is
+// Touching both seams is not the same as wrapping both, and the difference is
 // net winding.
 //
-// A torus is closed in u AND v, so its two seams meet at the corners of the
+// A torus is closed in u and v, so its two seams meet at the corners of the
 // domain rectangle. A small region sitting over one of those corners crosses
 // each seam twice and winds around neither: contractible, ordinary geometry
-// that happens to land in an awkward place in the parameters. It used to be
-// refused as a "torus-like double wrap" — a false statement about the
-// topology — because the test asked only whether both directions carried
-// jumps, which a straddle does too.
+// that happens to land in an awkward place in the parameters. It is not a
+// "torus-like double wrap": asking only whether both directions carry jumps
+// cannot tell the two apart, because a straddle carries them too.
 //
-// THE INVARIANT THAT PROVES THE SPLIT, rather than a shape check a wrong split
-// would also satisfy: each returned chain runs between two ADJACENT edges of
+// The invariant that proves the split, rather than a shape check a wrong split
+// would also satisfy: each returned chain runs between two adjacent edges of
 // the rectangle, so closing it through the corner between them gives one
 // polygon per piece — and the four polygons' areas must sum to the area of the
 // same region laid out with no seam in the way. That is ground truth the
@@ -21,7 +20,7 @@ import { makeCircle, revolve } from '../kernel/primitives.mjs';
 import { surfaceClosure } from '../kernel/surface.mjs';
 import { seamCrossingSpine, seamStraddleChains, seamDoubleStraddleChains, signedArea2D } from '../kernel/trim.mjs';
 
-// A REAL torus, revolved rather than declared: closed in both directions, and
+// A torus, revolved rather than declared: closed in both directions, and
 // curved in both, so nothing here rests on a trivially flat fixture.
 function torus(R = 30, r = 10) {
   return revolve(makeCircle([R, 0, 0], [1, 0, 0], [0, 0, 1], r, 4), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
@@ -29,7 +28,7 @@ function torus(R = 30, r = 10) {
 
 function domainOf(srf) {
   const c = surfaceClosure(srf);
-  assert.ok(c.closedU && c.closedV, 'the fixture is closed in BOTH directions — the whole point of it');
+  assert.ok(c.closedU && c.closedV, 'the fixture is closed in both directions — the whole point of it');
   return {
     uMin: srf.knotsU[0], uMax: srf.knotsU[srf.knotsU.length - 1],
     vMin: srf.knotsV[0], vMax: srf.knotsV[srf.knotsV.length - 1],
@@ -37,7 +36,7 @@ function domainOf(srf) {
 }
 
 // A circle in the surface's own parameters with every point brought back into
-// the domain, which is what a real projection returns and what makes the chain
+// the domain, which is what a projection returns and what makes the chain
 // discontinuous at both seams.
 function cornerCircle(dom, ru, rv, n) {
   const uSpan = dom.uMax - dom.uMin, vSpan = dom.vMax - dom.vMin;
@@ -63,7 +62,7 @@ function unwrappedCircle(dom, ru, rv, n) {
 const onU = (p, dom) => Math.abs(p[0] - dom.uMin) < 1e-12 || Math.abs(p[0] - dom.uMax) < 1e-12;
 const onV = (p, dom) => Math.abs(p[1] - dom.vMin) < 1e-12 || Math.abs(p[1] - dom.vMax) < 1e-12;
 
-test('DOUBLE STRADDLE: a region over the seams\' corner is refused BY THE RIGHT NAME, with its winding measured', () => {
+test('double straddle: a region over the seams\' corner is refused by the right name, with its winding measured', () => {
   const srf = torus();
   const dom = domainOf(srf);
   const loop = cornerCircle(dom, (dom.uMax - dom.uMin) * 0.1, (dom.vMax - dom.vMin) * 0.1, 64);
@@ -74,18 +73,18 @@ test('DOUBLE STRADDLE: a region over the seams\' corner is refused BY THE RIGHT 
   assert.deepEqual(spine.net, [0, 0], 'net winding is zero in both directions, which is what makes it contractible');
 
   // The single-seam routines correctly decline it: choosing between two
-  // genuinely different topologies by accident is the failure this prevents.
+  // different topologies by accident is the failure this prevents.
   const single = seamStraddleChains(loop, srf);
   assert.equal(single.ok, false);
   assert.equal(single.code, 'double-straddle');
 });
 
-test('DOUBLE STRADDLE: a genuine wrap in both directions is still refused, and still called a double wrap', () => {
+test('double straddle: a true wrap in both directions is still refused, and still called a double wrap', () => {
   const srf = torus();
   const dom = domainOf(srf);
   const uSpan = dom.uMax - dom.uMin, vSpan = dom.vMax - dom.vMin;
   // A (1,1) curve on the torus: once around u and once around v together, so
-  // both nets are non-zero. This is the topology the refusal is really about.
+  // both nets are non-zero. This is the topology the refusal is about.
   const n = 96;
   const loop = [];
   for (let i = 0; i < n; i++) {
@@ -94,12 +93,12 @@ test('DOUBLE STRADDLE: a genuine wrap in both directions is still refused, and s
   const r = seamCrossingSpine(loop, srf);
   assert.equal(r.ok, false);
   assert.equal(r.code, 'double-wrap');
-  assert.ok(r.net[0] !== 0 && r.net[1] !== 0, `both directions genuinely wind (got ${r.net})`);
+  assert.ok(r.net[0] !== 0 && r.net[1] !== 0, `both directions wind (got ${r.net})`);
   // And the handler declines it rather than producing chains for it.
   assert.equal(seamDoubleStraddleChains(loop, srf).code, 'not-a-double-straddle');
 });
 
-test('DOUBLE STRADDLE: the split returns one chain per piece, each running between two adjacent domain edges', () => {
+test('double straddle: the split returns one chain per piece, each running between two adjacent domain edges', () => {
   const srf = torus();
   const dom = domainOf(srf);
   const loop = cornerCircle(dom, (dom.uMax - dom.uMin) * 0.1, (dom.vMax - dom.vMin) * 0.1, 64);
@@ -127,7 +126,7 @@ test('DOUBLE STRADDLE: the split returns one chain per piece, each running betwe
   }
 });
 
-test('DOUBLE STRADDLE: the pieces account for the whole region — closed areas sum to the unwrapped area', () => {
+test('double straddle: the pieces account for the whole region — closed areas sum to the unwrapped area', () => {
   const srf = torus();
   const dom = domainOf(srf);
   const ru = (dom.uMax - dom.uMin) * 0.1, rv = (dom.vMax - dom.vMin) * 0.1;
@@ -136,8 +135,8 @@ test('DOUBLE STRADDLE: the pieces account for the whole region — closed areas 
   const r = seamDoubleStraddleChains(cornerCircle(dom, ru, rv, N), srf);
   assert.ok(r.ok, r.reason);
 
-  // A piece is closed THROUGH THE CORNER its two ends straddle, because that
-  // corner is where the two seams meet and is genuinely part of its boundary.
+  // A piece is closed through the corner its two ends straddle, because that
+  // corner is where the two seams meet and is part of its boundary.
   // Closing with the bare chord instead would cut each corner off and under-
   // report every area by the same triangle.
   const total = r.chains.reduce((sum, chain) => {

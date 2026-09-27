@@ -1,11 +1,9 @@
-// PIPE ROUND CAP — Stage 4a, the smallest,
-// self-contained cap-parity item (completing Rhino's own None/Flat/Round
-// triple). Verified two ways: (1) every point on the returned surface
-// really is exactly `radius` from the frame's own origin (a true
-// hemisphere, not an approximation); (2) the cap's own rim ring is
-// BYTE-IDENTICAL to the tube's own real end ring at that frame — the
-// actual "seamless by construction" claim, proven against `sweep1Rigid`
-// directly, not assumed.
+// Pipe round cap, the Round member of the None/Flat/Round cap set.
+// Verified two ways: (1) every point on the returned surface is exactly
+// `radius` from the frame's own origin (a true hemisphere, not an
+// approximation); (2) the cap's rim ring is byte-identical to the tube's end
+// ring at that frame — the "seamless by construction" claim, proven against
+// `sweep1Rigid` directly, not assumed.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -57,7 +55,7 @@ test('pipeRoundCapSurface: the pole sits exactly `radius` further along axisDir 
   assert.ok(dist(pole, expectedPole) < 1e-6, `pole should sit exactly radius ${radius} along axisDir from the origin`);
 });
 
-test('pipeRoundCapSurface: the START cap (axisDir = -zAxis) bulges BEFORE the rail begins, not after', () => {
+test('pipeRoundCapSurface: the start cap (axisDir = -zAxis) bulges before the rail begins, not after', () => {
   const rail = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [0, 0, 60, 1]] };
   const radius = 5;
   const srf = buildTube(rail, radius);
@@ -67,11 +65,11 @@ test('pipeRoundCapSurface: the START cap (axisDir = -zAxis) bulges BEFORE the ra
   const uMax = cap.knotsU[cap.knotsU.length - 1];
   const pole = surfacePoint(cap, uMax, cap.knotsV[0]);
   // The rail runs along +Z from z=0 to z=60; the start cap's own pole must
-  // sit at NEGATIVE z (before the rail begins), not positive.
+  // sit at negative z (before the rail begins), not positive.
   assert.ok(pole[2] < -radius + 1e-6, `start cap's pole should sit below z=0, got z=${pole[2]}`);
 });
 
-test('pipeRoundCapSurface: the rim ring is BYTE-IDENTICAL to the tube\'s own real end ring at that frame — the seamless-by-construction proof', () => {
+test('pipeRoundCapSurface: the rim ring is byte-identical to the tube\'s own end ring at that frame — the seamless-by-construction proof', () => {
   const rail = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [0, 0, 60, 1]] };
   const radius = 5;
   const srf = buildTube(rail, radius);
@@ -85,7 +83,7 @@ test('pipeRoundCapSurface: the rim ring is BYTE-IDENTICAL to the tube\'s own rea
   for (let j = 0; j <= N; j++) {
     const v = cap.knotsV[0] + (cap.knotsV[cap.knotsV.length - 1] - cap.knotsV[0]) * (j / N);
     const capPt = surfacePoint(cap, cap.knotsU[0], v);
-    // The corresponding tube-edge point at the SAME angular fraction: the
+    // The corresponding tube-edge point at the same angular fraction: the
     // tube's own U direction is the circle profile's parameter, [0, 2*PI]-ish
     // domain (arcKnots of narcs spans) — sample it at the same fraction.
     const uTube = srf.knotsU[0] + (srf.knotsU[srf.knotsU.length - 1] - srf.knotsU[0]) * (j / N);

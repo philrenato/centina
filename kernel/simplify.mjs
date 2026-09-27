@@ -1,28 +1,22 @@
-// POINT-COUNT decimation and insertion — the two operations behind
-// the "point-count" knob, which replaces REBUILD-as-a-
-// command with a live, non-destructive slider. Operates on plain point
-// arrays ([x,y,z] triples), never on a control net directly — the same
-// "resample as data" discipline this kernel already established for
-// Divide/Sweep auto-stationing (never combine curves as raw control
-// points, always as continuous values).
+// Point-count decimation and insertion — the two operations behind the
+// point-count knob, a live, non-destructive alternative to a Rebuild command.
+// Operates on plain point arrays ([x,y,z] triples), never on a control net
+// directly, as Divide/Sweep auto-stationing do (curves are combined as
+// continuous values, never as raw control points).
 //
-// Algorithm choice (31's own C1): rank-based
-// decimation — Visvalingam & Whyatt 1993's "effective area" metric — not
-// epsilon-driven Ramer-Douglas-Peucker. V-W scores every point by the
-// area of the triangle it forms with its two immediate neighbors; a
-// small area means the point is nearly collinear with its neighbors and
-// contributes little visual detail. Removing the lowest-scoring point
-// first, one at a time, with its now-adjacent neighbors' own scores
-// RECOMPUTED after each removal (the classic V-W iterative loop — a
-// neighbor's own effective area can only ever grow once a point next to
-// it is removed, never shrink, which is what gives V-W its quality over
-// a naive one-shot static ranking) is what maps cleanly onto "keep
-// exactly N points," the spec's own literal knob — RDP's epsilon would
-// need an awkward binary search to hit an exact target count instead.
+// Decimation is rank-based — Visvalingam & Whyatt 1993's "effective area"
+// metric — rather than epsilon-driven Ramer-Douglas-Peucker. V-W scores every
+// point by the area of the triangle it forms with its two immediate neighbors;
+// a small area means the point is nearly collinear with its neighbors and
+// contributes little visual detail. The lowest-scoring point is removed first,
+// one at a time, with its new neighbors' scores recomputed after each removal
+// (the V-W iterative loop; the paper also holds a neighbor's score at least at
+// the eliminated point's area, which this does not). Removing one at a time
+// maps directly onto "keep exactly N points"; RDP's epsilon would need a
+// binary search to hit an exact target count.
 //
-// The SURVIVING points feed straight into this kernel's own already-
-// proven globalCurveInterp/closedCurveInterp (kernel/interpolate.mjs) —
-// no new curve-fitting math, only the point SELECTION is new.
+// The surviving points feed into globalCurveInterp/closedCurveInterp
+// (kernel/interpolate.mjs); only the point selection is new.
 
 import { sub, dot, length } from './vec3.mjs';
 import { globalCurveInterp, closedCurveInterp } from './interpolate.mjs';
@@ -36,17 +30,12 @@ function triangleArea(a, b, c) {
   return 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
 }
 
-// Decimate an OPEN point sequence down to exactly `targetCount` points via
-// iterative Visvalingam-Whyatt. Both true endpoints are NEVER removed
-// (infinite effective area, the same "always keep both real endpoints
-// exact" convention divideByArcLength/adaptiveArcLengthSamples already
-// established elsewhere in this kernel). O(n^2) — deliberate, not an
-// oversight: correct and simple at the point counts an ordinary sketched
-// curve actually reaches (tens, not hundreds); a future Pencil-scale
-// caller (captures of several hundred raw points) should upgrade this to
-// a proper min-heap (the standard O(n log n) V-W implementation) rather
-// than reuse this as-is — named here so it isn't silently assumed fast
-// at every scale.
+// Decimate an open point sequence down to exactly `targetCount` points via
+// iterative Visvalingam-Whyatt. Both endpoints are never removed (infinite
+// effective area, as divideByArcLength/adaptiveArcLengthSamples keep both
+// endpoints exact). O(n^2): simple and correct at the point counts a sketched
+// curve reaches (tens, not hundreds). A caller with several hundred raw points
+// should use a min-heap (the standard O(n log n) V-W implementation).
 export function decimateOpenToCount(points, targetCount) {
   const n = points.length;
   if (targetCount >= n) return points.map((p) => [...p]);
@@ -74,7 +63,7 @@ export function decimateOpenToCount(points, targetCount) {
   return result;
 }
 
-// The farthest-apart pair of points in a CLOSED point set — the anchor
+// The farthest-apart pair of points in a closed point set — the anchor
 // pair a closed decimation splits on (see decimateClosedToCount below).
 // O(n^2), same scale reasoning as decimateOpenToCount above.
 export function farthestPointPairIndices(points) {
@@ -101,17 +90,15 @@ function arcSlice(points, from, to) {
   return result;
 }
 
-// Decimate a CLOSED point sequence down to exactly `targetCount` points.
-// A closed loop has no natural anchor pair the way an open sequence's own
-// two real endpoints are — plain Visvalingam-Whyatt run on it directly
-// would silently privilege whichever point happens to sit first/last in
-// the stored array, an arbitrary artifact of capture order, not a real
-// geometric feature (found while building this, not
-// in the original draft). Fixed by splitting the loop at its own
-// FARTHEST-APART point pair first — a real, order-independent geometric
-// anchor — decimating each resulting arc independently as an open
-// sequence (each keeping ITS OWN two endpoints, which are the same two
-// anchor points shared between the arcs), then recombining.
+// Decimate a closed point sequence down to exactly `targetCount` points.
+// A closed loop has no natural anchor pair the way an open sequence's two
+// endpoints are — plain Visvalingam-Whyatt run on it directly would privilege
+// whichever point sits first/last in the stored array, an artifact of capture
+// order rather than a geometric feature. So the loop is split at its
+// farthest-apart point pair first — an order-independent geometric anchor —
+// each resulting arc is decimated independently as an open sequence (each
+// keeping its two endpoints, which are the anchor points shared between the
+// arcs), and the arcs are recombined.
 export function decimateClosedToCount(points, targetCount) {
   const n = points.length;
   if (targetCount >= n) return points.map((p) => [...p]);
@@ -126,18 +113,17 @@ export function decimateClosedToCount(points, targetCount) {
   const targetInnerB = targetInner - targetInnerA;
   const decA = decimateOpenToCount(arcA, Math.max(2, targetInnerA + 2));
   const decB = decimateOpenToCount(arcB, Math.max(2, targetInnerB + 2));
-  return [...decA, ...decB.slice(1, -1)]; // decB's own two endpoints (j, i) are already the seam with decA — drop them here to avoid duplicating
+  return [...decA, ...decB.slice(1, -1)]; // decB's two endpoints (j, i) are already the seam with decA — dropped to avoid duplicating
 }
 
 export function decimateToCount(points, targetCount, closed) {
   return closed ? decimateClosedToCount(points, targetCount) : decimateOpenToCount(points, targetCount);
 }
 
-// Perpendicular distance from a curve sample to the chord between the
-// span's own two endpoint VALUES (not the raw stored points — the curve
-// may not pass exactly through every stored point once a manual edit has
-// reshaped the working set, so this always measures against the curve's
-// own true evaluated endpoints).
+// Perpendicular distance from a curve sample to the chord between the span's
+// two endpoint values (not the stored points — the curve may not pass exactly
+// through every stored point once a manual edit has reshaped the working set,
+// so this measures against the curve's evaluated endpoints).
 function chordDeviation(pt, chordA, chordB) {
   const ab = sub(chordB, chordA);
   const abLenSq = dot(ab, ab);
@@ -149,10 +135,9 @@ function chordDeviation(pt, chordA, chordB) {
 }
 
 // The point on the curve, within [u0,u1], that deviates furthest from the
-// straight chord between the curve's own values at u0/u1 — a fixed-sample
-// scan (not fully adaptive/recursive like adaptiveArcLengthSamples, since
-// this only needs a good-enough MAXIMUM for ranking spans against each
-// other, not a tessellation-quality guarantee).
+// straight chord between the curve's values at u0/u1 — a fixed-sample scan
+// (not adaptive like adaptiveArcLengthSamples, since this only needs a
+// maximum good enough to rank spans against each other).
 function highestDeviationInSpan(crv, u0, u1, samples = 16) {
   const chordA = curvePoint(crv, u0), chordB = curvePoint(crv, u1);
   let bestU = (u0 + u1) / 2, bestPt = curvePoint(crv, bestU), bestDev = chordDeviation(bestPt, chordA, chordB);
@@ -166,15 +151,13 @@ function highestDeviationInSpan(crv, u0, u1, samples = 16) {
 }
 
 // Insert `extraCount` new points into a working point set, one at a time,
-// each at the CURRENT fit curve's own highest-chord-deviation location
-// (the decision taken: "the new point inserts at the
-// current highest-curvature location, the Illustrator-Simplify instinct
-// in reverse") — a real point ON the curve, evaluated fresh via this
-// kernel's own proven interpolation, never a naive straight-line midpoint
-// (which would silently flatten exactly the detail this exists to add
-// back). Re-fits the curve after each single insertion (not batched) so
-// each new point responds to the shape AFTER its predecessor was added —
-// fine at the small insertion counts a slider tick actually requests.
+// each at the current fit curve's highest-chord-deviation location (the
+// highest-curvature location, the inverse of Illustrator's Simplify) — a point
+// on the curve, evaluated from the interpolation, never a straight-line
+// midpoint (which would flatten the detail this exists to add back). Re-fits
+// the curve after each single insertion so each new point responds to the
+// shape after its predecessor was added — fine at the small insertion counts
+// a slider tick requests.
 export function insertByHighestDeviation(points, extraCount, degree, closed) {
   let current = points.map((p) => [...p]);
   for (let k = 0; k < extraCount; k++) {
@@ -203,19 +186,16 @@ export function insertByHighestDeviation(points, extraCount, degree, closed) {
   return current;
 }
 
-// UNIFORM spacing mode (the spacing toggle, the
-// alternative to the rank-based ADAPTIVE decimation/insertion above):
-// resample the CURRENT fit curve at exactly `count` points, evenly by
-// real arc length — the same technique this kernel's own DIVIDE command
-// (divideByArcLength, kernel/curve.mjs) already uses, generalized to an
-// explicit [u0,u1] sub-range rather than always the curve's own full
-// knot domain, specifically so it also works on a closedCurveInterp
-// result — whose true, useful domain is [uStart,uEnd], not its full
-// wrap-padded knot range. `includeEnd` mirrors divideByArcLength's own
-// open-vs-closed distinction: true for an OPEN curve (both true
-// endpoints included, matching Rhino/Divide's own convention), false for
-// a CLOSED one (u0/u1 are the SAME physical seam point — including both
-// would duplicate it).
+// Uniform spacing mode (the alternative to the rank-based adaptive
+// decimation/insertion above): resample the current fit curve at exactly
+// `count` points, evenly by arc length — the technique of Divide
+// (divideByArcLength, kernel/curve.mjs), generalized to an explicit [u0,u1]
+// sub-range rather than the full knot domain, so it also works on a
+// closedCurveInterp result, whose useful domain is [uStart,uEnd], not its full
+// wrap-padded knot range. `includeEnd` mirrors divideByArcLength's
+// open-vs-closed distinction: true for an open curve (both endpoints
+// included, as in Rhino's Divide), false for a closed one (u0/u1 are the same
+// seam point — including both would duplicate it).
 export function resampleUniformInRange(crv, u0, u1, count, includeEnd, tolerance) {
   if (!Number.isInteger(count) || count < 1) throw new Error('resampleUniformInRange: count must be a positive integer');
   if (tolerance === undefined) {
@@ -251,14 +231,12 @@ export function resampleUniformInRange(crv, u0, u1, count, includeEnd, tolerance
   return results;
 }
 
-// The single entry point the app layer calls: given a curve's CURRENT
-// working point set, its live pointCount/degree/spacing params, and
-// whether it's closed, produce the new working point set the knobs
-// currently request. Dispatches ADAPTIVE (rank-based decimate/insert,
-// preserves as many original point identities as possible) vs UNIFORM
-// (a fresh even-arc-length resample of the fit curve, discards original
-// point identity entirely) — both real, both reusing only already-proven
-// kernel machinery, never a new curve-fitting algorithm.
+// The entry point the app layer calls: given a curve's current working point
+// set, its pointCount/degree/spacing params, and whether it is closed, produce
+// the new working point set the knobs request. Dispatches adaptive
+// (rank-based decimate/insert, preserves as many original points as possible)
+// vs uniform (a fresh even-arc-length resample of the fit curve, discarding
+// original point identity) — both on existing interpolation machinery.
 export function regeneratePointSet(workingPoints, targetCount, degree, closed, spacing) {
   if (spacing === 'uniform') {
     if (closed) {

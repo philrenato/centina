@@ -1,9 +1,9 @@
-// WRAPPING N SOLIDS INTO ONE SuperB CAGE — the field, and the cage that is
+// Wrapping N solids into one SuperB cage — the field, and the cage that is
 // projected onto it.
 //
-// WHAT THIS IS. A box cage, moved onto the signed distance field of the input
+// A box cage, moved onto the signed distance field of the input
 // solids. No isosurface is ever extracted, so no triangle is ever produced and
-// there is no quad remesh to write — which is exactly why this is affordable
+// there is no quad remesh to write, which is why this is affordable
 // where a marching-cubes or dual-contouring route is not. `superbBoxCage`
 // builds an all-quad cube-sphere; `superbSphereCage` and `superbEllipsoidCage`
 // are that cage projected onto an implicit surface. This is the same cage
@@ -11,33 +11,30 @@
 // begins and cannot degrade: all quads, interior valence 4, exactly eight
 // valence-3 corners, Euler characteristic 2.
 //
-// ⚠ WHAT IT COSTS, PERMANENTLY, AND THESE ARE NOT DEFECTS. The result is genus
-// 0: a through-hole in the input fills. Deep narrow pockets skin over. Sharp
-// edges arrive rounded unless creased afterwards, and a joined box comes back
-// as a soft box. Fidelity here is a slider, not a promise; if the ask is "give
-// me my polysurface back", this is not that tool and no amount of iteration
-// makes it that tool.
+// Inherent costs of the method: the result is genus 0 unless a torus start
+// cage is chosen (see torusStartCage), so a through-hole in the input
+// otherwise fills. Deep narrow pockets skin over. Sharp edges arrive rounded
+// unless creased afterwards, and a joined box comes back as a soft box.
+// Fidelity here is a slider; this does not reproduce the input polysurface.
 //
-// ⚠ THE INPUT IS A TRIANGLE SOUP, DELIBERATELY. Every host — SuperB, NURBS,
-// polysurface — reaches this through its display mesh, so all three take one
+// The input is a triangle soup. Every host — SuperB, NURBS, polysurface —
+// reaches this through its display mesh, so all three take one
 // identical path and nothing here touches the patch conversion. The cost is
 // that a Skin of 0 means "touches the tessellation", off by the document's own
 // chord tolerance.
 //
-// The four stages: field, start box, wrap, refit. Only the field is new; the
-// wrap is Kobbelt et al., "A Shrink Wrapping Approach to Remeshing Polygonal
-// Surfaces" (Eurographics 1999), alternating Taubin smoothing with a snap along
-// the field gradient, and the refit is `refitCageToLimitTargets`, which already
-// ships.
+// The four stages: field, start box, wrap, refit. The wrap is Kobbelt et al.,
+// "A Shrink Wrapping Approach to Remeshing Polygonal Surfaces"
+// (Eurographics 1999), alternating smoothing (the paper relaxes with
+// the umbrella operator; this uses Taubin's lambda|mu) with a snap along
+// the field gradient, and the refit is `refitCageToLimitTargets`.
 //
-// ⚠⚠ `wrapSolidsToSuperbCage` IS A PURE FUNCTION OF ITS INPUTS AND PARAMETERS,
-// and that is a requirement rather than a happy accident: the controls above it
-// are live, so every drag of a slider re-runs the whole solve from the stored
-// inputs. Nothing here is random, nothing is cached across calls, nothing reads
-// a clock, and the one place a solver could drift — the eigen decomposition of
-// a degenerate covariance — has a deterministic tie-break of its own. Same
-// inputs and params in, byte-identical cage out. Anything added here that does
-// not hold that turns the controls into a one-shot dialog.
+// `wrapSolidsToSuperbCage` is a pure function of its inputs and parameters.
+// The controls above it are live, so every drag of a slider re-runs the whole
+// solve from the stored inputs. Nothing here is random, nothing is cached
+// across calls, nothing reads a clock, and the eigen decomposition of a
+// degenerate covariance has a deterministic tie-break. Same inputs and params
+// in, byte-identical cage out.
 
 import { buildBVH, buildMeshPseudonormals, bvhClosestPoint, bvhIntersect } from './bvh.mjs';
 import { superbBoxCage } from './subdprimitives.mjs';
@@ -52,19 +49,17 @@ export const SOLID_WRAP_REFUSAL = Object.freeze({
   MEMBERS_DO_NOT_FUSE: 'members-do-not-fuse',
 });
 
-// ---------------------------------------------------------------------------
-// THE BLEND
-// ---------------------------------------------------------------------------
+// The blend
 
 /**
  * The published quadratic polynomial smooth minimum. At k = 0 it is exactly
  * `Math.min`, which is the exact union — the only thing the wrap needs outside
  * the solids — and above 0 it rounds the union's crease by about k/4.
  *
- * ⚠ IT IS NOT ASSOCIATIVE, so folding it over N members depends on the fold
+ * It is not associative, so folding it over N members depends on the fold
  * order by up to k/4 inside the blend region. The fold below runs in the
- * caller's own member order, which makes the answer deterministic rather than
- * order-independent; that is a named limitation, not a bug to be found later.
+ * caller's own member order, which makes the answer deterministic but not
+ * order-independent.
  */
 export function smoothMinPoly(a, b, k) {
   if (!(k > 0)) return Math.min(a, b);
@@ -79,17 +74,14 @@ export function smoothMinPoly(a, b, k) {
  *
  * Two surfaces a gap g apart both read g/2 at the midpoint between them, and
  * `smoothMinPoly(g/2, g/2, k)` is g/2 - k/4. That reaches zero — the moment a
- * bridge exists at all — at k = 2g. So the control a person types is halved
- * into the formula's own k, and the label is then literally true instead of
- * being a number whose meaning has to be learned by dragging it.
+ * bridge exists at all — at k = 2g. So the control a person types is doubled
+ * into the formula's own k, and the label is then literally true.
  */
 export function fuseBlendRadius(fuse) {
   return Math.max(0, fuse) * 2;
 }
 
-// ---------------------------------------------------------------------------
-// THE FIELD
-// ---------------------------------------------------------------------------
+// The field
 
 function boundsOfPositions(positions) {
   const lo = [Infinity, Infinity, Infinity];
@@ -117,11 +109,11 @@ function boundsOfPositions(positions) {
  *
  * Returns a record whose `distanceAt(p)` is the blended signed distance with
  * the skin already subtracted, so the surface the wrap chases is always the
- * zero set. A member whose mesh is not closed contributes an UNSIGNED distance
- * and is listed in `openMembers`: there is no inside to report for it, and
- * inventing one is how a wrap ends up inside-out.
+ * zero set. A member whose mesh is not closed and does not enclose a volume
+ * contributes an unsigned distance and is listed in `openMembers`: there is no
+ * inside to report for it, and inventing one turns a wrap inside-out.
  */
-/* THE SIGNED VOLUME OF A CLOSED TRIANGLE SOUP. Negative when the mesh faces
+/* The signed volume of a closed triangle soup. Negative when the mesh faces
    inward, and its magnitude is the enclosed volume either way. */
 export function soupSignedVolume(p) {
   let vol = 0;
@@ -133,7 +125,7 @@ export function soupSignedVolume(p) {
   return vol;
 }
 
-/* ⚠ SOLIDITY IS IMPUTED, NOT DEMANDED. A mesh that plainly bounds a region is
+/* Solidity is imputed, not demanded. A mesh that plainly bounds a region is
    treated as one whatever its rim does: every curved primitive in this kernel's
    host is a wall plus caps whose rims sample the same circle at different
    angles, so no weld tolerance closes them and none is combinatorially closed.
@@ -150,16 +142,15 @@ export function soupEnclosesVolume(p) {
   return box > 0 && Math.abs(soupSignedVolume(p)) / box > 0.01;
 }
 
-/* ⚠⚠ AN INWARD-WOUND MEMBER POISONS THE WHOLE FIELD, so every soup is turned to
+/* An inward-wound member corrupts the whole field, so every soup is turned to
    face outward before the field is built from it. It costs nothing for a member
    signed by ray parity, which counts crossings and cannot tell winding from
-   anything. It matters completely for one whose mesh IS combinatorially closed,
+   anything. It matters for one whose mesh is combinatorially closed,
    because that one is signed by its pseudonormals and they follow the winding:
-   five spheres wound inward read -276 at a point 70mm OUTSIDE all of them, the
-   blended minimum went negative across the whole scene, and the wrap collapsed
-   into the one lobe the flooding left — a chain of five came back as a lump
-   18mm across. Whole classes of mesh arrive this way; three of the four curved
-   primitives in this kernel's own host do. */
+   five spheres wound inward read -276 at a point 70mm outside all of them, the
+   blended minimum goes negative across the whole scene, and the wrap collapses
+   into one lobe. Three of the four curved primitives in this kernel's host
+   arrive wound this way. */
 export function orientSoupOutward(p) {
   if (soupSignedVolume(p) >= 0) return p;
   const out = p.slice();
@@ -185,10 +176,9 @@ export function makeSolidsField(members, opts = {}) {
     const positions = orientSoupOutward(m.positions);
     const bvh = buildBVH(positions);
     const pn = buildMeshPseudonormals(positions, opts);
-    /* ⚠ A PARITY-SIGNED MEMBER IS NOT OPEN. The flag was added above and this
-       line was left as it was, so a member the field signs perfectly well still
-       reported as having no inside — which is the list the caller reads to tell
-       a reader what it could not wrap, and the count the refusal is built on. */
+    /* A parity-signed member is not open: the field signs it, so it is left out
+       of `openMembers`, which the caller reads to report what it could not wrap
+       and which the refusal is built on. */
     const solid = m.solid === true || (m.solid !== false && soupEnclosesVolume(positions));
     if (!pn.closed && !solid) openMembers.push(idx);
     const b = boundsOfPositions(positions);
@@ -208,23 +198,18 @@ export function makeSolidsField(members, opts = {}) {
   const padding = Math.max(0, skin) + fuse + (diagonal > 0 ? diagonal * 0.02 : 0);
   const gradientStep = opts.gradientStep ?? Math.max(diagonal * 5e-4, 1e-9);
 
-  /* ⚠⚠ THE SIGN OF A MESH THAT IS NOT COMBINATORIALLY CLOSED, and this is the
-     ordinary case rather than the exotic one. A host draws a solid as a side
-     surface plus caps whose rims sample the same curve at different angles, so
-     nothing welds, nothing is a T-junction, and no repair could zip them: a
-     cone's own naked boundary came back as one loop at z = 0 spanning radii 47
-     to 179, wandering across the cap rather than round a rim.
-     The pseudonormal is meaningless there. Asked anyway — by asserting the mesh
-     is closed when the B-rep says the OBJECT is — it signed 84% of that cone's
-     bounding box as SOLID; capping the boundary instead signed 0% of it. Two
-     ways of being wrong, neither a near miss, both invisible in the result
-     except as a shape nobody can explain.
-     RAY PARITY DOES NOT CARE. A surface that bounds a region bounds it whether
-     or not its triangles agree about who owns an edge, so crossings still count.
-     That is what makes this the answer for anything CLOSE to solid rather than
-     only for what happens to be watertight. Three directions and a majority: one
-     ray that slips through a seam is wrong, three that all do is not worth
-     guarding against, and the directions are oblique so none runs along an
+  /* The sign of a mesh that is not combinatorially closed — the ordinary case.
+     A host draws a solid as a side surface plus caps whose rims sample the same
+     curve at different angles, so nothing welds, nothing is a T-junction, and no
+     repair could zip them: a cone's naked boundary can be one loop at z = 0
+     spanning radii 47 to 179, wandering across the cap rather than round a rim.
+     The pseudonormal is meaningless there: forcing it signs 84% of such a
+     cone's bounding box as solid, and capping the boundary signs 0% of it.
+     Ray parity does not depend on that. A surface that bounds a region bounds
+     it whether or not its triangles agree about who owns an edge, so crossings
+     still count, and anything close to solid is signed, not only what is
+     watertight. Three directions and a majority: one ray that slips through a
+     seam is outvoted, and the directions are oblique so none runs along an
      axis-aligned face. */
   const PARITY_DIRS = [
     [0.5773502692, 0.5773502692, 0.5773502692],
@@ -237,9 +222,8 @@ export function makeSolidsField(members, opts = {}) {
       let crossings = 0;
       const o = [p[0], p[1], p[2]];
       /* Advanced past each hit rather than gathered in one traversal: the BVH
-         reports the NEAREST hit, and a bounded re-cast is the whole of counting
-         them. The bound guards a degenerate mesh; a solid a ray crosses more
-         times than this is not one this wrap was going to help with. */
+         reports the nearest hit, so counting them is a bounded re-cast. The
+         bound guards a degenerate mesh. */
       for (let step = 0; step < 64; step += 1) {
         const hit = bvhIntersect(part.bvh, part.positions, o, d, Infinity);
         const t = hit && (typeof hit === 'number' ? hit : hit.t);
@@ -269,11 +253,11 @@ export function makeSolidsField(members, opts = {}) {
     return acc - skin;
   };
 
-  /* CENTRAL DIFFERENCES, NOT THE ANALYTIC GRADIENT. Each member's own gradient
+  /* Central differences, not the analytic gradient. Each member's own gradient
      is its outward pseudonormal and is available for free, but the blend's
-     chain rule across a fold of N of them is a second formula that has to agree
-     with the first one forever. Six evaluations buy one definition of the
-     field, and the snap is not the hot loop — the closest-point query is. */
+     chain rule across a fold of N of them would be a second formula that has to
+     agree with the first. Six evaluations keep one definition of the field,
+     and the snap is not the hot loop — the closest-point query is. */
   const gradientAt = (p) => {
     const h = gradientStep;
     const g = [0, 0, 0];
@@ -287,10 +271,10 @@ export function makeSolidsField(members, opts = {}) {
 
   return {
     memberCount: parts.length,
-    /* ⚠ A PARITY-SIGNED MEMBER HAS A VOLUME TOO. This counts the members the
-       field can report an INSIDE for, which is the question the refusal asks —
-       and reading it as "combinatorially closed" refused every solid whose mesh
-       is a side plus caps, which is most of them. */
+    /* Counts the members the field can report an inside for, parity-signed
+       ones included — the question the refusal asks. Counting only
+       combinatorially closed meshes would refuse every solid drawn as a side
+       plus caps. */
     closedCount: parts.filter((part) => part.pn.closed || part.parity).length,
     openMembers,
     fuse,
@@ -307,29 +291,26 @@ export function makeSolidsField(members, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// DOES IT FUSE
-// ---------------------------------------------------------------------------
+// Does it fuse
 
 /**
  * How many connected components the field's interior falls into, by flood fill
  * on a coarse occupancy grid.
  *
- * ⚠ A COUNTING GRID, NEVER A MESHING GRID. Nothing about this lattice reaches
+ * A counting grid, never a meshing grid. Nothing about this lattice reaches
  * the output — it answers one integer question — so the voxel signature that
  * makes grid-based surface extraction unusable here does not arise. What the
- * resolution does decide is the PRECISION of the answer: two members whose
+ * resolution does decide is the precision of the answer: two members whose
  * occupied cells touch across a gap narrower than one cell read as fused. The
- * resolution is therefore returned with the count rather than hidden.
+ * resolution is therefore returned with the count.
  */
 export function solidsFieldComponents(field, opts = {}) {
-  /* ⚠⚠ AN EMPTY GRID IS A RESOLUTION FAILURE BEFORE IT IS AN ANSWER. A member
-     thinner than one cell is sampled by nothing at all: a 2x2x160mm rod scored
-     ZERO occupied cells in a 160mm box and was refused as enclosing no space,
-     while the wrap itself handles it perfectly well (mass 0.99 once past the
-     refusal). So a grid that finds nothing is refined and asked again rather
-     than believed. It costs nothing in the ordinary case, because the ordinary
-     case is not empty; the ceiling is the same 96 the clamp already names. */
+  /* An empty grid is treated as a resolution failure before it is an answer. A
+     member thinner than one cell is sampled by nothing: a 2x2x160mm rod
+     occupies zero cells in a 160mm box, though the wrap handles it. So a grid
+     that finds nothing is refined and asked again. It costs nothing in the
+     ordinary case, which is not empty; the ceiling is the same 96 the clamp
+     names. */
   const first = componentsAtResolution(field, opts, Math.max(4, Math.min(96, Math.round(opts.resolution ?? 32))));
   if (first.occupied > 0 || !field.memberCount) return first;
   for (const res of [64, 96]) {
@@ -356,24 +337,19 @@ function componentsAtResolution(field, opts, resolution) {
   let occupied = 0;
   const p = [0, 0, 0];
   const lipschitz = field.parts.every((part) => !part.parity);
-  /* ⚠ THE SCAN LINE SKIPS WHAT THE DISTANCE ALREADY DECIDED. This grid is the
-     single largest cost in a drag — 125ms of 232 at density 8, more than the
-     wrap itself — and it was evaluating the field at every one of 20,460 cells.
-     The field is 1-Lipschitz (the smooth minimum's two partials sum to 1 and
-     both lie in [0,1], and every member's own term is a true distance), so a
-     reading of d at one cell fixes the SIGN for floor(|d|/cell - 0.5) cells
-     either side of it along any line. Skipping those is then exact rather than
-     approximate — the occupancy is identical cell for cell, which the gate
-     asserts against the unskipped loop.
-     ⚠⚠ AND ONLY WHERE EVERY MEMBER IS PROPERLY SIGNED. A member whose solidity
-     is imputed is signed by RAY PARITY, which puts a boolean sign on an unsigned
+  /* The scan line skips what the distance already decided. This grid is the
+     largest single cost in a drag (more than the wrap itself). The field is
+     1-Lipschitz (the smooth minimum's two partials sum to 1 and both lie in
+     [0,1], and every member's own term is a true distance), so a reading of d
+     at one cell fixes the sign for floor(|d|/cell - 0.5) cells either side of
+     it along any line. Skipping those is exact — the occupancy is identical
+     cell for cell to the unskipped loop.
+     Only where every member is properly signed. A member whose solidity is
+     imputed is signed by ray parity, which puts a boolean sign on an unsigned
      distance: near a thin feature the sign flips faster than the magnitude
-     changes and the field is not Lipschitz at all. Measured on a helix, which is
-     the one fixture here signed that way — the skipped grid and the full grid
-     disagreed by a cell at every margin tried, and a cell is enough to move the
-     handle count. So the skip is switched off for those and they pay the full
-     grid, which is the honest trade: the optimisation is worth having only
-     while it is exact. */
+     changes and the field is not Lipschitz (on a helix the skipped and full
+     grids differ by a cell, enough to move the handle count). The skip is
+     therefore off whenever a parity-signed member is present. */
   for (let i = 0; i < dims[0]; i += 1) {
     p[0] = lo[0] + (i + 0.5) * cell;
     for (let j = 0; j < dims[1]; j += 1) {
@@ -393,7 +369,7 @@ function componentsAtResolution(field, opts, resolution) {
 
   // Six-connected flood fill. An eighteen- or twenty-six-connected fill would
   // join two blobs that meet only at a corner, which is a bridge no surface can
-  // actually be drawn through.
+  // be drawn through.
   const seen = new Uint8Array(total);
   const sizes = [];
   const stack = [];
@@ -421,26 +397,22 @@ function componentsAtResolution(field, opts, resolution) {
     sizes.push(size);
   }
   sizes.sort((a, b) => b - a);
-  /* ⚠⚠ A SPECK IS NOT A PIECE, and counting one as a piece refuses the whole
+  /* A speck is not a piece; counting one as a piece would refuse the whole
      operation. A sharp corner or an open rim lands a handful of isolated cells
-     the sampling cannot join to the body they belong to: three overlapping
-     tetrahedra scored 4,201 cells plus EIGHT single-cell specks and were refused
-     as nine separate solids. The floor is relative with a small absolute base,
-     so it scales with the scene and still separates what genuinely is apart —
-     two spheres 900mm apart score 10 cells each and both survive it. */
+     the sampling cannot join to the body they belong to (three overlapping
+     tetrahedra: 4,201 cells plus eight single-cell specks). The floor is
+     relative with a small absolute base, so it scales with the scene and still
+     separates what is apart — two spheres 900mm apart score 10 cells each and
+     both survive it. */
   const minCells = Math.max(4, (sizes[0] ?? 0) * 0.005);
   const components = sizes.filter((n) => n >= minCells).length;
 
-  /* ⚠⚠ HOW MANY HANDLES, PER COMPONENT, WITH CAVITIES COUNTED — because the wrap
-     cannot keep them and a reader deserves to be told which of their holes is
-     about to close. The first version summed the Euler characteristic over EVERY
-     occupied cell and subtracted it from the component count, so the
-     sub-resolution specks the count deliberately ignores still moved χ, and an
-     interior cavity moved it again: a torus beside two small cubes reported ZERO
-     handles while plainly having one. χ is a per-component quantity and has to
-     be computed that way. For one solid component with c interior cavities,
-     handles = 1 + c - χ. It is a report, never a refusal — filling a hole is
-     often exactly what somebody wants from a blob. */
+  /* Handles, per component, with cavities counted, so the caller can report
+     which through-holes the wrap will close. χ is a per-component quantity: a
+     sum over every occupied cell would let sub-resolution specks and interior
+     cavities move it (a torus beside two small cubes would read zero
+     handles). For one solid component with c interior cavities,
+     handles = 1 + c - χ. It is a report, never a refusal. */
   const labels = new Int32Array(total).fill(-1);
   {
     let lab = 0;
@@ -471,7 +443,7 @@ function componentsAtResolution(field, opts, resolution) {
   const compSize = new Int32Array(Math.max(1, compCount));
   for (let idx = 0; idx < total; idx += 1) if (labels[idx] >= 0) compSize[labels[idx]] += 1;
 
-  // AIR THE BORDER CAN REACH. What it cannot reach is a cavity, and a cavity
+  // Air the border can reach. What it cannot reach is a cavity, and a cavity
   // adds one to χ exactly as a handle subtracts one — so they cancel unless
   // both are counted.
   const air = new Uint8Array(total);
@@ -550,37 +522,27 @@ function componentsAtResolution(field, opts, resolution) {
     perComponent.push({ size: compSize[c], chi, cavities: cavitiesOf[c], handles: h });
     handles += h;
   }
-  /* The occupancy rides out with the count because the hole search needs the
-     same lattice, and re-sampling it cost 81ms on a default drag. */
+  /* The occupancy is returned with the count because the hole search needs the
+     same lattice, and re-sampling it is a significant cost on every drag. */
   return { components, occupied, resolution, cell, dims, componentSizes: sizes, minCells,
     handles, perComponent, occupancy: solid };
 }
 
-/* ⚠⚠⚠ A REFUSAL IS THE WORST OUTCOME, AND ONE WAS ADDED HERE ON ONE FIXTURE.
-   Eroding a solid whose inside is INFERRED is genuinely ill-defined — parity
-   says whether a point is in, never where the missing surface is, so an uncapped
-   cylinder of radius 40 came back at 45.6 at Skin -15 and 47.6 at -30, growing
-   as it was eaten. That measurement was right and the conclusion drawn from it
-   was not: it refused every negative Skin on every imputed solid, and a
-   primitive's display mesh is imputed — a wall plus caps whose rims sample the
-   same circle — so a saved document that had been fusing a torus, a box and an
-   ellipsoid at Skin -15 stopped opening. It was one synthetic fixture, and a
-   torus's mesh is watertight AS A POINT SET where that cylinder genuinely is
-   not.
-   What survives is the check that measures rather than assumes: the component
-   count already refuses the settings that fragment the solid, which is where
-   erosion of an imputed inside actually fails (-5, -8 and -10 on that same
-   cylinder). Past that the cost is a blob larger than it should be, which a
-   reader can see and undo. A volume-agreement threshold was tried as a
-   replacement and rejected on measurement too — it would refuse a helix at 2.19
-   and an open cone at 0.48, both of which are results somebody may want.
- *
+/**
  * The refusals, by name, before anything is built. Returns null when the field
  * can be wrapped.
  *
  * Members further apart than Fuse can bridge cannot share one cage: a single
  * cage stretched over both is a web between them, which is a confident wrong
- * answer rather than a loose one. That is refused rather than fudged.
+ * answer rather than a loose one, so it is refused.
+ *
+ * A negative Skin on a solid whose inside is inferred is not refused. Eroding
+ * such a solid is ill-defined — parity says whether a point is in, never where
+ * the missing surface is — but a primitive's display mesh is inferred in this
+ * way, and refusing would block ordinary inputs. The component count refuses
+ * the settings that fragment the solid, which is where erosion of an inferred
+ * inside fails; past that the cost is a blob larger than it should be, which a
+ * reader can see and undo.
  */
 export function wrapSolidsRefusal(field, opts = {}) {
   if (!field.memberCount || !field.closedCount) {
@@ -589,23 +551,20 @@ export function wrapSolidsRefusal(field, opts = {}) {
       message: 'nothing in this selection encloses space.',
     };
   }
-  /* ⚠⚠ A NEGATIVE SKIN CANNOT EAT INTO A SOLID THAT WAS INFERRED. A member whose
-     mesh is not closed is signed by ray parity, and parity answers "inside" from
-     crossing counts without ever describing where the missing surface is — so the
-     distance reported deep in an open tube is the distance to its WALL, never to
-     the cap it does not have. Eroding that field does not shrink the solid, it
-     carves along a ridge that is not a boundary: an uncapped cylinder of radius
-     40 came back at radius 45.2 at Skin -15 and 47.1 at -30, GROWING as it was
-     eaten, and fragmented into three pieces at -5, -8 and -10 in between. The
-     positive direction is unaffected, because offsetting outward only ever reads
-     the field near the real surface, where parity and distance are both sound. */
+  /* Known limitation: a negative Skin cannot erode a solid that was inferred.
+     A member whose mesh is not closed is signed by ray parity, which answers
+     "inside" from crossing counts without describing where the missing surface
+     is — so the distance reported deep in an open tube is the distance to its
+     wall, never to the cap it does not have. Eroding that field carves along a
+     ridge that is not a boundary: an uncapped cylinder of radius 40 comes back
+     at radius 45.2 at Skin -15 and 47.1 at -30, growing as it is eaten, and
+     fragments at -5, -8 and -10 in between. The positive direction is
+     unaffected, because offsetting outward only reads the field near the real
+     surface, where parity and distance are both sound. */
   const comp = opts.components || solidsFieldComponents(field, opts);
-  /* ⚠ THE SAME EMPTY GRID HAS TWO CAUSES AND THEY WANT OPPOSITE ANSWERS. Nothing
-     is occupied either because no member encloses space — which the check above
-     already covers — or because a NEGATIVE Skin ate everything that did. Telling
-     a reader "nothing in this selection encloses space" while they are looking at
-     two solids is a false statement about their selection, and it names nothing
-     they can act on; the number they need to move is the one they just moved. */
+  /* An empty grid has two causes: no member encloses space (covered by the
+     check above), or a negative Skin ate everything that did. The second case
+     names Skin, the setting that caused it. */
   if (!comp.occupied) {
     const eaten = (opts.skin ?? 0) < 0;
     return {
@@ -618,10 +577,8 @@ export function wrapSolidsRefusal(field, opts = {}) {
   }
   if (comp.components > 1) {
     const n = field.memberCount;
-    /* ⚠ ONE SOLID CAN SPLIT TOO, and the plural message was written as though it
-       could not: a single member pinched in two by a waist or by a negative Skin
-       came back as "these 1 solids are further apart than Fuse can bridge",
-       which names the wrong cause and asks for something that cannot help. */
+    /* One solid can split too — a single member pinched in two by a waist or by
+       a negative Skin — and the message then names that cause. */
     return {
       reason: SOLID_WRAP_REFUSAL.MEMBERS_DO_NOT_FUSE,
       message: n === 1
@@ -633,9 +590,7 @@ export function wrapSolidsRefusal(field, opts = {}) {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// THE START BOX
-// ---------------------------------------------------------------------------
+// The start box
 
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const scale3 = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
@@ -651,13 +606,14 @@ function anyPerp(t) {
 }
 
 // The principal frame of the members' own mesh vertices. The cube-sphere's
-// eight valence-3 corners and twelve seam edges have to go SOMEWHERE, and their
-// placement is otherwise arbitrary; putting the box on the shape's own axes at
-// least makes it a property of the shape rather than of the world grid.
+// eight valence-3 corners and twelve seam edges have to go somewhere, and their
+// placement is otherwise arbitrary; putting the box on the shape's own axes
+// makes it a property of the shape rather than of the world grid.
 //
-// ⚠ THE VERTICES ARE WEIGHTED AS THEY COME, so a finely tessellated region
-// pulls the frame toward itself. Area weighting would fix that and is not done
-// here; on a display mesh of roughly uniform density it does not bite.
+// Known limitation: the vertices are weighted as they come, so a finely
+// tessellated region pulls the frame toward itself. Area weighting would fix
+// that and is not done here; on a display mesh of roughly uniform density it
+// has little effect.
 function principalFrame(parts) {
   let n = 0;
   let cx = 0, cy = 0, cz = 0;
@@ -688,9 +644,7 @@ function principalFrame(parts) {
   return { origin: [cx, cy, cz], axes: [e0, e1, e2] };
 }
 
-// ---------------------------------------------------------------------------
-// THE WRAP
-// ---------------------------------------------------------------------------
+// The wrap
 
 // Taubin's lambda|mu pair — "A Signal Processing Approach to Fair Surface
 // Design" (SIGGRAPH 1995). One shrinking pass at lambda followed by one
@@ -722,20 +676,18 @@ function laplacianStep(V, neighbors, w) {
 }
 
 
-/* ⚠⚠ THE START CAGE DECIDES THE TOPOLOGY, AND NOTHING AFTER IT CAN CHANGE THAT.
+/* The start cage decides the topology, and nothing after it can change that.
    The wrap moves vertices; it never cuts or joins, so the result has exactly the
    genus its start cage had. A cube-sphere start therefore fills every through
-   hole, which is why a torus fused with a box came back solid through the middle
-   and read as a defect rather than as the documented cost it was.
-   A TORUS START CAGE COSTS THE SOLVER NOTHING. Measured on a torus of major 100
-   and minor 30: hole radius 70.0mm against a true 70, silhouette 0.97, against a
-   box cage's pinched 14.0mm and 0.76 — the same passes, the same clamp, the same
-   refit. It is also a topologically NICER cage than the box: every vertex is
-   valence 4, where the box cage carries eight valence-3 corners.
-   ⚠ IT IS ALSO WRONG FOR SOME GENUS-1 SOLIDS, which is why the choice is
-   measured rather than inferred. A drilled box is genus 1 and a round tube
-   cannot represent its slab, so the torus cage scored 0.53 IoU against the box
-   cage's 0.85 on one. Both cages are built and the better is kept. */
+   hole.
+   A torus start cage costs the solver nothing. On a torus of major 100 and
+   minor 30 it recovers a hole radius of 70.0mm against a true 70 (silhouette
+   0.97), where a box cage pinches to 14.0mm (0.76) — the same passes, the same
+   clamp, the same refit. Every vertex is valence 4, where the box cage carries
+   eight valence-3 corners.
+   It is also wrong for some genus-1 solids: a drilled box is genus 1 and a
+   round tube cannot represent its slab (0.53 IoU against the box cage's 0.85).
+   So both cages are built and the better is kept. */
 function torusStartCage(center, u, v, d, R, r, nu, nv) {
   const vertices = [], faces = [];
   for (let i = 0; i < nu; i += 1) for (let j = 0; j < nv; j += 1) {
@@ -752,16 +704,16 @@ function torusStartCage(center, u, v, d, R, r, nu, nv) {
 
 /**
  * Where a through-hole runs, from the occupancy the component count already
- * builds. A hole is a direction you can SEE THROUGH: project the occupied cells
+ * builds. A hole is a direction you can see through: project the occupied cells
  * down it and the shadow encloses empty space the border cannot flood into.
  *
- * ⚠ THE THREE WORLD AXES ONLY, DELIBERATELY. Searching 67 directions over a
- * hemisphere and taking the largest enclosed shadow is WORSE, not better:
- * an oblique direction can enclose more area by coincidental alignment, and it
- * cost this exact selection — a torus with a box and an ellipsoid — 0.86 IoU
- * against 0.56. A tilted hole is simply not found, its torus cage loses the
- * volume comparison below, and the result is the plain genus-0 wrap. Finding one
- * wants a better objective than area, not more directions.
+ * The three world axes only. Taking the largest enclosed shadow over many
+ * directions is worse: an oblique direction can enclose more area by
+ * coincidental alignment (a torus with a box and an ellipsoid: 0.56 IoU
+ * against 0.86 on the axes). Known limitation: a tilted hole is not found, its
+ * torus cage loses the volume comparison below, and the result is the plain
+ * genus-0 wrap. Finding one needs a better objective than area, not more
+ * directions.
  */
 export function findHoleAxis(field, comp) {
   if (!comp || !comp.handles || !comp.dims || !(comp.cell > 0)) return null;
@@ -820,7 +772,7 @@ export function findHoleAxis(field, comp) {
   return best;
 }
 
-/* The volume a cage's LIMIT surface encloses. Two Catmull-Clark steps is what
+/* The volume a cage's limit surface encloses. Two Catmull-Clark steps is what
    every other measurement here reads, so it is what this reads. */
 function limitVolume(cage) {
   let c = { vertices: cage.vertices, faces: cage.faces, creases: {} };
@@ -834,10 +786,10 @@ function limitVolume(cage) {
   return Math.abs(vol);
 }
 
-/* ⚠ ONE LOOP, TWO CANDIDATE CAGES. The wrap runs unchanged on each start cage
+/* One loop, two candidate cages. The wrap runs unchanged on each start cage
    and the better one is kept, so a start cage that turns out to be the wrong
-   shape costs quality and never correctness. Factored out for exactly that
-   reason: a second copy of this loop would drift from the first. */
+   shape costs quality and never correctness. Shared so the two candidates run
+   identical code. */
 function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
   const neighbors = neighborsOf(cage);
 
@@ -852,58 +804,48 @@ function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
   }
   meanEdge = edgeCount ? meanEdge / edgeCount : field.diagonal || 1;
 
-  /* ⚠⚠ FIT SPENDS PASSES ON SNAPPING OR ON SMOOTHING, and that split is the
+  /* Fit spends passes on snapping or on smoothing, and that split is the
      whole control. Conformity is not monotonic in snap passes: on a torus, a box
      and an ellipsoid at density 14 the mean field error over the limit surface
-     falls 197, 76, 37, 7.6, 1.7mm across 3, 6, 8, 12, 18 passes and then CLIMBS
+     falls 197, 76, 37, 7.6, 1.7mm across 3, 6, 8, 12, 18 passes and then climbs
      — 1.9, 2.5, 3.3 at 26, 40, 56. Past the optimum the annealed clamp is
      smaller than the distance Taubin's pair moves a vertex, so further passes
-     can only smooth. A schedule that simply bought passes with Fit therefore ran
-     past the optimum at its own top end: 1.7mm at Fit 25 against 2.5mm at Fit
-     100, the control delivering less at maximum than at a quarter. Snapping
-     stops at the optimum instead, and the passes Fit does not spend on it are
-     spent smoothing — so Fit 0 is a SMOOTH melted lump rather than an
-     under-converged lumpy one. Measured on a torus, a box and an ellipsoid at
-     density 8, the mean field error over the limit surface runs 31.4, 26.3,
-     21.2, 15.0, 5.9mm across Fit 0, 25, 50, 75, 100, and monotonically on a lone
-     sphere and a chain of five as well.
-     ⚠ THE NEWTON STEP IS NOT DAMPED, which was tried and is worse. At 0.6 the
-     sphere refit missed the field by 0.0708 against 0.0004 undamped — the
-     instability was never in the step length. And the clamp does not grow with
-     Fit: the step is `-s*g/|g|^2`, exact only where |g| = 1, and a smooth
-     minimum has |g| < 1 through the blend, so a clamp that rose with Fit made
-     the control that means "hold this closer" the one that let it run away
-     (furthest cage vertex 21.2mm at Fit 50 to 39.0mm at Fit 100).
-     ⚠ THE SMOOTHING IS NOT A TRADE-OFF AGAINST CLOSENESS. Measured the other
-     way round: holding it at full strength beat every reduced setting at every
-     Fit, and 0.1 at Fit 100 was the worst result in the sweep — 26.6mm against
-     5.4mm. Taubin's lambda|mu pair is volume-preserving, so it regularizes the
-     cage without pulling it off the field; what it prevents is one overshooting
-     vertex staying overshot and dragging its neighbors into a sail. */
+     can only smooth. So snapping stops near the optimum (8 to 18 passes), and
+     the passes Fit does not spend on it are spent smoothing — Fit 0 is a smooth
+     melted lump rather than an under-converged lumpy one. On the same three
+     members at density 8, the mean field error runs 31.4, 26.3, 21.2, 15.0,
+     5.9mm across Fit 0, 25, 50, 75, 100.
+     The Newton step is not damped: damping at 0.6 makes the sphere refit miss
+     the field by 0.0708 against 0.0004 undamped. And the clamp does not grow
+     with Fit: the step is `-s*g/|g|^2`, exact only where |g| = 1, and a smooth
+     minimum has |g| < 1 through the blend, so a clamp that rose with Fit would
+     let the cage run away at high Fit.
+     The smoothing is not a trade-off against closeness: full strength beats
+     every reduced setting at every Fit (0.1 at Fit 100: 26.6mm against 5.4mm).
+     Taubin's lambda|mu pair is non-shrinking (a low-pass filter), so it
+     regularizes the cage without pulling it off the field; it keeps one
+     overshooting vertex from dragging its neighbors into a sail. */
   const snapPasses = Math.round(8 + 10 * fitFrac);
-  /* ⚠ THE MELT COUNT SCALES WITH THE FACET COUNT, or Fit means something
+  /* The melt count scales with the facet count, or Fit means something
      different at every Density. Smoothing spreads a vertex over roughly the
-     square root of the pass count in EDGES, and an edge is the form divided by
-     the facets — so a fixed count melts a coarse cage far more than a fine one.
-     Unscaled, Fit 0 gave a mean field error of 57mm at density 4 and 6.4mm at
-     density 20 on the same three members, and a chain of five lost a third of
-     its mass at the coarse end while the fine end barely moved. Squared, because
-     holding the spread at a fixed fraction of the form needs passes to rise with
-     the facets squared: the same Fit then lands within a third across the range
-     — 35, 30, 26, 24mm at densities 4, 8, 14, 20.
-     THE MELT IS ALSO THE CHEAP HALF. A snap pass evaluates the field at every
+     square root of the pass count in edges, and an edge is the form divided by
+     the facets — so a fixed count melts a coarse cage far more than a fine one
+     (unscaled, Fit 0 gives a mean field error of 57mm at density 4 and 6.4mm at
+     density 20 on the same three members). Squared, because holding the spread
+     at a fixed fraction of the form needs passes to rise with the facets
+     squared: the same Fit then lands within a third across the range — 35, 30,
+     26, 24mm at densities 4, 8, 14, 20.
+     The melt is also the cheap half. A snap pass evaluates the field at every
      cage vertex; a melt pass is two weighted averages over the ring and touches
      no field at all. */
   const meltScale = Math.min(16, (facets / 8) ** 2);
   let melt = Math.round(60 * (1 - fitFrac) * meltScale);
-  /* ⚠⚠ AND THE MELT MAY NOT BE ALLOWED TO EAT A THIN FEATURE. Smoothing spreads
-     a vertex about sqrt(passes) EDGES, so a melt sized for a solid lump closes a
-     tube whose wall is thinner than that reach — a torus cage of major 100 and
-     minor 30 lost 45% of its mass at Fit 50 and came back at 0.55 IoU, worse
-     than the genus-0 cage it was chosen over. The cap is the cage's own thinnest
-     dimension: half of it is the furthest a vertex may travel, which leaves the
-     feature standing. It binds only where a feature is thin, so the box cage's
-     numbers are unchanged. */
+  /* The melt may not eat a thin feature. Smoothing spreads a vertex about
+     sqrt(passes) edges, so a melt sized for a solid lump closes a tube whose
+     wall is thinner than that reach (a torus cage of major 100 and minor 30
+     loses 45% of its mass at Fit 50, 0.55 IoU). The cap is the cage's own
+     thinnest dimension: half of it is the furthest a vertex may travel, which
+     leaves the feature standing. It binds only where a feature is thin. */
   if (featureScale > 0) {
     let e = 0, n = 0;
     for (let i = 0; i < cage.vertices.length; i += 1) for (const j of neighbors[i]) {
@@ -916,18 +858,15 @@ function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
   }
   const passes = snapPasses + melt;
   const smoothWeight = 1;
-  /* ⚠⚠ THE CLAMP IS A DISTANCE TO TRAVEL, NOT A CAGE SPACING, and tying it to
-     the spacing made Density run backwards. The annealed schedule lets a vertex
-     cover about eight times the clamp in total, so a clamp of half the mean edge
-     gives a dense cage a fraction of the reach a coarse one has — and the start
-     box stands off the members by the padding whatever the density is. Measured
-     on a lone sphere the mass ratio went 1.01, 1.03, 1.18, 1.60 across densities
-     4, 12, 16, 24: raising the resolution INFLATED the wrap, the control that
-     means "resolve this better" making it worse. A cone and a cylinder went to
-     1.82 the same way and a helix to 5.31. Floored at a tenth of the field's
-     diagonal every density converges instead — 1.00, 1.04, 3.01 for those three
-     — and the coarse end is untouched, because there the spacing is the larger
-     of the two. */
+  /* The clamp is a distance to travel, not a cage spacing. The annealed
+     schedule lets a vertex cover about eight times the clamp in total, so a
+     clamp of half the mean edge alone gives a dense cage a fraction of the
+     reach a coarse one has — while the start box stands off the members by the
+     padding at every density. Density would then run backwards: on a lone
+     sphere the mass ratio goes 1.01, 1.03, 1.18, 1.60 across densities 4, 12,
+     16, 24. Floored at a tenth of the field's diagonal every density
+     converges; the coarse end is unaffected, because there the spacing is the
+     larger of the two. */
   const stepClamp = Math.max(meanEdge * 0.5, field.diagonal * 0.1);
 
   let V = cage.vertices.map((v) => v.slice());
@@ -945,10 +884,9 @@ function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
       const g2 = g[0] * g[0] + g[1] * g[1] + g[2] * g[2];
       if (!(g2 > 1e-18)) continue;
       let t = -s / g2;
-      /* A FIXED DECAY, NOT A FRACTION OF THE PASS COUNT. Annealed as
-         `1 - 0.65 * pass/(passes-1)` the schedule stretches when Fit buys more
-         passes, so a higher Fit spends longer at a large clamp and comes out
-         looser — the control degrading the thing it names. */
+      /* A fixed decay, not a fraction of the pass count. A schedule annealed as
+         `1 - 0.65 * pass/(passes-1)` stretches when Fit buys more passes, so a
+         higher Fit would spend longer at a large clamp and come out looser. */
       const clampNow = stepClamp * Math.pow(0.92, pass);
       const stepLen = Math.abs(t) * Math.sqrt(g2);
       if (stepLen > clampNow) t *= clampNow / stepLen;
@@ -962,8 +900,8 @@ function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
     if (s > worstField) worstField = s;
   }
 
-  /* THE CAGE IS NOT THE SURFACE. Control points sitting on the field leave the
-     LIMIT surface hovering inside them by a fraction of the cage spacing, and
+  /* The cage is not the surface. Control points sitting on the field leave the
+     limit surface hovering inside them by a fraction of the cage spacing, and
      every number reported about the result would be off by that. The refit
      moves the control points until their limit positions land on the wrapped
      targets instead. */
@@ -990,35 +928,33 @@ function runWrap(cage, field, opts, fitFrac, facets, featureScale) {
  *   opts.fit      0-100. How hard the wrap chases the field into concavities.
  *                 0 is a rounded bounding box; 100 is the tightest the cage can
  *                 reach.
- *   opts.refit    Correct the cage against its own LIMIT surface. Default true.
+ *   opts.refit    Correct the cage against its own limit surface. Default true.
  *
- * ⚠ FIT DRIVES BOTH THE PASS COUNT AND THE STEP CLAMP, and which of the two it
- * should really be is not settled by anything measured. Both are named in the
- * result so a caller can see what it got.
+ * Fit sets how the passes split between snapping and smoothing (see runWrap).
+ * The pass counts and the step clamp are returned so a caller can see what it
+ * got.
  *
  * Returns `{ ok: true, cage, targets, ... }` or `{ ok: false, reason, message }`.
  */
 export function wrapSolidsToSuperbCage(members, opts = {}) {
-  /* ⚠ THE FIELD MAY BE HANDED IN. Everything below this line reads the field
-     RECORD and never the meshes it came from — the two places that touch
+  /* The field may be handed in. Everything below this line reads the field
+     record and never the meshes it came from — the two places that touch
      `part.positions` (principalFrame and the local-bounds loop) consume it as a
      point cloud, not as triangles. So a field built from analytic balls, or from
      anything else that can answer a signed distance, drives this whole solver
-     unchanged. Without the hook a second field kind would have to copy the wrap. */
+     unchanged. */
   const field = opts.field || makeSolidsField(members, opts);
   const components = solidsFieldComponents(field, opts);
   const refusal = wrapSolidsRefusal(field, { ...opts, components });
   if (refusal) return { ok: false, ...refusal, field, components };
 
-  /* ⚠ THE CEILING IS WHERE THE SOLVE STOPS BEING WORTH WAITING FOR, not a round
-     number. Measured on a box and a cone: density 10 gives 378 quads in 289ms,
-     14 gives 672 in 354ms, 20 gives 1,326 in 550ms, 28 gives 2,688 in 1.1s and
-     40 gives 5,670 in 2.5s. Ten was well inside what the machine can do; 32 is
-     roughly 3,500 quads and comfortably under two seconds, which is the point at
-     which a control the caller re-runs on every drag has stopped being one.
-     The CONTROL's own range is a separate decision and lives with the control —
-     see the fuse paramSpec, where the slider stays inside the live band and the
-     typed field reaches the rest. */
+  /* The ceiling is where the solve stops being worth waiting for. On a box and
+     a cone: density 10 gives 378 quads in 289ms, 14 gives 672 in 354ms, 20
+     gives 1,326 in 550ms, 28 gives 2,688 in 1.1s and 40 gives 5,670 in 2.5s.
+     32 is roughly 3,500 quads and under two seconds, the limit for a control
+     re-run on every drag. The control's own range is a separate decision and
+     lives with the control — see the fuse paramSpec, where the slider stays
+     inside the live band and the typed field reaches the rest. */
   const density = Math.max(2, Math.min(32, Math.round(opts.density ?? 4)));
   const fit = Math.max(0, Math.min(100, opts.fit ?? 50));
   const fitFrac = fit / 100;
@@ -1050,9 +986,9 @@ export function wrapSolidsToSuperbCage(members, opts = {}) {
   const half = [0, 1, 2].map((d) => Math.max((hi[d] - lo[d]) / 2 + pad, 1e-6));
   const centerLocal = [0, 1, 2].map((d) => (hi[d] + lo[d]) / 2);
 
-  /* ⚠ THE BOX CAGE CARRIES TWO FACET COUNTS, NOT ONE PER AXIS. Its caps are a square
+  /* The box cage carries two facet counts, not one per axis. Its caps are a square
      grid in the first two axes, so x and y must share a count or the caps do
-     not weld to the sides. The around-count is therefore taken from the MEAN of
+     not weld to the sides. The around-count is therefore taken from the mean of
      the two, which keeps faces near-square on a box that is wide in one of them
      and not in the other, and is exactly square when they agree. */
   const cell = Math.max(half[0], half[1], half[2]) * 2 / density;
@@ -1064,15 +1000,15 @@ export function wrapSolidsToSuperbCage(members, opts = {}) {
   const candidates = [{ topology: 'sphere', featureScale: Math.min(half[0], half[1], half[2]) * 2,
     cage: { vertices: boxCage0.vertices.map(toWorld), faces: boxCage0.faces, creases: {} } }];
 
-  /* ⚠⚠ A THROUGH-HOLE NEEDS A START CAGE THAT HAS ONE. See torusStartCage's own
+  /* A through-hole needs a start cage that has one. See torusStartCage's
      header for why this is the only place the genus can be decided. The choice
-     between the two is MEASURED, not inferred from the handle count: the cage
+     between the two is measured, not inferred from the handle count: the cage
      whose limit volume agrees with the occupancy the field already counted wins.
-     That comparison is right on every fixture tried, including the two a field
-     error comparison gets WRONG — a tilted torus, whose axis this detector does
-     not find, produces a badly placed torus cage that hugs the field locally
-     while enclosing the wrong volume, and loses. So a missed or mistaken hole
-     degrades to the genus-0 wrap that shipped before, never to a worse one. */
+     A field-error comparison would pick wrongly on a tilted torus, whose axis
+     this detector does not find: a badly placed torus cage hugs the field
+     locally while enclosing the wrong volume, and loses the volume comparison.
+     So a missed or mistaken hole degrades to the genus-0 wrap, never to a
+     worse one. */
   const hole = opts.topology === 'sphere' ? null : findHoleAxis(field, components);
   if (hole && hole.r > 0 && hole.R > hole.r) {
     const around = Math.max(8, Math.min(96, Math.round(facets * 2.4)));
@@ -1121,16 +1057,16 @@ export function wrapSolidsToSuperbCage(members, opts = {}) {
   };
 }
 
-/* A FIELD MADE OF BALLS, for the same solver the meshes use.
+/* A field made of balls, for the same solver the meshes use.
    A metablob and a fused set of solids are the same question asked of different
    inputs: what surface encloses this field? So this returns the identical record
    `makeSolidsField` does and changes nothing downstream.
-   ⚠ `positions` IS A POINT CLOUD HERE, and that is not a shortcut. The only two
-   consumers that read it — the principal frame and the start box's local bounds
-   — walk it three numbers at a time and never ask which three form a triangle.
-   A modest sample of each sphere therefore carries exactly the information they
-   need, and the distance function is analytic rather than a BVH lookup: measured
-   at 0.21us against 19.0us, which is what makes a ball field live on a drag.
+   `positions` is a point cloud here. The only two consumers that read it — the
+   principal frame and the start box's local bounds — walk it three numbers at a
+   time and never ask which three form a triangle. A modest sample of each
+   sphere therefore carries the information they need, and the distance
+   function is analytic rather than a BVH lookup (about 0.2us against 19us),
+   which keeps a ball field interactive on a drag.
    Balls are [x, y, z, r] with an optional 5th number, that ball's own melt —
    the 3D reading of the same record the flat outline uses. */
 const BALL_SAMPLES = 42;

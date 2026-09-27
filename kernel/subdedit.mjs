@@ -1,19 +1,15 @@
-// SuperB CAGE TOPOLOGY EDITS — EXTRUDESUBD / INSERTEDGE / BRIDGE / STITCH /
-// DELETE FACES / FILLSUBDHOLE (milestones 4 and 6, plus the
-// v1-listed DELETE FACES/FILLSUBDHOLE pair, building on the already-shipped
-// sub-object selection milestone: kernel/subdselect.mjs's edgeLoopFromSeed/
-// edgeRingFromSeed and kernel/subd.mjs's own buildTopology/edgeKey). KERNEL
-// ONLY: pure cage-in, cage-out topology surgery, no app-layer object/UI/undo
-// here, matching every other kernel/*.mjs module's own discipline exactly.
+// SuperB cage topology edits: ExtrudeSubD, InsertEdge, Bridge, Stitch,
+// Delete Faces, FillSubDHole, Subdivide. Builds on kernel/subdselect.mjs
+// and kernel/subd.mjs's buildTopology/edgeKey. Kernel only: pure cage-in,
+// cage-out topology surgery, no app-layer object, UI or undo.
 //
-// EXTRUDESUBD/INSERTEDGE/BRIDGE grow the cage (new vertices/edges/faces);
-// DELETE FACES shrinks it (removes faces, prunes any now-orphaned vertex);
-// STITCH welds two separate boundary vertex chains into one (net vertex
-// count shrinks, but no faces are removed — the two chains' own edges become
-// shared interior edges instead); FILLSUBDHOLE adds exactly one new face,
-// zero new vertices. None of these ever mutate the input cage — every
-// function here returns a brand-new cage object, matching
-// subdivideCatmullClark's own convention.
+// Extrude, InsertEdge and Bridge grow the cage (new vertices/edges/faces);
+// Delete Faces shrinks it (removes faces, prunes any orphaned vertex);
+// Stitch welds two separate boundary vertex chains into one (the vertex
+// count shrinks, no faces are removed — the two chains' edges become shared
+// interior edges); FillSubDHole adds one new face and no vertices. None of
+// these mutate the input cage — every function returns a new cage object,
+// as subdivideCatmullClark does.
 
 function distSq(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2]; return dx * dx + dy * dy + dz * dz; }
 
@@ -24,17 +20,14 @@ import { cubicHermiteSegment } from './interpolate.mjs';
 
 function lerp3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 
-// BRIDGE CREASE — Rhino's own fourth Bridge Option. What it creases is the RIM,
-// not the rungs: the edges where the new wall MEETS the existing surface, so the
+// Bridge crease — Rhino's fourth Bridge Option. It creases the rim, not the
+// rungs: the edges where the new wall meets the existing surface, so the
 // bridge reads as a distinct tube joining two forms rather than blending
-// smoothly into both. Creasing the rungs instead would crease the wall's own
-// length, which is not what the option means.
+// smoothly into both.
 //
-// Takes a WEIGHT rather than a boolean so the kernel stays free of any app-side
-// "how hard is a hard crease" constant, and so a partial crease is available for
-// free — the same 0..N semi-sharp range this kernel's own crease machinery
-// already carries everywhere else. 0 means untouched: no key is written at all,
-// so the DEFAULT is byte-identical to a Bridge built before this existed.
+// Takes a weight rather than a boolean so the kernel holds no app-side "how
+// hard is a hard crease" constant, and a partial crease uses the same 0..N
+// semi-sharp range as the rest of the crease machinery. 0 writes no key.
 function creaseChain(creases, seq, weight, closed) {
   if (!(weight > 0)) return;
   const n = seq.length;
@@ -42,29 +35,21 @@ function creaseChain(creases, seq, weight, closed) {
   for (let i = 0; i < last; i++) creases[edgeKey(seq[i], seq[(i + 1) % n])] = weight;
 }
 
-// ── BRIDGE STRAIGHTNESS ──────────────────────────────────────────────────
-// Rhino's own Bridge Options carries a STRAIGHTNESS percentage alongside
-// Segments, and it is the whole difference between a bridge that reads as a
-// faceted sleeve and one that flows out of the surrounding surface: at 100%
-// a rung's interior rows are a plain straight lerp between the two rims
-// (what this module built before straightness existed); at 0% they follow a
-// cubic that leaves each rim along that rim's OWN outgoing surface
-// direction, so the tunnel meets the cage tangentially instead of at a
-// crease. Anything between is a plain blend of the two.
+// Bridge straightness
+// Rhino's Bridge Options carries a Straightness percentage alongside
+// Segments: at 100% a rung's interior rows are a straight lerp between the
+// two rims; at 0% they follow a cubic that leaves each rim along that rim's
+// own outgoing surface direction, so the tunnel meets the cage tangentially
+// instead of at a crease. Anything between is a blend of the two.
 //
-// NO NEW CURVE MATH: the cubic is `cubicHermiteSegment` (kernel/
-// interpolate.mjs), already node-tested with exact-endpoint, analytic-tangent
-// and finite-difference proofs from the internal-B-handles round — reused
-// here, only evaluated at a parameter rather than handed to a renderer. It
-// returns a degree-3 Bezier whose single span is [0,1], so evaluating it is
-// the plain cubic Bernstein basis, no knot machinery needed.
+// The cubic is `cubicHermiteSegment` (kernel/interpolate.mjs), evaluated at
+// a parameter. It returns a degree-3 Bezier whose single span is [0,1], so
+// evaluating it is the cubic Bernstein basis, no knot machinery.
 //
-// TWO IDENTITIES THIS GUARANTEES BY CONSTRUCTION, asserted rather than
-// assumed in this module's own test file: straightness 1 returns the lerp
-// BIT-IDENTICALLY (an early return, not an arithmetic coincidence), and at
-// segments=1 there are no interior rows at all, so straightness cannot
-// change the result by any value — which is exactly why Rhino defaults
-// Segments to 2.
+// Two identities, both asserted in the test file: straightness 1 returns
+// the lerp bit-identically (an early return), and at segments=1 there are
+// no interior rows, so straightness cannot change the result — which is
+// why Rhino defaults Segments to 2.
 function bridgeSpanPoint(pA, pB, mA, mB, t, straightness) {
   const straight = lerp3(pA, pB, t);
   if (straightness >= 1 || !mA || !mB) return straight;
@@ -75,20 +60,17 @@ function bridgeSpanPoint(pA, pB, mA, mB, t, straightness) {
   return lerp3(straight, herm, 1 - straightness);
 }
 
-// THE OUTGOING SURFACE DIRECTION AT ONE RIM VERTEX — the same "read it off
-// the owner face's own loop" trick this module's own winding already relies
-// on, rather than a face normal or a guessed axis. A rim vertex sits on
-// exactly one naked edge pair of its own chain; its owner face gives it one
-// neighbor ALONG the rim (the partner passed in) and one INWARD, into the
-// surface the rim bounds. `vertex - inward` therefore points away from that
-// surface, along the direction the surface itself is traveling as it
-// reaches the rim — which is precisely the tangent a tangent-continuous
-// bridge has to leave on.
+// The outgoing surface direction at one rim vertex, read off the owner
+// face's loop rather than a face normal or a guessed axis. A rim vertex
+// sits on one naked edge pair of its chain; its owner face gives it one
+// neighbor along the rim (the partner passed in) and one inward, into the
+// surface the rim bounds. `vertex - inward` points away from that surface,
+// along the direction the surface travels as it reaches the rim — the
+// tangent a tangent-continuous bridge leaves on.
 //
-// Returns null for a genuinely degenerate neighborhood (a zero-length
-// inward edge). Callers fall back to the straight chord there, so a
-// degenerate cage produces a plain straight rung rather than a NaN — an
-// honest degrade, matching this module's own posture everywhere else.
+// Returns null for a degenerate neighborhood (a zero-length inward edge).
+// Callers fall back to the straight chord there, so a degenerate cage
+// produces a straight rung rather than a NaN.
 function rimOutgoingDirection(cage, topology, vIdx, partnerIdx) {
   const edge = topology.edgeMap.get(edgeKey(vIdx, partnerIdx));
   if (!edge || edge.faces.length !== 1) return null;
@@ -102,12 +84,12 @@ function rimOutgoingDirection(cage, topology, vIdx, partnerIdx) {
   return length(d) < 1e-12 ? null : d;
 }
 
-// Per-vertex outgoing tangents for a whole rim, scaled to that rung's own
+// Per-vertex outgoing tangents for a whole rim, scaled to that rung's
 // chord length (the standard Hermite magnitude choice — a tangent scaled to
-// the span it crosses produces a blend proportional to the gap, so a narrow
+// the span it crosses gives a blend proportional to the gap, so a narrow
 // bridge bulges less than a wide one for the same straightness value).
 // `closed` distinguishes a Bridge rim (a closed loop, every vertex has a
-// rim partner on both sides) from an open edge RUN (the last vertex's only
+// rim partner on both sides) from an open edge run (the last vertex's only
 // rim partner is behind it).
 function rimTangents(cage, topology, seq, otherPts, closed, sign) {
   const n = seq.length;
@@ -123,12 +105,10 @@ function rimTangents(cage, topology, seq, otherPts, closed, sign) {
   return out;
 }
 
-// A consistently-wound 2-manifold never traverses the SAME directed edge
-// twice — the standard property this module's own test file already checks
-// the finished cage against. Used here to DECIDE an orientation rather than
-// verify one after the fact: a candidate rung set that would traverse any
-// directed edge a second time is simply not the correct winding, so the
-// choice needs no hand-derived formula at all.
+// A consistently wound 2-manifold never traverses the same directed edge
+// twice. Used here to decide an orientation rather than verify one after
+// the fact: a candidate rung set that would traverse any directed edge a
+// second time is not the correct winding.
 function directedEdgeReuseCount(faces) {
   const seen = new Set();
   let reused = 0;
@@ -142,11 +122,10 @@ function directedEdgeReuseCount(faces) {
   return reused;
 }
 
-// FACE NORMAL — Newell's method (robust for a non-planar or bowed n-gon, not
-// just a plain 3-point cross product), normalized. Returns [0,0,0] for a
-// genuinely degenerate (zero-area) face — callers decide how to react; this
-// module's own computeAverageNormal below treats an all-degenerate selection
-// as a real refusal, not a silent [0,0,0] direction.
+// Face normal — Newell's method (robust for a non-planar or bowed n-gon, not
+// just a 3-point cross product), normalized. Returns [0,0,0] for a
+// degenerate (zero-area) face; callers decide how to react —
+// computeAverageNormal below throws for a selection whose normals sum to zero.
 export function computeFaceNormal(cage, faceIdx) {
   const face = cage.faces[faceIdx];
   const n = face.length;
@@ -163,16 +142,11 @@ export function computeFaceNormal(cage, faceIdx) {
   return [nx / len, ny / len, nz / len];
 }
 
-// AVERAGE NORMAL of a set of selected faces — EXTRUDESUBD's own DEFAULT
-// direction ("extrude selected faces along their own average
-// normal, or a picked direction"). A plain per-face-normal average (not
-// area-weighted — a real, simple, honestly-stated v1 choice: area-weighting
-// would need each face's own real area, extra work the
-// "along their own average normal" wording doesn't demand). Throws honestly
-// if the selection's own normals cancel out (e.g. two exactly opposite faces
-// of a box selected together) rather than silently returning a meaningless
-// zero vector — the caller (the app layer's EXTRUDESUBD command) is expected
-// to require an explicit picked direction in that case.
+// Average normal of a set of selected faces — the default ExtrudeSubD
+// direction. A plain per-face-normal average, not area-weighted. Throws if
+// the normals cancel out (e.g. two opposite faces of a box selected
+// together) rather than returning a zero vector; the caller then needs an
+// explicit picked direction.
 export function computeAverageNormal(cage, faceIndices) {
   if (!faceIndices || !faceIndices.length) throw new Error('computeAverageNormal: faceIndices must be a non-empty array');
   let sum = [0, 0, 0];
@@ -182,26 +156,18 @@ export function computeAverageNormal(cage, faceIndices) {
   return scale(sum, 1 / len);
 }
 
-// EXTRUDESUBD — extrude the selected face(s) along `direction` (any nonzero
-// vector; the caller normalizes it against computeAverageNormal or its own
-// picked direction) by `distance` (signed — a negative distance extrudes
-// INTO the surface, matching Rotate/Scale's own "any finite typed number,
-// sign included" convention). The real "grow the cage" topology surgery
-// the spec calls for, not a point move: boundary edges of the selected
-// region (edges touching EXACTLY ONE selected face — whether the other side
-// is a non-selected neighbor face or a genuine cage boundary, both count
-// identically, see below) gain new connecting SIDE faces; a vertex touching
-// any such boundary edge is DUPLICATED (the old copy stays behind, still
-// used by whatever non-selected geometry referenced it; a new copy is
-// created at `position + direction*distance` for the selected face(s) to
-// use instead); a vertex used ONLY by selected faces (no boundary edge
-// touches it at all) is simply TRANSLATED in place — no duplicate needed,
-// since nothing outside the selection references its old position. This is
-// the standard "extrude region" algorithm (the same one Blender/Maya mesh
-// tools use), generalized correctly to an ARBITRARY (not necessarily
-// singly-connected) set of selected faces: the boundary/interior
-// classification is derived per-EDGE, never assumes the whole selection
-// forms one simply-connected patch.
+// ExtrudeSubD — extrude the selected face(s) along `direction` (any nonzero
+// vector; normalized here) by `distance` (signed — a negative distance
+// extrudes into the surface). This is topology surgery, not a point move:
+// boundary edges of the selected region (edges touching exactly one
+// selected face — whether the other side is a non-selected face or a cage
+// boundary) gain new side faces; a vertex touching any such edge is
+// duplicated (the old copy stays for the non-selected geometry; a new copy
+// at `position + direction*distance` goes to the selected faces); a vertex
+// used only by selected faces is translated in place, since nothing
+// outside the selection references it. This is the standard "extrude
+// region" algorithm, applied to an arbitrary (not necessarily singly
+// connected) face set: the boundary/interior classification is per edge.
 export function extrudeFaces(cage, faceIndices, direction, distance) {
   if (!faceIndices || !faceIndices.length) throw new Error('extrudeFaces: faceIndices must be a non-empty array');
   for (const fi of faceIndices) {
@@ -215,13 +181,11 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
   const selectedSet = new Set(faceIndices);
   const topology = buildTopology(cage);
 
-  // A BOUNDARY-REGION edge is one touching EXACTLY ONE selected face — this
-  // covers both "shared with a non-selected neighbor face" and "a genuine
-  // cage boundary edge of an open cage" identically (both need a new side
-  // face + duplicated endpoints; see this function's own header). An
-  // INTERIOR-region edge (touching exactly TWO selected faces) needs
-  // neither — the two faces move together, the shared edge simply comes
-  // along for the ride via its own endpoints' in-place translation.
+  // A boundary-region edge touches exactly one selected face — shared with
+  // a non-selected face or on the cage boundary, both need a new side face
+  // and duplicated endpoints. An interior-region edge (two selected faces)
+  // needs neither: the two faces move together and the edge follows its
+  // endpoints.
   const boundaryVertexSet = new Set();
   const boundaryEdgeKeys = new Set();
   for (const [key, edge] of topology.edgeMap) {
@@ -233,26 +197,17 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
     }
   }
 
-  // DEGENERATE-DIRECTION GUARD — a real gap found while testing this
-  // function against a genuinely reachable workflow (extruding the SAME
-  // face a SECOND time along a direction chosen freehand, e.g. sideways
-  // instead of up): if the extrude direction runs exactly PARALLEL to one
-  // of the region's own boundary-region edges, that edge's own new SIDE
-  // face degenerates to four COLLINEAR points (a pure in-plane slide along
-  // that one edge's own line, zero area) — a real, silent violation of
-  // this operation's own "no degenerate zero-area faces" requirement that
-  // nothing upstream of this point can see, since every individual number
-  // involved (the direction, the edge, the resulting vertices) is
-  // perfectly finite; only the CROSS PRODUCT reveals the degeneracy.
-  // Refused honestly and entirely (not just the one bad side face, which
-  // would leave a genuine hole in the boundary instead) — the same "refuse
-  // rather than guess" standard this app's own Mirror/Shear degenerate-axis
-  // checks already establish.
+  // Degenerate direction: if the extrude direction runs exactly parallel
+  // to a boundary-region edge (e.g. extruding a face a second time
+  // sideways), that edge's new side face is four collinear points with zero
+  // area. Every number involved is finite; only the cross product shows it.
+  // The whole extrude is refused, since skipping the one side face would
+  // leave a hole in the boundary.
   for (const [key, edge] of topology.edgeMap) {
     if (!boundaryEdgeKeys.has(key)) continue;
     const edgeDir = sub(cage.vertices[edge.v1], cage.vertices[edge.v0]);
     const edgeLen = length(edgeDir);
-    if (edgeLen < 1e-12) continue; // a genuinely zero-length edge is the INPUT cage's own problem, not this guard's to diagnose
+    if (edgeLen < 1e-12) continue; // a zero-length edge is a defect of the input cage, not this guard's to diagnose
     const cr = length(cross(edgeDir, offset));
     if (cr < 1e-9 * edgeLen * length(offset)) {
       throw new Error(`extrudeFaces: the extrude direction runs exactly parallel to boundary edge "${key}" — that edge's own new side face would collapse to four collinear points (zero area); pick a direction with some component out of the selected face's own plane`);
@@ -265,10 +220,8 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
     newIndexForOld.set(vi, newVertices.length);
     newVertices.push(add(cage.vertices[vi], offset));
   }
-  // Interior vertices — used by >=1 selected face, but never touch a
-  // boundary-region edge — translate in place (same index, new position);
-  // nothing outside the selection ever referenced the old position, so no
-  // duplicate is needed (see this function's own header).
+  // Interior vertices — used by >=1 selected face, touching no
+  // boundary-region edge — translate in place (same index, new position).
   const interiorSet = new Set();
   for (const fi of selectedSet) for (const vi of cage.faces[fi]) if (!boundaryVertexSet.has(vi)) interiorSet.add(vi);
   for (const vi of interiorSet) newVertices[vi] = add(cage.vertices[vi], offset);
@@ -277,11 +230,10 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
   for (const fi of selectedSet) {
     newFaces[fi] = newFaces[fi].map((vi) => (boundaryVertexSet.has(vi) ? newIndexForOld.get(vi) : vi));
   }
-  // One new SIDE face per boundary-region edge, wound using the ORIGINAL
-  // (pre-remap) vertex order as it appears in whichever selected face owns
-  // that edge — a boundary-region edge is, by construction, owned by
-  // EXACTLY one selected face, so this loop visits each exactly once, no
-  // dedup needed.
+  // One new side face per boundary-region edge, wound using the original
+  // (pre-remap) vertex order in the selected face that owns that edge — a
+  // boundary-region edge is owned by exactly one selected face, so this loop
+  // visits each once.
   const sideFaces = [];
   for (const fi of selectedSet) {
     const face = cage.faces[fi]; // original, pre-remap indices
@@ -294,29 +246,20 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
     }
   }
 
-  // CREASE REMAP — a real gap, not anticipated up
-  // front: a boundary-region (selCount===1) edge's crease survives this
-  // surgery for free — its own new SIDE face reuses that edge's ORIGINAL,
-  // pre-remap vertex pair as its own "near" edge by construction (the
-  // loop just above), so the old crease key stays a genuinely valid edge
-  // afterward, untouched. But an INTERIOR-region (selCount===2) edge —
-  // shared by two SELECTED faces — is a different story the instant BOTH
-  // its own endpoints sit on the selection's own boundary loop (and are
-  // therefore duplicated above): every selected face touching it gets
-  // remapped onto the NEW vertex copies, so the edge's real location in
-  // the OUTPUT topology is the REMAPPED key, not the old one. Left
-  // unhandled, the crease's own old key becomes a dangling entry pointing
-  // at an edge that no longer exists anywhere in the new cage, while the
-  // edge's real (moved) location gets no weight at all — a previously-hard
-  // seam silently going smooth, with zero warning. `mapVertex` mirrors the
-  // exact remap `newFaces` itself already applies a few lines up.
+  // Crease remap. A boundary-region (selCount===1) edge's crease survives:
+  // its new side face reuses the edge's original vertex pair as its near
+  // edge, so the old key is still a valid edge. An interior-region
+  // (selCount===2) edge whose endpoints are both duplicated moves onto the
+  // new vertex copies, so its key in the output is the remapped one;
+  // without the remap the old key would dangle and the moved edge would
+  // lose its weight. `mapVertex` mirrors the remap `newFaces` applies above.
   const mapVertex = (vi) => (boundaryVertexSet.has(vi) ? newIndexForOld.get(vi) : vi);
   const newCreases = { ...(cage.creases || {}) };
   for (const [key, weight] of Object.entries(cage.creases || {})) {
     const edge = topology.edgeMap.get(key);
-    if (!edge) continue; // a foreign/stale key already in the input — nothing real to remap
+    if (!edge) continue; // a stale key in the input — nothing to remap
     const selCount = edge.faces.filter((f) => selectedSet.has(f)).length;
-    if (selCount !== 2) continue; // boundary/exterior edges keep their own real, unchanged key
+    if (selCount !== 2) continue; // boundary/exterior edges keep their key
     const newKey = edgeKey(mapVertex(edge.v0), mapVertex(edge.v1));
     if (newKey === key) continue; // neither endpoint actually moved
     delete newCreases[key];
@@ -330,36 +273,29 @@ export function extrudeFaces(cage, faceIndices, direction, distance) {
   };
 }
 
-// EXTRUDESUBD, THE EDGE CASE — extrude selected NAKED (boundary) edges into
-// a new strip of faces. Rhino's own SubD extrude works on an edge as well as
-// a face, and the two are genuinely different operations rather than one
-// generalized to the other: extruding a FACE moves that face and walls in
-// the gap behind it (the surface keeps the same boundary), while extruding
-// an EDGE leaves every existing vertex exactly where it is and GROWS new
-// surface outward from the open edge — the natural way to pull a plane or a
-// hole's rim into a longer sheet.
+// ExtrudeSubD on edges — extrude selected naked (boundary) edges into a new
+// strip of faces. Extruding a face moves that face and walls in the gap
+// behind it (the surface keeps its boundary); extruding an edge leaves
+// every existing vertex where it is and grows new surface outward from the
+// open edge — pulling a plane or a hole's rim into a longer sheet.
 //
-// SCOPED TO NAKED EDGES, honestly and on purpose. An INTERIOR edge (two
-// faces) has no free side to grow into; extruding one means TEARING the
-// surface open along it and deciding which side each existing face follows —
-// a real, different operation with a real, different answer, not something
-// to guess at silently. Refused by name, the same standard the degenerate-
-// direction guard below (and Mirror/Shear's own axis checks) already set.
+// Naked edges only. An interior edge (two faces) has no free side to grow
+// into; extruding one means tearing the surface open along it and deciding
+// which side each existing face follows, which is a different operation.
+// It is refused by name.
 //
-// A CHAIN OF EDGES EXTRUDES AS ONE STRIP, not as detached quads: an endpoint
-// shared by two selected edges is duplicated ONCE and reused, so the new
-// faces share their rung and the result stays a single manifold surface.
-// This is what makes "double-click an open edge, extrude the whole boundary
-// loop" produce a collar rather than N loose flaps.
+// A chain of edges extrudes as one strip, not as detached quads: an
+// endpoint shared by two selected edges is duplicated once and reused, so
+// the new faces share their rung and the result stays one manifold surface
+// — a whole boundary loop extrudes into a collar.
 //
-// `direction` may be NULL, meaning "each edge grows the way its own surface
-// already points" — perpendicular to the edge, in its owner face's plane,
-// away from that face. This is the only sensible default for a whole
-// boundary LOOP: a single shared direction would push one side of the rim
-// out and the opposite side straight through the sheet, and averaging the
-// loop's own outward directions cancels to nothing. A vertex shared by two
-// selected edges moves by the average of their two outward directions, which
-// is what keeps the collar's own corners closed.
+// `direction` may be null, meaning each edge grows the way its surface
+// points — perpendicular to the edge, in its owner face's plane, away from
+// that face. This is the default a whole boundary loop needs: a single
+// shared direction would push one side of the rim out and the opposite side
+// through the sheet, and averaging the loop's outward directions cancels to
+// nothing. A vertex shared by two selected edges moves by the average of
+// their two outward directions, which keeps the collar's corners closed.
 export function extrudeEdges(cage, edgeKeys, direction, distance) {
   if (!edgeKeys || !edgeKeys.length) throw new Error('extrudeEdges: edgeKeys must be a non-empty array');
   if (!Number.isFinite(distance) || Math.abs(distance) < 1e-9) throw new Error('extrudeEdges: distance must be a nonzero finite number');
@@ -380,24 +316,24 @@ export function extrudeEdges(cage, edgeKeys, direction, distance) {
     }
   }
   // Same degeneracy the face case guards: a direction running exactly along
-  // a selected edge collapses that edge's own new face to four collinear
-  // points. Refused entirely rather than per-edge, so the result can never
-  // come back with a hole where one bad quad was skipped.
+  // a selected edge collapses that edge's new face to four collinear
+  // points. Refused entirely rather than per edge, so the result never
+  // has a hole where one bad quad was skipped.
   if (offset) {
     for (const key of keys) {
       const edge = topology.edgeMap.get(key);
       const edgeDir = sub(cage.vertices[edge.v1], cage.vertices[edge.v0]);
       const edgeLen = length(edgeDir);
-      if (edgeLen < 1e-12) continue; // a zero-length edge is the input cage's own problem
+      if (edgeLen < 1e-12) continue; // a zero-length edge is a defect of the input cage
       const cr = length(cross(edgeDir, offset));
       if (cr < 1e-9 * edgeLen * length(offset)) {
         throw new Error(`extrudeEdges: the extrude direction runs exactly parallel to edge "${key}" — its new face would collapse to four collinear points (zero area); pick a direction with some component across the edge`);
       }
     }
   }
-  // PER-EDGE OUTWARD (the `direction == null` default) — one vector per
-  // selected edge, then per-VERTEX by averaging whichever selected edges
-  // actually touch it, so a shared corner gets one offset and one copy.
+  // Per-edge outward (the `direction == null` default) — one vector per
+  // selected edge, then per vertex by averaging the selected edges that
+  // touch it, so a shared corner gets one offset and one copy.
   const offsetByVertex = new Map();
   if (!offset) {
     const acc = new Map();
@@ -437,11 +373,10 @@ export function extrudeEdges(cage, edgeKeys, direction, distance) {
     return newIndexForOld.get(vi);
   };
 
-  // WINDING — the new face must traverse the shared edge OPPOSITE to the way
-  // its own existing owner face does, which is what keeps the two
-  // consistently oriented (the same rule extrudeFaces' own side faces
-  // follow). Read the direction straight off the owner's vertex loop rather
-  // than assuming the key's own sorted order.
+  // Winding — the new face traverses the shared edge opposite to the way its
+  // owner face does, which keeps the two consistently oriented (as
+  // extrudeFaces' side faces do). The direction is read off the owner's
+  // vertex loop, not the key's sorted order.
   const newFaces = cage.faces.map((f) => f.slice());
   const addedFaces = [];
   for (const key of keys) {
@@ -462,19 +397,16 @@ export function extrudeEdges(cage, edgeKeys, direction, distance) {
   };
 }
 
-// INSERT POINT — split ONE edge by putting a new vertex on it. The smallest
-// real topology tool on 74's list, and genuinely different from INSERT EDGE
-// beside it: that one threads a whole new loop across a strip of faces, this
-// one touches exactly the edge you picked. Every face using that edge gains
-// one vertex in its own loop, so a quad becomes a 5-gon — which this kernel's
-// Catmull-Clark accepts natively (n-gon faces are already load-bearing here:
-// the cylinder and cone cage caps are n-gons by construction).
+// Insert Point — split one edge by putting a new vertex on it. Unlike
+// InsertEdge, which threads a new loop across a strip of faces, this touches
+// only the picked edge. Every face using that edge gains one vertex in its
+// loop, so a quad becomes a 5-gon, which Catmull-Clark accepts (the cylinder
+// and cone cage caps are n-gons too).
 //
-// NO T-JUNCTION, BY CONSTRUCTION. The new vertex is inserted into the loop of
-// EVERY face that used the edge, not just one — the same rule per-face
-// subdivide already follows when it widens a neighbor. Skipping the second
-// face would leave the new vertex used by one face only: a cage that still
-// renders, still counts right, and subdivides into a crack.
+// No T-junction: the new vertex goes into the loop of every face that used
+// the edge, as per-face subdivide does when it widens a neighbor. Skipping
+// the second face would leave the new vertex used by one face only, a cage
+// that renders and subdivides into a crack.
 export function insertPointOnEdge(cage, edgeKeyStr, t = 0.5) {
   if (!Number.isFinite(t) || t <= 0 || t >= 1) throw new Error('insertPointOnEdge: t must be a number strictly between 0 and 1');
   const topology = buildTopology(cage);
@@ -495,9 +427,9 @@ export function insertPointOnEdge(cage, edgeKeyStr, t = 0.5) {
     return out;
   });
 
-  // CREASE — the split edge no longer exists, so a weight left on its own key
-  // would dangle while the two halves that replaced it went smooth. Both
-  // halves inherit it, which is what keeps a hard edge hard through the edit.
+  // Crease — the split edge is gone, so a weight left on its key would
+  // dangle while the two halves went smooth. Both halves inherit it, which
+  // keeps a hard edge hard through the edit.
   const creases = { ...(cage.creases || {}) };
   if (creases[edgeKeyStr] !== undefined) {
     const w = creases[edgeKeyStr];
@@ -508,23 +440,18 @@ export function insertPointOnEdge(cage, edgeKeyStr, t = 0.5) {
   return { cage: { vertices, faces, creases }, newVertexIndex: newIndex, widenedFaceIndices: [...touched] };
 }
 
-// WELD VERTICES — collapse a selected set of cage vertices into ONE. Real
-// topology surgery, and the closest thing this module already had is
-// stitchEdgeRuns, which is exactly a vertex remap: the same discipline is
-// reused here rather than a second, subtly different merge.
+// Weld Vertices — collapse a selected set of cage vertices into one. The
+// same vertex-remap discipline as stitchEdgeRuns rather than a second,
+// subtly different merge.
 //
-// WHERE THE WELD LANDS is the caller's choice, matching Stitch's own
-// vocabulary: 'average' (the centroid of the selection — the default, and
-// the only one that treats every picked vertex equally), or 'first' (hold
-// the first-picked vertex still and pull the rest onto it, which is what you
-// want when one of them is already in the right place).
+// Where the weld lands is the caller's choice, in Stitch's vocabulary:
+// 'average' (the centroid of the selection — the default, and the only one
+// that treats every picked vertex equally), or 'first' (hold the
+// first-picked vertex still and pull the rest onto it).
 //
-// WHAT IT REFUSES, and why refusing beats guessing. A weld that would make a
-// face non-manifold (an edge ending up with 3+ faces) produces a cage that
-// still renders and still counts right, then subdivides into garbage — the
-// same silent-corruption class Bridge's own shared-vertex bug turned out to
-// be. Checked on the RESULT, not predicted from the input, so no case has to
-// be anticipated in advance to be caught.
+// A weld that would make the cage non-manifold (an edge with 3+ faces) is
+// refused: such a cage renders and counts right, then subdivides into
+// garbage. Checked on the result, not predicted from the input.
 export function weldVertices(cage, vertexIndices, position = 'average') {
   const picked = [...new Set(vertexIndices || [])];
   if (picked.length < 2) throw new Error('weldVertices: pick at least 2 vertices to weld (one alone is a no-op)');
@@ -560,9 +487,9 @@ export function weldVertices(cage, vertexIndices, position = 'average') {
     const cleaned = [];
     for (const vi of mapped) if (cleaned.length === 0 || cleaned[cleaned.length - 1] !== vi) cleaned.push(vi);
     if (cleaned.length > 1 && cleaned[0] === cleaned[cleaned.length - 1]) cleaned.pop();
-    // A face can also fold onto itself NON-consecutively (welding two
-    // opposite corners of a quad) — that is a real bowtie, not a triangle,
-    // and it is dropped rather than kept as a repeated-vertex face.
+    // A face can also fold onto itself non-consecutively (welding two
+    // opposite corners of a quad) — a bowtie, not a triangle — and it is
+    // dropped rather than kept as a repeated-vertex face.
     if (cleaned.length < 3 || new Set(cleaned).size !== cleaned.length) { collapsedFaceCount++; continue; }
     newFaces.push(cleaned);
   }
@@ -593,7 +520,7 @@ export function weldVertices(cage, vertexIndices, position = 'average') {
   }
 
   const out = { vertices: prunedVertices, faces: prunedFaces, creases: newCreases };
-  // THE SAFETY NET, checked on the real result.
+  // Non-manifold check on the result.
   const ctx = buildTopology(out);
   for (const e of ctx.edgeMap.values()) {
     if (e.faces.length > 2) {
@@ -608,26 +535,21 @@ export function weldVertices(cage, vertexIndices, position = 'average') {
   };
 }
 
-// SLIDE EDGE — move a selected edge (or a whole loop of them) ALONG the
-// surface, without changing topology at all: every vertex of the selection
-// travels down one of its own incident RAIL edges — the edges running across
-// the loop rather than along it — by a fraction t. The cheapest tool on 74's
-// own list precisely because it is pure geometry: no face is added, removed
-// or rewritten, only positions move, so nothing downstream can break in a
-// way a position drag could not already cause.
+// Slide Edge — move a selected edge (or a whole loop of them) along the
+// surface without changing topology: every vertex of the selection travels
+// down one of its incident rail edges — the edges running across the loop
+// rather than along it — by a fraction t. Pure geometry: no face is added,
+// removed or rewritten, only positions move.
 //
-// WHICH WAY IS "FORWARD" is the only real problem here. Each loop vertex has
-// two rails, one on each side, and choosing per-vertex independently gives a
-// zig-zag rather than a slide. The choice is PROPAGATED instead: the first
-// vertex picks a rail, and every subsequent vertex takes whichever of its own
-// two rails points most nearly the same way as the previous vertex's choice.
-// A vertex whose rails are genuinely ambiguous (no incident edge outside the
-// selection) simply stays put — an honest local no-op rather than a guess.
+// Each loop vertex has two rails, one on each side, and choosing per vertex
+// independently gives a zig-zag rather than a slide. The choice is
+// propagated instead: the first vertex picks a rail, and every later vertex
+// takes the rail pointing most nearly the same way as the previous choice.
+// A vertex with no incident edge outside the selection stays put.
 //
-// t IS BOUNDED, deliberately. At |t| = 1 a sliding vertex lands exactly on
-// the neighbor it is sliding toward, producing a zero-length edge and a
-// degenerate face — a cage that renders and subdivides into garbage. Refused
-// past 0.95 rather than clamped silently.
+// At |t| = 1 a sliding vertex lands on the neighbor it slides toward,
+// producing a zero-length edge and a degenerate face, so |t| above 0.95 is
+// refused rather than clamped.
 export function slideEdges(cage, edgeKeys, t) {
   if (!edgeKeys || !edgeKeys.length) throw new Error('slideEdges: edgeKeys must be a non-empty array');
   if (!Number.isFinite(t)) throw new Error('slideEdges: t must be a finite number');
@@ -652,11 +574,10 @@ export function slideEdges(cage, edgeKeys, t) {
 
   const vertices = cage.vertices.map((v) => v.slice());
   let slidCount = 0, stuckCount = 0;
-  // ONE pass. The first vertex with a real choice seeds the direction — rail
-  // 0 for a positive t, the rail most OPPOSITE to it for a negative one —
-  // and every vertex after it takes whichever of its own rails agrees best
-  // with that seed. This is what turns a set of independent per-vertex
-  // choices into a single coherent slide.
+  // One pass. The first vertex with a choice seeds the direction — rail 0
+  // for a positive t, the rail most opposite to it for a negative one — and
+  // every vertex after it takes the rail that agrees best with the previous
+  // choice.
   let reference = null;
   for (const vi of order) {
     const rails = railsFor(vi);
@@ -695,24 +616,18 @@ export function slideEdges(cage, edgeKeys, t) {
   };
 }
 
-// OFFSET / THICKEN A CAGE — the SubD answer to the NURBS Offset/Thicken
-// pair. Not the same machinery: a NURBS offset moves a tensor surface's own
-// control net along Greville normals, and a cage is not that. Here every
-// cage VERTEX moves along its own normal — the normalized sum of the normals
-// of the faces meeting there, which is the standard vertex-normal estimate
-// and, for a cage, the direction the limit surface itself locally faces.
+// Offset a cage — the SubD counterpart of the NURBS Offset. A NURBS offset
+// moves a tensor surface's control net along Greville normals; here every
+// cage vertex moves along its vertex normal — the normalized sum of the
+// normals of the faces meeting there, the standard vertex-normal estimate.
 //
-// HONEST ABOUT WHAT THIS IS. Offsetting a control cage does NOT produce a
-// mathematically exact offset of its own limit surface — no polynomial
-// surface has one in general, which is exactly why this app's own NURBS
-// offset says the same thing about itself. It produces a cage whose limit
-// surface runs roughly `distance` away from the original's, exactly as
-// every SubD modeler's own offset does. Stated here rather than implied.
+// Offsetting a control cage does not produce an exact offset of its limit
+// surface (no polynomial surface has one in general). It produces a cage
+// whose limit surface runs roughly `distance` away from the original's.
 //
-// SELF-INTERSECTION IS NOT GUARDED. A large enough offset on a concave
-// region folds the cage through itself. The NURBS side has a real
-// safeOffsetMagnitude search for this; the cage side does not yet, and
-// pretending otherwise would be worse than saying so.
+// Known limitation: self-intersection is not guarded. A large enough
+// offset on a concave region folds the cage through itself; the NURBS
+// side's safeOffsetMagnitude search has no cage counterpart.
 export function offsetCage(cage, distance) {
   if (!Number.isFinite(distance) || Math.abs(distance) < 1e-9) throw new Error('offsetCage: distance must be a nonzero finite number');
   const normals = vertexNormals(cage);
@@ -739,37 +654,24 @@ function vertexNormals(cage) {
   });
 }
 
-// THICKEN — give a cage real thickness: the original, an offset copy wound
-// the other way, and (for an OPEN cage) a rim of quads closing the gap
-// between the two boundaries, so a sheet becomes a slab. A CLOSED cage has
-// no boundary to close, so it comes back as two nested shells — a solid
-// with a cavity, which is the honest answer there and matches what the
-// NURBS thicken already does for the same input.
+// Thicken — give an open cage thickness: the original, an offset copy wound
+// the other way, and a rim of quads closing the gap between the two
+// boundaries, so a sheet becomes a slab.
 //
-// Winding: the offset copy is REVERSED (its faces read backwards) so its
-// own outward side faces away from the original — without that the two
-// sheets face the same way and the slab is inside-out on one side. The rim
-// quads are wound from the original's own boundary direction, so every
-// shared edge is traversed once each way.
-// REFUSES AN ALREADY-CLOSED CAGE, and this is the interesting case. The rim
-// below is built from NAKED edges — one wall quad per edge with a single
-// owner face. A closed cage has none, so the rim comes out empty and the
-// result is the original cage plus a reversed offset copy with nothing
-// joining them: one object silently becomes TWO disconnected shells, one
-// nested inside the other, with no wall anywhere. Verified structurally, not
-// reasoned about — a closed box or torus goes from 1 connected component to
-// 2, while an open sheet correctly stays at 1 with a real rim.
+// Winding: the offset copy is reversed (its faces read backwards) so its
+// outward side faces away from the original — otherwise the two sheets
+// face the same way and the slab is inside-out on one side. The rim quads
+// are wound from the original's boundary direction, so every shared edge
+// is traversed once each way.
 //
-// Two nested closed shells is a perfectly good B-rep hollow solid, which is
-// why this went unnoticed and was even written down as intended. It is NOT a
-// good SubD cage: the object stops being a single connected manifold, every
-// downstream cage command sees two components, and on screen it reads as a
-// duplicate of itself rather than as a wall — which is exactly how it was
-// reported ("a superb inside a superb; just have to undo or delete").
-// Refused rather than produced, per this app's own rule that an operation
-// which cannot keep a SuperB one watertight object should say so instead. The
-// escape hatch is real and named in the message: delete a face first, and the
-// thicken then builds a genuine wall around that opening.
+// A closed cage is refused. The rim is built from naked edges — one wall
+// quad per edge with a single owner face — and a closed cage has none, so
+// the result would be the original plus a reversed offset copy with nothing
+// joining them: two disconnected shells, one nested inside the other. That
+// is a valid B-rep hollow solid but not a single connected SubD cage, and
+// every later cage command would see two components. The message names the
+// way through: delete a face first, and the wall is built around that
+// opening.
 export function thickenCage(cage, distance) {
   if (!Number.isFinite(distance) || Math.abs(distance) < 1e-9) throw new Error('thickenCage: distance must be a nonzero finite number');
   const closedCheck = buildTopology(cage);
@@ -785,7 +687,7 @@ export function thickenCage(cage, distance) {
     ...cage.faces.map((f) => f.slice()),
     ...cage.faces.map((f) => f.slice().reverse().map((vi) => vi + n)),
   ];
-  // RIM — one quad per naked edge, wound against the owner face's own
+  // Rim — one quad per naked edge, wound against the owner face's
   // traversal so it agrees with both sheets at once.
   const topology = buildTopology(cage);
   const rimFaces = [];
@@ -799,110 +701,104 @@ export function thickenCage(cage, distance) {
     }
     rimFaces.push([vb, va, va + n, vb + n]);
   }
-  // Creases ride along on BOTH sheets — a hard edge stays hard on the copy.
+  // Creases are copied to both sheets — a hard edge stays hard on the copy.
   const creases = {};
   for (const [key, w] of Object.entries(cage.creases || {})) {
     creases[key] = w;
     const [a, b] = key.split('_').map(Number);
     creases[edgeKey(a + n, b + n)] = w;
   }
+  // The shell must face out whichever way it grew. The construction above
+  // can come out inside-out (a wall grown outward, distance > 0, on an open
+  // box does), so the winding is set from the finished shell's signed
+  // volume rather than from the sign of distance.
+  let allFaces = [...faces, ...rimFaces];
+  let vol = 0;
+  for (const f of allFaces) for (let i = 1; i + 1 < f.length; i++) {
+    const a = vertices[f[0]], b = vertices[f[i]], c = vertices[f[i + 1]];
+    vol += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+  }
+  if (vol < 0) allFaces = allFaces.map((f) => f.slice().reverse());
   return {
-    cage: { vertices, faces: [...faces, ...rimFaces], creases },
+    cage: { vertices, faces: allFaces, creases },
     offsetFaceIndices: cage.faces.map((_, i) => cage.faces.length + i),
     rimFaceIndices: rimFaces.map((_, i) => 2 * cage.faces.length + i),
   };
 }
 
-// INSERTEDGE — insert a new edge loop PARALLEL to and offset from a picked
-// existing loop ("insert an edge loop beside a picked loop,
-// position slider 0-1 along the ring — Rhino's InsertEdge. The fundamental
-// tighten move"). `seedKey` is any real cage edge; `side` (0 or 1) picks
-// WHICH of its own (up to 2) adjacent faces the new loop is inserted toward
-// — v1 always defaults to 0 (a real, stated scope cut: the OTHER neighbor
-// loop is reached by picking a seed edge on the opposite side instead, not
-// by a second app-layer control). `t` in (0,1) exclusive (0 or 1
-// would coincide EXACTLY with an existing loop, producing zero-area faces —
-// the "no degenerate zero-area faces" requirement stated
-// explicitly) is the position fraction: t->0 sits near the picked loop,
-// t->1 sits near its neighbor on the chosen side.
+// InsertEdge — insert a new edge loop parallel to and offset from a picked
+// existing loop (Rhino's InsertEdge). `seedKey` is any cage edge; `side`
+// (0 or 1) picks which of its (up to 2) adjacent faces the new loop is
+// inserted toward; the neighbor loop on the other side is reached by
+// seeding from an edge there. `t` in (0,1) exclusive is the position
+// fraction: t->0 sits near the picked loop, t->1 near its neighbor on the
+// chosen side. 0 or 1 would coincide with an existing loop and produce
+// zero-area faces.
 //
-// ALGORITHM (derived from first principles on a concrete UxV quad-strip
-// example — a cylinder side band — before writing this function; see this
-// module's own test file for the hand-derived worked numbers): a directed
-// BFS walks the QUAD STRIP between the picked loop and its one chosen
-// neighbor loop. Each strip face is entered already knowing its own "near"
-// edge (an edge of the PICKED loop, or — deeper into the strip — the
-// corresponding edge of whichever loop is currently nearest); within that
-// face, `oppositeEdgeInFace` gives the "far" edge (the corresponding edge of
-// the NEIGHBOR loop), and the face's other two edges are its two RUNGS
+// Algorithm (the test file carries worked numbers for a cylinder side
+// band): a directed BFS walks the quad strip between the picked loop and
+// its chosen neighbor loop. Each strip face is entered knowing its "near"
+// edge (an edge of the picked loop, or — deeper into the strip — the
+// corresponding edge of the nearest loop); within that face,
+// `oppositeEdgeInFace` gives the "far" edge (the corresponding edge of the
+// neighbor loop), and the face's other two edges are its two rungs
 // (connecting a near vertex to its corresponding far vertex). Crossing a
-// rung into the next face along the strip requires knowing, at that specific
-// vertex, which of the new face's own two OTHER incident edges continues the
-// SAME loop-A direction (not the rung itself, and not the far-side
-// continuation) — found directly via the new face's own vertex-index
-// neighbors, not by re-deriving "opposite" (which needs a KNOWN near edge to
-// start from, not yet known for the new face). A rung is shared by exactly
-// two strip faces (for an interior rung) — its own new inserted vertex is
-// computed once and reused, which is exactly what stitches the per-face new
-// edges into one continuous new loop.
+// rung into the next face requires knowing, at that vertex, which of the
+// new face's two other incident edges continues the same loop direction
+// (not the rung, and not the far-side continuation) — read from the new
+// face's vertex-index neighbors, since "opposite" needs a known near edge.
+// An interior rung is shared by two strip faces; its inserted vertex is
+// computed once and reused, which joins the per-face new edges into one
+// continuous loop.
 //
-// LOCAL MODE (`opts.local`) — the same cut, stopped after the seed face.
-// Whole-strip propagation is the right answer for "tighten this whole band"
-// and the wrong one for "refine THIS face": picking one edge and getting the
-// entire chain refined is a global edit answering a local ask. `local` is a
-// pure SCOPE restriction of the walk above — identical `t`, identical `side`,
-// identical near/far orientation reasoning, identical crease rules — it
-// simply never enqueues the neighbors across its own rungs. That is why it
-// is an option on this function rather than a separate one: a sibling copy
-// would have to restate the whole orientation derivation and would drift
-// from it. `recomputeInsertedLoopPositions` keeps working on the result for
-// free, since it is driven entirely by the returned rung pairs.
+// Local mode (`opts.local`) — the same cut, stopped after the seed face:
+// whole-strip propagation tightens a whole band, local refines one face.
+// It is a scope restriction of the walk above — same `t`, `side`,
+// near/far orientation and crease rules — that never enqueues the
+// neighbors across its rungs, so it is an option here rather than a
+// separate function that would restate the orientation logic.
+// `recomputeInsertedLoopPositions` works on the result, since it is driven
+// by the returned rung pairs.
 //
-// WHAT LOCAL LEAVES BEHIND, deliberately. The seed face becomes two quads
-// separated by the new edge. That edge's two endpoints sit in the interiors
-// of the seed face's two RUNGS, which are the only edges this operation ever
-// splits — the near edge (the seed itself) and the far edge are reused
-// VERBATIM by the two replacement quads, so nothing on either side of either
-// one changes. Each rung's OTHER face therefore has to receive that same new
-// vertex on its own boundary, growing from n sides to n+1: a vertex present
-// on one side of an edge and absent on the other is a crack, not a
-// T-junction. The resulting n-gon is a legal Catmull-Clark cage face —
-// computeFacePoint is a plain centroid for any n>=3 — so the limit surface
-// stays well defined; that n-gon plus the extraordinary vertices at the new
-// T-vertices is the substrate a T-spline-style local workflow needs.
+// What local leaves behind: the seed face becomes two quads separated by
+// the new edge. That edge's endpoints sit inside the seed face's two rungs,
+// the only edges this operation splits — the near edge (the seed) and the
+// far edge are reused verbatim by the two replacement quads. Each rung's
+// other face must therefore receive the same new vertex on its boundary,
+// growing from n sides to n+1: a vertex present on one side of an edge and
+// absent on the other is a crack. The resulting n-gon is a legal
+// Catmull-Clark cage face (computeFacePoint is a centroid for any n>=3), so
+// the limit surface stays well defined; that n-gon plus the extraordinary
+// vertices at the new T-vertices is what a T-spline-style local workflow
+// needs.
 //
-// THE SEED EDGE'S OTHER FACE IS NOT SPLIT, on purpose. `side` already names
-// which of the seed edge's faces is being refined, and the seed edge is not
-// split by this operation at all, so the other face has no missing vertex to
-// repair — it is genuinely untouched, not left inconsistent. Splitting it too
-// would not carry one cut straight across; it would start a SECOND,
-// independent parallel cut running away from the shared edge in the opposite
-// direction, doubling both the new faces and the T-junctions for a move asked
-// for once. That second cut is one more local insert with the other `side`.
+// The seed edge's other face is not split. `side` names which of the seed
+// edge's faces is refined, and the seed edge itself is not split, so the
+// other face has no missing vertex to repair. Splitting it too would start
+// a second, independent parallel cut running away from the shared edge,
+// doubling the new faces and the T-junctions; that is one more local insert
+// with the other `side`.
 //
-// WHAT AN N-GON DOES TO EITHER MODE, and the one place it is still a refusal.
-// "The opposite edge" is well defined only for a quad, so a strip cannot pass
-// through an n-gon. It can END at one, and does: reached mid-strip, a non-quad
-// stops that direction of the walk exactly as a cage boundary or a
-// non-manifold rung already stopped it, and the loop keeps every face it had
-// already crossed. The rung shared with the n-gon is still split, and the
-// T-junction repair below widens the n-gon from n to n+1 so no crack is left —
-// the same repair `local` mode has always relied on. The n-gons a run stopped
-// at come back in `stoppedAtNonQuadFaceIndices`, so a partial loop is stated
-// rather than inferred.
+// N-gons, in either mode. The opposite edge is well defined only for a
+// quad, so a strip cannot pass through an n-gon. It ends at one: reached
+// mid-strip, a non-quad stops that direction of the walk as a cage boundary
+// or a non-manifold rung does, and the loop keeps every face it has
+// crossed. The rung shared with the n-gon is still split, and the
+// T-junction repair below widens the n-gon from n to n+1 so no crack is
+// left. The n-gons a run stopped at come back in
+// `stoppedAtNonQuadFaceIndices`, so a partial loop is stated rather than
+// inferred.
 //
-// The SEED face is the exception, in both modes: a non-quad there has no cut
-// in it at all and no earlier progress to stop after, so it is refused, by a
-// message that names the face, its side count, and the adjacent quad to seed
-// from instead. A face already carrying a T-junction vertex (an n-gon, n>=5)
-// therefore cannot itself seed the next insert — but it can be, and is,
-// correctly WIDENED AGAIN as the neighbor of one, which is the case that
-// actually recurs when refining locally.
+// The seed face is the exception, in both modes: a non-quad there has no
+// cut in it and no earlier progress to stop after, so it is refused by a
+// message naming the face, its side count, and the adjacent quad to seed
+// from. A face carrying a T-junction vertex (an n-gon, n>=5) therefore
+// cannot seed the next insert, but it is widened again as the neighbor of
+// one, which is the case that recurs when refining locally.
 //
-// SO A WHOLE-LOOP INSERT CAN NOW LEAVE T-JUNCTIONS, where it previously could
-// not: on an all-quad cage it still leaves none (the walk crosses every face
-// whose rungs it splits), and on a cage carrying an n-gon it leaves exactly
-// the one widened n-gon at each end where the strip stopped.
+// On an all-quad cage a whole-loop insert leaves no T-junctions (the walk
+// crosses every face whose rungs it splits); on a cage carrying an n-gon it
+// leaves one widened n-gon at each end where the strip stopped.
 export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   const local = !!(opts && opts.local);
   if (!Number.isFinite(t) || t <= 0 || t >= 1) throw new Error('insertEdgeLoop: t must be a number strictly between 0 and 1');
@@ -912,13 +808,12 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   if (!seedEdge) throw new Error(`insertEdgeLoop: "${seedKey}" is not a real edge of this cage`);
   const face0 = seedEdge.faces[side];
   if (face0 === undefined) throw new Error(`insertEdgeLoop: no face on side ${side} of edge "${seedKey}" (it has ${seedEdge.faces.length} adjacent face${seedEdge.faces.length === 1 ? '' : 's'})`);
-  // THE SEED FACE IS THE ONE PLACE A NON-QUAD IS STILL A REFUSAL, and the
-  // refusal names what it hit. The cut inside a face runs from one of the
-  // near edge's two neighboring sides to the other, leaving across the edge
-  // opposite the near one — which needs exactly one side on each hand and a
-  // single opposite edge, true only of a quad. Met MID-STRIP that is a place
-  // to stop (see the enqueue below). Met as the SEED it is a face with no cut
-  // in it at all, and there is no earlier progress to stop after.
+  // A non-quad seed face is refused, and the refusal names what it hit. The
+  // cut inside a face runs from one of the near edge's two neighboring sides
+  // to the other, leaving across the edge opposite the near one — which
+  // needs exactly one side on each hand and a single opposite edge, true
+  // only of a quad. Met mid-strip that is a place to stop (see the enqueue
+  // below); met as the seed there is no earlier progress to stop after.
   if (cage.faces[face0].length !== 4) {
     const otherSide = side === 0 ? 1 : 0;
     const otherFace = seedEdge.faces[otherSide];
@@ -930,7 +825,7 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
 
   const faceInfos = new Map(); // faceIdx -> { na, nb, farNa, farNb }
   const visited = new Set();
-  const stoppedAtNonQuad = new Set(); // INPUT face indices the strip declined to enter
+  const stoppedAtNonQuad = new Set(); // input face indices the strip declined to enter
   const queue = [{ faceIdx: face0, nearKey: seedKey }];
 
   while (queue.length) {
@@ -943,20 +838,17 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     const nearEdge = topology.edgeMap.get(nearKey);
     const farKey = oppositeEdgeInFace(cage, faceIdx, nearKey);
     if (!farKey) throw new Error(`insertEdgeLoop: face ${faceIdx} has no well-defined opposite edge for "${nearKey}"`);
-    // ORIENT THE NEAR PAIR TO THE FACE'S OWN TRAVERSAL, not to the edge's
-    // canonical (sorted) one. An edgeKey is order-independent by design —
-    // "3_7" says nothing about which way either of its two faces walks it,
-    // and the two walk it in OPPOSITE directions precisely because the
-    // cage is consistently wound. The replacement quads below are built in
-    // traversal order ([na, nb, Nb, Na]), so taking na/nb from the edge
-    // record instead of from this face produced a correctly-shaped but
-    // BACKWARDS-wound pair for every face whose own traversal happened to
-    // run against the canonical order — a cage that still has the right
-    // vertex and face counts, still renders, and is silently
-    // non-orientable. Found by the generated corpus sweeping `side`, not
-    // by any hand-built fixture: side 0 on a box happens to walk with the
-    // canonical order throughout and is clean, side 1 starts from the
-    // OTHER face of the same seed edge and was wrong at every step.
+    // Orient the near pair to this face's traversal, not to the edge's
+    // canonical (sorted) order. An edgeKey is order-independent — "3_7"
+    // says nothing about which way either of its two faces walks it, and
+    // the two walk it in opposite directions because the cage is
+    // consistently wound. The replacement quads below are built in
+    // traversal order ([na, nb, Nb, Na]), so na/nb taken from the edge
+    // record would give a correctly shaped but backwards-wound pair for
+    // every face whose traversal runs against the canonical order: a cage
+    // with the right counts that renders and is non-orientable. On a box,
+    // side 0 happens to follow the canonical order throughout and side 1
+    // runs against it at every step.
     const ia0 = face.indexOf(nearEdge.v0);
     if (ia0 === -1) throw new Error(`insertEdgeLoop: face ${faceIdx} does not contain vertex ${nearEdge.v0}`);
     let na, nb, farNa, farNb;
@@ -965,50 +857,43 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
       na = nearEdge.v0; nb = nearEdge.v1;
       farNb = face[(ia0 + 2) % 4]; farNa = face[(ia0 + 3) % 4];
     } else if (face[(ia0 + 3) % 4] === nearEdge.v1) {
-      // this face walks v1 -> v0: relabel so na is genuinely the corner
-      // this face reaches FIRST, carrying each one's own far partner with
-      // it (the rung pairing is unchanged — only which is called "a").
+      // this face walks v1 -> v0: relabel so na is the corner this face
+      // reaches first, carrying each one's far partner with it (the rung
+      // pairing is unchanged — only which is called "a").
       na = nearEdge.v1; nb = nearEdge.v0;
       farNa = face[(ia0 + 2) % 4]; farNb = face[(ia0 + 1) % 4];
     } else throw new Error(`insertEdgeLoop: face ${faceIdx} does not contain edge "${nearKey}" as one of its own sides`);
 
     faceInfos.set(faceIdx, { na, nb, farNa, farNb });
 
-    if (local) continue; // LOCAL: the cut stops at this face's own rungs, so no neighbor is ever enqueued
+    if (local) continue; // local: the cut stops at this face's rungs, so no neighbor is enqueued
 
     for (const [nearV, farV] of [[na, farNa], [nb, farNb]]) {
       const rKey = edgeKey(nearV, farV);
       const rEdge = topology.edgeMap.get(rKey);
-      if (!rEdge) continue; // shouldn't happen for a well-formed quad, but an honest skip beats a crash
+      if (!rEdge) continue; // unreachable for a well-formed quad; skipped rather than thrown
       const others = rEdge.faces.filter((f) => f !== faceIdx);
-      if (others.length !== 1) continue; // a true cage boundary (0 left) or non-manifold (2+ left) — stop expanding this direction, don't guess
+      if (others.length !== 1) continue; // a cage boundary (0 left) or non-manifold (2+ left) — stop expanding this direction
       const nextFaceIdx = others[0];
       if (visited.has(nextFaceIdx)) continue;
       const nextFace = cage.faces[nextFaceIdx];
-      // A NON-QUAD ENDS THE STRIP HERE, it does not end the operation. This is
-      // the third member of a family the two lines above already handle the
-      // same way: a rung with no face beyond it (a cage boundary) and a rung
-      // with two or more (non-manifold) both stop this direction and keep
-      // whatever the walk already has. "The face beyond has no opposite edge
-      // to leave by" is the same kind of fact and gets the same answer —
-      // it was the only one of the three that threw, which made an n-gon
-      // ANYWHERE along a strip cancel the whole insert, including the part
-      // that was perfectly well defined.
+      // A non-quad ends the strip here, not the operation — the same answer
+      // the two lines above give a cage boundary (no face beyond the rung)
+      // and a non-manifold rung (two or more): stop this direction and keep
+      // what the walk has.
       //
-      // kernel/subdselect.mjs already reads it this way: edgeRingFromSeed and
-      // faceLoopFromSeed — the walks that SHOW a user which strip an insert
-      // will act on — return a partial ring at an n-gon and throw on nothing.
-      // A pick that highlights a strip has to be a pick the insert can run.
+      // kernel/subdselect.mjs reads it the same way: edgeRingFromSeed and
+      // faceLoopFromSeed — the walks that show which strip an insert will
+      // act on — return a partial ring at an n-gon. A pick that highlights a
+      // strip has to be a pick the insert can run.
       //
-      // Crossing instead would be a guess, and there is no rule to guess by.
-      // The two new vertices land inside the near edge's two neighboring
-      // sides; an n-gon has (n-2)/2 sides on each hand rather than one, and
-      // nothing chooses among them. For odd n there is not even an opposite
-      // edge to aim at. So: stop, and leave the n-gon crack-free rather than
-      // cut wrong. The rung shared with it IS still split (it is a rung of a
-      // face that is being split), and the T-junction repair below splices
-      // that new vertex into the n-gon's own boundary, widening it from n to
-      // n+1 — the identical mechanism `local` mode has always relied on.
+      // Crossing has no rule to follow. The two new vertices land inside the
+      // near edge's two neighboring sides; an n-gon has (n-2)/2 sides on each
+      // hand rather than one, and nothing chooses among them. For odd n there
+      // is no opposite edge at all. The rung shared with the n-gon is still
+      // split (it is a rung of a face being split), and the T-junction repair
+      // below splices that new vertex into the n-gon's boundary, widening it
+      // from n to n+1, the same mechanism local mode uses.
       if (nextFace.length !== 4) { stoppedAtNonQuad.add(nextFaceIdx); continue; }
       const idx2 = nextFace.indexOf(nearV);
       if (idx2 === -1) throw new Error(`insertEdgeLoop: rung "${rKey}" traversal error at face ${nextFaceIdx}`);
@@ -1020,9 +905,9 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     }
   }
 
-  // Materialize one new vertex per DISTINCT rung actually touched by the
-  // strip (a rung shared by 2 strip faces is discovered twice but only
-  // built once — same `newVertexOf` map both discoveries look up).
+  // Materialize one new vertex per distinct rung touched by the strip (a
+  // rung shared by 2 strip faces is discovered twice but built once — both
+  // discoveries look up the same `newVertexOf` map).
   const newVertices = cage.vertices.map((v) => v.slice());
   const newVertexOf = new Map();
   const insertedVertexIndices = [];
@@ -1052,22 +937,21 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     replacementFaces.push([info.na, info.nb, NbIdx, NaIdx]); // near half (toward the picked loop)
     replacementFaces.push([NaIdx, NbIdx, info.farNb, info.farNa]); // far half (toward the neighbor loop)
   }
-  // T-JUNCTION REPAIR — every rung this insert split is, in general, shared
-  // with a face that is NOT itself being split, and that face's own boundary
-  // still walks the rung as a single side. Left alone it would omit a vertex
-  // its neighbor has, which is not a T-junction but a crack: the two faces
-  // would agree on the endpoints and disagree about everything between them,
-  // and subdivideCatmullClark would refine the mismatch rather than close it.
-  // So the new vertex is spliced into that face's loop, in traversal order,
-  // between the rung's own two endpoints — turning an n-gon into an (n+1)-gon
-  // that is still legal input to every rule in kernel/subd.mjs.
+  // T-junction repair — a rung this insert split may be shared with a face
+  // that is not itself being split, whose boundary still walks the rung as
+  // a single side. Left alone it would omit a vertex its neighbor has, which
+  // is a crack: the two faces would agree on the endpoints and disagree
+  // about everything between them, and subdivideCatmullClark would refine
+  // the mismatch rather than close it. So the new vertex is spliced into
+  // that face's loop, in traversal order, between the rung's two endpoints —
+  // turning an n-gon into an (n+1)-gon, still legal input to kernel/subd.mjs.
   //
-  // A face is rebuilt only if one of its own sides is genuinely a split rung;
-  // otherwise it is copied through unchanged. This repair is reached by a cut
-  // that STOPS — which is `local` mode by construction, and a whole-loop
-  // insert wherever its strip stopped at an n-gon or a cage boundary. On an
-  // all-quad closed band every face across every split rung was itself
-  // enqueued, so nothing is rebuilt and this pass is a no-op.
+  // A face is rebuilt only if one of its sides is a split rung; otherwise it
+  // is copied through unchanged. This repair is reached by a cut that stops
+  // — local mode by construction, and a whole-loop insert wherever its
+  // strip stopped at an n-gon or a cage boundary. On an all-quad closed band
+  // every face across every split rung was itself enqueued, so nothing is
+  // rebuilt.
   const splitRungMid = new Map(); // rung edgeKey -> the new vertex sitting in its interior
   rungPairs.forEach(([nearIdx, farIdx], i) => splitRungMid.set(edgeKey(nearIdx, farIdx), insertedVertexIndices[i]));
 
@@ -1076,10 +960,10 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
   const stoppedAtNonQuadFaceIndices = [];
   cage.faces.forEach((face, fi) => {
     if (facesToRemove.has(fi)) return;
-    // Recorded here rather than during the walk because the walk knows INPUT
-    // indices and every other index this function returns is an OUTPUT one.
-    // keptFaces leads the output array, so its current length IS that index,
-    // whichever of the two branches below ends up doing the push.
+    // Recorded here rather than during the walk because the walk knows input
+    // indices and every other index this function returns is an output one.
+    // keptFaces leads the output array, so its current length is that index,
+    // whichever of the two branches below does the push.
     if (stoppedAtNonQuad.has(fi)) stoppedAtNonQuadFaceIndices.push(keptFaces.length);
     const n = face.length;
     let splits = false;
@@ -1092,24 +976,18 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
       const mid = splitRungMid.get(edgeKey(a, b));
       if (mid !== undefined) widened.push(mid);
     }
-    tJunctionFaceIndices.push(keptFaces.length); // index into the OUTPUT faces array, which starts with keptFaces
+    tJunctionFaceIndices.push(keptFaces.length); // index into the output faces array, which starts with keptFaces
     keptFaces.push(widened);
   });
 
-  // CREASE REMAP — the same real gap named in extrudeFaces' own header,
-  // in this operation's own shape: the near/far edges of every strip face
-  // (na-nb, farNa-farNb — the loop-direction edges) are reused VERBATIM
-  // by the near-half/far-half replacement faces above, so a crease on
-  // either survives for free, unchanged. A RUNG (na-farNa or nb-farNb —
-  // the perpendicular edges the loop actually crosses) is a different
-  // story: it gets SPLIT into two brand-new edges (near-to-inserted,
-  // inserted-to-far) that never existed before, and the original rung
-  // itself no longer exists as an edge anywhere in the output topology —
-  // its own old crease key would otherwise silently dangle while both of
-  // its real replacements got no weight at all. Fixed by transferring the
-  // rung's own weight onto BOTH of its new halves, reusing the already-
-  // built `rungPairs`/`insertedVertexIndices` (built above for exactly
-  // this near/far correspondence, one entry per rung actually crossed).
+  // Crease remap, as in extrudeFaces: the near/far edges of every strip face
+  // (na-nb, farNa-farNb — the loop-direction edges) are reused verbatim by
+  // the replacement faces above, so a crease on either survives unchanged. A
+  // rung (na-farNa or nb-farNb — the edges the loop crosses) is split into
+  // two new edges (near-to-inserted, inserted-to-far) and is gone from the
+  // output, so its weight moves onto both halves; otherwise the old key
+  // would dangle and both halves would go smooth. `rungPairs` and
+  // `insertedVertexIndices` hold one entry per rung crossed.
   const newCreases = { ...(cage.creases || {}) };
   rungPairs.forEach(([nearIdx, farIdx], i) => {
     const oldKey = edgeKey(nearIdx, farIdx);
@@ -1127,35 +1005,29 @@ export function insertEdgeLoop(cage, seedKey, t = 0.5, side = 0, opts = {}) {
     rungPairs,
     // Output-array indices, so a caller can highlight what it just made
     // without re-deriving it: the two halves of every split face, and the
-    // untouched-but-widened neighbors that now carry a T-junction vertex.
+    // untouched but widened neighbors that carry a T-junction vertex.
     splitFaceIndices: replacementFaces.map((_, i) => keptFaces.length + i),
     tJunctionFaceIndices,
-    // The n-gons the strip stopped at, so "this loop is partial" is something
-    // the caller is TOLD rather than something it has to infer from a face
-    // count. Empty means the loop ran to its natural ends (a closed band, or
-    // a cage boundary at each end) — an all-quad cage always returns empty,
-    // which is every cage that existed before an n-gon was introduced.
+    // The n-gons the strip stopped at, so a partial loop is reported rather
+    // than inferred from a face count. Empty means the loop ran to its
+    // natural ends (a closed band, or a cage boundary at each end); an
+    // all-quad cage always returns empty.
     stoppedAtNonQuadFaceIndices,
   };
 }
 
-// The LOCAL edge insert, named. Identical arguments to insertEdgeLoop's own
-// first four and identical return shape — this exists so an app-layer call
-// site reads as the operation the user asked for rather than as a loop insert
-// with a flag turned off, and it holds no logic of its own precisely so the
-// two can never disagree about anything.
+// The local edge insert, named. Same arguments as insertEdgeLoop's first
+// four and the same return shape; it holds no logic of its own, so the two
+// cannot disagree.
 export function insertEdgeLocal(cage, seedKey, t = 0.5, side = 0) {
   return insertEdgeLoop(cage, seedKey, t, side, { local: true });
 }
 
-// Re-positions an ALREADY-inserted loop's own vertices to a NEW `t`, given
-// the (nearIdx, farIdx) rung pairs insertEdgeLoop returned — pure reposition,
-// no topology change at all (same vertex/face/edge counts before and after).
-// This is what lets the app layer offer a real, continuously-draggable
-// position slider AFTER the loop already exists (Surface Fair's own
-// Smoothness-slider precedent): the
-// expensive topology surgery above runs exactly ONCE, at insertion time;
-// every subsequent slider drag is just this cheap reposition.
+// Re-positions an inserted loop's vertices to a new `t`, given the
+// (nearIdx, farIdx) rung pairs insertEdgeLoop returned — no topology change
+// (same vertex/face/edge counts before and after). The topology surgery
+// above runs once, at insertion; a position slider dragged afterwards calls
+// only this.
 export function recomputeInsertedLoopPositions(cage, insertedVertexIndices, rungPairs, t) {
   if (!Number.isFinite(t) || t <= 0 || t >= 1) throw new Error('recomputeInsertedLoopPositions: t must be a number strictly between 0 and 1');
   const vertices = cage.vertices.map((v) => v.slice());
@@ -1166,21 +1038,16 @@ export function recomputeInsertedLoopPositions(cage, insertedVertexIndices, rung
   return { vertices, faces: cage.faces, creases: cage.creases };
 }
 
-// DELETE FACES — the v1-listed "makes holes" command. Removes
-// the given faces from the cage and prunes any vertex left with ZERO
-// remaining faces (an orphan — kept around it would break
-// subdivideCatmullClark's own vertex-point rule, which assumes every vertex
-// has at least one incident face), compacting the surviving vertex indices.
-// A crease is kept only when the edge it names still genuinely exists in the
-// OUTPUT topology (both endpoints survive AND some remaining face still uses
-// that exact edge) — a dangling crease key pointing at a vertex pair that's
-// no longer an edge anywhere would be a real, silent correctness gap, not
-// caught by a plain "did both endpoints survive" check alone (two vertices
-// can each individually survive, used by different faces, without the
-// specific edge between them still existing). Returns `vertexRemap` (old
-// index -> new index, for every SURVIVING vertex only) so a caller (BRIDGE,
-// below) that already computed something in terms of the ORIGINAL indices
-// can translate it, without re-deriving the same compaction a second time.
+// Delete Faces — removes the given faces from the cage (making holes) and
+// prunes any vertex left with no remaining face (an orphan would break
+// subdivideCatmullClark's vertex-point rule, which assumes every vertex has
+// at least one incident face), compacting the surviving vertex indices. A
+// crease is kept only when the edge it names exists in the output topology
+// (both endpoints survive and some remaining face uses that exact edge);
+// two vertices can each survive, used by different faces, without the edge
+// between them surviving. Returns `vertexRemap` (old index -> new index,
+// for surviving vertices only) so a caller (Bridge, below) holding
+// original indices can translate them.
 export function deleteFaces(cage, faceIndices) {
   if (!faceIndices || !faceIndices.length) throw new Error('deleteFaces: faceIndices must be a non-empty array');
   for (const fi of faceIndices) {
@@ -1208,7 +1075,7 @@ export function deleteFaces(cage, faceIndices) {
     const [a, b] = key.split('_').map(Number);
     if (!vertexRemap.has(a) || !vertexRemap.has(b)) continue; // an endpoint was orphaned by this deletion
     const newKey = edgeKey(vertexRemap.get(a), vertexRemap.get(b));
-    if (!newTopology.edgeMap.has(newKey)) continue; // both endpoints survive, but this specific edge no longer exists anywhere
+    if (!newTopology.edgeMap.has(newKey)) continue; // both endpoints survive, but this edge does not
     newCreases[newKey] = weight;
   }
 
@@ -1219,39 +1086,31 @@ export function deleteFaces(cage, faceIndices) {
   };
 }
 
-// The single boundary edge at `vIdx` OTHER than `excludeKey` — used by
-// boundaryLoopFromSeed's own walk below. Returns null when there isn't
-// exactly one (a dead end, or a non-manifold boundary vertex where 2+
-// boundary edges meet) — an honest stop, matching every other kernel walk
-// in this file's own "refuse rather than guess" convention.
+// The single boundary edge at `vIdx` other than `excludeKey` — used by
+// boundaryLoopFromSeed's walk below. Returns null when there is not exactly
+// one (a dead end, or a non-manifold boundary vertex where 2+ boundary
+// edges meet), which stops the walk.
 function otherBoundaryEdgeAt(topology, vIdx, excludeKey) {
   const candidates = topology.vertexEdges[vIdx].filter((e) => e.faces.length === 1 && edgeKey(e.v0, e.v1) !== excludeKey);
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-// BOUNDARY LOOP FROM SEED — walks a real cage BOUNDARY (an edge used by
-// exactly one face) all the way around, starting from any one boundary edge,
-// returning the ordered vertex-index loop. This is a DIFFERENT walk from
-// kernel/subdselect.mjs's own edgeLoopFromSeed (which requires a regular
-// valence-4 interior vertex at every step and has no notion of "boundary" at
-// all) — a hole's own rim vertices can have any valence, so the only real
-// constraint here is "exactly one OTHER boundary edge at this vertex,"
-// checked by otherBoundaryEdgeAt above.
+// Walks a cage boundary (edges used by exactly one face) all the way
+// around, starting from any one boundary edge, returning the ordered
+// vertex-index loop. Unlike kernel/subdselect.mjs's edgeLoopFromSeed (which
+// needs a regular valence-4 vertex at every step), a hole's rim vertices
+// can have any valence, so the only constraint is exactly one other
+// boundary edge at each vertex (otherBoundaryEdgeAt above).
 //
-// ORIENTATION, derived deliberately, not guessed: `seedKey`'s one adjacent
-// face F traverses the edge as (v0 -> v1) somewhere in its own cyclic vertex
-// order (by definition of how buildTopology records `edge.v0`/`edge.v1` — see
-// its own construction, which always records the edge in the SAME direction
-// the owning face visits it). For the cage to stay a consistently-oriented
-// manifold once this hole is FILLED, the new fill face must traverse this
-// same edge in the OPPOSITE direction, i.e. (v1 -> v0). Starting the walk at
-// v0 and stepping AWAY from v1 (via v0's own OTHER boundary edge) produces
-// exactly the ordered list [v0, x2, ..., xk, v1] — reading this list as a
-// face's own cyclic vertex order, its wrap-around edge (last element back to
-// first) is (v1 -> v0), the required opposite direction, with zero extra
-// reversal step needed. Proven directly in this module's own test file (a
-// face built from this loop shares every edge with its one real neighbor in
-// the opposite direction — a genuine winding-consistency check, not assumed).
+// Orientation: `seedKey`'s one adjacent face traverses the edge as
+// (v0 -> v1) (buildTopology records an edge in the direction its first
+// owning face visits it). For the cage to stay consistently oriented once
+// the hole is filled, the fill face must traverse this edge as (v1 -> v0).
+// Starting at v0 and stepping away from v1 (via v0's other boundary edge)
+// gives [v0, x2, ..., xk, v1]; read as a face's cyclic vertex order, its
+// wrap-around edge is (v1 -> v0), with no reversal step. The test file
+// checks that a face built from this loop shares every edge with its
+// neighbor in the opposite direction.
 export function boundaryLoopFromSeed(cage, seedKey) {
   const topology = buildTopology(cage);
   const seedEdge = topology.edgeMap.get(seedKey);
@@ -1275,13 +1134,11 @@ export function boundaryLoopFromSeed(cage, seedKey) {
   return loop;
 }
 
-// FILLSUBDHOLE — the inverse of DELETE FACES. Fills a real, currently-open
-// boundary loop with ONE new planar n-gon face, matching the loop's own
-// vertex count exactly (the stated honest v1 scope — no
-// attempt at a fancier multi-face/centroid-fan fill). Refuses
-// honestly if the given loop isn't a genuine, currently-open boundary
-// (each consecutive pair must be a real edge of the cage used by EXACTLY one
-// face right now) rather than silently building an invalid/overlapping face.
+// FillSubDHole — the inverse of Delete Faces. Fills an open boundary loop
+// with one new n-gon face over the loop's vertices (no multi-face or
+// centroid-fan fill). Refuses if the loop is not an open boundary (each
+// consecutive pair must be an edge of the cage used by exactly one face)
+// rather than building an invalid or overlapping face.
 export function fillHoleWithNGon(cage, loopVertexIndices) {
   if (!loopVertexIndices || loopVertexIndices.length < 3) throw new Error('fillHoleWithNGon: loopVertexIndices needs at least 3 vertices');
   if (new Set(loopVertexIndices).size !== loopVertexIndices.length) throw new Error('fillHoleWithNGon: loopVertexIndices contains a repeated vertex — not a simple loop');
@@ -1300,38 +1157,28 @@ export function fillHoleWithNGon(cage, loopVertexIndices) {
   };
 }
 
-// The ordered boundary-loop walk of an entire FACE SET (as opposed to
-// boundaryLoopFromSeed's single already-open boundary edge) — BRIDGE's own
-// prerequisite: before the two selected patches are actually deleted, find
-// what their own rim will look like ONCE they are. A "boundary-region" edge
-// of the set (exactly one of its up-to-2 adjacent faces is IN the set,
-// mirroring extrudeFaces' own identical definition one milestone up) is
-// only usable here when its OTHER side is a real, different, un-selected
-// face (edge.faces.length === 2) — v1's own honest, stated scope cut:
-// Bridge does not attempt to reason about a selection whose own rim touches
-// an ALREADY-open cage edge (deleting the selection there wouldn't create a
-// new hole edge at all, it would just erase that edge from the topology
-// entirely), refusing by name rather than silently producing a malformed
-// tunnel.
+// The ordered boundary loop of a face set (as opposed to
+// boundaryLoopFromSeed's single open boundary edge) — Bridge's
+// prerequisite: before the two selected patches are deleted, find what
+// their rim will be once they are. A boundary-region edge of the set
+// (exactly one of its adjacent faces is in the set, as in extrudeFaces) is
+// usable only when its other side is a different, unselected face
+// (edge.faces.length === 2). A selection whose rim touches an open cage
+// edge is refused by name: deleting the selection there would erase that
+// edge rather than create a new hole edge.
 //
-// ORIENTATION — a real bug, found and fixed via this module's own test
-// file, not assumed correct on the first try: the selected face's own
-// SURVIVING neighbor across a rim edge (va,vb) traverses that SAME edge in
-// the OPPOSITE direction (vb,va) — the standard consistent-orientation
-// manifold property, true of any two faces sharing an edge. Per
-// boundaryLoopFromSeed's own derivation, a NEW face filling this rim must
-// traverse the edge opposite the SURVIVING neighbor's own direction, i.e.
-// opposite of (vb,va) = (va,vb) — the SAME direction the selected
-// (about-to-be-deleted) face itself already used. So `nextOf` must record
-// the SELECTED face's own forward direction (va -> vb) verbatim, not
-// reversed — proven directly: a hand round-trip (delete a face, refill its
-// rim via THIS function) is checked byte-for-byte against the SAME rim
-// walked from a seed edge via the independently-derived, already-proven
-// boundaryLoopFromSeed, in this module's own test file.
+// Orientation: the selected face's surviving neighbor across a rim edge
+// (va,vb) traverses that edge as (vb,va), as any two consistently oriented
+// faces sharing an edge do. A new face filling this rim must traverse the
+// edge opposite the surviving neighbor, i.e. as (va,vb) — the direction the
+// selected face used. So `nextOf` records the selected face's forward
+// direction (va -> vb) verbatim, not reversed. The test file checks a
+// delete-and-refill round trip against the same rim walked by
+// boundaryLoopFromSeed.
 export function orderedBoundaryLoopOfFaceSet(cage, faceIndices) {
   const topology = buildTopology(cage);
   const selSet = new Set(faceIndices);
-  const nextOf = new Map(); // va -> vb, the SAME direction the selected face itself traverses this rim edge
+  const nextOf = new Map(); // va -> vb, the direction the selected face traverses this rim edge
   for (const fi of faceIndices) {
     const face = cage.faces[fi];
     const n = face.length;
@@ -1341,7 +1188,7 @@ export function orderedBoundaryLoopOfFaceSet(cage, faceIndices) {
       const edge = topology.edgeMap.get(key);
       const selCount = edge.faces.filter((f) => selSet.has(f)).length;
       if (selCount !== 1) continue; // interior to the selection (2 selected faces share it) — not part of the rim
-      if (edge.faces.length !== 2) throw new Error(`orderedBoundaryLoopOfFaceSet: the selection's own rim touches an already-open cage edge ("${key}") — Bridge v1 needs a fully interior patch, surrounded by other faces on every side`);
+      if (edge.faces.length !== 2) throw new Error(`orderedBoundaryLoopOfFaceSet: the selection's own rim touches an already-open cage edge ("${key}") — a face group to bridge must be surrounded by other faces on every side`);
       if (nextOf.has(va)) throw new Error(`orderedBoundaryLoopOfFaceSet: vertex ${va} has more than one rim continuation — the selection's own boundary is not a single simple loop`);
       nextOf.set(va, vb);
     }
@@ -1359,151 +1206,121 @@ export function orderedBoundaryLoopOfFaceSet(cage, faceIndices) {
     cur = next;
     if (loop.length > cage.vertices.length) throw new Error('orderedBoundaryLoopOfFaceSet: the rim walk failed to close within a reasonable number of steps');
   }
-  /* ⚠⚠ CLOSING IS NOT THE SAME AS BEING THE WHOLE RIM. Every check above is
-     LOCAL — each rim vertex has exactly one continuation, so the walk closes
-     cleanly even when the patch has SEVERAL separate boundaries, and the walk
-     then returns whichever one its arbitrary start vertex happened to sit on
-     and drops the others without a word. A band of faces wrapped right around
-     a tube is exactly that shape: an annulus, two rim loops, no single face
-     that can stand for it. Every caller treats this loop as THE outline of the
-     patch — mergeFaces replaces the patch with one n-gon over it, bridgeFaces
-     builds a tunnel from it — so a dropped second loop is left with no face on
-     it at all: a hole, silently, out of a command whose whole promise was to
-     close one. `nextOf` holds one entry per rim edge, and a single cycle of
-     length L consumes exactly L of them, so comparing the two is an exact
-     count of whether this rim is one loop or several. */
+  /* Closing is not the same as being the whole rim. Every check above is
+     local — each rim vertex has exactly one continuation, so the walk closes
+     even when the patch has several separate boundaries, and it returns
+     whichever one its start vertex sat on. A band of faces wrapped around a
+     tube is that shape: an annulus, two rim loops, no single face that can
+     stand for it. Every caller treats this loop as the outline of the patch
+     — mergeFaces replaces the patch with one n-gon over it, bridgeFaces
+     builds a tunnel from it — so a dropped second loop would be left as a
+     hole. `nextOf` holds one entry per rim edge, and a single cycle of
+     length L consumes exactly L of them, so comparing the two tells one
+     loop from several. */
   if (loop.length !== nextOf.size) {
     throw new Error(`orderedBoundaryLoopOfFaceSet: this patch has ${nextOf.size} rim edges but its outline closes after ${loop.length} — it has more than one boundary (a band around the body rather than a disc), so no single face can stand in for it`);
   }
   return loop;
 }
 
-// BRIDGE — milestone 6: "connect two face/edge-loop selections
-// with a tunnel of faces, Segments chip." v1 SCOPE, stated honestly: exactly
-// TWO FACE selections (each a single simply-connected interior patch, per
-// orderedBoundaryLoopOfFaceSet's own refusal above) on the SAME SuperB
-// object — feeding it two already-open EDGE-LOOP selections directly (e.g.
-// two holes DELETE FACES already made) is a real, separate generalization,
-// not wired (a student reaches that case today by re-selecting
-// the hole's own rim faces — there are none once deleted — so this is a
-// genuine, named gap, not a workaround). Refuses honestly, naming the real
-// counts, when the two rims don't have matching vertex counts.
+// Bridge — connect two face selections with a tunnel of faces (Segments).
+// Each selection must be a single simply connected interior patch (see
+// orderedBoundaryLoopOfFaceSet's refusals); two open holes are bridged by
+// bridgeBoundaryLoops below. Rims of unequal vertex count are joined by
+// the monotone correspondence in bridgeRims.
 //
-// CORRESPONDENCE — which vertex of loop A lines up with which of loop B —
-// splits into two genuinely different questions, one deterministic and one
-// that genuinely needs a heuristic:
-//   DIRECTION is NOT a free choice — both loops come out of
-//   orderedBoundaryLoopOfFaceSet in the SAME "correct if independently
-//   filled with one face" convention (proven directly, see that function's
-//   own header), and a tunnel connecting two such loops always needs
-//   exactly ONE of them walked in REVERSE of its own fill-direction (the
-//   standard fact that a cylinder wall's two rims run opposite senses
-//   relative to how each would independently cap off alone) — this module
-//   always reverses loop B, never loop A, a fixed, arbitrary-but-consistent
-//   choice (reversing A instead would work identically by symmetry).
-//   Proven directly: this module's own test file checks the RESULT is a
-//   fully consistent 2-manifold (every shared edge traversed in opposite
-//   directions by its two faces) on multiple real fixtures, not merely
-//   "looks plausible."
-//   ROTATION (which vertex of the now-correctly-reversed loop B lines up
-//   with loop A's own start) has no single correct answer for two
-//   independently-selected patches — resolved via the standard "bridge two
-//   loops" heuristic (the same idea Blender's own Bridge Edge Loops uses):
-//   search every rotation, keep whichever minimizes the total squared
-//   distance between corresponding vertex pairs. No manual per-vertex/twist
-//   override — a real, stated limitation for a pathological
-//   pair of loops where the nearest-distance heuristic picks a visually
-//   twisted correspondence; the common, intended case (two roughly facing
-//   openings) is exact and unambiguous.
-export function bridgeFaces(cage, faceIndicesA, faceIndicesB, segments = 1, straightness = 1, creaseWeight = 0) {
+// Correspondence — which vertex of loop A lines up with which of loop B —
+// is two questions, one deterministic and one heuristic:
+//   Direction is fixed. Both loops come out of orderedBoundaryLoopOfFaceSet
+//   in the same "fill with one face" convention, and a tunnel between two
+//   such loops needs exactly one of them walked in reverse (a cylinder
+//   wall's two rims run opposite senses relative to how each would cap off
+//   alone). Loop B is always the one reversed; reversing A would work the
+//   same by symmetry. The test file checks the result is a consistent
+//   2-manifold (every shared edge traversed in opposite directions by its
+//   two faces) on several fixtures.
+//   Rotation (which vertex of the reversed loop B lines up with loop A's
+//   start) has no single correct answer for two independently selected
+//   patches. It is resolved by the standard "bridge two loops" heuristic
+//   (as in Blender's Bridge Edge Loops): search every rotation, keep the
+//   one minimizing the total squared distance between corresponding vertex
+//   pairs. `spin` offsets the result by whole rim steps, for a pair of
+//   loops where the nearest-distance answer reads as twisted.
+export function bridgeFaces(cage, faceIndicesA, faceIndicesB, segments = 1, straightness = 1, creaseWeight = 0, spin = 0) {
   if (!faceIndicesA || !faceIndicesA.length || !faceIndicesB || !faceIndicesB.length) throw new Error('bridgeFaces: faceIndicesA and faceIndicesB must both be non-empty arrays');
   if (!Number.isInteger(segments) || segments < 1) throw new Error('bridgeFaces: segments must be a positive integer');
-  const setA = new Set(faceIndicesA), setB = new Set(faceIndicesB);
+  const setB = new Set(faceIndicesB);
   for (const fi of faceIndicesA) if (setB.has(fi)) throw new Error(`bridgeFaces: face ${fi} is in both selections — they must be disjoint`);
 
   const loopA0 = orderedBoundaryLoopOfFaceSet(cage, faceIndicesA);
   const loopB0raw = orderedBoundaryLoopOfFaceSet(cage, faceIndicesB);
-  // The two patches are deleted FIRST — that is what turns a face selection
-  // into a pair of open rims, which is the only shape the tunnel builder
-  // below ever works on. An ALREADY-open pair of rims (two holes a student
-  // made earlier) skips this step entirely and calls the same builder
-  // directly: see bridgeBoundaryLoops below.
+  // The two patches are deleted first — that turns a face selection into a
+  // pair of open rims, the only shape the tunnel builder works on. An
+  // already-open pair of rims skips this step and calls the same builder:
+  // see bridgeBoundaryLoops below.
   const del = deleteFaces(cage, [...faceIndicesA, ...faceIndicesB]);
-  return bridgeRims(cage, del.cage, del.vertexRemap, loopA0, loopB0raw, segments, 'bridgeFaces', straightness, creaseWeight);
+  return bridgeRims(cage, del.cage, del.vertexRemap, loopA0, loopB0raw, segments, 'bridgeFaces', straightness, creaseWeight, spin);
 }
 
-// BRIDGE ON TWO ALREADY-OPEN EDGE LOOPS — the generalization bridgeFaces'
-// own header named as unwired ("feeding it two already-open EDGE-LOOP
-// selections directly is a real, separate generalization"), asked for
-// directly: bridge should work on a pair of open edge loops, not only on two
-// face selections. Each seed is ONE boundary edge of its own hole; the rest
-// of that hole's rim is walked from it by boundaryLoopFromSeed, which is
-// exactly the rim-finding half that already existed.
+// Bridge on two open edge loops. Each seed is one boundary edge of its
+// hole; the rest of that hole's rim is walked from it by
+// boundaryLoopFromSeed.
 //
-// WHY THIS NEEDS NO NEW ORIENTATION REASONING: boundaryLoopFromSeed and
-// orderedBoundaryLoopOfFaceSet both return their loop in the SAME
-// convention — "the order a single new face filling this rim would use" —
-// each derived and proven independently in its own header above. So both
-// paths hand the tunnel builder loops of identical meaning, and the builder's
-// own reverse-B-then-rotate correspondence applies unchanged.
-export function bridgeBoundaryLoops(cage, seedKeyA, seedKeyB, segments = 1, straightness = 1, creaseWeight = 0) {
+// No new orientation reasoning is needed: boundaryLoopFromSeed and
+// orderedBoundaryLoopOfFaceSet both return their loop in the same
+// convention — the order a single new face filling this rim would use — so
+// both paths hand the tunnel builder loops of identical meaning, and its
+// reverse-B-then-rotate correspondence applies unchanged.
+export function bridgeBoundaryLoops(cage, seedKeyA, seedKeyB, segments = 1, straightness = 1, creaseWeight = 0, spin = 0) {
   if (!Number.isInteger(segments) || segments < 1) throw new Error('bridgeBoundaryLoops: segments must be a positive integer');
   const loopA0 = boundaryLoopFromSeed(cage, seedKeyA);
   const loopB0raw = boundaryLoopFromSeed(cage, seedKeyB);
-  // Two seeds on the SAME rim would walk the identical loop and "bridge" a
-  // hole to itself. Caught by identity here, by name, rather than left to
-  // the shared-vertex refusal below (which would also fire, but with a
-  // message about two openings touching, which is not what happened).
+  // Two seeds on the same rim would walk the identical loop and bridge a
+  // hole to itself. Caught here by name rather than left to the
+  // shared-vertex refusal in bridgeRims, whose message (two openings
+  // touching) would misdescribe it.
   if (loopA0.length === loopB0raw.length && loopA0.every((v) => loopB0raw.includes(v))) {
     throw new Error(`bridgeBoundaryLoops: "${seedKeyA}" and "${seedKeyB}" are both on the SAME open boundary loop — Bridge needs one edge from each of TWO different holes`);
   }
-  // Nothing is deleted here: the rims are already open, so the "cage the
-  // tunnel is built onto" IS this cage, and every rim vertex keeps its own
-  // index (an identity remap, where the face path needs a real one).
+  // Nothing is deleted here: the rims are already open, so the tunnel is
+  // built onto this cage and every rim vertex keeps its index (an identity
+  // remap, where the face path needs a real one).
   const workCage = { vertices: cage.vertices.map((v) => v.slice()), faces: cage.faces.map((f) => [...f]), creases: { ...(cage.creases || {}) } };
   const identity = new Map(cage.vertices.map((_, i) => [i, i]));
-  return bridgeRims(cage, workCage, identity, loopA0, loopB0raw, segments, 'bridgeBoundaryLoops', straightness, creaseWeight);
+  return bridgeRims(cage, workCage, identity, loopA0, loopB0raw, segments, 'bridgeBoundaryLoops', straightness, creaseWeight, spin);
 }
 
-// The tunnel builder both Bridge paths share: given two rims (in fill-face
-// order, per the two walkers' own headers), the cage those rims are open on,
-// and how each rim's vertex indices map into it, build the ring-by-ring wall
-// between them. Factored out when Bridge grew its second entry point rather
-// than duplicated — the correspondence search, the duplicate-edge refusal
-// and the winding are all one definition, so the two paths cannot drift.
-// UNEQUAL RIMS — the monotone correspondence, and the whole of what
-// "the bridge resamples" means here.
+// The tunnel builder both Bridge paths share (bridgeRims, below): given two
+// rims (in fill-face order), the cage those rims are open on, and how each
+// rim's vertex indices map into it, build the ring-by-ring wall between
+// them. The correspondence search, the duplicate-edge refusal and the
+// winding are one definition, so the two paths cannot drift.
 //
-// THE RESAMPLE HAPPENS INSIDE THE BRIDGE, NEVER ON A RIM. Both rims keep
-// every vertex they had, in place: nothing is inserted into them, nothing is
-// removed, nothing moves. That is what lets this coexist with the rule the
-// old refusal was protecting ("matching one rim to another by resampling
-// would move vertices that already exist, which a bridge may never do") —
-// the reconciliation lives entirely in the NEW faces.
+// Unequal rims: the monotone correspondence. The resampling happens inside
+// the bridge, never on a rim. Both rims keep every vertex they had, in
+// place — nothing is inserted, removed or moved, since a bridge may not
+// move existing vertices — and the reconciliation lives entirely in the
+// new faces.
 //
 // `c[j] = floor(j * nCoarse / nFine)` is monotone and advances by exactly 0
 // or 1 per step, so walking the fine rim once emits exactly `nCoarse` quads
 // and `nFine - nCoarse` triangles. A 12-rim bridged to an 8-rim gives 8
 // quads and 4 triangles.
 //
-// THE TRIANGLES ARE THE HONEST COST, stated rather than hidden: each one
-// becomes a valence-3 extraordinary vertex under Catmull-Clark, so the limit
-// surface is slightly less even there than an all-quad bridge between
-// matched rims. That is a real difference a modeler can see if they look
-// for it, and it is strictly better than the alternative of refusing, or of
-// silently editing one of the two objects the student built.
+// Each triangle becomes a valence-3 extraordinary vertex under
+// Catmull-Clark, so the limit surface is slightly less even there than an
+// all-quad bridge between matched rims; the alternatives are refusing, or
+// editing one of the two rims.
 //
-// WHERE THE TRIANGLES LAND IS NOT ARBITRARY: they are distributed evenly
-// around the ring by the floor() itself, not bunched at the seam, because
-// `c` advances on a uniform schedule rather than after a run of steps.
+// The triangles are distributed evenly around the ring by the floor(), not
+// bunched at the seam, because `c` advances on a uniform schedule.
 function rimCorrespondence(nFine, nCoarse) {
   const c = [];
   for (let j = 0; j <= nFine; j++) c.push(Math.floor((j * nCoarse) / nFine));
   return c; // c[nFine] === nCoarse, i.e. the wrap back to coarse[0]
 }
 // One band of the tunnel wall, between two rings of possibly different
-// counts. Equal counts take the original quad path unchanged, in the
-// original order, so every existing Bridge result is byte-identical.
+// counts. Equal counts take the plain quad path.
 function bridgeBandFaces(ringNear, ringFar) {
   const p = ringNear.length, q = ringFar.length;
   const out = [];
@@ -1514,8 +1331,8 @@ function bridgeBandFaces(ringNear, ringFar) {
     return out;
   }
   // The winding below is the equal-count face [a, b, bFar, aFar] with the
-  // repeated far (or near) vertex dropped — so a triangle is that same quad
-  // degenerating, not a separately-derived orientation.
+  // repeated far (or near) vertex dropped — a triangle is that quad
+  // degenerating, not a separately derived orientation.
   if (p > q) {
     const c = rimCorrespondence(p, q);
     for (let j = 0; j < p; j++) {
@@ -1533,32 +1350,30 @@ function bridgeBandFaces(ringNear, ringFar) {
   }
   return out;
 }
-// THE OPEN-RUN SIBLING of rimCorrespondence, and the difference is the whole
-// point: a rim WRAPS, so its correspondence is a uniform schedule that lands
-// back on coarse[0] after a full turn and has no distinguished starting
-// vertex. A RUN has ENDS, and the ends are not free — the first vertex of one
-// run must meet the first of the other and the last must meet the last, or the
-// wall would run off the end of the shorter run and leave a dangling stub. So
-// this map is monotone with c[0] === 0 and c[p - 1] === q - 1 (both ends
-// PINNED), and the interior is spread evenly between them by the round()
-// itself rather than bunched against either end.
+// The open-run counterpart of rimCorrespondence. A rim wraps, so its
+// correspondence is a uniform schedule that lands back on coarse[0] after a
+// full turn and has no distinguished starting vertex. A run has ends, and
+// they are not free — the first vertex of one run must meet the first of
+// the other and the last the last, or the wall would run off the end of the
+// shorter run and leave a dangling stub. So this map is monotone with
+// c[0] === 0 and c[p - 1] === q - 1 (both ends pinned), and the interior is
+// spread evenly between them by the round().
 //
-// `p >= 2` is guaranteed by the caller's own "at least 2 vertices" refusal, so
+// `p >= 2` is guaranteed by the caller's "at least 2 vertices" refusal, so
 // the p - 1 divisor is never zero.
 function openRunCorrespondence(p, q) {
   const c = [];
   for (let j = 0; j < p; j++) c.push(Math.round((j * (q - 1)) / (p - 1)));
   return c;
 }
-// One band of an OPEN bridge wall, between two rows of possibly different
+// One band of an open bridge wall, between two rows of possibly different
 // counts — the open-chain counterpart of bridgeBandFaces, which wraps with
-// `% p` because a rim closes. Nothing here wraps: the walk stops one short of
-// the end of whichever row is FINE, so the fine row's own edges each get
-// exactly one face and the coarse row stalls where the correspondence does.
+// `% p` because a rim closes. Nothing here wraps: the walk stops one short
+// of the end of the finer row, so each of its edges gets exactly one face
+// and the coarse row stalls where the correspondence does.
 //
-// Equal counts take the original quad path unchanged, in the original order
-// and in whichever of the two windings the caller's orientation search
-// settled on, so every existing Bridge result is byte-identical.
+// Equal counts take the plain quad path, in whichever of the two windings
+// the caller's orientation search chose.
 function bridgeRunBandFaces(rowNear, rowFar, flip) {
   const p = rowNear.length, q = rowFar.length;
   const out = [];
@@ -1568,10 +1383,10 @@ function bridgeRunBandFaces(rowNear, rowFar, flip) {
     }
     return out;
   }
-  // A stalled step repeats a vertex, and the face it produces is that same
-  // quad with the repeat dropped — so a triangle here is the quad
-  // degenerating, not a separately-derived orientation that could disagree
-  // with its neighbors' winding.
+  // A stalled step repeats a vertex, and the face it produces is that quad
+  // with the repeat dropped — a triangle here is the quad degenerating, not
+  // a separately derived orientation that could disagree with its
+  // neighbors' winding.
   const push = (a, b, f0, f1) => {
     if (a === b) out.push(flip ? [a, f0, f1] : [a, f1, f0]);
     else if (f0 === f1) out.push(flip ? [b, a, f0] : [a, b, f0]);
@@ -1586,44 +1401,41 @@ function bridgeRunBandFaces(rowNear, rowFar, flip) {
   for (let j = 0; j + 1 < q; j++) push(rowNear[c[j]], rowNear[c[j + 1]], rowFar[j], rowFar[j + 1]);
   return out;
 }
-function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segments, label, straightness = 1, creaseWeight = 0) {
+// Spin is a whole number of rim steps added to the correspondence the
+// distance search settles on: +1 pairs each A vertex with the B vertex one
+// step further round, so the tunnel twists by one edge; 0 is the search's
+// answer. A spun correspondence is held to the same duplicate-edge rule as
+// the searched one, and refused by name rather than built non-manifold.
+function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segments, label, straightness = 1, creaseWeight = 0, spin = 0) {
   const cage = sourceCage;
-  // SHARED-VERTEX REFUSAL — a real gap in the
-  // FIRST fix (the rungA===rungB check a few lines below only rejects a
-  // rotation that pairs the shared vertex with ITSELF; it does nothing for
-  // a rotation where the shared vertex survives paired with something
-  // else). Two real, separately-found failure modes if this isn't caught
-  // up front: (1) the "closest rotation that doesn't duplicate anything"
-  // search can still ACCEPT a rotation where the shared vertex simply
-  // isn't in either rung pair that round — the tunnel builds successfully,
-  // but that shared vertex's own face neighborhood is no longer a topological
-  // disk (a genuine vertex-non-manifold pinch — the limit surface
-  // collapses to a point there), invisible to every check in this module,
-  // which all reason about EDGES, not vertex link-disks; (2) if the two
-  // loops share TWO vertices without sharing an edge, some rotation can
-  // pair them crosswise (A[i]=u,B[i]=v and A[j]=v,B[j]=u), creating the
-  // SAME rung edge (u,v) twice — a real edge with 4 incident faces, only
-  // caught by the existing edgeMap check if (u,v) happens to already
-  // exist elsewhere, not in general. Both vanish together by refusing
-  // outright the instant the two loops' own vertex SETS intersect at
-  // all — two openings that already touch have no genuine gap to tunnel
-  // through, matching this project's own "refuse rather than guess"
-  // standard (the same posture `stitchEdgeRuns`, one function below,
-  // already takes for its own runA/runB shared-vertex case).
+  if (!Number.isInteger(spin)) throw new Error(`${label}: spin must be a whole number of rim steps`);
+  // Shared-vertex refusal. The rungA===rungB check below only rejects a
+  // rotation that pairs a shared vertex with itself. Two failure modes
+  // remain if the loops share a vertex: (1) the rotation search can accept
+  // a rotation where the shared vertex is in no rung pair — the tunnel
+  // builds, but that vertex's face neighborhood is not a topological disk
+  // (a vertex-non-manifold pinch where the limit surface collapses to
+  // a point), invisible to the checks here, which reason about edges, not
+  // vertex link-disks; (2) if the two loops share two vertices without
+  // sharing an edge, some rotation can pair them crosswise (A[i]=u,B[i]=v
+  // and A[j]=v,B[j]=u), creating the same rung edge (u,v) twice — an edge
+  // with 4 incident faces, caught by the edgeMap check only if (u,v)
+  // already exists elsewhere. Both are prevented by refusing whenever the
+  // two loops' vertex sets intersect: two openings that already touch have
+  // no gap to tunnel through. `stitchEdgeRuns` refuses its shared-vertex
+  // case the same way.
   const sharedVertex = loopA0.find((vi) => loopB0raw.includes(vi));
   if (sharedVertex !== undefined) {
     throw new Error(`${label}: the two boundary loops share vertex ${sharedVertex} — they already touch, with no real gap to tunnel through (pick two openings separated by real, uninterrupted cage surface)`);
   }
   const nA = loopA0.length, nB = loopB0raw.length;
-  // Every ring the tunnel builds internally carries the FINE count, so the
+  // Every ring the tunnel builds internally carries the fine count, so the
   // reconciliation happens in exactly one band — the one touching the coarse
-  // rim — rather than being smeared through every intermediate ring.
+  // rim — rather than being spread through every intermediate ring.
   const nF = Math.max(nA, nB);
-  const n = nA; // kept: every equal-count expression below reads the same as before
-  const loopB0 = [...loopB0raw].reverse(); // deterministic — see this function's own header
+  const loopB0 = [...loopB0raw].reverse(); // deterministic — see bridgeFaces' header
   // The rung pairs for one candidate alignment: which A vertex each B vertex
-  // reaches across to. With equal counts this is exactly index-to-index, so
-  // the scoring, the duplicate-edge check and the rings below are unchanged.
+  // reaches across to. With equal counts this is index-to-index.
   function rungPairs(seqB) {
     const pairs = [];
     if (nA === nB) { for (let i = 0; i < nA; i++) pairs.push([i, i]); return pairs; }
@@ -1633,20 +1445,15 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
     return pairs;
   }
 
-  // ROTATION VALIDITY — a real, found-via-testing correctness gap, not
-  // theoretical: on a cage with real internal symmetry (e.g. a plain box),
-  // SOME rotation offsets pair loopA[i] with a loopB[i] that ALREADY sits
-  // exactly one edge away via a completely different, already-kept face
-  // (the two openings' own rims happen to share a "diagonal" neighbor) —
-  // building the tunnel with that offset would create a rung edge
-  // DUPLICATING one that already exists elsewhere in the cage, a genuine
-  // non-manifold result (an edge used by 4 faces) that the distance
-  // heuristic alone can't see (a duplicate can be the SHORTEST rung, not
-  // the longest). So every rotation candidate is checked against the
-  // cage's OWN real topology (after deletion, so only genuinely surviving
-  // faces are considered) before ever being accepted, and candidates are
-  // tried in ascending-distance order — the closest ROTATION THAT DOESN'T
-  // DUPLICATE ANYTHING wins, not just the closest one, period.
+  // Rotation validity: on a cage with internal symmetry (e.g. a plain box),
+  // some rotation offsets pair loopA[i] with a loopB[i] that already sits
+  // one edge away via a different, kept face (the two rims share a
+  // "diagonal" neighbor). Building the tunnel with that offset would
+  // duplicate an existing edge — an edge used by 4 faces — and the distance
+  // heuristic cannot see it (a duplicate can be the shortest rung). So every
+  // rotation candidate is checked against the cage's topology after
+  // deletion, and candidates are tried in ascending-distance order: the
+  // closest rotation that duplicates nothing wins.
   const del = { cage: workCage, vertexRemap };
   const delTopology = buildTopology(workCage);
   function rotate(arr, k) { return arr.slice(k).concat(arr.slice(0, k)); }
@@ -1658,19 +1465,15 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   function wouldDuplicateExistingEdge(seqB0) {
     for (const [ai, bi] of rungPairs(seqB0)) {
       const rungA = del.vertexRemap.get(loopA0[ai]), rungB = del.vertexRemap.get(seqB0[bi]);
-      if (rungA === undefined || rungB === undefined) return true; // shouldn't happen for a well-formed selection; treat as invalid defensively
-      // A real, found-via-review gap: when the two selections' rims share a
-      // cage vertex WITHOUT sharing an edge (e.g. two diagonal faces of the
-      // same 2x2 grid, meeting only at the shared center vertex), that
-      // shared vertex survives deleteFaces (it's still used by the
-      // surviving, non-selected faces) and rungA===rungB for whichever
-      // rotation happens to pair them — a DEGENERATE rung (a "tunnel" edge
-      // from a vertex to itself), not caught by the edgeMap check above
-      // (a real cage never has a self-loop edge to find), and worse: this
-      // exact degenerate pairing has distSq===0, so the "closest rotation"
-      // heuristic actively PREFERS it over every real, non-degenerate
-      // rotation. Reject it explicitly, the same way stitchEdgeRuns (one
-      // function below) already refuses runA/runB sharing a vertex.
+      if (rungA === undefined || rungB === undefined) return true; // unreachable for a well-formed selection; treated as invalid
+      // When the two rims share a cage vertex without sharing an edge (e.g.
+      // two diagonal faces of a 2x2 grid, meeting only at the center
+      // vertex), that vertex survives deleteFaces (the unselected faces still
+      // use it) and rungA===rungB for the rotation that pairs it — a
+      // degenerate rung from a vertex to itself, which the edgeMap check
+      // cannot catch (a cage has no self-loop edge). Its distSq is 0, so the
+      // closest-rotation heuristic would prefer it over every other rotation.
+      // Rejected explicitly, as stitchEdgeRuns refuses runs sharing a vertex.
       if (rungA === rungB) return true;
       if (delTopology.edgeMap.has(edgeKey(rungA, rungB))) return true;
     }
@@ -1686,7 +1489,17 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   if (!validCandidate) {
     throw new Error(`${label}: every possible correspondence between the two rims would duplicate an edge the cage already has elsewhere (the two openings are already directly connected by existing geometry) — pick two openings with a genuine gap of empty space between them`);
   }
-  const alignedLoopB0 = validCandidate.candidate;
+  let alignedLoopB0 = validCandidate.candidate;
+  if (spin) {
+    const spunBy = (k) => rotate(alignedLoopB0, ((k % nB) + nB) % nB);
+    const spun = spunBy(spin);
+    if (wouldDuplicateExistingEdge(spun)) {
+      let near = null;
+      for (let k = 1; k < nB && near === null; k++) { if (!wouldDuplicateExistingEdge(spunBy(spin - k))) near = spin - k; else if (!wouldDuplicateExistingEdge(spunBy(spin + k))) near = spin + k; }
+      throw new Error(`${label}: spin ${spin} pairs rim vertices the cage already joins${near === null ? '' : `; ${near} is the nearest spin that builds`}`);
+    }
+    alignedLoopB0 = spun;
+  }
 
   const loopA = loopA0.map((vi) => del.vertexRemap.get(vi));
   const loopB = alignedLoopB0.map((vi) => del.vertexRemap.get(vi));
@@ -1698,13 +1511,13 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   const ptsA = loopA0.map((vi) => cage.vertices[vi]);
   const ptsB = alignedLoopB0.map((vi) => cage.vertices[vi]);
   // Tangents are read off workCage (post-deletion, where the rims are
-  // genuinely naked) using the REMAPPED indices, while positions come from
-  // the source cage — deleteFaces preserves every surviving vertex position
-  // exactly, so the two agree by construction.
+  // naked) using the remapped indices, while positions come from the source
+  // cage — deleteFaces preserves every surviving vertex position exactly, so
+  // the two agree.
   // The corresponded partner point for each rim vertex — with equal counts
-  // this is ptsB/ptsA verbatim, so the tangents are unchanged. With unequal
-  // counts a coarse vertex has several partners; the FIRST is used, since
-  // this only aims the tangent and any of them points the same way.
+  // this is ptsB/ptsA verbatim. With unequal counts a coarse vertex has
+  // several partners; the first is used, since this only aims the tangent
+  // and any of them points the same way.
   const pairs = rungPairs(alignedLoopB0);
   const partnerOfA = new Array(nA), partnerOfB = new Array(nB);
   for (const [ai, bi] of pairs) {
@@ -1717,10 +1530,10 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   for (let k = 1; k < segments; k++) {
     const t = k / segments;
     const ring = [];
-    // An intermediate ring carries the FINE count, so the tunnel keeps its
+    // An intermediate ring carries the fine count, so the tunnel keeps its
     // full resolution all the way along and only the single band against the
     // coarse rim reconciles. At t < 1 the several fine points sharing one
-    // coarse partner are still genuinely distinct, so no face degenerates.
+    // coarse partner are still distinct, so no face degenerates.
     for (let j = 0; j < nF; j++) {
       const [ai, bi] = pairs[j % pairs.length];
       ring.push(newVertices.length);
@@ -1730,105 +1543,82 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   }
   rings.push(loopB);
 
-  // Face winding [a, b, bFar, aFar] (both rings walked FORWARD, in their
-  // own already-correct direction — loopB was already reversed once above,
-  // deterministically, so no second reversal belongs here) — derived
-  // empirically against a real fixture (two SEPARATE boxes with a genuine
-  // gap between them, one opened face each — the realistic Bridge scenario,
-  // not two already-side-connected faces of the SAME closed box, which has
-  // no true "gap" to tunnel through at all and is a poor orientation test
-  // for exactly that reason), proven by this module's own test file via a
-  // real 2-manifold/consistent-winding check (every edge shared by exactly
-  // 2 faces traverses it in opposite directions), not assumed from a
-  // plausible-looking formula.
+  // Face winding [a, b, bFar, aFar], both rings walked forward (loopB was
+  // reversed once above, so no second reversal belongs here). The test file
+  // checks the result on two separate boxes with a gap between them, one
+  // opened face each, for consistent winding (every edge shared by exactly
+  // 2 faces is traversed in opposite directions).
   const newFaces = [...del.cage.faces];
   for (let r = 0; r < rings.length - 1; r++) {
     for (const f of bridgeBandFaces(rings[r], rings[r + 1])) newFaces.push(f);
   }
-  // Rim edges only, and on the REMAPPED indices — the crease map is keyed by the
-  // indices the returned cage actually uses, which after deleteFaces are not the
-  // source cage's own.
+  // Rim edges only, and on the remapped indices — the crease map is keyed by the
+  // indices the returned cage uses, which after deleteFaces are not the
+  // source cage's.
   const outCreases = { ...del.cage.creases };
   creaseChain(outCreases, loopA, creaseWeight, true);
   creaseChain(outCreases, loopB, creaseWeight, true);
   return {
     cage: { vertices: newVertices, faces: newFaces, creases: outCreases },
     tunnelFaceIndices: newFaces.map((_, i) => i).slice(del.cage.faces.length),
+    spinSteps: nB,
   };
 }
 
-// BRIDGE ON TWO OPEN EDGE RUNS — the full generalization asked for directly:
-// "Any 1 edge to any other 1 edge. Or 2 to 2 etc. Different bodies, one or
-// two holes etc." This is the SAME-HOLE and N-to-N case, and it is
-// genuinely EASIER than the closed-loop Bridge above, not harder — worth
-// stating plainly, because the reverse is the natural assumption:
+// Bridge on two open edge runs — any run of edges to any other: one edge
+// to one edge, N to N, across bodies, or two runs of the same hole.
 //
-//   A CLOSED loop has ROTATIONAL freedom, which is why bridgeRims runs an
-//   n-way rotation search scored by total squared distance, and why it needs
-//   a duplicate-edge validity check to stop the closest rotation from being
-//   a non-manifold one. Two OPEN runs have ENDS. There is no rotation at
-//   all — only a direction choice, forward or reversed, exactly 2
-//   candidates.
+//   A closed loop has rotational freedom, which is why bridgeRims runs an
+//   n-way rotation search scored by total squared distance, and needs a
+//   duplicate-edge check to stop the closest rotation from being a
+//   non-manifold one. Two open runs have ends. There is no rotation — only
+//   a direction choice, forward or reversed, 2 candidates.
 //
-// WHAT DECIDES WHAT, and this is the real design point: ORIENTATION is not a
-// free choice and is not derived by hand here — a consistently-wound
-// 2-manifold never traverses the same DIRECTED edge twice, so a candidate
-// rung set that would reuse one is simply the wrong winding, and
-// directedEdgeReuseCount decides it by direct verification of that property.
-// CORRESPONDENCE (which end of runA meets which end of runB) is the one
-// genuinely geometric question, and total squared distance answers it. So
-// topology settles orientation, geometry settles correspondence, and neither
-// is left to a plausible-looking formula.
+// Orientation is decided by topology: a consistently wound 2-manifold never
+// traverses the same directed edge twice, so a candidate rung set that
+// would reuse one is the wrong winding, and directedEdgeReuseCount decides
+// it. Correspondence (which end of runA meets which end of runB) is the
+// geometric question, and total squared distance answers it.
 //
-// ADDITIVE ONLY — unlike bridgeFaces, nothing is deleted (the runs are
-// already naked edges), so there is no vertexRemap to thread anywhere and
-// every existing vertex index stays valid.
+// Additive only — unlike bridgeFaces, nothing is deleted (the runs are
+// already naked edges), so there is no vertexRemap and every existing
+// vertex index stays valid.
 //
-// TOPOLOGY, named honestly: bridging two runs of the SAME hole SPLITS that
-// one boundary loop into two, where the closed-loop Bridge above MERGES two
-// loops into a tunnel. Both are legal on a Catmull-Clark cage; the result
-// here is still open (the two ends of the new wall are naked edges, as they
-// must be), so a caller should not expect a closed solid from this.
+// Bridging two runs of the same hole splits that boundary loop into two,
+// where the closed-loop Bridge merges two loops into a tunnel. Both are
+// legal on a Catmull-Clark cage; the result here is still open (the two
+// ends of the new wall are naked edges), not a closed solid.
 //
-// UNEQUAL COUNTS ARE SUPPORTED, by the same means the closed-loop Bridge
-// above already uses and for the same reason: nothing is resampled, because a
-// bridge may never move a vertex that already exists. The fine run drives the
-// walk, the coarse run stalls where openRunCorrespondence says it does, and
-// each stalled step's quad degenerates to a triangle — `p - q` of them for a
-// p-to-q bridge, spread evenly along the wall rather than bunched at one end.
-// The triangles are the honest cost (each becomes a valence-3 extraordinary
-// vertex under Catmull-Clark), and the ENDS are pinned first-to-first and
-// last-to-last, which is the one freedom a closed rim has and an open run
-// does not.
-// AN OPEN RUN IS NOT A CLOSED RIM, and nothing here used to say so. A run's
-// own precondition — "every consecutive pair is a real naked edge" — is
-// satisfied just as well by a CLOSED loop handed over as a plain vertex list,
-// because a closed loop's consecutive pairs are all naked edges too. The
-// result is not a refusal: it is a junction that builds cleanly, winds
-// consistently, has no repeated-vertex face, and leaves every rim's own
-// CLOSING edge unattached — a slit down each arm, invisible to every
-// structural check this module makes. Measured on three facets-6
-// subdPipeCage tubes: accepted, 18 naked edges before and 9 after, where a
-// genuine closed-rim junction leaves none.
+// Unequal counts are supported as in the closed-loop Bridge: nothing is
+// resampled, because a bridge may not move an existing vertex. The fine run
+// drives the walk, the coarse run stalls where openRunCorrespondence says
+// it does, and each stalled step's quad degenerates to a triangle — `p - q`
+// of them for a p-to-q bridge, spread evenly along the wall. Each triangle
+// becomes a valence-3 extraordinary vertex under Catmull-Clark. The ends
+// are pinned first-to-first and last-to-last.
 //
-// Two distinct shapes of closed input, both refused here by name:
-//   - the bare cycle [v0..v_{m-1}], detected by its own closing edge existing
-//     in the cage as a naked edge between the run's two ENDS. A genuinely
-//     open run can only have that if it already spans its whole rim bar one
-//     edge — which is the same loop under another name, so refusing it is
-//     right rather than over-strict.
-//   - the wrapped list [v0..v_{m-1}, v0], which is not a simple chain at all.
-// Length 2 is exempt from the first check: a 2-vertex run's own single edge
-// IS the edge between its ends, and no loop can close in two vertices.
+// An open run is not a closed rim. A run's precondition — every
+// consecutive pair is a naked edge — is also met by a closed loop handed
+// over as a plain vertex list. Bridged as a run, it builds a junction that
+// winds consistently, has no repeated-vertex face, and leaves every rim's
+// closing edge unattached — a slit down each arm that no structural check
+// here sees.
 //
-// `wording` exists because the CONSEQUENCE of handing a closed rim to an
-// open-run function is not the same for every caller, and a refusal that names
-// the wrong consequence is worse than a generic one. A bridge BUILDS faces onto
-// the run and leaves the rim's own closing edge unattached; a weld builds
-// nothing and fails a different way (see stitchEdgeRuns). The checks themselves
-// are shared — one guard, not a second near-copy that later drifts — and the
-// defaults reproduce the bridge wording exactly, so a caller that passes
-// nothing is byte-identical to before this parameter existed.
+// Two shapes of closed input, both refused by name:
+//   - the bare cycle [v0..v_{m-1}], detected by its closing edge existing
+//     in the cage as a naked edge between the run's two ends. An open run
+//     can only have that if it spans its whole rim bar one edge — the same
+//     loop under another name.
+//   - the wrapped list [v0..v_{m-1}, v0], which is not a simple chain.
+// Length 2 is exempt from the first check: a 2-vertex run's single edge is
+// the edge between its ends, and no loop can close in two vertices.
+//
+// `wording` exists because the consequence of handing a closed rim to an
+// open-run function differs by caller, and a refusal should name the right
+// one. A bridge builds faces onto the run and leaves the rim's closing edge
+// unattached; a weld builds nothing and fails a different way (see
+// stitchEdgeRuns). The checks themselves are shared; the defaults are the
+// bridge wording.
 const OPEN_RUN_WORDING_DEFAULT = {
   verb: 'bridge',
   closedTail: 'Bridging it as a run would leave that one edge unattached, a slit along the arm. Use bridgeClosedRimsHub for a junction of closed rims, or bridgeBoundaryLoops for exactly two of them',
@@ -1853,9 +1643,9 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
   if (!Number.isInteger(segments) || segments < 1) throw new Error('bridgeEdgeRuns: segments must be a positive integer');
   if (!(straightness >= 0 && straightness <= 1)) throw new Error('bridgeEdgeRuns: straightness must be between 0 and 1');
 
-  // Two runs that already touch have no genuine gap to bridge, and a shared
-  // vertex would pinch the result vertex-non-manifold — the same refusal, for
-  // the same reason, that bridgeRims and stitchEdgeRuns both already make.
+  // Two runs that already touch have no gap to bridge, and a shared vertex
+  // would pinch the result vertex-non-manifold — the same refusal
+  // bridgeRims and stitchEdgeRuns make.
   const shared = runA.find((vi) => runB.includes(vi));
   if (shared !== undefined) throw new Error(`bridgeEdgeRuns: the two edge runs share vertex ${shared} — they already touch, with no real gap to bridge across`);
 
@@ -1867,9 +1657,9 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
   // Which runB vertex each runA vertex reaches across to, and vice versa —
   // the same pairing bridgeRunBandFaces walks, needed here for the distance
   // score and again below for the tangents and the interior rows. With equal
-  // counts it is exactly index-to-index, so every expression that reads it is
-  // unchanged. An open run has no rotational freedom, so unlike bridgeRims'
-  // own rungPairs this depends on the counts alone and is built once.
+  // counts it is index-to-index. An open run has no rotational freedom, so
+  // unlike bridgeRims' rungPairs this depends on the counts alone and is
+  // built once.
   const pairs = [];
   if (nA === nB) { for (let i = 0; i < nA; i++) pairs.push([i, i]); }
   else if (nA < nB) { const c = openRunCorrespondence(nB, nA); for (let j = 0; j < nB; j++) pairs.push([c[j], j]); }
@@ -1878,15 +1668,15 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
   const candidates = [];
   for (const reversed of [false, true]) {
     const seqB = reversed ? [...runB].reverse() : [...runB];
-    // Scored over CORRESPONDING pairs, not over a shared index — with unequal
+    // Scored over corresponding pairs, not over a shared index — with unequal
     // counts a plain index walk would score the two runs against vertices that
     // never meet, and would not even visit the longer run's tail.
     let dist = 0;
     for (const [ai, bi] of pairs) dist += distSq(cage.vertices[runA[ai]], cage.vertices[seqB[bi]]);
     for (const flip of [false, true]) {
       // Probed through the band helper itself, so directedEdgeReuseCount
-      // judges the topology the bridge will actually build — including the
-      // degenerate triangles, which carry the rim edges that decide the flip.
+      // judges the topology the bridge will build — including the degenerate
+      // triangles, which carry the rim edges that decide the flip.
       const faces = bridgeRunBandFaces(runA, seqB, flip);
       candidates.push({ seqB, flip, dist, reuse: directedEdgeReuseCount([...cage.faces, ...faces]) });
     }
@@ -1897,28 +1687,24 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
   const chosen = valid[0];
   const seqB = chosen.seqB;
 
-  // TWISTED-BRIDGE SIGNAL — a real case found by testing, not anticipated:
-  // winding validity is a HARD constraint and distance is only a preference,
-  // so when the two runs' own surfaces are oppositely oriented (each face
-  // normal pointing the same way rather than continuing one surface), the
-  // NEAREST correspondence is not manifold-legal and the only legal one pairs
-  // each rim vertex with the FAR end of the other run — a genuinely twisted
-  // wall whose rungs cross in the middle. That is still valid cage topology,
-  // so refusing outright would block a legitimate join between two
-  // independently-built bodies; but it is almost never what a student meant,
-  // and saying nothing would be exactly the silent-wrong-result this project
-  // refuses everywhere else. So it is built AND reported, for the caller to
-  // name in its own status line.
+  // Twisted bridge: winding validity is a hard constraint and distance only
+  // a preference, so when the two runs' surfaces are oppositely oriented
+  // (face normals pointing the same way rather than continuing one surface),
+  // the nearest correspondence is not manifold-legal and the only legal one
+  // pairs each rim vertex with the far end of the other run — a twisted wall
+  // whose rungs cross in the middle. That is valid cage topology and a
+  // legitimate join between two independently built bodies, but rarely the
+  // intent, so it is built and reported (`twisted`) for the caller to name.
   const nearestDist = Math.min(...candidates.map((c) => c.dist));
   const twisted = chosen.dist > nearestDist * (1 + 1e-9);
 
   const ptsA = runA.map((vi) => cage.vertices[vi]);
   const ptsB = seqB.map((vi) => cage.vertices[vi]);
-  // rimTangents wants one partner POINT per vertex of the run it is aiming.
-  // With equal counts that is ptsB/ptsA verbatim, so the tangents are
-  // unchanged. With unequal counts a coarse vertex has several partners; the
-  // FIRST is used, since this only aims the tangent and any of them points
-  // the same way — the same choice bridgeRims makes for its own rims.
+  // rimTangents wants one partner point per vertex of the run it is aiming.
+  // With equal counts that is ptsB/ptsA verbatim. With unequal counts a
+  // coarse vertex has several partners; the first is used, since this only
+  // aims the tangent and any of them points the same way — the same choice
+  // bridgeRims makes.
   const partnerOfA = new Array(nA), partnerOfB = new Array(nB);
   for (const [ai, bi] of pairs) {
     if (partnerOfA[ai] === undefined) partnerOfA[ai] = ptsB[bi];
@@ -1929,11 +1715,11 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
 
   const newVertices = cage.vertices.map((v) => v.slice());
   const rows = [runA];
-  // Every interior row carries the FINE count (pairs.length is exactly that),
-  // so the reconciliation happens in the single band touching the coarse run
-  // and every other band is plain quads. At t < 1 the several fine points
-  // sharing one coarse partner are still genuinely distinct, so no interior
-  // face degenerates.
+  // Every interior row carries the fine count (pairs.length), so the
+  // reconciliation happens in the single band touching the coarse run and
+  // every other band is plain quads. At t < 1 the several fine points
+  // sharing one coarse partner are still distinct, so no interior face
+  // degenerates.
   for (let k = 1; k < segments; k++) {
     const t = k / segments;
     const row = [];
@@ -1952,15 +1738,13 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
     for (const f of bridgeRunBandFaces(rows[r], rows[r + 1], chosen.flip)) added.push(f);
   }
   // The orientation above was decided against a single-segment wall. A
-  // multi-segment one repeats the same band pattern per row pair — but at
-  // unequal counts only ONE of those bands is the reconciling one and the
-  // rest are plain quads, so "holds by construction" is a weaker claim there
-  // than it looks. Hence the check stays, verified rather than assumed, since
-  // a silently non-manifold cage is the one outcome worth refusing outright.
+  // multi-segment one repeats the band pattern per row pair, but at unequal
+  // counts only one of those bands is the reconciling one and the rest are
+  // plain quads, so the assembled wall is checked again rather than assumed.
   const finalFaces = [...newFaces, ...added];
   if (directedEdgeReuseCount(finalFaces) !== 0) throw new Error('bridgeEdgeRuns: internal error — the assembled bridge is not consistently wound (this should not happen for two well-formed open runs)');
 
-  // Rim edges only — an OPEN run is not closed, so its last vertex has no edge
+  // Rim edges only — an open run is not closed, so its last vertex has no edge
   // back to its first (passing closed:true here would invent one).
   const outCreases = { ...(cage.creases || {}) };
   creaseChain(outCreases, runA, creaseWeight, false);
@@ -1972,56 +1756,45 @@ export function bridgeEdgeRuns(cage, runA, runB, segments = 1, straightness = 1,
   };
 }
 
-// STITCH — milestone 7: "merge two edge runs into one (First/
-// Second/Average position chips, tracked from Rhino's Stitch)." `runA`/
-// `runB` are each an ORDERED array of vertex indices tracing a real,
-// connected boundary chain (need not be a closed loop — an open "run" of
-// consecutive boundary edges, exactly as Rhino's own Stitch expects two
-// nearby-but-disconnected boundary edges/curves). Requires matching vertex
-// counts, refused honestly by name otherwise — and unlike Bridge one command
-// up, that is not a scope cut this could lift the same way. Bridge reconciles
-// unequal counts by letting a quad DEGENERATE to a triangle, which costs only
-// a face; a weld reconciles by IDENTIFYING vertices, so pairing two fine
-// vertices onto one coarse one would merge them into each other and move
-// geometry the student built.
+// Stitch — merge two edge runs into one (First/Second/Average position,
+// after Rhino's Stitch). `runA`/`runB` are each an ordered array of vertex
+// indices tracing a connected boundary chain — an open run of consecutive
+// boundary edges, as Rhino's Stitch expects two nearby, disconnected
+// boundary edges. Matching vertex counts are required. Bridge reconciles
+// unequal counts by letting a quad degenerate to a triangle, which costs
+// only a face; a weld reconciles by identifying vertices, so pairing two
+// fine vertices onto one coarse one would merge them into each other and
+// move existing geometry.
 //
-// THE ACTUAL MECHANISM — a real topology-merge, not a face-rebuild: once
-// each corresponding pair of vertices is IDENTIFIED as one vertex (moved to
-// the position `position` dictates) and every face reference to the
-// "losing" vertex is remapped onto the "keeping" one, whatever edge used to
-// run ALONG one run (with exactly one adjacent face, e.g. runA[i]-runA[i+1])
-// and whatever edge ran along the OTHER run (runB[i]-runB[i+1], also one
-// adjacent face) become — after the remap — the exact SAME edgeKey, now used
-// by BOTH original faces: a genuine 2-face INTERIOR edge, precisely closing
-// the gap Stitch exists to close. No new faces are built or need to be —
-// this is the entire operation.
+// Mechanism — a topology merge, not a face rebuild: once each corresponding
+// pair of vertices is identified as one vertex (moved to the position
+// `position` dictates) and every face reference to the losing vertex is
+// remapped onto the keeping one, the edge along one run (one adjacent face,
+// e.g. runA[i]-runA[i+1]) and the edge along the other (runB[i]-runB[i+1],
+// also one face) become the same edgeKey, used by both original faces: a
+// 2-face interior edge, closing the gap. No new faces are built.
 //
-// CORRESPONDENCE — an open run has no rotational ambiguity (unlike Bridge's
-// closed loops); the only real question is which END matches which, i.e.
-// forward vs reversed — resolved the same minimal-total-distance way Bridge
-// resolves its own larger (rotation + direction) search.
+// Correspondence — an open run has no rotational ambiguity (unlike Bridge's
+// closed loops); the only question is which end matches which, forward vs
+// reversed — resolved by minimal total squared distance, as Bridge
+// resolves its larger (rotation + direction) search.
 //
-// THAT SENTENCE IS THE WHOLE REASON A CLOSED RIM IS REFUSED HERE, and the
-// failure it produces is NOT the same one the bridges have. A weld builds no
-// faces, so there is no unattached closing edge and no slit: handed two
-// facets-6 tube rims, this welds every edge, including each rim's own closing
-// one — naked edge count goes 12 to 0. What it cannot do is find the ROTATION.
-// Forward-vs-reversed is the entire search, so vertex i of one rim is paired
-// with vertex i of the other wherever that happens to land: on two coaxial
-// radius-5 rims the merged ring came back at radii 0, 4.33, 4.33, 0, 4.33,
-// 4.33 instead of 5 throughout — pairs of diametrically opposite vertices
-// averaged onto the axis — and all six welded edges were traversed twice in
-// the SAME direction, so the result was not consistently wound either. Both
-// failures are silent. A closed rim's rotation is exactly what bridgeRims'
-// own n-way rotation search exists for; refusing here and naming that is the
-// honest answer, not a rotation search bolted onto a merge.
+// That is why a closed rim is refused here, and the failure differs from
+// the bridges'. A weld builds no faces, so there is no unattached closing
+// edge: two tube rims weld along every edge, including each rim's closing
+// one. What it cannot find is the rotation. Forward-vs-reversed is the
+// whole search, so vertex i of one rim is paired with vertex i of the other
+// wherever that lands: on two coaxial rims, diametrically opposite vertices
+// can be averaged onto the axis, crushing the merged ring, and the welded
+// edges can be traversed twice in the same direction, leaving the result
+// inconsistently wound. A closed rim's rotation is what bridgeRims' n-way
+// rotation search is for, and the refusal names it.
 //
-// The three preconditions this shares with the bridges — a run is a simple
-// chain, its consecutive pairs are real cage edges, and those edges are naked
-// — were also unchecked, and each is separately reachable: a list of
-// non-adjacent vertices welds unrelated points into a vertex pinch, and a run
-// of INTERIOR (2-face) vertices produced edges with three faces, a genuinely
-// non-manifold cage. checkOpenRunChain covers all of it.
+// checkOpenRunChain also enforces the three preconditions shared with the
+// bridges — a run is a simple chain, its consecutive pairs are cage edges,
+// and those edges are naked. Without them a list of non-adjacent vertices
+// welds unrelated points into a vertex pinch, and a run of interior (2-face)
+// vertices produces edges with three faces, a non-manifold cage.
 const STITCH_OPEN_RUN_WORDING = {
   verb: 'weld',
   closedTail: 'A closed rim has rotational freedom this function does not search — it pairs the two rims by index, forward or reversed only — so on two ordinary tube rims it welds every edge and still crushes the merged ring toward the axis and leaves the result inconsistently wound. Use bridgeBoundaryLoops to join two closed rims, or bridgeClosedRimsHub for three or more',
@@ -2069,12 +1842,11 @@ export function stitchEdgeRuns(cage, runA, runB, position = 'average') {
   }
 
   const remappedFaces = cage.faces.map((f) => f.map((vi) => finalIndexOf(vi)));
-  // Defensive cleanup (not expected to fire for a genuinely well-formed
-  // stitch of two separate runs, since a bijective per-index merge can't by
-  // itself collapse two DIFFERENT already-distinct face vertices onto one
-  // index): drop any now-consecutive-duplicate vertex within a face, and
-  // drop any face that collapses below a real 3-sided minimum. `collapsedFaceCount`
-  // reports this honestly rather than silently producing a corrupt cage.
+  // Defensive cleanup (not expected to fire for a well-formed stitch of two
+  // separate runs, since a bijective per-index merge cannot collapse two
+  // distinct face vertices onto one index): drop any consecutive-duplicate
+  // vertex within a face, and drop any face that collapses below 3 sides.
+  // `collapsedFaceCount` reports how many were dropped.
   let collapsedFaceCount = 0;
   const newFaces = [];
   for (const f of remappedFaces) {
@@ -2089,7 +1861,7 @@ export function stitchEdgeRuns(cage, runA, runB, position = 'average') {
   for (const [key, weight] of Object.entries(cage.creases || {})) {
     const [a, b] = key.split('_').map(Number);
     const na = finalIndexOf(a), nb = finalIndexOf(b);
-    if (na === undefined || nb === undefined || na === nb) continue; // a dropped/merged-to-self edge — nothing real left to crease
+    if (na === undefined || nb === undefined || na === nb) continue; // a dropped/merged-to-self edge — nothing left to crease
     newCreases[edgeKey(na, nb)] = weight;
   }
 
@@ -2100,34 +1872,17 @@ export function stitchEdgeRuns(cage, runA, runB, position = 'average') {
   };
 }
 
-// SUBDIVIDE (global) — the v1.1-listed "SUBDIVIDE (global or
-// per-face)". The GLOBAL case is the cheap, exact, zero-new-topology-risk
-// one, and it is genuinely just a refinement: subdivideCatmullClark (the
-// already-proven Catmull-Clark refinement step, kernel/subd.mjs) produces a
-// FINER control cage whose LIMIT surface is EXACTLY the input cage's own
-// limit surface — the defining property of a subdivision surface, not an
-// approximation. So "subdivide the whole cage one level" and "commit that
-// finer cage as the new live-editable cage" is one call: every quad becomes
-// 4, an n-gon becomes n quads, the shape a student sees is unchanged, but
-// there are now more editable control vertices to push and pull. Semi-sharp
-// crease weights decrement by exactly 1 per level (the standard DeRose
-// semi-sharp decay subdivideCatmullClark already does) — which is precisely
-// what KEEPS the limit surface identical across the refinement, not a side
-// effect to work around. Returns a brand-new cage (the input is never
-// mutated), matching every other function in this file.
-//
-// This is deliberately the WHOLE-cage operation only. A genuine PER-FACE
-// subdivide (refine only some selected faces, leaving the rest coarse) is a
-// real, separate, HARDER problem, honestly deferred as a v1.1-follow-up:
-// refining one face's edges without also splitting the shared edge of every
-// un-refined neighbor leaves a T-junction / non-manifold cage, which
-// subdivideCatmullClark (and Reflect/Bridge/every other edit here) all assume
-// never happens; repairing that cleanly needs real edge-midpoint-insertion-
-// and-neighbor-re-topologizing machinery (splitting each neighbor quad into a
-// 5-gon, with crease/winding bookkeeping across the split), exactly the class
-// of unverified topology surgery this project's own standing rule refuses to
-// rush. Not attempted here — named honestly rather than shipped half-built or
-// accepting a silently-corrupt non-manifold boundary.
+// Subdivide (global) — one refinement of the whole cage.
+// subdivideCatmullClark (kernel/subd.mjs) produces a finer control cage
+// whose limit surface is exactly the input cage's limit surface — the
+// defining property of a subdivision surface, not an approximation. So
+// "subdivide the whole cage one level" and "commit that finer cage as the
+// editable cage" is one call: every quad becomes 4, an n-gon becomes n
+// quads, the shape is unchanged, and there are more control vertices to
+// push and pull. Semi-sharp crease weights decrement by exactly 1 per level
+// (the DeRose semi-sharp decay), which is what keeps the limit surface
+// identical across the refinement. Returns a new cage (the input is never
+// mutated). Refining only selected faces is subdivideFaces, below.
 export function subdivideCageGlobal(cage) {
   const refined = subdivideCatmullClark(cage); // validateCage runs inside
   return {
@@ -2139,42 +1894,29 @@ export function subdivideCageGlobal(cage) {
   };
 }
 
-// MERGEFACES — the v1.1-listed companion to SUBDIVIDE.
-// Dissolves the shared INTERNAL edges between a connected group of 2+ edge-
-// adjacent selected faces, replacing the whole group with ONE new N-gon face
-// spanning their combined outer boundary (Rhino's own MergeFaces, exactly).
-// The dissolved internal edges' own creases (if any) simply disappear along
-// with the edges — the correct, expected behavior matching Rhino: there is no
-// edge left there to carry a crease. Every SURVIVING (rim) edge keeps its own
-// crease untouched.
+// MergeFaces — dissolves the shared internal edges between a connected
+// group of 2+ edge-adjacent selected faces, replacing the group with one
+// new n-gon face spanning their combined outer boundary (Rhino's
+// MergeFaces). The dissolved internal edges' creases disappear with the
+// edges; every surviving (rim) edge keeps its crease.
 //
-// Reuses two already-proven functions in this file wholesale rather than re-
-// deriving anything: orderedBoundaryLoopOfFaceSet gives the new face's own
-// ordered vertex loop, wound in the SAME direction the selected faces
-// themselves traverse it — which is exactly "opposite the surviving neighbor"
-// (the standard manifold property: two faces sharing an edge traverse it in
-// opposite directions), so the new n-gon is consistently oriented with its
-// surviving neighbors by construction, the exact property that function was
-// built and proven for. deleteFaces does the actual removal + orphaned-vertex
-// prune/compaction + crease rebuild — it already DROPS any crease whose edge
-// no longer exists in the output (which is EXACTLY what makes a dissolved
-// internal edge's crease vanish correctly) and KEEPS every surviving edge's
-// crease (the rim edges still exist via their un-selected neighbor while
-// deleteFaces runs, so their creases survive). The new n-gon is then
-// appended, its loop translated through deleteFaces' own vertexRemap.
+// orderedBoundaryLoopOfFaceSet gives the new face's ordered vertex loop,
+// wound in the direction the selected faces traverse it — opposite the
+// surviving neighbor — so the new n-gon is consistently oriented with its
+// neighbors. deleteFaces does the removal, orphaned-vertex prune,
+// compaction and crease rebuild: it drops any crease whose edge is gone
+// from the output (the dissolved internal edges) and keeps every surviving
+// edge's crease (the rim edges still exist via their unselected neighbor).
+// The new n-gon is then appended, its loop translated through deleteFaces'
+// vertexRemap.
 //
-// CONNECTED-GROUP REQUIREMENT, refused honestly (not guessed): the selected
-// faces must form a SINGLE edge-connected group. A disconnected selection
-// (e.g. two faces picked on opposite sides of the cage, sharing no edge) has
-// no single merged n-gon to become — orderedBoundaryLoopOfFaceSet would
-// silently walk only ONE component's rim and ignore the rest, a real silent-
-// corruption risk, so it is refused up front by name, BEFORE that function is
-// ever called. Merging one connected group at a time is the honest v1
-// contract (the app layer partitions a multi-group selection and asks for one
-// group at a time, matching Bridge's own identical single-patch posture). The
-// rim also may not touch an already-open cage boundary edge
-// (orderedBoundaryLoopOfFaceSet's own v1 cut, inherited here by name) — the
-// same honest, stated limitation Bridge already has.
+// The selected faces must form a single edge-connected group. A
+// disconnected selection (e.g. two faces on opposite sides of the cage) has
+// no single merged n-gon, and orderedBoundaryLoopOfFaceSet would walk only
+// one component's rim, so it is refused by name before that function is
+// called; the app layer partitions a multi-group selection and merges one
+// group at a time. The rim may not touch an open cage boundary edge
+// (orderedBoundaryLoopOfFaceSet's refusal, as for Bridge).
 export function mergeFaces(cage, faceIndices) {
   if (!faceIndices || faceIndices.length < 2) throw new Error('mergeFaces: select at least 2 edge-adjacent faces to merge (merging a single face is a no-op)');
   const seen = new Set();
@@ -2184,11 +1926,10 @@ export function mergeFaces(cage, faceIndices) {
     seen.add(fi);
   }
 
-  // Single-edge-connected-group check — MUST run before
-  // orderedBoundaryLoopOfFaceSet (which would otherwise silently return just
-  // one component's rim for a disconnected selection; see this function's own
-  // header). Uses the same shared-edge adjacency the app layer's own
-  // superbFaceGroupsFromSelection grouping uses.
+  // Single edge-connected group check — must run before
+  // orderedBoundaryLoopOfFaceSet, which would return one component's rim for
+  // a disconnected selection. Uses the same shared-edge adjacency as the app
+  // layer's superbFaceGroupsFromSelection grouping.
   const topology = buildTopology(cage);
   const selSet = new Set(faceIndices);
   const visited = new Set([faceIndices[0]]);
@@ -2204,30 +1945,27 @@ export function mergeFaces(cage, faceIndices) {
   if (visited.size !== faceIndices.length) throw new Error(`mergeFaces: the selected faces are not all edge-connected into one group (${faceIndices.length} selected, only ${visited.size} reachable through shared edges) — merge one connected group at a time`);
 
   // Ordered rim of the merged region — throws on an open-boundary rim edge or
-  // a non-simple rim (both honest v1 refusals inherited from this shared
-  // function, see its own header).
+  // a non-simple rim (see orderedBoundaryLoopOfFaceSet).
   const loop = orderedBoundaryLoopOfFaceSet(cage, faceIndices);
 
-  // Remove the group, prune the now-orphaned interior vertices, compact, and
-  // rebuild creases (dropping the dissolved internal edges' own creases along
-  // with their edges) — all in one already-proven call.
+  // Remove the group, prune the orphaned interior vertices, compact, and
+  // rebuild creases (dropping the dissolved internal edges' creases along
+  // with their edges).
   const del = deleteFaces(cage, faceIndices);
   const newLoop = loop.map((vi) => del.vertexRemap.get(vi));
   if (newLoop.some((v) => v === undefined)) {
-    // A rim vertex is shared with a surviving neighbor face, so it can never
-    // be orphaned by deleteFaces — this is a genuine internal-consistency
-    // guard, not an expected path.
+    // A rim vertex is shared with a surviving neighbor face, so deleteFaces
+    // cannot orphan it — an internal-consistency guard, not an expected path.
     throw new Error('mergeFaces: internal error — a rim vertex did not survive the merge (this should not happen for a well-formed connected selection)');
   }
   const newFaces = [...del.cage.faces, newLoop];
   const newCage = { vertices: del.cage.vertices, faces: newFaces, creases: del.cage.creases };
 
-  // MANIFOLD SAFETY NET — the same last-resort structural gate
-  // kernel/subdconvert.mjs already runs on its own output (no face with a
-  // repeated vertex; no edge shared by more than 2 faces). Not expected to
-  // fire for a well-formed connected selection, but a topology edit has no
-  // business ever committing a corrupt cage silently (this app's own "no
-  // silent failure" standing rule), and the check is cheap.
+  // Manifold check — the same last-resort structural check
+  // kernel/subdconvert.mjs runs on its output (no face with a repeated
+  // vertex; no edge shared by more than 2 faces). Not expected to fire for a
+  // well-formed connected selection; it keeps a corrupt cage from being
+  // returned, and it is cheap.
   for (const f of newCage.faces) {
     if (new Set(f).size !== f.length) throw new Error('mergeFaces: the merge produced a face with a repeated vertex — refusing to build a corrupt cage');
   }
@@ -2244,39 +1982,30 @@ export function mergeFaces(cage, faceIndices) {
   };
 }
 
-// SUBDIVIDE SELECTED FACES — refine only what is picked, and leave the
-// rest of the cage where it is. Direct ask: "when a face is selected in
-// SuperB and subdivide is run it should subdivide ONLY that face/the
-// selected faces."
+// Subdivide selected faces — refine only the picked faces and leave the
+// rest of the cage where it is.
 //
-// THE PROBLEM THIS HAS TO SOLVE, and the reason it was deferred once
-// already: refining one face puts a new vertex at the MIDDLE of an edge
-// that an unrefined neighbor still describes as a single side. That is
-// a T-JUNCTION — the neighbor's own face loop never mentions the new
-// vertex, so the two faces disagree about where their shared boundary
-// is, and subdivideCatmullClark/Reflect/Bridge all inherit a cage that is
-// no longer manifold. A crack that renders fine and corrupts quietly.
+// Refining one face puts a new vertex at the middle of an edge that an
+// unrefined neighbor still describes as a single side: a T-junction. The
+// neighbor's face loop never mentions the new vertex, so the two faces
+// disagree about their shared boundary, and subdivideCatmullClark, Reflect
+// and Bridge would all inherit a non-manifold cage — a crack that renders.
 //
-// THE FIX, and why it needs no new machinery: this kernel's Catmull-Clark
-// accepts ANY face size — that property is already load-bearing elsewhere
-// (superbCylinderCage's own n-gon caps rely on it), not a new assumption
-// taken on for this. So the neighbor does not need splitting into quads.
-// INSERT the new midpoint into the NEIGHBOR'S OWN VERTEX LOOP: a quad
-// bordering one refined face becomes a 5-gon, one bordering two becomes a
-// 6-gon, and the T-junction is gone BY CONSTRUCTION rather than by
-// tolerance. Every edge still has exactly two faces that agree on it.
+// Catmull-Clark here accepts any face size (superbCylinderCage's n-gon caps
+// rely on it), so the neighbor does not need splitting into quads: the new
+// midpoint is inserted into the neighbor's vertex loop. A quad bordering
+// one refined face becomes a 5-gon, one bordering two becomes a 6-gon, and
+// there is no T-junction by construction rather than by tolerance. Every
+// edge still has exactly two faces that agree on it.
 //
-// WHAT THIS DELIBERATELY DOES NOT DO — and it is the honest difference
-// from the GLOBAL SubdivideSubD: it does not move any existing vertex,
-// and it places new vertices at plain edge midpoints and face centroids
-// rather than through the smooth Catmull-Clark rules. Applying those
-// rules locally would move the selection's own boundary vertices, which
-// belong just as much to faces nobody asked to refine — the surface
-// would change where the student did not touch it. The consequence,
-// stated rather than glossed: a LOCAL subdivide genuinely does change
-// the limit surface near the refined region, unlike the global one,
-// which is exactly limit-preserving. Real Rhino's own local subdivide
-// behaves the same way, for the same reason.
+// Unlike the global subdivide, this moves no existing vertex, and it places
+// new vertices at plain edge midpoints and face centroids rather than
+// through the smooth Catmull-Clark rules. Applying those rules locally
+// would move the selection's boundary vertices, which belong equally to
+// faces not being refined. The consequence: a local subdivide changes the
+// limit surface near the refined region, where the global one is exactly
+// limit-preserving. Rhino's local subdivide behaves the same way, for the
+// same reason.
 export function subdivideFaces(cage, faceIndices) {
   const selected = [...new Set(faceIndices)];
   if (!selected.length) throw new Error('subdivideFaces: no faces selected');
@@ -2287,9 +2016,9 @@ export function subdivideFaces(cage, faceIndices) {
   const selectedSet = new Set(selected);
   const newVertices = cage.vertices.map((v) => v.slice());
 
-  // One edge point per DISTINCT edge of the selection — an edge shared by
-  // two selected faces is discovered twice and built once, which is what
-  // keeps those two faces agreeing on their shared boundary.
+  // One edge point per distinct edge of the selection — an edge shared by
+  // two selected faces is discovered twice and built once, which keeps those
+  // two faces agreeing on their shared boundary.
   const edgePointOf = new Map();
   const splitPairs = [];
   function edgePoint(a, b) {
@@ -2327,10 +2056,9 @@ export function subdivideFaces(cage, faceIndices) {
       }
       return;
     }
-    // An UNSELECTED face keeps its own shape and gains only the midpoints
-    // that now genuinely exist on its own sides — this is the whole
-    // T-junction fix, and it is why a neighbor can legally come out a
-    // 5-gon or a 6-gon.
+    // An unselected face keeps its shape and gains only the midpoints that
+    // exist on its sides — the T-junction repair, and why a neighbor can
+    // come out a 5-gon or a 6-gon.
     const loop = [];
     let widened = false;
     for (let c = 0; c < f.length; c++) {
@@ -2344,12 +2072,10 @@ export function subdivideFaces(cage, faceIndices) {
   });
   for (const [, , idx] of splitPairs) insertedVertexIndices.push(idx);
 
-  // CREASE REMAP — same rule and same reasoning as insertEdgeLoop's own:
-  // a split edge no longer exists in the output topology at all, so its
-  // weight would dangle on a dead key while both real halves silently
-  // came out smooth. Transfer to BOTH halves. No decay: this is a
-  // topology refinement, not a subdivision step, so nothing has been
-  // subdivided for a semi-sharp weight to decay against.
+  // Crease remap, as in insertEdgeLoop: a split edge is gone from the
+  // output topology, so its weight would dangle on a dead key while both
+  // halves came out smooth. It transfers to both halves. No decay: this is
+  // a topology refinement, not a subdivision step.
   const newCreases = { ...(cage.creases || {}) };
   for (const [a, b, mid] of splitPairs) {
     const oldKey = edgeKey(a, b);
@@ -2361,11 +2087,10 @@ export function subdivideFaces(cage, faceIndices) {
   }
 
   const result = { vertices: newVertices, faces: newFaces, creases: newCreases };
-  // LAST-RESORT MANIFOLD GATE, the same one subdconvert.mjs already runs
-  // on its own output: no face may repeat a vertex, and no edge may be
-  // shared by more than two faces. The construction above should make
-  // both impossible; this is what makes "should" checkable rather than
-  // hoped for, on an operation whose whole point is not corrupting a cage.
+  // Last-resort manifold check, the same one subdconvert.mjs runs on its
+  // output: no face may repeat a vertex, and no edge may be shared by more
+  // than two faces. The construction above should make both impossible;
+  // this checks it.
   const seen = new Map();
   for (const f of result.faces) {
     if (new Set(f).size !== f.length) throw new Error('subdivideFaces: produced a face with a repeated vertex');
@@ -2385,77 +2110,63 @@ export function subdivideFaces(cage, faceIndices) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// N-WAY BRIDGE — a Y, a cross, or any N ≥ 3 open edge runs joined through a
-// single hub. Rhino's own SubD Bridge does not do this; two runs is all it
-// offers, and asking for three is where the construction genuinely changes
-// rather than merely getting bigger.
+// N-way bridge — a Y, a cross, or any N ≥ 3 open edge runs joined through a
+// single hub. Rhino's SubD Bridge joins two runs only.
 //
-// WHY IT IS A DIFFERENT CONSTRUCTION, not more of the same. Bridging TWO
-// runs is a quad grid — topologically a strip between two chains, with one
-// correspondence to choose and nothing else to decide. Three or more runs
-// meet at a BRANCHING JUNCTION, and there is no canonical quad topology for
-// one: something has to occupy the middle. Here that something is an
-// explicit HUB — each run is bridged inward to its own shrunken copy, those
-// copies are welded corner to corner into one closed ring, and the ring is
-// capped by a single n-gon.
+// Bridging two runs is a quad grid — a strip between two chains, with one
+// correspondence to choose. Three or more runs meet at a branching
+// junction, and there is no canonical quad topology for one: something has
+// to occupy the middle. Here that is an explicit hub — each run is bridged
+// inward to its own shrunken copy, those copies are welded corner to corner
+// into one closed ring, and the ring is capped by a single n-gon.
 //
-// The n-gon is not a compromise. Catmull-Clark refines a face of any size,
-// and this cage already ships n-gon caps on SuperBCylinder/SuperBCone plus
-// an n-valence apex on SuperBCone — so a hub face and its extraordinary
-// corner vertices are ordinary geometry here, not a special case to be
-// engineered around. That is exactly why this is reachable on a SubD cage
-// and not on a tensor-product NURBS patch, where a branching junction
-// cannot be one surface at all.
+// Catmull-Clark refines a face of any size, and the SuperBCylinder/
+// SuperBCone cages already have n-gon caps and an n-valence apex, so a hub
+// face and its extraordinary corner vertices are ordinary geometry here.
+// A tensor-product NURBS patch cannot represent a branching junction as
+// one surface.
 //
-// WHAT IS DECIDED RATHER THAN DERIVED, and how:
-//  - CYCLIC ORDER. The runs arrive as an unordered set; a hub needs to know
-//    which run sits next to which. Taken from each run's own angle about the
-//    hub center, measured in the junction's own best-fit plane.
-//  - RUN DIRECTION. Each run is traversed so that walking the ring is
+// Decided rather than derived:
+//  - Cyclic order. The runs arrive as an unordered set; a hub needs to know
+//    which run sits next to which. Taken from each run's angle about the
+//    hub center, measured in the junction's best-fit plane.
+//  - Run direction. Each run is traversed so that walking the ring is
 //    consistent: a run's far end is whichever of its two endpoints lies
-//    nearer the NEXT run around the ring.
-//  - WINDING. Not derived at all. Both arm windings and both cap directions
-//    are built and tested against `directedEdgeReuseCount`, and the one that
-//    produces a consistently-wound 2-manifold is kept — the same "verify the
-//    property rather than trust a hand-derived rule" discipline the two-run
-//    bridge already uses for its own correspondence search.
+//    nearer the next run around the ring.
+//  - Winding. Both arm windings and both cap directions are built and
+//    tested against `directedEdgeReuseCount`, and the one that produces a
+//    consistently wound 2-manifold is kept, as the two-run bridge does.
 //
-// Straightness applies at the RIM only, and honestly so: a rung leaves each
-// run along that run's own outgoing surface direction, and arrives at the
-// hub flat, because there is no surface at the hub to be tangent to yet.
-const HUB_INSET = 0.62; // how far in from its own run each inner ring sits, as a fraction of the way to the hub center
+// Straightness applies at the rim only: a rung leaves each run along that
+// run's outgoing surface direction and arrives at the hub flat, because
+// there is no surface at the hub to be tangent to.
+const HUB_INSET = 0.62; // how far in from its run each inner ring sits, as a fraction of the way to the hub center
 function norm3(a) { const L = length(a); return L > 1e-12 ? scale(a, 1 / L) : [0, 0, 0]; }
 
-// THE JUNCTION PLANE AND THE CYCLIC ORDER AROUND IT — shared by both hub
-// constructions in this file, one definition, so a fix to either can never
-// apply to only one of them.
+// The junction plane and the cyclic order around it — shared by both hub
+// constructions in this file.
 //
-// THE PLANE IS TAKEN FROM THE SINGLE MOST SPREAD PAIR, NOT A SUM. Summing the
-// signed cross products over array-ordered pairs is ORDER-DEPENDENT — swap two
-// arms and terms change sign — and for a symmetric junction (N arms evenly
-// spaced, which is the ordinary case, not an exotic one) the terms cancel to
-// zero and a perfectly coplanar, perfectly well-spread set gets refused as
-// "collinear". Measured before fixing: 256 of 384 permutation/direction
-// variants of a 4-arc square rim were refused that way. For coplanar centroids
-// EVERY pair's cross product is parallel to the true normal, so taking the
-// LARGEST is both exact and independent of the order the arms arrive in; for a
-// non-coplanar set it is an honest best available estimate, exactly as the sum
-// was. The same technique kernel/selfintersect.mjs's own bestFitPlane already
-// uses against the same underlying failure.
+// The plane is taken from the single most spread pair, not a sum. Summing
+// the signed cross products over array-ordered pairs is order-dependent —
+// swap two arms and terms change sign — and for a symmetric junction (N
+// arms evenly spaced, the ordinary case) the terms cancel to zero and a
+// coplanar, well-spread set would be refused as collinear. For coplanar
+// centroids every pair's cross product is parallel to the true normal, so
+// taking the largest is exact and independent of the order the arms arrive
+// in; for a non-coplanar set it is a best available estimate. The same
+// technique as kernel/selfintersect.mjs's bestFitPlane.
 //
-// ITS SIGN DOES NOT MATTER to either caller: it only fixes which way round the
-// ring is numbered, and each construction absorbs that (the run hub searches
-// both windings; the closed-rim hub is provably invariant, its two poles
-// simply swapping roles).
+// Its sign does not matter to either caller: it only fixes which way round
+// the ring is numbered, and each construction absorbs that (the run hub
+// searches both windings; the closed-rim hub is invariant, its two poles
+// swapping roles).
 //
-// THE CYCLIC ORDER IS A RING IN ONE PLANE, and that is a real limitation
-// rather than a universal truth. Three arms are always coplanar, so N = 3 is
-// safe by construction. A genuinely three-dimensional N >= 4 junction — the
-// ±X/±Y/+Z frame corner — has arms that no single plane orders sensibly, and
-// two of them can project to nearly the same angle here and be mis-ordered.
-// The closed-rim hub below refuses that case by name via its own equator test;
-// the run hub does not, and this is where it would have to.
+// Known limitation: the cyclic order is a ring in one plane. Three arms are
+// always coplanar, so N = 3 is safe. A three-dimensional N >= 4 junction —
+// the ±X/±Y/+Z frame corner — has arms that no single plane orders, and two
+// of them can project to nearly the same angle here and be mis-ordered. The
+// closed-rim hub below refuses that case by name via its equator test; the
+// run hub does not.
 function junctionPlaneOrder(mids, centre, who, noun) {
   let nrm = [0, 0, 0], nrmLen = 0;
   for (let i = 0; i < mids.length; i++) for (let j = i + 1; j < mids.length; j++) {
@@ -2464,12 +2175,11 @@ function junctionPlaneOrder(mids, centre, who, noun) {
     if (cl > nrmLen) { nrm = c; nrmLen = cl; }
   }
   nrm = norm3(nrm);
-  if (!length(nrm)) throw new Error(`${who}: the ${noun}s are collinear about their own center, so there is no junction plane to order them around — move one ${noun} off the line the others share`);
-  // An in-plane reference direction: the first arm's own offset from the
-  // center, with any out-of-plane part removed. WHICH arm is first only
+  if (!length(nrm)) throw new Error(`${who}: the ${noun}s are in a line, so there is no junction plane — move one ${noun} off it`);
+  // An in-plane reference direction: the first arm's offset from the
+  // center, with any out-of-plane part removed. Which arm is first only
   // rotates every measured angle by a constant, so the cyclic sequence the
-  // sort produces is the same one cut at a different place — a rotation of the
-  // ring, which changes nothing about the junction it describes.
+  // sort produces is the same one cut at a different place.
   const d0 = sub(mids[0], centre);
   const u = norm3(sub(d0, scale(nrm, dot(d0, nrm))));
   if (!length(u)) throw new Error(`${who}: the first ${noun} sits on the junction axis itself, leaving no in-plane direction to measure the others against`);
@@ -2480,12 +2190,28 @@ function junctionPlaneOrder(mids, centre, who, noun) {
   });
   return { nrm, u, v, order };
 }
+// Same scale-free contract as subdnetwork.mjs: a one-plane angular ordering
+// holds only while the worst arm center sits within 25% of the arms' mean
+// spread from that plane. Three centers are always coplanar, so this applies
+// only for N >= 4. Kept local so subdnetwork -> subdedit does not become a
+// circular dependency.
+const RUN_HUB_PLANARITY_TOLERANCE = 0.25;
+function runHubPlanarityResidual(pts) {
+  const centre = scale(pts.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / pts.length);
+  let nrm = [0, 0, 0], best = 0;
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+    const c = cross(sub(pts[i], centre), sub(pts[j], centre)), cl = length(c);
+    if (cl > best) { best = cl; nrm = c; }
+  }
+  if (!(best > 0)) return 0;
+  const n = norm3(nrm);
+  const spread = pts.reduce((acc, p) => acc + length(sub(p, centre)), 0) / pts.length;
+  return spread > 0 ? Math.max(...pts.map((p) => Math.abs(dot(sub(p, centre), n)))) / spread : 0;
+}
 export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, creaseWeight = 0) {
   if (!Array.isArray(runs) || runs.some((r) => !Array.isArray(r))) throw new Error('bridgeEdgeRunsHub: runs must be an array of vertex-index arrays');
   if (runs.length < 3) throw new Error(`bridgeEdgeRunsHub: a hub junction needs at least 3 edge runs (got ${runs.length}) — two runs is an ordinary bridge, use bridgeEdgeRuns`);
-  const m = runs[0].length;
-  if (m < 2) throw new Error('bridgeEdgeRunsHub: each run needs at least 2 vertices (at least one edge)');
-  if (runs.some((r) => r.length !== m)) throw new Error(`bridgeEdgeRunsHub: the runs have different vertex counts (${runs.map((r) => r.length).join(', ')}) — a hub needs matching counts, since every arm meets the same ring (an unequal pairing would need a run resampled, a real separate generalization)`);
+  if (runs.some((r) => r.length < 2)) throw new Error('bridgeEdgeRunsHub: each run needs at least 2 vertices (at least one edge)');
   if (!Number.isInteger(segments) || segments < 1) throw new Error('bridgeEdgeRunsHub: segments must be a positive integer');
   if (!(straightness >= 0 && straightness <= 1)) throw new Error('bridgeEdgeRunsHub: straightness must be between 0 and 1');
   for (let i = 0; i < runs.length; i++) for (let j = i + 1; j < runs.length; j++) {
@@ -2495,30 +2221,29 @@ export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, cr
   const topology = buildTopology(cage);
   runs.forEach((run, i) => checkOpenRunChain(cage, topology, run, `run ${i}`, 'bridgeEdgeRunsHub'));
 
-  // The hub's own center and plane — see junctionPlaneOrder below, which both
-  // hub constructions share so the two cannot drift apart.
+  // The hub's center and plane — see junctionPlaneOrder, which both hub
+  // constructions share.
   const mids = runs.map((run) => scale(run.reduce((acc, vi) => add(acc, cage.vertices[vi]), [0, 0, 0]), 1 / run.length));
   const centre = scale(mids.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / mids.length);
+  const planarResidual = mids.length >= 4 ? runHubPlanarityResidual(mids) : 0;
+  if (planarResidual > RUN_HUB_PLANARITY_TOLERANCE) throw new Error(`bridgeEdgeRunsHub: the ${mids.length} runs sit ${(planarResidual * 100).toFixed(0)}% of their spread off one plane — move them nearer one, or bridge the faces`);
   const { order } = junctionPlaneOrder(mids, centre, 'bridgeEdgeRunsHub', 'run');
 
-  // Each run is walked so its FAR end is the one nearer the next run around
-  // the ring — that is what makes "run i's end meets run i+1's start" true
-  // for every i, which is the whole reason the ring closes.
+  // Each run is walked so its far end is the one nearer the next run around
+  // the ring — that makes "run i's end meets run i+1's start" true for every
+  // i, which is why the ring closes.
   //
-  // THIS RULE IS RIGHT EXCEPT UNDER AN EXACT TIE, and a tie is not exotic: on a
-  // symmetric junction (three arcs evenly spaced around one rim) a run's two
-  // endpoints are EQUIDISTANT from the next run to the bit, so `<` falls through
-  // to "keep" and the direction is decided by the order the caller happened to
-  // hand the run in rather than by geometry. Half of those orders produce a ring
-  // that cannot be wound consistently — measured at 24 of 48 permutation and
-  // direction variants of a 3-arc square rim before this was searched.
+  // The rule fails under an exact tie, which is ordinary: on a symmetric
+  // junction (three arcs evenly spaced around one rim) a run's two endpoints
+  // are equidistant from the next run to the bit, so `<` falls through to
+  // "keep" and the direction is decided by the order the caller handed the
+  // run in rather than by geometry, and some of those orders give a ring
+  // that cannot be wound consistently.
   //
-  // Under a tie every direction is geometrically equally good, so the honest
-  // resolution is to SEARCH the assignment rather than trust a rule the tie
-  // defeats — the same "verify the property rather than derive it" discipline
-  // the winding below already uses. The derived assignment is tried FIRST and is
-  // what every non-degenerate junction uses, so the search costs nothing in the
-  // ordinary case.
+  // Under a tie every direction is geometrically equally good, so the
+  // assignment is searched, as the winding below is. The derived assignment
+  // is tried first and is what every non-degenerate junction uses, so the
+  // search costs nothing in the ordinary case.
   const N = order.length;
   const derivedFlips = order.map((ri, k) => {
     const run = runs[ri];
@@ -2526,11 +2251,11 @@ export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, cr
     return distSq(cage.vertices[run[0]], nextMid) < distSq(cage.vertices[run[run.length - 1]], nextMid);
   });
   const seqFor = (flips) => order.map((ri, k) => (flips[k] ? [...runs[ri]].reverse() : [...runs[ri]]));
-  // The derived assignment first, then every other combination. Flipping ALL of
-  // them at once only reverses the ring's own orientation, which the winding
-  // search already absorbs, so this converges early in practice. Capped so a
-  // pathological arm count cannot turn a refusal into a hang; beyond the cap the
-  // derived assignment is the only one tried, exactly as before.
+  // The derived assignment first, then every other combination. Flipping all
+  // of them at once only reverses the ring's orientation, which the winding
+  // search absorbs, so this converges early in practice. Capped so a
+  // pathological arm count cannot turn a refusal into a hang; beyond the cap
+  // only the derived assignment is tried.
   const MAX_SEARCHED_ARMS = 8;
   const directionCandidates = [derivedFlips];
   if (N <= MAX_SEARCHED_ARMS) {
@@ -2540,7 +2265,7 @@ export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, cr
       directionCandidates.push(flips);
     }
   }
-  const attempt = (seq) => buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightness);
+  const attempt = (seq) => buildHubForSeq(cage, topology, seq, N, centre, segments, straightness);
   let built = null;
   for (const flips of directionCandidates) {
     built = attempt(seqFor(flips));
@@ -2559,37 +2284,40 @@ export function bridgeEdgeRunsHub(cage, runs, segments = 1, straightness = 1, cr
 }
 
 // One direction assignment's worth of hub geometry plus its winding search.
-// Returns null if no winding of THIS assignment is consistent, so the caller can
-// try another; every attempt allocates its OWN vertex array, so a rejected one
-// leaves nothing behind in the cage — the vertex leak this construction has
-// already been caught by a count assertion for once.
-function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightness) {
+// Returns null if no winding of this assignment is consistent, so the caller
+// can try another; every attempt allocates its own vertex array, so a
+// rejected one leaves no orphaned vertices in the cage.
+function buildHubForSeq(cage, topology, seq, N, centre, segments, straightness) {
   const newVertices = cage.vertices.map((p) => p.slice());
   const push = (p) => { newVertices.push(p); return newVertices.length - 1; };
   const innerPos = seq.map((run) => run.map((vi) => lerp3(cage.vertices[vi], centre, HUB_INSET)));
-  // Consecutive inner runs SHARE their touching endpoint — that single weld
-  // per junction is what turns N separate inner chains into one closed ring,
-  // and it is why the ring has N(m-1) vertices rather than N*m.
+  // Consecutive inner runs share their touching endpoint — that single weld
+  // per junction turns N separate inner chains into one closed ring. Each
+  // arm contributes its (m[k]-1) steps, so unequal run counts need neither
+  // resampling nor a transition patch: the central n-gon has Σ(m[k]-1)
+  // vertices.
   const corner = [];
-  for (let k = 0; k < N; k++) corner.push(push(lerp3(innerPos[k][m - 1], innerPos[(k + 1) % N][0], 0.5)));
+  for (let k = 0; k < N; k++) corner.push(push(lerp3(innerPos[k][innerPos[k].length - 1], innerPos[(k + 1) % N][0], 0.5)));
   const inner = seq.map((_, k) => {
+    const m = seq[k].length;
     const row = [corner[(k - 1 + N) % N]];
     for (let j = 1; j < m - 1; j++) row.push(push(innerPos[k][j]));
     row.push(corner[k]);
     return row;
   });
 
-  // The ring, walked once: each arm contributes its own start corner and its
+  // The ring, walked once: each arm contributes its start corner and its
   // interior vertices, and the next arm's start corner continues it.
   const ring = [];
-  for (let k = 0; k < N; k++) for (let j = 0; j < m - 1; j++) ring.push(inner[k][j]);
+  for (let k = 0; k < N; k++) for (let j = 0; j + 1 < inner[k].length; j++) ring.push(inner[k][j]);
 
-  // Every vertex this junction needs, built ONCE PER DIRECTION ATTEMPT. Only the
-  // WINDING is searched below, and winding is a property of the face lists alone
-  // — so building geometry inside THAT search would append a fresh copy of every
-  // interior row per rejected trial and leave the discarded ones orphaned in the
-  // cage. Caught by a vertex-count test rather than by reading.
+  // Every vertex this junction needs, built once per direction attempt. Only
+  // the winding is searched below, and winding is a property of the face
+  // lists alone — building geometry inside that search would append a fresh
+  // copy of every interior row per rejected trial and leave the discarded
+  // ones orphaned in the cage.
   const armRows = seq.map((run, k) => {
+    const m = run.length;
     const outer = run.map((vi) => cage.vertices[vi]);
     const innerPts = inner[k].map((vi) => newVertices[vi]);
     const tan = rimTangents(cage, topology, run, innerPts, false, 1);
@@ -2598,9 +2326,8 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
       const t = r / segments;
       const row = [];
       for (let j = 0; j < m; j++) {
-        // The hub end gets a straight tangent on purpose: there is no surface
-        // there for a rung to leave along, so claiming one would be inventing
-        // a direction rather than reading one.
+        // The hub end gets a straight tangent: there is no surface there for
+        // a rung to leave along.
         row.push(push(bridgeSpanPoint(outer[j], innerPts[j], tan[j], sub(innerPts[j], outer[j]), t, straightness)));
       }
       rows.push(row);
@@ -2615,7 +2342,7 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
       const rows = armRows[k];
       for (let r = 0; r + 1 < rows.length; r++) {
         const near = rows[r], far = rows[r + 1];
-        for (let j = 0; j + 1 < m; j++) {
+        for (let j = 0; j + 1 < near.length; j++) {
           added.push(armFlip ? [near[j + 1], near[j], far[j], far[j + 1]] : [near[j], near[j + 1], far[j + 1], far[j]]);
         }
       }
@@ -2635,25 +2362,20 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
   return { ...chosen, newVertices, seq, ringLength: ring.length };
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// N-WAY CLOSED-RIM HUB — N >= 3 CLOSED rims (tube ends) welded into one
-// junction. Build-order step 2: a pipe network's junction is N
-// tube rims meeting, and nothing in this file could do it.
+// N-way closed-rim hub — N >= 3 closed rims (tube ends) welded into one
+// junction, as at a pipe network's junction.
 //
-// WHY NEITHER EXISTING BRIDGE FITS, stated precisely because the difference is
-// the whole reason this exists. bridgeBoundaryLoops joins two closed loops
-// into a tunnel and stops at two. bridgeEdgeRunsHub joins N OPEN runs, and an
-// open run is a chain with two ENDS — which is exactly what its hub relies on:
-// consecutive runs weld end to end into one closed ring, which a single n-gon
-// then caps. A closed rim has no ends to weld, so that construction has
-// nothing to build on. Handing it one is not a refusal either — it builds
-// cleanly, winds consistently, and silently leaves each rim's own closing edge
-// unattached (see checkOpenRunChain above, which now refuses it by name).
+// bridgeBoundaryLoops joins two closed loops into a tunnel and stops at
+// two. bridgeEdgeRunsHub joins N open runs, and relies on each run having
+// two ends: consecutive runs weld end to end into one closed ring, which a
+// single n-gon caps. A closed rim has no ends to weld, and handed to that
+// construction it would leave each rim's closing edge unattached
+// (checkOpenRunChain refuses it by name).
 //
-// THE CONSTRUCTION — a sphere with N holes, which is exactly what a junction
-// surface is. N boundary circles on a genus-0 surface gives Euler
-// characteristic 2 - N, and the smallest honest realization of it here adds
-// exactly TWO new vertices, the junction's own poles:
+// The construction — a sphere with N holes, which is what a junction
+// surface is. N boundary circles on a genus-0 surface give Euler
+// characteristic 2 - N, and the smallest realization of it here adds
+// exactly two new vertices, the junction's poles:
 //
 //   - Each rim is split at two vertices into an arc on the +normal side of the
 //     junction plane and an arc on the -normal side.
@@ -2664,58 +2386,51 @@ function buildHubForSeq(cage, topology, seq, m, N, centre, segments, straightnes
 //     triangles. That is 2N more.
 //
 //   V = Nm + 2, E = Nm + 5N, F = 4N, so V - E + F = 2 - N exactly, for every
-//   N and every m. Checked as a real Euler count in this module's own tests,
-//   not asserted here.
+//   N and every m. The tests check the Euler count.
 //
-// NO SEGMENTS DIAL, and that is a scope cut rather than an oversight: the hub
-// faces attach DIRECTLY to the rims the caller supplies, so the only new
-// vertices are the two poles. A pipe network is expected to have already
-// stopped its tubes short of the junction — that inset is the caller's job
-// (HUB_INSET is the constant to generalize for it), and doing it
-// here would mean this function moving vertices that already exist, which a
-// bridge may never do.
+// No Segments option: the hub faces attach directly to the rims the caller
+// supplies, so the only new vertices are the two poles. A pipe network is
+// expected to have stopped its tubes short of the junction — that inset is
+// the caller's job (HUB_INSET is the constant to generalize for it); doing
+// it here would move existing vertices, which a bridge may not do.
 //
-// WHAT IS DERIVED AND WHAT IS VERIFIED:
+// Derived and verified:
 //
-//  - FILL ORDER is taken from the CAGE, never from the caller. A closed rim is
-//    a cycle: the given array can start anywhere and run either way. The
-//    canonical direction is boundaryLoopFromSeed's own — the order a single
-//    face filling this rim would use, which traverses each rim edge opposite
-//    to that edge's one existing face. Normalizing to it here absorbs every
-//    direction flip and every rotation of the input, once, instead of leaving
-//    a search to find them later.
+//  - Fill order is taken from the cage, never from the caller. A closed rim
+//    is a cycle: the given array can start anywhere and run either way. The
+//    canonical direction is boundaryLoopFromSeed's — the order a single face
+//    filling this rim would use, which traverses each rim edge opposite to
+//    that edge's one existing face. Normalizing to it absorbs every
+//    direction flip and rotation of the input once.
 //
-//  - THE SPLIT is chosen by maximizing how cleanly it separates the rim's own
+//  - The split is chosen by maximizing how cleanly it separates the rim's
 //    +normal side from its -normal side, over every candidate pair of split
 //    vertices. Exact ties are ordinary on a symmetric rim (a facets-8 ring
 //    whose vertices straddle the equator has a three-way tie), so a tie is
-//    broken toward the most BALANCED split — which on that same fixture is
-//    also the geometrically right one, the two vertices nearest the equator.
+//    broken toward the most balanced split — there, the two vertices
+//    nearest the equator.
 //
-//  - WHICH NEIGHBOR EACH ARM CONNECTS TO is derived and then VERIFIED, not
-//    trusted. The derivation: a rim's fill order runs counter-clockwise about
-//    its own outward direction d, and writing the rim in the orthonormal basis
-//    e1 = normalize(n - (n.d)d), e2 = d x e1 gives dot(v - centre, n) =
+//  - Which neighbor each arm connects to is derived and then measured. The
+//    derivation: a rim's fill order runs counter-clockwise about its outward
+//    direction d, and writing the rim in the orthonormal basis
+//    e1 = normalize(n - (n.d)d), e2 = d x e1 gives dot(v - center, n) =
 //    rho * cos(phi) with e2 contributing nothing, so the +n arc runs from
-//    phi = -90 to +90 and its START sits at -rho*e2 = rho*(n x d)/|..| — which
-//    is exactly the direction of the NEXT arm around n. That is a proof, not a
-//    guess, but a winding check cannot discriminate a wrong answer here (both
-//    pairings close a valid ring), so the choice is settled by measurement
-//    instead: total crotch-edge length under each pairing, the shorter wins.
-//    The derivation is why the first one essentially always does.
+//    phi = -90 to +90 and its start sits at -rho*e2 = rho*(n x d)/|..| — the
+//    direction of the next arm around n. A winding check cannot tell the
+//    two pairings apart (both close a valid ring), so the choice is settled
+//    by total crotch-edge length under each pairing, the shorter winning;
+//    by the derivation that is almost always the next arm.
 //
-//  - WINDING is not searched at all, and does not need to be: every hub face
-//    walks its rim arc in fill order, which is opposite to the arm face that
-//    already owns that edge. Consistency follows by construction, and is then
-//    checked against directedEdgeReuseCount as a real gate rather than a
-//    belief.
+//  - Winding is not searched: every hub face walks its rim arc in fill
+//    order, which is opposite to the arm face that owns that edge.
+//    Consistency follows by construction and is checked against
+//    directedEdgeReuseCount.
 //
-// THE REAL LIMITATION, named rather than discovered later: this is a junction
-// ordered around ONE plane. An arm pointing along the junction normal itself
-// has no equator to divide between the two poles — its whole rim lies flat in
-// the junction plane — and is refused by name. That rules out a genuinely
-// three-dimensional hub such as +X/-X/+Y/-Y/+Z, which needs a different
-// construction, not a bigger version of this one.
+// Known limitation: the junction is ordered around one plane. An arm
+// pointing along the junction normal has no equator to divide between the
+// two poles — its whole rim lies flat in the junction plane — and is
+// refused by name. That rules out a three-dimensional hub such as
+// +X/-X/+Y/-Y/+Z, which needs a different construction.
 export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const creaseWeight = opts.creaseWeight ?? 0;
   if (!Array.isArray(rims) || rims.some((r) => !Array.isArray(r))) throw new Error('bridgeClosedRimsHub: rims must be an array of vertex-index arrays');
@@ -2734,9 +2449,8 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   if (!(creaseWeight >= 0)) throw new Error('bridgeClosedRimsHub: creaseWeight must be zero or positive');
 
   const topology = buildTopology(cage);
-  // EVERY edge of the ring, the CLOSING one included. That closing edge is the
-  // entire difference between a rim and a run, so it is checked first-class
-  // rather than left to fall out of a loop that stops one short.
+  // Every edge of the ring, the closing one included — that edge is the
+  // difference between a rim and a run.
   rims.forEach((rim, i) => {
     for (let k = 0; k < m; k++) {
       const a = rim[k], b = rim[(k + 1) % m];
@@ -2749,7 +2463,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
 
   // Fill order, from the cage. buildTopology records an edge as (v0 -> v1) in
   // the direction the owning face visits it, so a rim listed the same way the
-  // arm walks it is the REVERSE of fill order.
+  // arm walks it is the reverse of fill order.
   const oriented = rims.map((rim) => {
     const edge = topology.edgeMap.get(edgeKey(rim[0], rim[1]));
     return edge.v0 === rim[0] ? [...rim].reverse() : [...rim];
@@ -2759,9 +2473,9 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const centre = scale(mids.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / N);
   const { nrm, order } = junctionPlaneOrder(mids, centre, 'bridgeClosedRimsHub', 'rim');
 
-  // Per rim: where to cut it in two. `s` is each vertex's own height above the
-  // junction plane, measured from that rim's OWN center — using the hub center
-  // instead would bias a whole rim to one side and destroy the split.
+  // Per rim: where to cut it in two. `s` is each vertex's height above the
+  // junction plane, measured from that rim's own center — the hub center
+  // would bias a whole rim to one side and destroy the split.
   const arms = order.map((ri) => {
     const rim = oriented[ri];
     const c = mids[ri];
@@ -2776,7 +2490,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
     const pre = [0];
     for (let i = 0; i < m; i++) pre.push(pre[i] + s[i]);
     const total = pre[m];
-    // Sum of s over the vertices STRICTLY between p and q, walking forward.
+    // Sum of s over the vertices strictly between p and q, walking forward.
     const fwdInterior = (p, q) => (p < q ? pre[q] - pre[p + 1] : total - pre[p + 1] + pre[q]);
     const steps = (p, q) => (q - p + m) % m;
     const tol = Math.max(1e-12, spread * m * 1e-9);
@@ -2800,7 +2514,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   // The poles. Each sits at the center of the vertices it caps — a mean over a
   // set, so no arm's position in the array can influence it. A rim whose +side
   // arc is a single edge contributes no interior vertex, which is legal; only
-  // if NO arm contributes does the fallback along the normal apply.
+  // if no arm contributes does the fallback along the normal apply.
   const ringScaleAll = arms.reduce((acc, a) => acc + a.rim.reduce((r, vi) => r + length(sub(cage.vertices[vi], mids[a.ri])), 0) / m, 0) / N;
   const interiorOf = (list) => list.flatMap((a) => a.slice(1, -1));
   const meanOf = (idxs) => scale(idxs.reduce((acc, vi) => add(acc, cage.vertices[vi]), [0, 0, 0]), 1 / idxs.length);
@@ -2810,10 +2524,10 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const poleMinus = minusInterior.length ? meanOf(minusInterior) : sub(centre, scale(nrm, ringScaleAll));
 
   // Which neighbor each arm's P vertex reaches across to. The derivation in
-  // this function's own header says NEXT; both choices close a valid ring, so a
-  // winding check cannot tell them apart, and the shorter total crotch is what
-  // actually decides. On a symmetric junction the two totals differ by a wide
-  // margin — the near neighbor against the far one — so this is not a tie.
+  // the header says next; both choices close a valid ring, so a winding
+  // check cannot tell them apart, and the shorter total crotch decides. On a
+  // symmetric junction the two totals differ widely — the near neighbor
+  // against the far one — so this is not a tie.
   const crotchTotal = (nb) => arms.reduce((acc, a, k) => acc + Math.sqrt(distSq(cage.vertices[a.P], cage.vertices[arms[(k + nb + N) % N].Q])), 0);
   const nb = crotchTotal(1) <= crotchTotal(-1) ? 1 : -1;
 
@@ -2846,4 +2560,321 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
     armCount: N,
     rims: arms.map((a) => a.rim),
   };
+}
+
+// N-way face bridge — N >= 3 face groups, on one cage or on bodies merged
+// into one, joined through a single junction: a Y, a T, an X. Each group is
+// opened into a rim as bridgeFaces opens its two, each rim grows an arm of
+// `segments` bands toward the junction, and the arms' inner ends are closed
+// by the junction below.
+//
+// Ports. Each arm ends on a port ring: the rim's vertices carried `reach` of
+// the way toward the junction center. That map is a similarity about the
+// center, so N rims that do not overlap give N ports that do not overlap
+// either, at 1 - reach of their size. FACE_HUB_REACH is 0.25, not the run
+// hub's 0.62: on a Y of equal boxes the limit surface's neck against the rim
+// is 0.77 at 0.2 and 0.42 at 0.62 — the second reads as three balloons tied
+// at a knot. The junction center is the mean of the rim centers.
+//
+// Unequal rims. Every port carries the fine count M (the largest rim), so
+// the junction sees equal rings and the reconciliation happens in one band,
+// the one on a coarser rim, as in bridgeRims: port point j sits at
+// parameter j * m / M in that rim's edge-index space, so its rim partner is
+// floor(j * m / M) — the correspondence bridgeBandFaces derives, met by
+// construction. A rim of the fine count gets its own vertices back
+// verbatim. The M - m triangles in that band are spread round the ring by
+// the floor.
+//
+// The junction is the shape a modeler builds by hand for a pipe Y: each
+// port is cut into a contiguous chain above the junction plane and one
+// below, the cut edges of neighboring arms are joined by one crotch quad
+// each, and the upper chains, taken round the ring, bound one cap face, the
+// lower chains another. No new vertex: V = NM, F = N + 2, and with the 2N
+// crotch edges V - E + F = 2 - N, a sphere with N holes.
+// bridgeClosedRimsHub's two poles are not used here because a port of four
+// vertices has no equator vertex to split at, and its pole faces then span
+// both hemispheres — a crease Catmull-Clark never smooths out.
+//
+// The cut is the contiguous split that puts the most height above and the
+// least below; the ring order of the arms is junctionPlaneOrder's, run in
+// the direction that lands each arm's upper→lower cut edge on its neighbor;
+// the winding is derived from the port's array order (an arm band walks its
+// far ring backward, so the caps walk it forward) and then checked by
+// directedEdgeReuseCount.
+//
+// Spin, per arm, is a whole number of port steps: arm k's rim meets its port
+// rotated by spins[k], twisting that arm alone. 0 everywhere is the
+// untwisted result.
+//
+// Two junctions, chosen by the arms' spread. Arms round one plane — a Y, a
+// T, an X, a star — take the ring junction above. Arms that leave that
+// plane — the ±X/±Y/+Z corner, a tetrahedral four, a six-way cross — take
+// the spatial junction: the convex hull of every port vertex with each
+// port's facet removed, a sphere with N holes in triangles, wound by the
+// arm bands. The choice is by the largest rise of one arm, seen from the
+// junction center, out of the plane the other arms share (a plane fitted to
+// all of them tilts with the raised arm and never sees it; three arms are
+// always coplanar and take the ring). Worst dihedral after two
+// Catmull-Clark steps, on an X of four boxes with one arm raised: the ring
+// gives 37° at a 45° raise and folds to 87° at 60°; the hull holds 44°
+// throughout, 35° on a tetrahedral four, 36° on a six-way cross, 49° on a
+// flat Y where the ring gives 30° — so the ring up to HUB_ARM_TILT_MAX and
+// the hull past it.
+//
+// Refused by name: fewer than three groups (two is bridgeFaces); a face in
+// two groups; two rims sharing a vertex (they already touch); a group whose
+// rim is not one simple loop (orderedBoundaryLoopOfFaceSet's refusal);
+// group centers in a line (no junction plane); an arm whose port is not a
+// facet of the hull (it ends inside the junction the others make). Two
+// arms pointing nearly the same way are built and reported: `crossing`
+// lists the pairs whose port rings come closer than their radii sum, since
+// a larger reach pulls the ports apart and the result is undoable where a
+// refusal is not.
+const HUB_ARM_TILT_MAX = 42; // degrees an arm may rise, seen from the junction center, out of the plane the other arms share before the junction is built on the hull
+const FACE_HUB_REACH = 0.25; // where the arms meet, as a fraction of the way from each rim to the junction center
+export function bridgeFacesHub(cage, groups, opts = {}) {
+  if (!Array.isArray(groups) || groups.some((g) => !Array.isArray(g) || !g.length)) throw new Error('bridgeFacesHub: groups must be an array of non-empty face-index arrays');
+  if (groups.length < 3) throw new Error(`bridgeFacesHub: a hub needs at least 3 face groups (got ${groups.length}) — two groups is an ordinary tunnel, use bridgeFaces`);
+  return bridgeOpenings(cage, groups.map((faces) => ({ faces })), opts);
+}
+
+// Any openings, any number: each is a group of faces (deleted first, as
+// bridgeFaces does) or an already-open rim named by one of its edges
+// (boundaryLoopFromSeed), on one body or on bodies merged into one. Two
+// openings are the ordinary tunnel (bridgeRims); three or more are the
+// junction below. `opts.spins[k]` / the returned `rims[k]` follow the
+// openings' order.
+export function bridgeOpenings(cage, openings, opts = {}) {
+  const segments = opts.segments ?? 1, straightness = opts.straightness ?? 1, creaseWeight = opts.creaseWeight ?? 0;
+  // Reach — how far along the way from each rim to the junction center the
+  // arms meet; the ports are that fraction in and 1 - reach of their rim's
+  // size, so a small reach is a wide junction close to the rims and a large
+  // one is long necks meeting at a small core.
+  const reach = opts.reach ?? FACE_HUB_REACH;
+  if (!(reach >= 0.05 && reach <= 0.95)) throw new Error('bridgeOpenings: reach must be between 0.05 and 0.95 of the way to the junction centre');
+  if (!Array.isArray(openings) || openings.some((o) => !o || (!(Array.isArray(o.faces) && o.faces.length) && typeof o.rim !== 'string'))) throw new Error('bridgeOpenings: each opening is a non-empty face list or the key of one edge on an open rim');
+  const N = openings.length;
+  if (N < 2) throw new Error(`bridgeOpenings: a bridge needs at least 2 openings (got ${N})`);
+  if (!Number.isInteger(segments) || segments < 1) throw new Error('bridgeOpenings: segments must be a positive integer');
+  const spins = openings.map((_, k) => (opts.spins && opts.spins[k]) || 0);
+  if (spins.some((v) => !Number.isInteger(v))) throw new Error('bridgeOpenings: each spin must be a whole number of port steps');
+  const seen = new Map();
+  openings.forEach((o, k) => { for (const fi of o.faces || []) { if (seen.has(fi)) throw new Error(`bridgeOpenings: face ${fi} is in openings ${seen.get(fi) + 1} and ${k + 1} — the groups must be disjoint`); seen.set(fi, k); } });
+
+  const loops0 = openings.map((o) => (o.faces ? orderedBoundaryLoopOfFaceSet(cage, o.faces) : boundaryLoopFromSeed(cage, o.rim)));
+  for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+    if (loops0[i].length === loops0[j].length && loops0[i].every((v) => loops0[j].includes(v))) throw new Error(`bridgeOpenings: openings ${i + 1} and ${j + 1} are the same rim`);
+    const shared = loops0[i].find((vi) => loops0[j].includes(vi));
+    if (shared !== undefined) throw new Error(`bridgeOpenings: openings ${i + 1} and ${j + 1} share vertex ${shared} — they already touch, with no real gap to bridge across`);
+  }
+
+  const deleted = openings.flatMap((o) => o.faces || []);
+  const del = deleted.length ? deleteFaces(cage, deleted) : { cage: { vertices: cage.vertices.map((v) => v.slice()), faces: cage.faces.map((f) => [...f]), creases: { ...(cage.creases || {}) } }, vertexRemap: new Map(cage.vertices.map((_, i) => [i, i])) };
+  if (N === 2) {
+    const r = bridgeRims(cage, del.cage, del.vertexRemap, loops0[0], loops0[1], segments, 'bridgeOpenings', straightness, creaseWeight, spins[0] - spins[1]);
+    return { ...r, bridgeFaceIndices: r.tunnelFaceIndices, hubFaceIndices: [], armCount: 2, ringLength: Math.max(loops0[0].length, loops0[1].length), crossing: [], spatial: false };
+  }
+  const work = del.cage;
+  const topology = buildTopology(work);
+  const loops = loops0.map((loop) => loop.map((vi) => del.vertexRemap.get(vi)));
+  if (loops.some((loop) => loop.some((v) => v === undefined))) throw new Error('bridgeOpenings: internal error — a rim vertex did not survive face deletion');
+
+  const M = Math.max(...loops.map((l) => l.length));
+  const mids = loops.map((loop) => scale(loop.reduce((acc, vi) => add(acc, work.vertices[vi]), [0, 0, 0]), 1 / loop.length));
+  const centre = scale(mids.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / N);
+  const { nrm, order } = junctionPlaneOrder(mids, centre, 'bridgeOpenings', 'opening');
+  let spatial = false;
+  if (N >= 4) mids.forEach((mid, k) => {
+    const others = mids.filter((_, j) => j !== k);
+    const oc = scale(others.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / others.length);
+    let on = [0, 0, 0], onLen = 0;
+    for (let i = 0; i < others.length; i++) for (let j = i + 1; j < others.length; j++) {
+      const c = cross(sub(others[i], oc), sub(others[j], oc)), cl = length(c);
+      if (cl > onLen) { on = c; onLen = cl; }
+    }
+    if (!onLen) return;
+    const tilt = Math.asin(Math.min(1, Math.abs(dot(norm3(sub(mid, centre)), norm3(on))))) * 180 / Math.PI;
+    if (tilt > HUB_ARM_TILT_MAX) spatial = true;
+  });
+  if (opts.junction === 'ring') spatial = false; else if (opts.junction === 'hull') spatial = true;
+
+  const newVertices = work.vertices.map((v) => v.slice());
+  const push = (p) => newVertices.push(p) - 1;
+  const added = [];
+  const ports = [];
+  loops.forEach((loop, k) => {
+    const m = loop.length;
+    const inset = loop.map((vi) => lerp3(work.vertices[vi], centre, reach));
+    const portPos = [];
+    for (let j = 0; j < M; j++) {
+      const u = (j * m) / M, e = Math.floor(u);
+      portPos.push(lerp3(inset[e], inset[(e + 1) % m], u - e));
+    }
+    const port = portPos.map((p) => push(p));
+    const spin = ((spins[k] % M) + M) % M;
+    const portSpun = port.map((_, j) => port[(j + spin) % M]);
+    const c = rimCorrespondence(M, m);
+    const rimPts = loop.map((vi) => work.vertices[vi]);
+    const partner = new Array(m);
+    for (let j = 0; j < M; j++) if (partner[c[j]] === undefined) partner[c[j]] = newVertices[portSpun[j]];
+    const tan = rimTangents(work, topology, loop, partner, true, 1);
+    const rings = [loop];
+    for (let r = 1; r < segments; r++) {
+      const t = r / segments;
+      const ring = [];
+      for (let j = 0; j < M; j++) {
+        const a = rimPts[c[j]], b = newVertices[portSpun[j]];
+        // The port end is straight: there is no surface there for a band to
+        // leave along.
+        ring.push(push(bridgeSpanPoint(a, b, tan[c[j]], sub(b, a), t, straightness)));
+      }
+      rings.push(ring);
+    }
+    rings.push(portSpun);
+    for (let r = 0; r + 1 < rings.length; r++) for (const f of bridgeBandFaces(rings[r], rings[r + 1])) added.push(f);
+    ports.push(port);
+  });
+
+  let junction, arms;
+  if (!spatial) {
+    // The cut: the contiguous run of the port with the greatest height above
+    // the junction plane, measured from the port's own center, is the upper
+    // chain; the rest is the lower. Both are non-empty.
+    arms = ports.map((port, k) => {
+      const pc = scale(port.reduce((acc, vi) => add(acc, newVertices[vi]), [0, 0, 0]), 1 / M);
+      const s = port.map((vi) => dot(sub(newVertices[vi], pc), nrm));
+      let best = null;
+      for (let start = 0; start < M; start++) {
+        let sum = 0;
+        for (let len = 1; len < M; len++) {
+          sum += s[(start + len - 1) % M];
+          if (!best || sum > best.sum) best = { start, len, sum };
+        }
+      }
+      const upper = [], lower = [];
+      for (let j = 0; j < M; j++) (j < best.len ? upper : lower).push(port[(best.start + j) % M]);
+      return { k, upper, lower, centre: pc };
+    });
+
+    // Ring order, in the direction that lands each arm's upper→lower cut edge
+    // (the one that follows the upper chain in array order) on its neighbor.
+    const cutMid = (a) => lerp3(newVertices[a.upper[a.upper.length - 1]], newVertices[a.lower[0]], 0.5);
+    const at = (i) => arms[order[((i % N) + N) % N]];
+    let vote = 0;
+    for (let i = 0; i < N; i++) {
+      const a = at(i), mid = cutMid(a);
+      vote += distSq(mid, at(i + 1).centre) < distSq(mid, at(i - 1).centre) ? 1 : -1;
+    }
+    const ring = vote >= 0 ? order.map((k) => arms[k]) : order.map((k) => arms[k]).reverse();
+    junction = [];
+    for (let i = 0; i < N; i++) {
+      const a = ring[i], b = ring[(i + 1) % N];
+      junction.push([a.upper[a.upper.length - 1], a.lower[0], b.lower[b.lower.length - 1], b.upper[0]]);
+    }
+    junction.push(ring.flatMap((a) => a.upper));
+    junction.push([...ring].reverse().flatMap((a) => a.lower));
+  } else {
+    // The spatial junction — the convex hull of every port vertex, with each
+    // port's facet removed: a sphere with N holes for arms in any
+    // directions, in triangles. Each port must be a facet of the hull, which
+    // is what "the arms come from around the junction" means geometrically;
+    // an arm whose port sinks inside the hull the others make is named.
+    // A port is a planar polygon, and four coplanar corners are what an
+    // incremental hull cannot triangulate cleanly. So each port also gets a
+    // peak: its center pushed a hair outward from the junction center. The
+    // facet becomes a strictly convex pyramid the hull triangulates without
+    // ties; every triangle touching a peak belongs to one port and is
+    // dropped, and the peaks never enter the cage.
+    const pts = ports.flat();
+    const P = pts.map((vi) => newVertices[vi]);
+    let extent = 0; for (const q of P) extent = Math.max(extent, Math.abs(q[0]), Math.abs(q[1]), Math.abs(q[2]));
+    const portOf = new Map(); ports.forEach((port, k) => port.forEach((vi) => portOf.set(vi, k)));
+    const peakOf = [];
+    ports.forEach((port, k) => {
+      const c = scale(port.reduce((acc, vi) => add(acc, newVertices[vi]), [0, 0, 0]), 1 / M);
+      const away = norm3(sub(c, centre));
+      peakOf.push(P.length); P.push(add(c, scale(away, extent * 1e-4)));
+    });
+    const hull = convexHullFaces(P);
+    const onHull = new Set();
+    junction = [];
+    for (const f of hull) {
+      if (f.some((i) => i >= pts.length)) { f.forEach((i) => { if (i < pts.length) onHull.add(pts[i]); }); continue; }
+      const vs = f.map((i) => pts[i]);
+      vs.forEach((vi) => onHull.add(vi));
+      if (new Set(vs.map((vi) => portOf.get(vi))).size > 1) junction.push(vs);
+    }
+    for (let k = 0; k < N; k++) if (ports[k].some((vi) => !onHull.has(vi))) throw new Error(`bridgeOpenings: opening ${k + 1}'s arm ends inside the junction the others make — move it outward or raise Reach`);
+    // A peak that reached an inter-port triangle would mean a port facet is
+    // not a face of the hull — the same case, caught the same way.
+    for (const f of hull) if (f.some((i) => i >= pts.length) && new Set(f.map((i) => (i >= pts.length ? peakOf.indexOf(i) : portOf.get(pts[i])))).size > 1) throw new Error(`bridgeOpenings: opening ${peakOf.indexOf(f.find((i) => i >= pts.length)) + 1}'s arm ends inside the junction the others make — move it outward or raise Reach`);
+    arms = ports.map((port, k) => ({ k, centre: scale(port.reduce((acc, vi) => add(acc, newVertices[vi]), [0, 0, 0]), 1 / M) }));
+    // The hull is wound one way throughout; the arm bands fix which.
+    const base = directedEdgeReuseCount(work.faces);
+    if (directedEdgeReuseCount([...work.faces.map((f) => [...f]), ...added, ...junction]) !== base) junction = junction.map((f) => [...f].reverse());
+  }
+  const faces = [...work.faces.map((f) => [...f]), ...added, ...junction];
+  if (directedEdgeReuseCount(faces) !== directedEdgeReuseCount(work.faces)) {
+    throw new Error('bridgeOpenings: the junction is not consistently wound — the openings may not all be separate openings of one consistently-oriented cage');
+  }
+  const crossing = [];
+  const portRadius = (k) => ports[k].reduce((acc, vi) => acc + Math.sqrt(distSq(newVertices[vi], arms[k].centre)), 0) / M;
+  for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+    if (Math.sqrt(distSq(arms[i].centre, arms[j].centre)) < portRadius(i) + portRadius(j)) crossing.push([i, j]);
+  }
+  const outCreases = { ...(work.creases || {}) };
+  for (const loop of loops) creaseChain(outCreases, loop, creaseWeight, true);
+  const base = work.faces.length;
+  return {
+    cage: { vertices: newVertices, faces, creases: outCreases },
+    bridgeFaceIndices: added.map((_, i) => base + i),
+    hubFaceIndices: junction.map((_, i) => base + added.length + i),
+    armCount: N,
+    ringLength: M,
+    rims: loops,
+    crossing,
+    spatial,
+  };
+}
+
+// The convex hull of a point set, as outward-wound triangles of point indices
+// — incremental: a starting tetrahedron, then each further point removes the
+// faces that see it and closes the horizon with new ones. A few dozen points
+// at most here, so the plain O(n²) form is the right one.
+export function convexHullFaces(P) {
+  const n = P.length;
+  if (n < 4) throw new Error('convexHullFaces: at least four points');
+  let scaleRef = 0;
+  for (const p of P) scaleRef = Math.max(scaleRef, Math.abs(p[0]), Math.abs(p[1]), Math.abs(p[2]));
+  const eps = Math.max(1e-12, scaleRef * 1e-9);
+  const faceNormal = (a, b, c) => cross(sub(P[b], P[a]), sub(P[c], P[a]));
+  // A starting tetrahedron of four points not in one plane — each the point
+  // that spans the most, so four coplanar corners of one port can never be it.
+  const i0 = 0;
+  let i1 = -1, i2 = -1, i3 = -1, best = 0;
+  for (let i = 1; i < n; i++) { const d = length(sub(P[i], P[i0])); if (d > best) { best = d; i1 = i; } }
+  if (best <= eps) throw new Error('convexHullFaces: the points coincide');
+  best = 0;
+  for (let i = 1; i < n; i++) { if (i === i1) continue; const a = length(faceNormal(i0, i1, i)); if (a > best) { best = a; i2 = i; } }
+  if (i2 < 0 || best <= eps * eps) throw new Error('convexHullFaces: the points lie on one line');
+  const n012 = norm3(faceNormal(i0, i1, i2));
+  best = 0;
+  for (let i = 1; i < n; i++) { if (i === i1 || i === i2) continue; const h = Math.abs(dot(n012, sub(P[i], P[i0]))); if (h > best) { best = h; i3 = i; } }
+  if (i3 < 0 || best <= eps) throw new Error('convexHullFaces: the points lie in one plane');
+  let faces = [[i0, i1, i2], [i0, i2, i3], [i0, i3, i1], [i1, i3, i2]];
+  const centroid = scale(add(add(P[i0], P[i1]), add(P[i2], P[i3])), 0.25);
+  faces = faces.map((f) => (dot(faceNormal(f[0], f[1], f[2]), sub(P[f[0]], centroid)) < 0 ? [f[0], f[2], f[1]] : f));
+  const used = new Set([i0, i1, i2, i3]);
+  for (let p = 0; p < n; p++) {
+    if (used.has(p)) continue;
+    const visible = faces.filter((f) => dot(norm3(faceNormal(f[0], f[1], f[2])), sub(P[p], P[f[0]])) > eps);
+    if (!visible.length) continue;
+    const edgeCount = new Map();
+    for (const f of visible) for (let k = 0; k < 3; k++) { const a = f[k], b = f[(k + 1) % 3]; edgeCount.set(`${a}>${b}`, (edgeCount.get(`${a}>${b}`) || 0) + 1); }
+    const horizon = [];
+    for (const f of visible) for (let k = 0; k < 3; k++) { const a = f[k], b = f[(k + 1) % 3]; if (!edgeCount.has(`${b}>${a}`)) horizon.push([a, b]); }
+    faces = faces.filter((f) => !visible.includes(f));
+    for (const [a, b] of horizon) faces.push([a, b, p]);
+  }
+  return faces;
 }

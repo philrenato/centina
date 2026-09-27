@@ -1,11 +1,11 @@
-// PATCH — a surface fitted through scattered curves and points.
+// Patch — a surface fitted through scattered curves and points.
 //
-// The fixtures here are chosen so each claim has an INDEPENDENT oracle rather
+// The fixtures here are chosen so each claim has an independent oracle rather
 // than being checked against the fitter's own output:
 //   · a plane and a saddle have closed forms, so "did it fit" is a distance to a
 //     formula this file writes, not to anything patch.mjs computed;
 //   · a sparse cloud has fewer samples than control points in places, which is
-//     the case that makes an unregularised solve singular rather than merely
+//     the case that makes an unregularized solve singular rather than merely
 //     loose — it is here to prove the stiffness is load-bearing;
 //   · a folded input has no single-valued answer at all, and the refusal is the
 //     correct result.
@@ -13,10 +13,10 @@ import { strict as assert } from 'node:assert';
 import { fitPatch, fitPatchToTolerance, samplePatchInputs, PATCH_REFUSAL } from '../kernel/patch.mjs';
 import { surfacePoint } from '../kernel/surface.mjs';
 
-let passed = 0, failed = 0;
+// Every case runs; the failures are collected and reported together at the end.
+const failures = [];
 function t(name, fn) {
-  try { fn(); passed++; console.log(`  PASS: ${name}`); }
-  catch (e) { failed++; console.log(`  FAIL: ${name} — ${e.message}`); }
+  try { fn(); } catch (e) { failures.push(`${name} — ${e.message}`); }
 }
 
 const gridOn = (f, n = 12, span = 100) => {
@@ -28,7 +28,7 @@ const gridOn = (f, n = 12, span = 100) => {
   return out;
 };
 const worstAgainst = (r, f, n = 9, span = 100) => {
-  // Sample the FITTED surface on its own domain and measure against the closed
+  // Sample the fitted surface on its own domain and measure against the closed
   // form — the fit's own residual is not consulted.
   let worst = 0;
   for (let i = 1; i < n; i++) for (let j = 1; j < n; j++) {
@@ -64,9 +64,9 @@ t('more control points fit a curved surface more closely', () => {
     `fine ${fine.maxDeviation} should beat coarse ${coarse.maxDeviation}`);
 });
 
-t('⭐ the stiffness is load-bearing: a sparse cloud still resolves', () => {
+t('the stiffness is load-bearing: a sparse cloud still resolves', () => {
   // Far fewer samples than control points, clustered so whole regions of the net
-  // have nothing near them. Unregularised this is singular, not just loose.
+  // have nothing near them. Unregularized this is singular, not just loose.
   const f = (x, y) => 0.02 * x * y / 10;
   const pts = [];
   for (let i = 0; i < 18; i++) {
@@ -80,14 +80,14 @@ t('⭐ the stiffness is load-bearing: a sparse cloud still resolves', () => {
     'every control point must be finite — an undetermined one comes back NaN');
 });
 
-t('⛔ zero stiffness is refused, and the refusal says why', () => {
+t('zero stiffness is refused, and the refusal says why', () => {
   const r = fitPatch(gridOn((x, y) => x / 10), { stiffness: 0 });
   assert.equal(r.ok, false);
   assert.equal(r.kind, PATCH_REFUSAL.BAD_REQUEST);
   assert.match(r.reason, /singular|undetermined/);
 });
 
-t('⛔ input that folds over its own plane is refused, not averaged', () => {
+t('input that folds over its own plane is refused, not averaged', () => {
   // Two sheets at the same (u,v): a fit would return the average of both, a
   // surface through neither, and report half the gap as if it were accuracy.
   const pts = [];
@@ -100,7 +100,7 @@ t('⛔ input that folds over its own plane is refused, not averaged', () => {
   assert.equal(r.kind, PATCH_REFUSAL.FOLDED);
 });
 
-t('⛔ collinear input is refused — there is no second direction to span', () => {
+t('collinear input is refused — there is no second direction to span', () => {
   const pts = [];
   for (let i = 0; i <= 20; i++) pts.push([i * 5, 0, 0]);
   const r = fitPatch(pts, { uCount: 5, vCount: 5 });
@@ -108,7 +108,7 @@ t('⛔ collinear input is refused — there is no second direction to span', () 
   assert.equal(r.kind, PATCH_REFUSAL.DEGENERATE_PLANE);
 });
 
-t('⛔ and an empty input is refused rather than producing an empty surface', () => {
+t('and an empty input is refused rather than producing an empty surface', () => {
   assert.equal(fitPatch([], {}).ok, false);
   assert.equal(fitPatch({ curves: [], points: [] }, {}).kind, PATCH_REFUSAL.NO_INPUT);
 });
@@ -120,7 +120,7 @@ t('curves and loose points are sampled into one target list', () => {
   assert.ok(got.some((p) => Math.abs(p[0] - 50) < 1e-9 && Math.abs(p[1] - 50) < 1e-9));
 });
 
-t('a patch is fitted through four boundary curves that do NOT touch', () => {
+t('a patch is fitted through four boundary curves that do not touch', () => {
   // The case BoundSrf and the n-sided patch both refuse: curves with gaps.
   const mk = (a, b) => ({ degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[...a, 1], [...b, 1]] });
   const curves = [
@@ -158,8 +158,8 @@ t('the reported deviation is an upper bound, never flattering', () => {
   const pts = gridOn(f, 14);
   const r = fitPatch(pts, { uCount: 7, vCount: 7, stiffness: 0.2 });
   assert.equal(r.ok, true);
-  /* ⚠ THE TRUE DISTANCE IS APPROXIMATED ON A GRID, SO THE GRID'S OWN RESOLUTION
-     IS THE ALLOWANCE. A grid search OVERESTIMATES the true minimum — it can only
+  /* The true distance is approximated on a grid, so the grid's own resolution
+     is the allowance. A grid search overestimates the true minimum — it can only
      find the closest point it happened to sample — so comparing it to the
      reported residual without accounting for the spacing fails the test rather
      than the code. The spacing is measured here rather than assumed, so the
@@ -185,5 +185,4 @@ t('the reported deviation is an upper bound, never flattering', () => {
     `true worst distance ${worst.toFixed(4)} must not exceed the reported ${r.maxDeviation.toFixed(4)} plus the grid's own ${spacing.toFixed(4)} spacing`);
 });
 
-console.log(`\n${passed}/${passed + failed} checks passed.`);
-if (failed) process.exit(1);
+assert.equal(failures.length, 0, `${failures.length} failed:\n${failures.join('\n')}`);

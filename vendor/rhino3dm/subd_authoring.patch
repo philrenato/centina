@@ -1,0 +1,149 @@
+diff --git a/src/bindings/bnd_subd.cpp b/src/bindings/bnd_subd.cpp
+index 843e2eb..505802c 100644
+--- a/src/bindings/bnd_subd.cpp
++++ b/src/bindings/bnd_subd.cpp
+@@ -111,6 +111,97 @@ BND_SubD::BND_SubD()
+   SetTrackedPointer(new ON_SubD(), nullptr);
+ }
+ 
++// ---------------------------------------------------------------------------
++// AUTHORING
++//
++// Every function bounds-checks its indices and returns -1/false rather than
++// trusting the caller: these are reached from JS, where an off-by-one is a
++// wrong number and not a compile error.
++// ---------------------------------------------------------------------------
++int BND_SubD::AddVertex(ON_3dPoint point)
++{
++  if (nullptr == m_subd) return -1;
++  ON_SubDVertex* v = m_subd->AddVertex(ON_SubDVertexTag::Unset, &point.x);
++  if (nullptr == v) return -1;
++  m_authored_vertices.push_back(v);
++  return (int)m_authored_vertices.size() - 1;
++}
++
++int BND_SubD::AddFaceFromVertexIndices(const int* vi, unsigned int n)
++{
++  if (nullptr == m_subd || n < 3) return -1;
++  const int count = (int)m_authored_vertices.size();
++  for (unsigned int i = 0; i < n; i++)
++  {
++    if (vi[i] < 0 || vi[i] >= count) return -1;
++    for (unsigned int j = i + 1; j < n; j++) if (vi[i] == vi[j]) return -1;
++  }
++  ON_SimpleArray<ON_SubDEdgePtr> eptrs(n);
++  for (unsigned int i = 0; i < n; i++)
++  {
++    ON_SubDVertex* a = m_authored_vertices[vi[i]];
++    ON_SubDVertex* b = m_authored_vertices[vi[(i + 1) % n]];
++    ON_SubDEdgePtr ep = m_subd->FindOrAddEdge(a, b);
++    if (nullptr == ep.Edge()) return -1;
++    // the face walks a -> b; the pointer must run the same way
++    if (ep.RelativeVertex(0) != a) ep = ep.Reversed();
++    eptrs.Append(ep);
++  }
++  ON_SubDFace* f = m_subd->AddFace(eptrs);
++  if (nullptr == f) return -1;
++  return (int)m_subd->FaceCount() - 1;
++}
++
++int BND_SubD::AddFace4(int v0, int v1, int v2, int v3)
++{
++  int vi[4] = { v0, v1, v2, v3 };
++  return AddFaceFromVertexIndices(vi, v3 < 0 ? 3u : 4u);
++}
++
++#if defined(ON_WASM_COMPILE)
++int BND_SubD::AddFace(emscripten::val vertexIndices)
++{
++  const int n = vertexIndices["length"].as<int>();
++  if (n < 3 || n > 64) return -1;
++  int vi[64];
++  for (int i = 0; i < n; i++) vi[i] = vertexIndices[i].as<int>();
++  return AddFaceFromVertexIndices(vi, (unsigned int)n);
++}
++#endif
++
++static ON_SubDEdge* Internal_AuthoredEdge(ON_SubD* subd, const std::vector<ON_SubDVertex*>& verts, int v0, int v1)
++{
++  if (nullptr == subd) return nullptr;
++  const int count = (int)verts.size();
++  if (v0 < 0 || v0 >= count || v1 < 0 || v1 >= count || v0 == v1) return nullptr;
++  return subd->FindEdge(verts[v0], verts[v1]).Edge();
++}
++
++bool BND_SubD::SetEdgeCrease(int v0, int v1, bool crease)
++{
++  ON_SubDEdge* e = Internal_AuthoredEdge(m_subd, m_authored_vertices, v0, v1);
++  if (nullptr == e) return false;
++  e->m_edge_tag = crease ? ON_SubDEdgeTag::Crease : ON_SubDEdgeTag::Smooth;
++  if (crease) e->ClearSharpnessForExperts();
++  return true;
++}
++
++bool BND_SubD::SetEdgeSharpness(int v0, int v1, double sharpness)
++{
++  ON_SubDEdge* e = Internal_AuthoredEdge(m_subd, m_authored_vertices, v0, v1);
++  if (nullptr == e) return false;
++  if (!(sharpness >= 0.0 && sharpness <= ON_SubDEdgeSharpness::MaximumValue)) return false;
++  const ON_SubDEdgeSharpness s = ON_SubDEdgeSharpness::FromConstant(sharpness);
++  if (s.IsNotValid(false)) return false;
++  // a sharp edge is a smooth edge with a sharpness: an interior edge only
++  // (a naked edge is a crease whatever it is asked), tagged Smooth here so
++  // the tag update leaves it — and its sharpness — alone
++  if (2 != e->m_face_count) return false;
++  if (sharpness > 0.0) e->m_edge_tag = ON_SubDEdgeTag::Smooth;
++  e->SetSharpnessForExperts(s);
++  return true;
++}
++
+ // SubD components
+ BND_SubDFace::BND_SubDFace(const class ON_SubDFace* face, ON_SubDRef parent)         { m_subdface = face; m_parent = std::move(parent); }
+ BND_SubDEdge::BND_SubDEdge(const class ON_SubDEdge* edge, ON_SubDRef parent)         { m_subdedge = edge; m_parent = std::move(parent); }
+@@ -485,6 +576,13 @@ void initSubDBindings(void*)
+     .function("faces", &BND_SubD::Faces)
+     .function("edges", &BND_SubD::Edges)
+     .function("vertices", &BND_SubD::Vertices)
++    .function("addVertex", &BND_SubD::AddVertex)
++    .function("addFace4", &BND_SubD::AddFace4)
++    .function("addFace", &BND_SubD::AddFace)
++    .function("setEdgeCrease", &BND_SubD::SetEdgeCrease)
++    .function("setEdgeSharpness", &BND_SubD::SetEdgeSharpness)
++    .function("updateUnsetTagsAndSectorCoefficients", &BND_SubD::UpdateUnsetTagsAndSectorCoefficients)
++    .property("isValid", &BND_SubD::IsValid)
+     ;
+ }
+ #endif
+diff --git a/src/bindings/bnd_subd.h b/src/bindings/bnd_subd.h
+index 4978fad..d840583 100644
+--- a/src/bindings/bnd_subd.h
++++ b/src/bindings/bnd_subd.h
+@@ -211,6 +211,28 @@ public:
+ 
+   const ON_SubD* GetONSubDComponent() const { return m_subd; }
+ 
++  // AUTHORING. ON_SubD can be built up vertex by vertex and face by face;
++  // none of it was reachable from a script, so a SubD could be READ from a
++  // .3dm and never written into one. Vertices are addressed by the index
++  // this object handed out, faces by their vertex indices (edges are found
++  // or made as the faces need them), and creases and sharpness by the two
++  // vertices of the edge. Call updateUnsetTagsAndSectorCoefficients() once
++  // the net is complete: it tags the naked edges as creases and every
++  // vertex from the edges meeting there, and leaves the tags set here alone.
++  int AddVertex(ON_3dPoint point);
++  int AddFace4(int v0, int v1, int v2, int v3);
++#if defined(ON_WASM_COMPILE)
++  int AddFace(emscripten::val vertexIndices);
++#endif
++  bool SetEdgeCrease(int v0, int v1, bool crease);
++  bool SetEdgeSharpness(int v0, int v1, double sharpness);
++  unsigned int UpdateUnsetTagsAndSectorCoefficients() { return m_subd->UpdateAllTagsAndSectorCoefficients(true); }
++  bool IsValid() const { return m_subd->IsValid(); }
++
+ protected:
+   void SetTrackedPointer(ON_SubD* subd, const ON_ModelComponentReference* compref);
++
++private:
++  std::vector<ON_SubDVertex*> m_authored_vertices;
++  int AddFaceFromVertexIndices(const int* vi, unsigned int n);
+ };

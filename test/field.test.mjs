@@ -6,7 +6,7 @@ import {
 } from '../kernel/field.mjs';
 import { smoothstep } from '../kernel/cage.mjs';
 
-// A small field whose value at every node is DISTINCT and hand-derivable
+// A small field whose value at every node is distinct and hand-derivable
 // (node (i,j) holds i*10 + j), so a sample landing on the wrong node is
 // visible as a wrong number rather than a plausible one.
 function rampField(uCount, vCount) {
@@ -24,7 +24,7 @@ test('a field is a plain Array — a typed array would not survive the JSON roun
   assert.ok(Array.isArray(round.values), 'values must still be an array after a JSON round trip');
 });
 
-test('sampling at an open direction\'s own node fractions returns that node EXACTLY', () => {
+test('sampling at an open direction\'s own node fractions returns that node exactly', () => {
   const f = rampField(4, 3);
   // Open in both directions: node k sits at fraction k/(N-1).
   for (let i = 0; i < 4; i++) {
@@ -44,7 +44,7 @@ test('bilinear between four nodes is their exact weighted blend, not an approxim
   assert.ok(Math.abs(got - expected) < 1e-12, `got ${got}, expected ${expected}`);
 });
 
-test('an OPEN direction clamps at both ends — fraction 1 is the last node, not a wrap to the first', () => {
+test('an open direction clamps at both ends — fraction 1 is the last node, not a wrap to the first', () => {
   const f = rampField(4, 3);
   assert.equal(sampleFieldFraction(f, 1, 0, false, false), 30);
   assert.equal(sampleFieldFraction(f, 0, 1, false, false), 2);
@@ -52,7 +52,7 @@ test('an OPEN direction clamps at both ends — fraction 1 is the last node, not
   assert.equal(sampleFieldFraction(f, 5, -3, false, false), 30);
 });
 
-test('a CLOSED direction genuinely bridges the seam: the last cell blends node N-1 back to node 0', () => {
+test('a closed direction bridges the seam: the last cell blends node N-1 back to node 0', () => {
   const f = rampField(4, 3);
   // Wrapped in U: node k sits at k/N, so the final cell spans [3/4, 1)
   // and blends node 3 (value 30) back to node 0 (value 0).
@@ -66,9 +66,9 @@ test('a CLOSED direction genuinely bridges the seam: the last cell blends node N
 test('wrap is per-direction: closing U must not change what V does', () => {
   const f = rampField(4, 3);
   // j contributes exactly +1 per node in this fixture, so the difference
-  // between two samples that vary ONLY in V isolates V's own behavior
+  // between two samples that vary only in V isolates V's own behavior
   // regardless of however U happened to resolve. Differencing rather than
-  // reading a value directly is what makes this a real independence
+  // reading a value directly makes this an independence
   // check: at an arbitrary fu the U blend is fractional, so any test that
   // tried to read j back out of a single sample would be testing its own
   // arithmetic, not the sampler's.
@@ -78,7 +78,7 @@ test('wrap is per-direction: closing U must not change what V does', () => {
     assert.ok(Math.abs((atV1 - atV0) - 2) < 1e-12,
       `V must still span its own 2 nodes with wrapU=${wrapU}, got ${atV1 - atV0}`);
   }
-  // ...while U genuinely resolved differently, so the two are not the same sample.
+  // ...while U resolved differently, so the two are not the same sample.
   assert.notEqual(sampleFieldFraction(f, 0.37, 1, false, false), sampleFieldFraction(f, 0.37, 1, true, false));
 });
 
@@ -133,8 +133,8 @@ test('fieldMean averages every node, and answers zero for an empty or absent fie
   assert.equal(fieldMean({ uCount: 2, vCount: 2, values: [] }), 0);
 });
 
-test('fieldMean is the reduction that MOVES while the peak does not — the whole reason a field drives a number by its mean', () => {
-  // Two fields a student could plausibly paint: a small mark and a large
+test('fieldMean is the reduction that moves while the peak does not — why a field drives a number by its mean', () => {
+  // Two plausible painted fields: a small mark and a large
   // one, both at full brush strength. Their peaks are identical; only the
   // mean can tell them apart, which is what a driven number needs.
   const small = makeField(8, 8), large = makeField(8, 8);
@@ -167,12 +167,10 @@ test('isField refuses a malformed field rather than sampling one', () => {
 });
 
 
-// ---------------------------------------------------------------
-// fieldFromDistances — the COMPUTED producer
-// ---------------------------------------------------------------
+// fieldFromDistances: the computed producer
 
 // A 5x4 grid whose node (i,j) sits at a hand-derivable distance: the
-// distance IS i, so a whole ROW shares one value and a wrong index
+// distance is i, so a whole row shares one value and a wrong index
 // shows up as a wrong row rather than a plausible number.
 const distByRow = (i) => i;
 
@@ -188,11 +186,11 @@ test('inside innerRadius is exactly full strength and outside outerRadius is exa
   }
 });
 
-test('the default ramp reproduces 1 - smoothstep(normalized distance) BIT-IDENTICALLY', () => {
-  // The same claim R2a proves for the ramp evaluator itself, re-proven
-  // for THIS consumer: a producer that re-derived the normalization
-  // slightly differently would drift from the deform that shares its
-  // ramp, and only ever by a last-bit amount nobody would notice.
+test('the default ramp reproduces 1 - smoothstep(normalized distance) bit-identically', () => {
+  // The ramp evaluator's own bit-identity claim, re-proven for this
+  // consumer: a producer that re-derived the normalization slightly
+  // differently would drift from the deform that shares its ramp, by a
+  // last-bit amount no visual check would catch.
   const inner = 2, outer = 7;
   const dist = (i) => i;           // rows 0..9 sit at distance 0..9
   const f = fieldFromDistances(10, 2, dist, inner, outer, null);
@@ -208,8 +206,8 @@ test('value falls monotonically as distance grows', () => {
   for (let i = 1; i < 12; i++) {
     assert.ok(f.values[i] <= f.values[i - 1], `row ${i} not above row ${i - 1}`);
   }
-  // and it genuinely varies — a constant field would satisfy the above
-  assert.ok(f.values[0] > f.values[11] + 0.5, 'the field genuinely varies');
+  // and it varies — a constant field would satisfy the above
+  assert.ok(f.values[0] > f.values[11] + 0.5, 'the field varies');
 });
 
 test('a zero span authors a hard edge at innerRadius, with no division by zero', () => {
@@ -221,23 +219,23 @@ test('a zero span authors a hard edge at innerRadius, with no division by zero',
 });
 
 test('one degenerate node reads as outside instead of poisoning the whole field', () => {
-  // A pole or collapsed row can genuinely answer NaN. The cost must be
-  // that ONE node, not an isField-refusing grid.
+  // A pole or collapsed row can answer NaN. The cost must be
+  // that one node, not an isField-refusing grid.
   const f = fieldFromDistances(4, 3, (i, j) => (i === 2 && j === 1 ? NaN : i), 0, 3, null);
   assert.ok(isField(f), 'the field is still well-formed');
   assert.equal(f.values[2 * 3 + 1], 0, 'the degenerate node reads as fully outside');
   assert.ok(f.values[2 * 3 + 0] > 0, 'its neighbor is unaffected');
 });
 
-test("an edited ramp's own endpoints are honoured OUTSIDE the band, not overridden", () => {
-  // The R2a structural point, re-proven for this consumer: a ramp that
+test("an edited ramp's own endpoints are honored outside the band, not overridden", () => {
+  // Re-proven for this consumer: a ramp that
   // does not reach 0 must not be clipped to 0 past outerRadius. A
   // consumer that kept hardcoded end branches would fail exactly here.
   const ramp = { interp: 'linear', stops: [[0, 0.8], [1, 0.3]] };
   const f = fieldFromDistances(5, 1, distByRow, 1, 3, ramp);
   assert.equal(f.values[0], 0.8, 'inside inner reads the ramp start, not 1');
   assert.equal(f.values[4], 0.3, 'outside outer reads the ramp end, not 0');
-  assert.ok(f.values[2] > 0.3 && f.values[2] < 0.8, 'and it genuinely interpolates between');
+  assert.ok(f.values[2] > 0.3 && f.values[2] < 0.8, 'and it interpolates between');
 });
 
 test('the returned grid is u-major with the requested dimensions', () => {
@@ -252,10 +250,8 @@ test('the returned grid is u-major with the requested dimensions', () => {
   }
 });
 
-// ---------------------------------------------------------------
-// cloneField — the copy a field needs the moment it stops belonging to
+// cloneField: the copy a field needs the moment it stops belonging to
 // the one surface that produced it.
-// ---------------------------------------------------------------
 
 test('a cloned field is equal to its original', () => {
   const f = rampField(4, 3);
@@ -265,8 +261,8 @@ test('a cloned field is equal to its original', () => {
   assert.deepEqual(c.values, f.values);
 });
 
-test('a cloned field does not ALIAS its original — writing one leaves the other alone', () => {
-  // The whole reason this function exists: two records that look
+test('a cloned field does not alias its original — writing one leaves the other alone', () => {
+  // The reason this function exists: two records that look
   // independent must not share one values array.
   const f = rampField(4, 3);
   const c = cloneField(f);
@@ -278,7 +274,7 @@ test('a cloned field does not ALIAS its original — writing one leaves the othe
   assert.equal(c.values[0], 0);
 });
 
-test('a clone is a PLAIN Array, so it survives the JSON round trip persistence puts it through', () => {
+test('a clone is a plain Array, so it survives the JSON round trip persistence puts it through', () => {
   const f = makeField(3, 3);
   f.values[4] = 0.5;
   const c = cloneField(f);
@@ -286,15 +282,15 @@ test('a clone is a PLAIN Array, so it survives the JSON round trip persistence p
   assert.deepEqual(JSON.parse(JSON.stringify(c)), c);
 });
 
-test('a clone of a field built from a typed array comes back PLAIN', () => {
-  // isField only requires Array.isArray, so this is refused rather than
-  // silently copied — the refusal is the point: a Float64Array grid would
+test('a field built from a typed array is refused by cloneField, not copied', () => {
+  // isField requires Array.isArray, so this is refused rather than
+  // copied: a Float64Array grid would
   // JSON-round-trip into an object with numeric keys, not an array.
   const bad = { uCount: 2, vCount: 2, values: new Float64Array([0, 0, 0, 0]) };
   assert.equal(cloneField(bad), null);
 });
 
-test('cloneField REFUSES a malformed field instead of copying it', () => {
+test('cloneField refuses a malformed field instead of copying it', () => {
   assert.equal(cloneField(null), null);
   assert.equal(cloneField(undefined), null);
   assert.equal(cloneField({}), null);

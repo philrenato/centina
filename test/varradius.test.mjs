@@ -9,9 +9,7 @@ import {
 
 const near = (a, b, tol = 1e-12) => Math.abs(a - b) < tol;
 
-/* ═══════════════════════════════════════════════════════════════════════
-   THE RADIUS PROFILE
-   ═══════════════════════════════════════════════════════════════════════ */
+// Radius profile
 
 test('a profile refuses everything that would make r(t) meaningless, by name', () => {
   assert.equal(radiusProfile([[0, 3]]).ok, false, 'one stop is a constant-radius fillet, not a profile');
@@ -34,7 +32,7 @@ test('the profile passes through every stop exactly, and two stops are a straigh
   assert.equal(p.ok, true, p.reason);
   for (const [t, r] of stops) assert.ok(near(p.radiusAt(t), r, 1e-14), `stop at ${t} must evaluate to ${r}, got ${p.radiusAt(t)}`);
 
-  // TWO STOPS ARE THE STRAIGHT LINE, exactly — the Hermite cubic through two
+  // Two stops are the straight line, exactly — the Hermite cubic through two
   // points whose end slopes are both the segment slope IS the line, so this is a
   // closed form and not an approximation of one.
   const taper = radiusProfile([[0, 2], [1, 7]]);
@@ -45,7 +43,7 @@ test('the profile passes through every stop exactly, and two stops are a straigh
   }
 });
 
-/* A NATURAL CUBIC SPLINE THROUGH THE SAME STOPS, as the control. Without it,
+/* A natural cubic spline through the same stops, as the control. Without it,
    "no overshoot" is a claim about a function nobody compared against anything —
    every interpolant looks well behaved on a plot of itself. */
 function naturalCubic(ts, rs) {
@@ -72,15 +70,15 @@ function naturalCubic(ts, rs) {
   };
 }
 
-test('the interpolation is shape-preserving, and the smoother alternative goes NEGATIVE on the same stops', () => {
-  /* ⚠ THE STOP SETS ARE CHOSEN TO REACH EVERY CLAMP, because a profile that
+test('the interpolation is shape-preserving, and the smoother alternative goes negative on the same stops', () => {
+  /* The stop sets are chosen to reach every clamp, because a profile that
      merely looks reasonable exercises none of them. Fritsch & Carlson's rule has
      three separate guards and each needs its own shape to fire:
        · an interior extremum (zero the slope),
-       · an END whose three-point extrapolation points the WRONG WAY — a gentle
+       · an end whose three-point extrapolation points the wrong way — a gentle
          first segment followed by a steep one, where the unclamped slope is
          -8.8 and drags a profile whose smallest stop is 1 down to 0.354,
-       · an END at a turning point where the extrapolation is more than three
+       · an end at a turning point where the extrapolation is more than three
          times the segment slope, which overshoots the largest stop.
      Range-checking one well-behaved profile passes with all three removed. */
   const sets = [
@@ -99,13 +97,13 @@ test('the interpolation is shape-preserving, and the smoother alternative goes N
       const r = p.radiusAt(i / 8000);
       lo = Math.min(lo, r); hi = Math.max(hi, r);
     }
-    // The whole point: r(t) never leaves the range of the stops, so positive
+    // r(t) never leaves the range of the stops, so positive
     // stops are a positive radius everywhere with nothing left to hope for.
     assert.ok(near(lo, Math.min(...rs), 1e-12), `${JSON.stringify(stops)}: the minimum must be the smallest stop, exactly (${lo})`);
     assert.ok(near(hi, Math.max(...rs), 1e-12), `${JSON.stringify(stops)}: and the maximum the largest (${hi})`);
     assert.ok(near(p.minRadius, lo, 1e-12) && near(p.maxRadius, hi, 1e-12), 'and the reported range must be the measured one');
   }
-  // THE CONTROL. A natural cubic through the very same stops asks for a ball of
+  // The control: a natural cubic through the very same stops asks for a ball of
   // radius -8.5 — a fillet inverted through its own spine.
   const stops = sets[0];
   const nat = naturalCubic(stops.map((s) => s[0]), stops.map((s) => s[1]));
@@ -139,7 +137,7 @@ test('thick -> thin -> thick is the named default, symmetric and bounded by its 
   assert.equal(p.shape, 'thick-thin-thick');
   assert.ok(near(p.radiusAt(0), 4, 1e-14) && near(p.radiusAt(1), 4, 1e-14), 'the ends are equal and exact');
   assert.ok(near(p.radiusAt(0.5), 1.5, 1e-14), 'the waist is exactly the waist, at exactly the middle');
-  assert.ok(near(p.slopeAt(0.5), 0, 1e-14), 'and it is a genuine minimum there, not a point the curve passes through on its way down');
+  assert.ok(near(p.slopeAt(0.5), 0, 1e-14), 'and it is a minimum there, not a point the curve passes through on its way down');
   for (let i = 0; i <= 1000; i++) {
     const t = i / 1000;
     assert.ok(near(p.radiusAt(t), p.radiusAt(1 - t), 1e-14), `symmetric stops must give a symmetric profile (t=${t})`);
@@ -153,18 +151,16 @@ test('thick -> thin -> thick is the named default, symmetric and bounded by its 
   const off = thickThinThickProfile({ ends: 4, waist: 1.5, at: 0.25 });
   assert.ok(near(off.radiusAt(0.25), 1.5, 1e-14));
   assert.ok(near(off.slopeAt(0.25), 0, 1e-14));
-  // And the refusals, which are what keep the name honest.
+  // The refusals, which keep the name accurate.
   assert.match(thickThinThickProfile({ ends: 4, waist: 4 }).reason, /not thinner|constant/);
   assert.match(thickThinThickProfile({ ends: 4, waist: 6 }).reason, /not thinner|constant/);
   assert.match(thickThinThickProfile({ ends: 4, waist: 1, at: 0 }).reason, /strictly inside/);
   assert.match(thickThinThickProfile({ ends: 0, waist: 1 }).reason, /positive/);
 });
 
-/* ═══════════════════════════════════════════════════════════════════════
-   THE SECTION — checked against closed forms, not against itself
-   ═══════════════════════════════════════════════════════════════════════ */
+// Section: checked against closed forms, not against itself
 
-/* THE CONE. A straight spine with a LINEAR radius law has an exact envelope:
+/* The cone. A straight spine with a linear radius law has an exact envelope:
    the balls' boundary is a right circular cone. For centers on the z axis and
    r = a + b*z (so b IS dr/ds), the contact point of the ball at height z sits at
    radius r*sqrt(1-b^2) from the axis and at height z - r*b, which eliminates to
@@ -199,7 +195,7 @@ test('a variable-radius blend on a straight spine IS the exact cone, to machine 
     }
   }
   assert.ok(worst < 1e-12, `every point must lie ON the cone, not near it (worst ${worst.toExponential(3)})`);
-  /* TWO RULERS, ONE NUMBER. The cone equation and the signed canal measure share
+  /* Two rulers, one number. The cone equation and the signed canal measure share
      no algebra — one is a closed form in the surface's own coordinates, the
      other a minimization over the sphere family — so their agreement is what
      licenses the canal measure to be believed on the fixtures below, where no
@@ -208,8 +204,8 @@ test('a variable-radius blend on a straight spine IS the exact cone, to machine 
   assert.ok(Math.abs(built.deviation - worst) < 1e-12, `the two rulers must agree (${built.deviation.toExponential(3)} vs ${worst.toExponential(3)})`);
 });
 
-test('the section TILT is load-bearing: great-circle sections miss the same cone by 1.5e-2 and never converge', () => {
-  /* A constant-radius section builder puts the arc on a GREAT circle of the
+test('the section tilt is load-bearing: great-circle sections miss the same cone by 1.5e-2 and never converge', () => {
+  /* A constant-radius section builder puts the arc on a great circle of the
      ball. Every point of that arc is still exactly `radius` from the ball
      center, so a radius-only instrument reports a perfect blend — this is the
      error the unsigned measure cannot see, and the reason `canalDeviation` is
@@ -243,21 +239,20 @@ test('the section TILT is load-bearing: great-circle sections miss the same cone
     return { cone, ballRadius, canal: canal.worst, signed: canal.worstSigned };
   };
   const m9 = measure(9), m33 = measure(33), m129 = measure(129);
-  assert.ok(m9.cone > 1e-2, `the great-circle build must genuinely miss the cone (${m9.cone.toExponential(3)})`);
-  // STRUCTURAL, NOT A SAMPLING CHOICE. Every section is individually in the
+  assert.ok(m9.cone > 1e-2, `the great-circle build must miss the cone (${m9.cone.toExponential(3)})`);
+  // Structural, not a sampling choice. Every section is individually in the
   // wrong plane, so adding sections cannot help — and this is exactly the shape
   // of error that gets mistaken for "needs more sections".
   assert.ok(m129.cone > 0.9 * m9.cone,
-    `and it must NOT fall with section count — 9: ${m9.cone.toExponential(3)}, 33: ${m33.cone.toExponential(3)}, 129: ${m129.cone.toExponential(3)}`);
+    `and it must not fall with section count — 9: ${m9.cone.toExponential(3)}, 33: ${m33.cone.toExponential(3)}, 129: ${m129.cone.toExponential(3)}`);
   assert.ok(m9.canal > 1e-2 && m9.signed < 0, `the signed canal measure sees it, and sees that it cuts too deep (${m9.signed.toExponential(3)})`);
-  console.log(`      great-circle sections on a tapered spine: ${m9.cone.toExponential(2)}mm off the cone at 9 sections, ${m129.cone.toExponential(2)}mm at 129 — structural`);
 });
 
-/* THE REAL FILLET FIXTURE: a cylinder of radius 20 about +z cut by a plane
-   inclined at 60 degrees, so the dihedral genuinely varies around the
-   intersection ellipse — AND the radius varies along it. A ball of radius r
+/* The fillet fixture: a cylinder of radius 20 about +z cut by a plane
+   inclined at 60 degrees, so the dihedral varies around the
+   intersection ellipse, and the radius varies along it. A ball of radius r
    tangent to both sits at distance (Rc - r) from the axis and r from the plane,
-   both closed form, and the center MOVES when r changes, which is what makes
+   both closed form, and the center moves when r changes, which is what makes
    this a real rolling-ball spine rather than a prescribed one. */
 const Rc = 20, alpha = 60 * Math.PI / 180, S0 = -1.4, SPAN = 2.8;
 function filletBall(t, r) {
@@ -284,7 +279,7 @@ const planeDist = (p) => -p[0] * Math.sin(alpha) + p[2] * Math.cos(alpha);
 const cylDist = (p) => Math.abs(Math.hypot(p[0], p[1]) - Rc);
 
 test('the fixture is a real rolling ball before anything is blamed on the code', () => {
-  // Contact, not radius: each touch point must LIE ON its surface.
+  // Contact, not radius: each touch point must lie on its surface.
   for (let i = 0; i <= 12; i++) {
     const t = i / 12, r = waisted.radiusAt(t), b = filletBall(t, r);
     const pA = b.centre.map((v, k) => v + r * b.toTouchA[k]);
@@ -292,9 +287,9 @@ test('the fixture is a real rolling ball before anything is blamed on the code',
     assert.ok(cylDist(pA) < 1e-12, `touch A must lie on the cylinder wall (${cylDist(pA)})`);
     assert.ok(Math.abs(planeDist(pB)) < 1e-12, `touch B must lie on the plane (${planeDist(pB)})`);
   }
-  /* AND THE ROLLING INVARIANT, which is what makes the tilt computable at all:
+  /* The rolling invariant, which is what makes the tilt computable at all:
      for any ball kept tangent to a fixed surface, n . m' = -r' identically. Both
-     touch directions must therefore have the SAME component along the spine
+     touch directions must therefore have the same component along the spine
      tangent, equal to -dr/ds. If this fails the fixture is not a rolling ball
      and every measurement below would be judging the wrong object. */
   let worstMismatch = 0, minRate = Infinity, maxRate = -Infinity;
@@ -308,7 +303,7 @@ test('the fixture is a real rolling ball before anything is blamed on the code',
     minRate = Math.min(minRate, f.radiusRate); maxRate = Math.max(maxRate, f.radiusRate);
   }
   assert.ok(worstMismatch < 1e-9, `n . T must equal -dr/ds on both faces (worst ${worstMismatch.toExponential(3)})`);
-  assert.ok(maxRate - minRate > 0.1, `and the radius must genuinely be changing, or this is a constant-radius test wearing a profile (${minRate.toFixed(4)} .. ${maxRate.toFixed(4)})`);
+  assert.ok(maxRate - minRate > 0.1, `and the radius must be changing, or this is a constant-radius test wearing a profile (${minRate.toFixed(4)} .. ${maxRate.toFixed(4)})`);
   // The dihedral varies too, so the fixture exercises both things at once.
   let minAng = Infinity, maxAng = -Infinity;
   for (let i = 0; i <= 12; i++) {
@@ -320,10 +315,10 @@ test('the fixture is a real rolling ball before anything is blamed on the code',
   assert.ok((maxAng - minAng) * 180 / Math.PI > 15, `the dihedral must vary as well (${((maxAng - minAng) * 180 / Math.PI).toFixed(1)} degrees)`);
 });
 
-test('a CONSTANT profile reproduces the constant-radius blend BIT FOR BIT', () => {
+test('a constant profile reproduces the constant-radius blend bit for bit', () => {
   /* The strongest closed form available: with dr/ds = 0 the tilt is zero, the
      contact circle's center is the ball center and its radius is the ball's, so
-     every control point must come out IDENTICAL — not close, identical. A
+     every control point must come out identical — not close, identical. A
      construction that merely converged to the constant-radius one would be a
      second implementation of the same thing, and the two would drift. */
   const flat = radiusProfile([[0, 3], [0.5, 3], [1, 3]]);
@@ -377,9 +372,9 @@ test('a section refuses a radius outrunning the spine, and a spine that is not t
     'and both tangency points must lie exactly on it');
   assert.ok(near(Math.hypot(...good.tangencyB.map((v, i) => v - good.contactCentre[i])), good.contactRadius, 1e-14));
 
-  /* ⚠ AND THE CASE THE "OPPOSED FACES" GUARD CANNOT SEE. Tilting both touch
+  /* The case the "opposed faces" guard cannot see. Tilting both touch
      directions towards the spine pulls them together: two directions that are
-     diametrically opposite IN THE CONTACT PLANE have nA . nB = +0.28 once they
+     diametrically opposite in the contact plane have nA . nB = +0.28 once they
      share a tilt of 0.8, which is nowhere near the -1 that guard tests for. The
      contact arc still sweeps a full 180 degrees, which no single rational
      quadratic can carry. Refused by the sweep, not by the dot product. */
@@ -393,9 +388,7 @@ test('a section refuses a radius outrunning the spine, and a spine that is not t
   assert.ok(flat.sweep > Math.PI - 1e-9, `${flat.sweep}`);
 });
 
-/* ═══════════════════════════════════════════════════════════════════════
-   MEASURING — proving the ruler before quoting it
-   ═══════════════════════════════════════════════════════════════════════ */
+// Measuring: the ruler is proved before it is quoted
 
 function buildFillet(n, profile = waisted, ballAt = filletBall) {
   const arcs = [];
@@ -427,14 +420,13 @@ test('the ruler is refined, not merely dense — and the number it reports stops
     assert.ok(Math.abs(r.refined - ref) / ref < 1e-6,
       `a refined reading must not depend on the sampling: ${r.s} samples gives ${r.refined.toExponential(6)} against ${ref.toExponential(6)}`);
   }
-  /* AND THE UNREFINED READING IS NOT A CRUDER VERSION OF THE SAME NUMBER — it is
+  /* The unrefined reading is not a cruder version of the same number — it is
      a different number by three orders. A sampled minimum of a function with a
-     stationary minimum always OVERSTATES, so density alone reports a better
+     stationary minimum always overstates, so density alone reports a better
      surface than exists, and it does so at every density anyone would pay for. */
   assert.ok(readings[3].raw > 100 * ref,
     `the sampled ruler at 257 must be wildly too kind, or refinement is decorative (${readings[3].raw.toExponential(2)} vs ${ref.toExponential(2)})`);
   assert.ok(readings[4].raw < readings[0].raw / 100, 'and the sampled one must at least fall with density, confirming it is the ruler moving');
-  console.log(`      ruler: refined ${ref.toExponential(6)}mm at every density 33..1025; sampled reads ${readings[3].raw.toExponential(2)}mm at 257 and ${readings[4].raw.toExponential(2)}mm at 1025`);
   // The measure reports the ruler's own contribution rather than leaving it to
   // be guessed at.
   const d = canalDeviation(built.srf, filletAt, surfacePoint, { spineSamples: 257 });
@@ -450,7 +442,6 @@ test('the blend converges with section count, at better than third order', () =>
   const o1 = Math.log2(a1.worst / a2.worst), o2 = Math.log2(a2.worst / a3.worst);
   assert.ok(o1 > 3 && o2 > 3, `cubic interpolation in V should give roughly fourth order (${o1.toFixed(2)}, ${o2.toFixed(2)})`);
   assert.ok(a3.worst < 1e-5, `and by 49 sections it is under 1e-5mm (${a3.worst.toExponential(2)})`);
-  console.log(`      variable radius on a varying dihedral: 13 sections ${a1.worst.toExponential(2)}mm -> 25 ${a2.worst.toExponential(2)}mm -> 49 ${a3.worst.toExponential(2)}mm (orders ${o1.toFixed(2)}, ${o2.toFixed(2)})`);
 });
 
 test('closed-form derivatives and differenced ones build the same surface', () => {
@@ -479,19 +470,19 @@ test('closed-form derivatives and differenced ones build the same surface', () =
 });
 
 test('the tangency curves still lie on both supporting surfaces when the radius varies', () => {
-  /* The check a radius-only instrument cannot make: the blend has to TOUCH both
+  /* The check a radius-only instrument cannot make: the blend has to touch both
      faces, and where it touches is where they must be trimmed back to.
 
-     ⚠ MEASURED ON THE BORDER CURVES, NOT ON THEIR CONTROL POINTS. The tangency
+     Measured on the border curves, not on their control points. The tangency
      curves are interpolants through the section tangency points, so their
      control polygons sit off a curved supporting surface by design — 0.125mm
      here, which is a control polygon standing away from a wall and not a blend
      missing it.
 
-     ⚠ AND THIS IS NOT THE QUANTITY THE TOLERANCE LOOP CERTIFIES. That loop
-     measures the ENVELOPE deviation — how far the surface strays from the balls.
+     This is not the quantity the tolerance loop certifies. That loop
+     measures the envelope deviation — how far the surface strays from the balls.
      How far the tangency curve strays from the face it is supposed to lie in is
-     a different number of the same order, and it is the one a TRIM depends on.
+     a different number of the same order, and it is the one a trim depends on.
      Asserted separately for that reason. */
   const border = (n) => {
     const arcs = [];
@@ -507,10 +498,10 @@ test('the tangency curves still lie on both supporting surfaces when the radius 
     return { cyl, plane };
   };
   const b13 = border(13), b25 = border(25), b49 = border(49);
-  // ON A PLANAR FACE IT IS EXACT AND STAYS EXACT: an interpolant through
+  // On a planar face it is exact and stays exact: an interpolant through
   // coplanar points cannot leave their plane, at any section count.
-  for (const b of [b13, b25, b49]) assert.ok(b.plane < 1e-13, `the tangency curve on a PLANAR face must be exact, not merely close (${b.plane.toExponential(2)})`);
-  // On the CURVED face it is an interpolation error and must fall like one.
+  for (const b of [b13, b25, b49]) assert.ok(b.plane < 1e-13, `the tangency curve on a planar face must be exact, not merely close (${b.plane.toExponential(2)})`);
+  // On the curved face it is an interpolation error and must fall like one.
   const o1 = Math.log2(b13.cyl / b25.cyl), o2 = Math.log2(b25.cyl / b49.cyl);
   assert.ok(o1 > 3 && o2 > 3, `and on the curved face it must converge at better than third order (${o1.toFixed(2)}, ${o2.toFixed(2)})`);
   assert.ok(b49.cyl < 1e-4, `${b49.cyl.toExponential(2)}`);
@@ -519,7 +510,6 @@ test('the tangency curves still lie on both supporting surfaces when the radius 
   assert.equal(built.ok, true, built.reason);
   assert.equal(built.tangencyCurveA.ctrlPts.length, built.srf.ctrlNet[0].length);
   assert.equal(built.tangencyCurveB.ctrlPts[0][0], built.srf.ctrlNet[2][0][0]);
-  console.log(`      tangency curve off the CURVED face: ${b13.cyl.toExponential(2)}mm at 13 sections -> ${b49.cyl.toExponential(2)}mm at 49 (orders ${o1.toFixed(2)}, ${o2.toFixed(2)}); exact on the planar face at every count`);
 });
 
 test('the tolerance loop still chooses the section count by measuring, with a radius that varies', () => {
@@ -531,17 +521,16 @@ test('the tolerance loop still chooses the section count by measuring, with a ra
   assert.equal(tight.ok, true, tight.reason);
   assert.ok(tight.sections > loose.sections, `a tighter ask must cost sections (${tight.sections} vs ${loose.sections})`);
   assert.ok(tight.deviation < loose.deviation, `and achieve less deviation (${tight.deviation} vs ${loose.deviation})`);
-  // An impossible ask returns a real surface and SAYS it fell short.
+  // An impossible ask returns a real surface and says it fell short.
   const impossible = variableRadiusBlend({ ballAt: filletBall, profile: waisted, tolerance: 1e-15, evalSrf: surfacePoint, maxSections: 33 });
   assert.equal(impossible.ok, true, 'a surface that missed the target is still a surface');
   assert.equal(impossible.metTolerance, false, 'and it must say it missed');
-  assert.ok(impossible.sections <= 33, 'and honour the ceiling it was given');
-  console.log(`      to 0.01mm: ${loose.sections} sections, achieved ${loose.deviation.toExponential(2)}mm; to 1e-5mm: ${tight.sections} sections, ${tight.deviation.toExponential(2)}mm`);
+  assert.ok(impossible.sections <= 33, 'and honor the ceiling it was given');
 });
 
 test('the constant-radius builder still refuses a varying radius when no measure replaces its own', () => {
-  // The hook that lets a variable-radius blend through must not have opened the
-  // door for a caller who did not mean to vary anything.
+  // The hook that lets a variable-radius blend through must not admit a caller
+  // who did not mean to vary anything.
   const r = blendSurfaceToTolerance((t) => {
     const b = filletBall(t, 2 + t);
     return { centre: b.centre, radius: 2 + t, toTouchA: b.toTouchA, toTouchB: b.toTouchB };
@@ -550,14 +539,12 @@ test('the constant-radius builder still refuses a varying radius when no measure
   assert.match(r.reason, /ONE radius/);
 });
 
-/* ═══════════════════════════════════════════════════════════════════════
-   FEASIBILITY — ENFORCED
-   ═══════════════════════════════════════════════════════════════════════ */
+// Feasibility, enforced
 
-/* A PRESCRIBED SPINE, which is the only way the canal condition is reachable.
-   For a ball genuinely rolling on fixed faces, n . m' = -r' makes |dr/ds| <= 1
+/* A prescribed spine, which is the only way the canal condition is reachable.
+   For a ball rolling on fixed faces, n . m' = -r' makes |dr/ds| <= 1
    an identity — see the right-angle test below. What violates the condition is a
-   center path that does NOT move when the radius does: a variable-radius pipe,
+   center path that does not move when the radius does: a variable-radius pipe,
    and equally an app that takes its spine from an offset of the edge curve and
    then applies a profile to it. */
 function pipeBall(profile) {
@@ -586,7 +573,7 @@ test('the canal condition is enforced at exactly |dr/ds| = 1, and the closed for
     assert.ok(Math.abs(f.worstRate - rate) < 1e-9, `${f.worstRate}`);
     assert.match(f.reason, /outruns/);
     assert.ok(f.excess > 0, `and it must say by how much (${f.excess})`);
-    // ENFORCED, NOT REPORTED. The builder must refuse — not return a surface
+    // Enforced, not reported. The builder must refuse — not return a surface
     // with a residual attached to it.
     const blend = variableRadiusBlend({ ballAt, profile: p, tolerance: 0.01, evalSrf: surfacePoint });
     assert.equal(blend.ok, false, 'an infeasible profile must not come back with a surface');
@@ -596,7 +583,7 @@ test('the canal condition is enforced at exactly |dr/ds| = 1, and the closed for
   }
 });
 
-test('the refusal names WHERE along the edge it fails, not just that it does', () => {
+test('the refusal names where along the edge it fails, not just that it does', () => {
   // Steep only between t = 0.2 and t = 0.25; everywhere else this profile is
   // gentle. A refusal that named the whole edge would be useless to a user.
   const p = radiusProfile([[0, 1], [0.2, 1.2], [0.25, 30], [1, 32]]);
@@ -640,7 +627,7 @@ test('the margin and the rate cross zero at the same taper — two readings of o
 
 test('a right-angled edge cannot violate the condition however steep the taper — and that is a closed form', () => {
   /* Two planes meeting at a right angle, material in the first quadrant, edge up
-     +z. A ball of radius r sits at (r, r, z), so the center moves in BOTH faces'
+     +z. A ball of radius r sits at (r, r, z), so the center moves in both faces'
      normal directions as the radius grows and the spine outruns the radius by
      sqrt(2) even in the limit:
 

@@ -1,9 +1,9 @@
-// TRIANGLE SHAPE ON A FLAT CAP.
+// Triangle shape on a flat cap.
 //
 // `triangulatePolygon2D` is an ear-clipper, and on a convex loop every ear it
 // can find shares ONE apex vertex: an n-gon comes back as n-2 needles radiating
 // from a single boundary point. Area is exact — the failure is entirely one of
-// SHAPE — and shape is invisible to a rasteriser and expensive to a path
+// SHAPE — and shape is invisible to a rasterizer and expensive to a path
 // tracer, where a needle is a poor BVH leaf and ray-intersection precision
 // degrades with the triangle.
 //
@@ -59,7 +59,7 @@ function roundedRect(halfX, halfY, r, perArc, perSide) {
   return pts;
 }
 
-// THE INVARIANT THAT MATCHES THE PICTURE. The visible defect is streaks
+// The invariant that matches the picture. The visible defect is streaks
 // converging on ONE point of the face's boundary, and that point is a vertex
 // shared by every triangle in the face. So the property to hold is a valence
 // bound on the BOUNDARY: a single-apex fan puts n-2 triangles on one boundary
@@ -116,11 +116,11 @@ test('the centroid fan raises the minimum-angle floor on a convex loop, at every
     // of exactly half the arc one edge subtends: 180/n degrees.
     assert.ok(Math.abs(ear.minAngle - 180 / n) < 1e-6,
       `n=${n}: ear-clip min angle ${ear.minAngle} should be the single-apex signature ${180 / n}`);
-    /* Concentric rings, not one fan, so the floor no longer falls with n: a
+    /* Concentric rings, not one fan, so the floor does not fall with n: a
        single fan gives every triangle the arc it subtends, 360/n, which is
        1.9 degrees by n=192 and is what a tracer draws as radial streaks. The
-       rings hold an ABSOLUTE floor instead, which is the whole point of them
-       and the claim worth pinning. */
+       rings hold an ABSOLUTE floor instead, and that is the claim worth
+       pinning. */
     assert.ok(q.minAngle >= 15,
       `n=${n}: the ringed fan must hold an absolute angle floor, got ${q.minAngle}`);
     assert.ok(q.minAngle > ear.minAngle * 1.999,
@@ -145,8 +145,8 @@ test('the centroid fan covers exactly the polygon it was given — no area lost,
     const q = quality(fan.points, fan.tris);
     assert.ok(Math.abs(q.area - want) <= want * 1e-12,
       `n=${n}: fan covered ${q.area}, polygon encloses ${want}`);
-    /* The ringed tiling adds interior vertices, so neither count is `n` any
-       more. What must still hold is that the cost stays proportional to the
+    /* The ringed tiling adds interior vertices, so neither count is `n`.
+       What must still hold is that the cost stays proportional to the
        loop rather than exploding, and that a loop dense enough to need rings
        actually got them -- a silent fallback to the single fan would restore
        the streaks while every area check above stayed green. */
@@ -169,7 +169,7 @@ test('the centroid fan covers exactly the polygon it was given — no area lost,
   }
 });
 
-test('NO BOUNDARY VERTEX CARRIES THE WHOLE FACE — the valence bound, across every convex fixture', () => {
+test('no boundary vertex carries the whole face — the valence bound, across every convex fixture', () => {
   const fixtures = {
     'disc, 96 points': ngon(96, 45),
     'disc, 240 points': ngon(240, 45),
@@ -193,10 +193,10 @@ test('NO BOUNDARY VERTEX CARRIES THE WHOLE FACE — the valence bound, across ev
     assert.ok(earValence >= (poly.length - 2) * 0.5,
       `${name}: the ear-clip is expected to fan from one apex (valence ${earValence} of ${poly.length - 2} triangles)`);
     /* A quad strip gives each boundary vertex three triangles -- its own two
-       plus its neighbour's -- so the bound is small and constant rather than 2.
-       ⚠ AND THE BOUNDARY ALONE NO LONGER SETTLES IT. A single fan also puts
-       only two on each RIM vertex; what it does is pile all n onto the
-       CENTROID, so a regression back to it would sail past a rim-only check.
+       plus its neighbor's -- so the bound is small and constant rather than 2.
+       The boundary alone does not settle it. A single fan also puts only two
+       on each RIM vertex; what it does is pile all n onto the CENTROID, so a
+       single fan would pass a rim-only check.
        The claim is that no vertex anywhere carries the face. */
     assert.ok(fanValence <= 4, `${name}: max boundary valence must stay small, got ${fanValence}`);
     const counts = new Map();
@@ -220,9 +220,9 @@ test('NO BOUNDARY VERTEX CARRIES THE WHOLE FACE — the valence bound, across ev
       assert.ok(q.worstRatio < e.worstRatio, `${name}: radius ratio must improve (${e.worstRatio} -> ${q.worstRatio})`);
     }
 
-    /* ⭐ THE FLOOR IS THE LOOP'S OWN, AND THE FAN REACHES IT. An absolute
+    /* The floor is the loop's own, and the fan reaches it. An absolute
        minimum-angle number is not a property of the triangulator: the fan's
-       triangle over one boundary edge is isoceles with its apex at the centroid,
+       triangle over one boundary edge is isosceles with its apex at the centroid,
        so its smallest angle IS the angle that edge subtends from there, and no
        triangulation using only the loop's vertices plus one interior point can
        beat that. Beating it needs Steiner points — Delaunay refinement — which
@@ -247,14 +247,14 @@ test('NO BOUNDARY VERTEX CARRIES THE WHOLE FACE — the valence bound, across ev
 test('a fillet-sampled rounded rectangle — the filleted box top — stops emitting degenerate triangles', () => {
   // Measured on the app's own render mesh for a 60mm cube filleted at r=5: the
   // ear-clip fan gave a worst minimum angle of 0 degrees and a worst radius
-  // ratio of 9.4e13 (genuinely degenerate triangles), the centroid fan 1.17
+  // ratio of 9.4e13 (degenerate triangles), the centroid fan 1.17
   // degrees and 34.8. The loop below reproduces that shape's character — dense
   // corner arcs, sparse straights — so the floor cannot silently return.
   const poly = roundedRect(30, 30, 5, 40, 3);
   const ear = quality(poly, triangulatePolygon2D(poly));
   const fan = triangulateConvexFanFromCentroid(poly);
   const q = quality(fan.points, fan.tris);
-  // The ear-clip fan's worst triangle is genuinely degenerate — zero area to
+  // The ear-clip fan's worst triangle is degenerate — zero area to
   // float precision, which is what an unbounded radius ratio means.
   assert.ok(ear.worstRatio > 1e6, `the ear-clip fixture must actually be degenerate, got ${ear.worstRatio}`);
   assert.ok(q.worstRatio < 200, `worst radius ratio ${q.worstRatio} must become bounded`);
@@ -324,7 +324,7 @@ test('a real trimmed planar face comes out of tessellateTrimmedSurface with the 
   const want = shoelace(loop) * 100;
   assert.ok(Math.abs(area - want) <= want * 1e-9,
     `traced area ${area} should equal the trim loop's own ${want}`);
-  // Ringed, so no longer one per edge — but still proportional to the loop, and
+  // Ringed, so not one per edge — but still proportional to the loop, and
   // strictly more than a single fan would have emitted.
   assert.ok(tris.length > n && tris.length <= 24 * n,
     `the ringed cap should be proportional to its loop, got ${tris.length} for ${n} points`);
@@ -354,11 +354,11 @@ test('a real trimmed planar face comes out of tessellateTrimmedSurface with the 
       uses.set(key, (uses.get(key) || 0) + 1);
     }
   }
-  /* The single fan left exactly one vertex carrying half the face — its
-     centroid. The rings leave NONE: the apex is now a six-to-sixteen triangle
-     fan on an inner ring, so nothing is shared that heavily. Asserting zero is
-     the stronger claim and it is the one the streaks turned on. */
+  /* A single fan leaves exactly one vertex carrying half the face — its
+     centroid. The rings leave NONE: the apex is a six-to-sixteen triangle fan
+     on an inner ring, so nothing is shared that heavily. Asserting zero is
+     the stronger claim. */
   let shared = 0;
   for (const [, c] of uses) if (c > n / 2) shared++;
-  assert.equal(shared, 0, `no vertex should carry half the face any more, found ${shared}`);
+  assert.equal(shared, 0, `no vertex should carry half the face, found ${shared}`);
 });

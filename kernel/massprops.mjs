@@ -1,30 +1,29 @@
-// MASS PROPERTIES — volume, surface area, centroid and second moments of a
+// Mass properties — volume, surface area, centroid and second moments of a
 // closed shell, by the divergence theorem over its own boundary faces.
 //
-// THE REASON THIS EXISTS IS NOT THE FEATURE. Volume is a BOOLEAN VALIDITY
-// ORACLE that needs no reference answer and no human looking at a picture:
+// Volume is also a boolean validity oracle that needs no reference answer:
 //
 //     volume(A u B) + volume(A n B) == volume(A) + volume(B)
 //     volume(A - B) + volume(A n B) == volume(A)
 //
-// Both hold for ANY two solids, whatever shape, with nothing to compare
-// against — which is exactly what a fuzz harness needs. A boolean that keeps
+// Both hold for any two solids, whatever shape, with nothing to compare
+// against, which is what a fuzz harness needs. A boolean that keeps
 // a fragment it should have dropped, or drops one it should have kept, still
 // sews into something closed with a perfectly ordinary Euler characteristic
 // and zero naked edges; chi and the naked-edge count both pass it. The volume
 // identity does not.
 //
-// A FACE IS A POINT LOOP, AND A TRIANGLE IS JUST A 3-POINT LOOP — so the same
+// A face is a point loop, and a triangle is a 3-point loop, so the same
 // function measures a tessellated triangle soup and a B-rep's own face
 // boundaries with no second code path. Every integral below is accumulated as
-// a signed sum of tetrahedra fanned from the ORIGIN, which is what makes that
-// unification exact rather than convenient:
+// a signed sum of tetrahedra fanned from the origin, which makes that
+// unification exact:
 //
 //   - The origin needs no relationship to the solid. A tetrahedron behind the
 //     origin contributes a negative volume and the far face's own positive
 //     contribution cancels it, so the total is the enclosed volume wherever
 //     the solid sits. No centering pass, no bounding-box trick.
-//   - A fan is exact for a PLANAR loop even when it is not convex. A fan
+//   - A fan is exact for a planar loop even when it is not convex. A fan
 //     triangle that escapes the polygon is traversed the other way round by
 //     its neighbors and cancels — the 3D generalization of the shoelace
 //     formula. Convexity is not required and is not checked.
@@ -32,27 +31,25 @@
 //     its outer loop subtracts, so a face with holes is measured by iterating
 //     all of its loops and summing.
 //
-// WHAT THIS IS EXACT FOR, STATED PLAINLY. Every result is exact for a shell
-// whose faces are genuinely planar polygons — a box, any polyhedron, any
-// triangle soup. For a CURVED face handed over as its own boundary loop, the
+// Exactness: every result is exact for a shell whose faces are planar polygons — a box, any polyhedron, any
+// triangle soup. For a curved face handed over as its own boundary loop, the
 // loop is a polygon inscribed in the true surface, so the answer is the
 // inscribed polyhedron's, slightly under the true one. Measure a curved solid
-// from its TESSELLATION rather than its boundary loops and the error is the
+// from its tessellation rather than its boundary loops and the error is the
 // tessellation's, which is the caller's own resolution choice.
 //
-// CLOSURE IS REPORTED, NOT ASSUMED. A shell that is genuinely closed and
+// Closure is reported, not assumed. A shell that is closed and
 // consistently wound satisfies the closed-surface theorem exactly: the sum of
 // every face's own area vector is zero. `closureResidual` is that sum's
-// magnitude, relative to total area — a real, cheap check that an open shell
+// magnitude, relative to total area — a cheap check that an open shell
 // or a flipped face fails, and one no volume number can tell you on its own.
 //
-// NOT BUILT, NAMED RATHER THAN IMPLIED: principal axes. They are one
+// Not built: principal axes. They are one
 // eigen-decomposition of the inertia tensor this already computes, and
 // kernel/refit.mjs already carries a symmetric 3x3 Jacobi solver to reuse —
 // but a symmetric solid (a sphere, a cube) has degenerate eigenvalues, where
-// "the principal axes" are not a well-defined answer at all, and deciding
-// whether to refuse, flag, or return an arbitrary orthonormal triple is its
-// own call rather than an oversight of this one.
+// "the principal axes" are not well defined, and whether to refuse, flag, or
+// return an arbitrary orthonormal triple is left open.
 
 function cross(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -67,19 +64,18 @@ function finitePoint(p, where) {
 }
 
 /**
- * Mass properties of a closed shell given as an array of point LOOPS.
+ * Mass properties of a closed shell given as an array of point loops.
  *
  * `loops` — [[[x,y,z], ...], ...]. Each entry is one face boundary (or one
- *   ring of a face), given once, NOT repeating its first point at the end.
+ *   ring of a face), given once, not repeating its first point at the end.
  *   A triangle soup is simply an array of 3-point loops. Every loop must be
  *   wound consistently with every other — outward for a positive volume.
  *
  * Returns { volume, area, centroid, bbox, areaVector, closureResidual,
  *           inertiaOrigin, inertiaCentroid }, where:
  *
- *   volume            SIGNED. Negative means the shell is wound inside-out,
- *                     which is a real possible outcome and is reported rather
- *                     than absorbed by an abs().
+ *   volume            Signed. Negative means the shell is wound inside-out,
+ *                     which is reported rather than absorbed by an abs().
  *   area              Sum of each loop's own planar area. Exact for a planar
  *                     loop of any shape; for a triangle it is the triangle.
  *   centroid          Volume-weighted, null when the volume is degenerate.
@@ -117,7 +113,7 @@ export function massProperties(loops) {
     }
 
     // Area vector of the loop: half the sum of consecutive cross products.
-    // Its magnitude IS the planar polygon's area, with no convexity
+    // Its magnitude is the planar polygon's area, with no convexity
     // assumption and no need to know the plane in advance.
     const av = [0, 0, 0];
     for (let i = 0; i < loop.length; i++) {
@@ -198,7 +194,7 @@ export function massProperties(loops) {
  * loop — a ring is wound opposite to the loop that contains it, so it
  * subtracts on its own, with no hole-specific arithmetic anywhere.
  *
- * A vertex with no point is a real possibility in the half-edge structure
+ * A vertex with no point is possible in the half-edge structure
  * (the Euler operators can create one before it is positioned), so a loop
  * carrying one is refused by name rather than measured as if it sat at the
  * origin.

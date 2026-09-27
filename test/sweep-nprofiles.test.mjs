@@ -8,9 +8,7 @@ import { buildParallelTransportFrames, sweepNProfiles } from '../kernel/sweep.mj
 
 const line = (p0, p1) => ({ degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[...p0, 1], [...p1, 1]] });
 
-// ---------------------------------------------------------------------
-// closestPointOnCurve — the Q1 "profile-to-rail correspondence" machinery
-// ---------------------------------------------------------------------
+// closestPointOnCurve — profile-to-rail correspondence
 
 test('closestPointOnCurve on a straight rail finds the exact perpendicular-foot projection', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
@@ -21,7 +19,7 @@ test('closestPointOnCurve on a straight rail finds the exact perpendicular-foot 
   assert.equal(hit.ambiguous, false);
 });
 
-test('closestPointOnCurve on a curved rail satisfies the real closest-point condition ((C(u)-P) perpendicular to C\'(u)), an independent geometric check not a hardcoded number', () => {
+test('closestPointOnCurve on a curved rail satisfies the closest-point condition ((C(u)-P) perpendicular to C\'(u)), an independent geometric check not a hardcoded number', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 10, 0, Math.PI / 2);
   const target = [15, 8, 3];
   const hit = closestPointOnCurve(rail, target);
@@ -29,14 +27,14 @@ test('closestPointOnCurve on a curved rail satisfies the real closest-point cond
   const toTarget = sub(target, hit.point);
   // Interior optimum: (C(u)-P) . C'(u) = 0 (up to numerical tolerance).
   // At a domain boundary this can legitimately fail (a clamped endpoint),
-  // so only assert it when the found u is genuinely interior.
+  // so only assert it when the found u is interior.
   if (hit.u > rail.knots[0] + 1e-6 && hit.u < rail.knots[rail.knots.length - 1] - 1e-6) {
     assert.ok(Math.abs(dot(toTarget, tangent)) < 1e-6, `perpendicularity residual=${dot(toTarget, tangent)}`);
   }
   assert.equal(hit.ambiguous, false);
 });
 
-test('closestPointOnCurve is honestly AMBIGUOUS on a rail that loops back near itself (a hairpin/U-shaped rail), not a silent arbitrary pick', () => {
+test('closestPointOnCurve reports an ambiguity on a rail that loops back near itself (a hairpin/U-shaped rail), not a silent arbitrary pick', () => {
   // A degree-1 "U" rail: left leg down, across the bottom, right leg back
   // up — symmetric about x=0. A target point ON that symmetry plane, above
   // both leg-tops, is exactly equidistant from the two separate legs.
@@ -48,22 +46,20 @@ test('closestPointOnCurve is honestly AMBIGUOUS on a rail that loops back near i
   const hit = closestPointOnCurve(rail, [0, 0, 12]);
   assert.equal(hit.ambiguous, true);
   assert.ok(hit.ambiguousWith !== null);
-  // The two candidate stations should be genuinely far apart in parameter
-  // (opposite legs), not two samples of the SAME dip.
+  // The two candidate stations should be far apart in parameter
+  // (opposite legs), not two samples of the same dip.
   assert.ok(Math.abs(hit.u - hit.ambiguousWith) > 1, `u=${hit.u} ambiguousWith=${hit.ambiguousWith}`);
 });
 
-test('closestPointOnCurve is NOT ambiguous for an ordinary, non-self-proximate rail (no false positives)', () => {
+test('closestPointOnCurve is not ambiguous for an ordinary, non-self-proximate rail (no false positives)', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
   const hit = closestPointOnCurve(rail, [3, 0, 4]);
   assert.equal(hit.ambiguous, false);
 });
 
-// ---------------------------------------------------------------------
-// buildParallelTransportFrames(rail, extraParams) — the Q2 extension
-// ---------------------------------------------------------------------
+// buildParallelTransportFrames(rail, extraParams)
 
-test('buildParallelTransportFrames: extraParams=[] is byte-identical to the original single-argument call (regression safety for sweep1Rigid and Sweep1)', () => {
+test('buildParallelTransportFrames: extraParams=[] is byte-identical to the single-argument call (sweep1Rigid and Sweep1 rely on it)', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 10, 0, 1.3 * Math.PI);
   const a = buildParallelTransportFrames(rail);
   const b = buildParallelTransportFrames(rail, []);
@@ -74,7 +70,7 @@ test('buildParallelTransportFrames: extraParams=[] is byte-identical to the orig
   assert.deepEqual(b.extra, []);
 });
 
-test('buildParallelTransportFrames: an extra parameter that coincides with a rail control point\'s own Greville station reuses that EXACT frame, not a numerically-separate twin', () => {
+test('buildParallelTransportFrames: an extra parameter that coincides with a rail control point\'s own Greville station reuses that exact frame, not a numerically-separate twin', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 10, 0, 1.3 * Math.PI);
   const gParams = (() => {
     // recompute independently via the frames themselves (frames[i].u is
@@ -83,10 +79,10 @@ test('buildParallelTransportFrames: an extra parameter that coincides with a rai
     return frames.map((f) => f.u);
   })();
   const frames = buildParallelTransportFrames(rail, [gParams[2]]);
-  assert.deepEqual(frames.extra[0], frames[2], 'extra frame at a coincident station must be the SAME frame as the control-point one');
+  assert.deepEqual(frames.extra[0], frames[2], 'extra frame at a coincident station must be the same frame as the control-point one');
 });
 
-test('buildParallelTransportFrames: a frame at a genuine INTERIOR (non-control-point) rail parameter is orthonormal and its tangent matches an independent curvePointAndTangent call', () => {
+test('buildParallelTransportFrames: a frame at an interior (non-control-point) rail parameter is orthonormal and its tangent matches an independent curvePointAndTangent call', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 10, 0, 1.3 * Math.PI);
   const uMid = (rail.knots[0] + rail.knots[rail.knots.length - 1]) / 2 + 0.017; // deliberately off any knot/Greville value
   const frames = buildParallelTransportFrames(rail, [uMid]);
@@ -101,11 +97,9 @@ test('buildParallelTransportFrames: a frame at a genuine INTERIOR (non-control-p
   assert.ok(Math.hypot(f.zAxis[0] - tangent[0], f.zAxis[1] - tangent[1], f.zAxis[2] - tangent[2]) < 1e-9);
 });
 
-// ---------------------------------------------------------------------
-// sweepNProfiles — Q3, the exactness proof
-// ---------------------------------------------------------------------
+// sweepNProfiles — exactness
 
-test('sweepNProfiles: N=3 different-radius circles along a STRAIGHT rail — the cross-section AT each profile\'s own rail station matches that profile\'s own real circle exactly (ground-truth radius+plane check, not a tautological self-comparison)', () => {
+test('sweepNProfiles: N=3 different-radius circles along a straight rail — the cross-section at each profile\'s own rail station matches that profile\'s own real circle exactly (ground-truth radius+plane check, not a tautological self-comparison)', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
   const p0 = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3);
   const p1 = makeCircle([0, 0, 10], [1, 0, 0], [0, 1, 0], 5);
@@ -115,18 +109,17 @@ test('sweepNProfiles: N=3 different-radius circles along a STRAIGHT rail — the
 
   // Stations must have been inferred correctly: profile 0 at u=0 (z=0),
   // profile 1 at u=0.5 (z=10), profile 2 at u=1 (z=20) — and, since the
-  // rail is straight, the TRUE arc-length fraction is exactly the same
-  // 0/0.5/1 (this function's own real fix over loft()'s chord-of-grid
-  // approximation).
+  // rail is straight, the true arc-length fraction is exactly the same
+  // 0/0.5/1 (unlike loft()'s chord-of-grid approximation).
   const vOf = (idx) => srf.stations.find((s) => s.profileIndex === idx).v;
   assert.ok(Math.abs(vOf(0) - 0) < 1e-9);
   assert.ok(Math.abs(vOf(1) - 0.5) < 1e-9);
   assert.ok(Math.abs(vOf(2) - 1) < 1e-9);
 
   // The exactness guarantee (global interpolation, applied twice) is that
-  // surfacePoint(srf, ubar[i], v_k) reproduces grid[i][k] EXACTLY — grid[i]
-  // being each profile's own resample at relative fraction i/(N-1) of ITS
-  // OWN domain. This is checked AT the actual ubar[i] samples (not an
+  // surfacePoint(srf, ubar[i], v_k) reproduces grid[i][k] exactly — grid[i]
+  // being each profile's own resample at relative fraction i/(N-1) of its
+  // own domain. This is checked at the actual ubar[i] samples (not an
   // arbitrary continuous parameter in between, where a discrete-sample
   // reconstruction is only an approximation of the true circle — see
   // loft.test.mjs's own identical corner-vs-continuous distinction).
@@ -141,16 +134,16 @@ test('sweepNProfiles: N=3 different-radius circles along a STRAIGHT rail — the
   }
 });
 
-test('sweepNProfiles: exactness also holds along a CURVED rail (not just the trivial straight case) — each station\'s cross-section matches an INDEPENDENT resample of that profile\'s own curve', () => {
+test('sweepNProfiles: exactness also holds along a curved rail (not just the trivial straight case) — each station\'s cross-section matches an independent resample of that profile\'s own curve', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 20, 0, Math.PI); // a semicircular rail, radius 20
   // Profiles positioned at three different stations along the rail, each
   // roughly perpendicular to the rail's own tangent there.
   const stationU = [rail.knots[0], (rail.knots[0] + rail.knots[rail.knots.length - 1]) / 2, rail.knots[rail.knots.length - 1]];
   const profiles = stationU.map((u, i) => {
     const { point, tangent } = curvePointAndTangent(rail, u);
-    // build a small circle centered AT this rail point, roughly facing
+    // build a small circle centered at this rail point, roughly facing
     // the tangent (exact axis choice doesn't matter for this test — only
-    // that the profile SITS at the right world location, since stationing
+    // that the profile sits at the right world location, since stationing
     // is by centroid-proximity)
     const arbitraryUp = Math.abs(tangent[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
     let xAxis = normalize([
@@ -175,14 +168,14 @@ test('sweepNProfiles: exactness also holds along a CURVED rail (not just the tri
     const p0u = profile.knots[0], p1u = profile.knots[profile.knots.length - 1];
     for (let k = 0; k < uSampleCount; k++) {
       const t = k / (uSampleCount - 1);
-      const want = curvePoint(profile, p0u + t * (p1u - p0u)); // independent resample of the ORIGINAL profile
+      const want = curvePoint(profile, p0u + t * (p1u - p0u)); // independent resample of the original profile
       const got = surfacePoint(srf, srf.ubar[k], v);
       assert.ok(Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]) < 1e-7, `profile ${i} t=${t}: got ${got} want ${want}`);
     }
   }
 });
 
-test('sweepNProfiles: localized profiles (per-station frame decomposition) round-trip back to the ORIGINAL world control points exactly, at an arbitrary (non-control-point) rail station', () => {
+test('sweepNProfiles: localized profiles (per-station frame decomposition) round-trip back to the original world control points exactly, at an arbitrary (non-control-point) rail station', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 20, 0, Math.PI);
   const p0 = makeCircle(curvePoint(rail, rail.knots[0]), [1, 0, 0], [0, 0, 1], 2);
   const mid = (rail.knots[0] + rail.knots[rail.knots.length - 1]) / 2;
@@ -207,37 +200,37 @@ test('sweepNProfiles: localized profiles (per-station frame decomposition) round
   }
 });
 
-test('sweepNProfiles throws honestly on fewer than 2 profiles', () => {
+test('sweepNProfiles throws on fewer than 2 profiles', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
   const p0 = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3);
   assert.throws(() => sweepNProfiles(rail, [p0]));
 });
 
-test('sweepNProfiles throws honestly when two profiles station at (nearly) the same rail parameter, rather than silently building a degenerate surface', () => {
+test('sweepNProfiles throws when two profiles station at (nearly) the same rail parameter, rather than silently building a degenerate surface', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
   const p0 = makeCircle([0, 0, 10], [1, 0, 0], [0, 1, 0], 3);
   const p1 = makeCircle([0, 0, 10.0000001], [1, 0, 0], [0, 1, 0], 5);
   assert.throws(() => sweepNProfiles(rail, [p0, p1]), /same rail parameter|same rail station/i);
 });
 
-test('sweepNProfiles propagates closestPointOnCurve\'s own ambiguity as an honest, named error (not a silently-wrong surface) on a self-proximate rail', () => {
+test('sweepNProfiles propagates closestPointOnCurve\'s own ambiguity as a named error (not a silently-wrong surface) on a self-proximate rail', () => {
   const rail = {
     degree: 1,
     knots: [0, 0, 1, 2, 3, 3],
     ctrlPts: [[-5, 0, 10, 1], [-5, 0, 0, 1], [5, 0, 0, 1], [5, 0, 10, 1]],
   };
-  // A 2-point line profile's centroid is an EXACT unweighted midpoint (no
+  // A 2-point line profile's centroid is an exact unweighted midpoint (no
   // rational-weight offset the way a circle's own control polygon has —
   // see this file's own "closestPointOnCurve on a straight rail" test and
-  // sweep.mjs's own honest caveat that a profile's centroid is only a
+  // sweep.mjs's own caveat that a profile's centroid is only a
   // representative anchor, not its true geometric centroid), so this
-  // places p0's station EXACTLY on the hairpin's own symmetry plane.
+  // places p0's station exactly on the hairpin's own symmetry plane.
   const p0 = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[-1, 0, 12, 1], [1, 0, 12, 1]] };
   const p1 = makeCircle([-5, 0, 5], [1, 0, 0], [0, 1, 0], 1); // an ordinary, unambiguous station
   assert.throws(() => sweepNProfiles(rail, [p0, p1]), /AMBIGUOUS/);
 });
 
-test('sweepNProfiles (the curved-rail fix): a REAL curved rail\'s own true arc is what the surface follows between stations — NOT the straight chord between the two profiles. The regression: an N-profile Sweep1 "acted like a Loft" on a curved rail: a 90-degree, radius-100 arc rail with a small circle profile at each end should have its v=0.5 cross-section sit near the arc\'s own true midpoint (70.71, 70.71), NOT the straight chord\'s midpoint (50, 50).', () => {
+test('sweepNProfiles on a curved rail: the surface follows the rail\'s true arc between stations, not the straight chord between the two profiles — a 90-degree, radius-100 arc rail with a small circle profile at each end has its v=0.5 cross-section near the arc\'s true midpoint (70.71, 70.71), not the straight chord\'s midpoint (50, 50).', () => {
   const rail = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 100, 0, Math.PI / 2);
   const startPt = [100, 0, 0];
   const endPt = [0, 100, 0];
@@ -247,13 +240,12 @@ test('sweepNProfiles (the curved-rail fix): a REAL curved rail\'s own true arc i
   assert.equal(isFiniteNet(srf.ctrlNet), true);
 
   const trueArcMid = [70.710678, 70.710678, 0]; // radius 100 at 45 degrees
-  const straightChordMid = [50, 50, 0]; // midpoint of the two profile centers — the OLD (buggy) behavior
+  const straightChordMid = [50, 50, 0]; // midpoint of the two profile centers — where a loft-like chord interpolation lands
 
-  // "Spine" at v=0.5: average of the cross-section around the tube, the
-  // same cheap, dependency-free proxy the interactive repro
-  // uses (a true circle's own centroid, discretely sampled — not exact,
-  // but more than precise enough to tell "hugging the arc" from "cutting
-  // the chord" apart, which differ by ~28 units here).
+  // "Spine" at v=0.5: average of the cross-section around the tube (a
+  // circle's own centroid, discretely sampled — not exact, but precise
+  // enough to tell "hugging the arc" from "cutting the chord" apart, which
+  // differ by ~28 units here).
   let sx = 0, sy = 0, sz = 0, k = 0;
   for (const u of [0, 0.25, 0.5, 0.75, 1]) {
     const p = surfacePoint(srf, u, 0.5);
@@ -265,20 +257,20 @@ test('sweepNProfiles (the curved-rail fix): a REAL curved rail\'s own true arc i
   const distToArc = distTo(spine, trueArcMid);
   const distToChord = distTo(spine, straightChordMid);
 
-  assert.ok(distToArc < 10, `surface v=0.5 spine ${spine} should sit within ~10 units of the rail's TRUE arc midpoint ${trueArcMid}, got distance ${distToArc}`);
-  assert.ok(distToChord > 20, `surface v=0.5 spine ${spine} should be CLEARLY far from the straight-chord midpoint ${straightChordMid} (the old, buggy loft-like behavior), got distance ${distToChord}`);
+  assert.ok(distToArc < 10, `surface v=0.5 spine ${spine} should sit within ~10 units of the rail's true arc midpoint ${trueArcMid}, got distance ${distToArc}`);
+  assert.ok(distToChord > 20, `surface v=0.5 spine ${spine} should be clearly far from the straight-chord midpoint ${straightChordMid} (loft-like chord interpolation), got distance ${distToChord}`);
   assert.ok(distToArc < distToChord / 3, `spine should track the rail's arc far more closely than the chord: distToArc=${distToArc} distToChord=${distToChord}`);
 });
 
-test('sweepNProfiles: profiles picked OUT OF RAIL ORDER are still correctly re-ordered by inferred station, not by pick order', () => {
+test('sweepNProfiles: profiles picked out of rail order are still correctly re-ordered by inferred station, not by pick order', () => {
   const rail = line([0, 0, 0], [0, 0, 20]);
   const pEnd = makeCircle([0, 0, 20], [1, 0, 0], [0, 1, 0], 8);
   const pStart = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3);
   const pMid = makeCircle([0, 0, 10], [1, 0, 0], [0, 1, 0], 5);
-  // picked in the order END, START, MID — deliberately scrambled
+  // picked in the order end, start, mid — deliberately scrambled
   const srf = sweepNProfiles(rail, [pEnd, pStart, pMid], 12);
   const stationsByV = [...srf.stations].sort((a, b) => a.v - b.v);
-  assert.equal(stationsByV[0].profileIndex, 1, 'pStart (pick index 1) should be the FIRST station (smallest v)');
-  assert.equal(stationsByV[1].profileIndex, 2, 'pMid (pick index 2) should be the MIDDLE station');
-  assert.equal(stationsByV[2].profileIndex, 0, 'pEnd (pick index 0) should be the LAST station (largest v)');
+  assert.equal(stationsByV[0].profileIndex, 1, 'pStart (pick index 1) should be the first station (smallest v)');
+  assert.equal(stationsByV[1].profileIndex, 2, 'pMid (pick index 2) should be the middle station');
+  assert.equal(stationsByV[2].profileIndex, 0, 'pEnd (pick index 0) should be the last station (largest v)');
 });

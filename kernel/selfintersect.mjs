@@ -1,80 +1,67 @@
-// SELF-INTERSECTION — Phase C of the self-intersection guards, the CURVE
-// tier, plus the highest-value consumer of it
-// of it: profile validity.
+// Self-intersection of a curve — the curve tier of the self-intersection
+// guards, and the check a profile needs before it is consumed.
 //
-// WHY THIS MATTERS MORE THAN IT SOUNDS. Extrude, Revolve, Loft, Cap and Sweep
-// all consume a profile curve, and every one of them today produces a
-// self-intersecting SURFACE, silently, from a self-intersecting PROFILE. Only
-// Trim ever checked its input (via `trimLoopsValid`). A student who draws a
-// figure-eight and extrudes it gets a solid that looks plausible, fails every
-// downstream boolean, fails export, and fails CAM — with nothing anywhere
-// saying why.
+// Extrude, Revolve, Loft, Cap and Sweep all consume a profile curve, and each
+// of them turns a self-intersecting profile into a self-intersecting surface.
+// A figure-eight extruded gives a solid that looks plausible and then fails
+// every downstream boolean, export and CAM step with no diagnostic.
 //
-// THREE DECISIONS THIS PHASE HAD TO MAKE RATHER THAN INHERIT
-// ("which path it takes, which plane it flattens to, and at
-// what planarity tolerance are decisions this phase must make, not inherit"):
+// Three decisions:
 //
-// 1. WHICH PLANE. The best-fit plane through the curve's own dense samples,
-//    by Newell's method — the same technique `capProfilePlaneCheck` already
-//    uses to decide whether a profile can be capped, reused rather than a
-//    second, differently-behaving notion of "the plane this curve is in".
-//    Newell's is the right choice specifically because it is robust on a
-//    non-convex ring, where picking three points and crossing them is not.
+// 1. Which plane. The best-fit plane through the curve's own dense samples,
+//    found from the most spread sample pair about the centroid (see
+//    `bestFitPlane` for why not Newell's method).
 //
-// 2. WHAT PLANARITY TOLERANCE. RELATIVE to the curve's own size (its sample
+// 2. What planarity tolerance. Relative to the curve's own size (its sample
 //    bounding-box diagonal), never an absolute millimeter count — otherwise
-//    a 5mm curve and a 500mm curve are judged by wildly different standards,
-//    and this kernel has no document scale to appeal to. Deliberately
-//    GENEROUS (1%), because the near-planar case is the one that
-//    matters: "a planar sketch with one point nudged off-plane loses its
-//    exact 3D crossing while keeping the tolerance-level one that actually
-//    breaks downstream ops." A curve that is planar to within 1% of its own
-//    size and crosses itself in that plane will still produce a broken
-//    surface, so it is worth catching; a genuinely spatial curve is not.
+//    a 5mm curve and a 500mm curve are judged by different standards,
+//    and this kernel has no document scale to appeal to. Generous (1%),
+//    because the near-planar case is the one that matters: a planar sketch
+//    with one point nudged off-plane loses its exact 3D crossing while
+//    keeping the tolerance-level one that breaks downstream operations. A
+//    curve that is planar to within 1% of its own size and crosses itself in
+//    that plane will still produce a broken surface, so it is worth
+//    catching; a spatial curve is not.
 //
-// 3. WHICH PATH. Planar -> an exact 2D segment-intersection test. Non-planar
-//    -> reported honestly as NOT TESTED (`planar: false`), never as "clean".
-//    That is the gate, and it is the honest half: a space curve
-//    passing near itself is not an intersection, and claiming a clean result
-//    for a case this tier cannot judge would be worse than saying nothing.
+// 3. Which path. Planar -> an exact 2D segment-intersection test. Non-planar
+//    -> reported as not tested (`planar: false`), never as "clean": a space
+//    curve passing near itself is not an intersection, and claiming a clean
+//    result for a case this tier cannot judge would be worse than saying
+//    nothing.
 //
-// DELIBERATELY NOT BUILT HERE, named rather than silently missing: the space-
-// curve MINIMUM SELF-DISTANCE report Phase C also describes (a
-// clearance number with a parametric-neighborhood exclusion for the s ~= t
-// pairs that are trivially zero). Real, separate, and it needs its own
-// decision about what an actionable clearance number even is. This module is
-// the planar half plus its named consumer.
+// Not built here: a space-curve minimum self-distance report (a clearance
+// number with a parametric-neighborhood exclusion for the s ~= t pairs that
+// are trivially zero). It needs its own decision about what an actionable
+// clearance number is. This module is the planar half.
 
 import { curvePoint, adaptiveArcLengthSamples, isCurveClosed } from './curve.mjs';
 import { segmentsIntersect } from './trim.mjs';
 import { sub, cross, dot, normalize, length } from './vec3.mjs';
 
 // How far off its own best-fit plane a curve may sit and still be judged
-// PLANAR, as a fraction of its own sample bounding-box diagonal. See decision
+// planar, as a fraction of its own sample bounding-box diagonal. See decision
 // 2 above for why this is relative and why it is generous.
 export const PLANARITY_TOL_FRAC = 0.01;
 
-// The plane the samples lie in, found by the MOST SPREAD PAIR about the
-// centroid rather than by Newell's method — and that choice is the whole
-// reason this function exists instead of reusing `capProfilePlaneCheck`'s.
+// The plane the samples lie in, found by the most spread pair about the
+// centroid rather than by Newell's method, which is why this does not reuse
+// `capProfilePlaneCheck`'s.
 //
-// NEWELL'S METHOD CANCELS TO ZERO ON EXACTLY THE SHAPES THIS MODULE EXISTS TO
-// CATCH. It sums SIGNED per-edge contributions, i.e. it is an area-weighted
-// normal — and a figure-eight's two lobes wind in OPPOSITE directions, so
+// Newell's method cancels to zero on exactly the shapes this module exists to
+// catch. It sums signed per-edge contributions, i.e. it is an area-weighted
+// normal — and a figure-eight's two lobes wind in opposite directions, so
 // their contributions cancel and the "normal" comes out zero-length. Newell's
 // then reports the canonical self-intersecting profile as having no plane at
-// all, and the guard silently declines to judge the one case it was built
-// for. Found by running the gate fixture, not by reading the formula.
+// all, and the guard declines to judge the one case it was built for.
 //
-// Taking the single most spread pair instead is exact for genuinely coplanar
-// points (every pair's cross product is parallel to the true normal, so the
-// largest is simply the best-conditioned one), independent of winding, and
-// independent of the order the samples arrive in. This project already
-// reached for the same fix once, in `bridgeEdgeRunsHub`, against the same
-// underlying failure: a sum of signed cross products canceling on symmetric
-// input. SIGN is deliberately not meaningful here — a self-intersection is a
-// topological fact about the projected polygon, and which way the normal
-// points cannot change it.
+// Taking the single most spread pair instead is exact for coplanar points
+// (every pair's cross product is parallel to the true normal, so the largest
+// is simply the best-conditioned one), independent of winding, and independent
+// of the order the samples arrive in. `bridgeEdgeRunsHub` uses the same
+// construction against the same failure: a sum of signed cross products
+// canceling on symmetric input. Sign is not meaningful here — a
+// self-intersection is a topological fact about the projected polygon, and
+// which way the normal points cannot change it.
 export function bestFitPlane(points) {
   const n = points.length;
   if (n < 3) return null;
@@ -97,23 +84,22 @@ export function bestFitPlane(points) {
   // Scale-aware: the cross product's magnitude grows with the square of the
   // point set's own size, so an absolute floor would refuse a legitimately
   // small curve and accept noise on a large one.
-  if (!nrm || !(bestMag > bestR * bestR * 1e-9)) return null; // genuinely collinear or coincident samples have no plane — refused rather than normalized into noise
+  if (!nrm || !(bestMag > bestR * bestR * 1e-9)) return null; // collinear or coincident samples have no plane — refused rather than normalized into noise
   return { origin: centroid, normal: normalize(nrm) };
 }
 
 // Sample bounding-box diagonal — the size the planarity tolerance is relative
-// to. Also the honest answer to "how big is this curve" for a curve that has
-// no other notion of scale.
+// to, and the curve's size for a curve that has no other notion of scale.
 function sampleDiagonal(points) {
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const p of points) for (let i = 0; i < 3; i++) { if (p[i] < lo[i]) lo[i] = p[i]; if (p[i] > hi[i]) hi[i] = p[i]; }
   return length(sub(hi, lo));
 }
 
-// Self-intersection of a 2D polyline, adjacency-aware in BOTH directions.
+// Self-intersection of a 2D polyline, adjacency-aware in both directions.
 //
 // `closed` is load-bearing, not cosmetic. `polylineSelfIntersects`
-// (kernel/trim.mjs) is written for a trim LOOP and unconditionally wraps the
+// (kernel/trim.mjs) is written for a trim loop and unconditionally wraps the
 // final segment back to the start — correct there, and wrong for an open
 // profile, where it would invent a closing segment the curve does not have
 // and report a crossing against geometry that is not on screen.
@@ -124,7 +110,7 @@ export function polylineSelfIntersects2D(pts, closed) {
   for (let i = 0; i < segCount; i++) {
     const a0 = pts[i], a1 = pts[(i + 1) % n];
     for (let j = i + 1; j < segCount; j++) {
-      // Adjacent segments legitimately share an endpoint; on a CLOSED
+      // Adjacent segments legitimately share an endpoint; on a closed
       // polyline the first and last are adjacent too. Excluded in both
       // directions rather than only forward — a one-directional check reports
       // every closed curve as self-intersecting at its own seam.
@@ -136,8 +122,8 @@ export function polylineSelfIntersects2D(pts, closed) {
   return false;
 }
 
-// The real entry point. Returns a RESULT SHAPE rather than a bare boolean —
-// Phase A asks for exactly this, so a caller can distinguish
+// The entry point. Returns a result shape rather than a bare boolean, so a
+// caller can distinguish
 // "checked, clean", "checked, crosses itself" and "could not be checked at
 // this tier" instead of collapsing the third into the first.
 //
@@ -151,9 +137,9 @@ export function curveSelfIntersects(crv, opts = {}) {
   const uMax = k[k.length - 1 - crv.degree];
   if (!(uMax > uMin)) return { tested: false, planar: false, selfIntersects: false, reason: 'degenerate parameter domain', planarityError: NaN, size: 0 };
 
-  // TWO-STAGE SAMPLING, and the first stage is not optional.
+  // Two-stage sampling, and the first stage is not optional.
   //
-  // `adaptiveArcLengthSamples` refines against a chord-deviation TOLERANCE in
+  // `adaptiveArcLengthSamples` refines against a chord-deviation tolerance in
   // the curve's own coordinate units, and this kernel has no document scale
   // to pick one from — passing `undefined` does not fall back to a default,
   // it makes every `deviation > tolerance` comparison false and silently

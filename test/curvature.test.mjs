@@ -1,4 +1,4 @@
-// CURVATURE — asserted against CLOSED FORMS, not against itself.
+// Curvature — asserted against closed forms, not against itself.
 //
 // Curvature is the easiest quantity in this kernel to get plausibly wrong: a
 // version that ignores the weights of a rational surface produces numbers that
@@ -6,7 +6,7 @@
 // So every test here compares against a value known in advance — a sphere of
 // radius R has K = 1/R^2 and |H| = 1/R everywhere, a cylinder has K = 0 and
 // |H| = 1/(2R), a plane has both zero, a saddle has K < 0. Every primitive
-// sphere and cylinder in this app is RATIONAL, which is exactly where a
+// sphere and cylinder in this app is rational, which is exactly where a
 // weight mistake shows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,12 +37,12 @@ function plane(size) {
   return extrude(makeLine([0, 0, 0], [size, 0, 0]), [0, 1, 0], size);
 }
 
-test('⭐ a RATIONAL sphere gives its own closed-form curvature', () => {
+test('a rational sphere gives its own closed-form curvature', () => {
   for (const R of [10, 50, 137.5]) {
     const s = sphere(R);
     let worstK = 0, worstH = 0, n = 0;
     sampleInterior(s, (c) => {
-      if (!c.ok) return; // the poles are genuinely degenerate and reported as such
+      if (!c.ok) return; // the poles are degenerate and reported as such
       n++;
       worstK = Math.max(worstK, Math.abs(c.K - 1 / (R * R)) * R * R);
       worstH = Math.max(worstH, Math.abs(Math.abs(c.H) - 1 / R) * R);
@@ -53,7 +53,7 @@ test('⭐ a RATIONAL sphere gives its own closed-form curvature', () => {
   }
 });
 
-test('⭐ a RATIONAL cylinder is developable — K = 0, |H| = 1/(2R)', () => {
+test('a rational cylinder is developable — K = 0, |H| = 1/(2R)', () => {
   const R = 25;
   const s = cylinder(R, 80);
   let worstK = 0, worstH = 0, n = 0;
@@ -77,8 +77,8 @@ test('a plane has no curvature at all', () => {
   });
 });
 
-test('⭐ a saddle reads NEGATIVE Gaussian curvature — the sign carries meaning', () => {
-  // z = (x^2 - y^2)/k is a genuine saddle: curving up one way and down the other.
+test('a saddle reads negative Gaussian curvature — the sign carries meaning', () => {
+  // z = (x^2 - y^2)/k is a saddle: curving up one way and down the other.
   const rows = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
@@ -102,7 +102,7 @@ test('⭐ a saddle reads NEGATIVE Gaussian curvature — the sign carries meanin
   assert.equal(sawNegative, count, `every interior point of a saddle has K < 0 (${sawNegative}/${count})`);
 });
 
-test('a pole is REFUSED rather than returned as a huge number', () => {
+test('a pole is refused rather than returned as a huge number', () => {
   const s = sphere(40);
   const [uMin] = dom(s.knotsU, s.degU);
   const [vMin, vMax] = dom(s.knotsV, s.degV);
@@ -122,7 +122,7 @@ test('principal curvatures bracket the mean and multiply to the Gaussian', () =>
   });
 });
 
-test('⭐ minimum radius of curvature finds the tightest bend, and says nothing on a plane', () => {
+test('minimum radius of curvature finds the tightest bend, and says nothing on a plane', () => {
   const R = 18;
   const s = sphere(R);
   const worst = minimumRadiusOfCurvature(s, 16, 16);
@@ -145,5 +145,5 @@ test('second partials of a plane vanish, and of a sphere do not', () => {
   }
   const s = sphere(20);
   const ds = surfaceDerivs2(s, (dom(s.knotsU, s.degU)[0] + dom(s.knotsU, s.degU)[1]) / 2, (dom(s.knotsV, s.degV)[0] + dom(s.knotsV, s.degV)[1]) / 2);
-  assert.ok(Math.hypot(...ds.Suu) > 1e-6, 'a sphere genuinely bends, so Suu does not vanish');
+  assert.ok(Math.hypot(...ds.Suu) > 1e-6, 'a sphere bends, so Suu does not vanish');
 });

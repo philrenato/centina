@@ -1,35 +1,30 @@
-// EXTEND — CARRY A CURVE PAST ITS OWN END.
+// Extend — carry a curve past its own end.
 //
-// Three kinds, and they are three different promises rather than three settings:
+// Three kinds, each a different continuity guarantee:
 //
-//   · LINE   — leaves along the real end tangent. Meets the original at G1.
-//   · ARC    — leaves along the tangent on the osculating circle, so the
+//   · line   — leaves along the end tangent. Meets the original at G1.
+//   · arc    — leaves along the tangent on the osculating circle, so the
 //              curvature at the join matches too: G2.
-//   · SMOOTH — continues the curve's OWN polynomial. Not an approximation of the
-//              original's shape, the same function evaluated further along, so
-//              every derivative matches and the original portion is unchanged to
-//              the last bit.
+//   · smooth — continues the curve's own polynomial: the same function
+//              evaluated further along, so every derivative matches and the
+//              original portion is unchanged to the last bit.
 //
-// ⚠⚠ AND NONE OF THEM EVER MAKES AN UNCLAMPED CURVE, which is the trap this
-// whole file is arranged to avoid. `kernel/knots.mjs` says it plainly: its
-// insertKnot machinery assumes clamped input, `extractSubCurve` silently returns
-// a DIFFERENT curve on unclamped input (measured there at 0.37 units on a curve
-// spanning 3), and `decomposeToBezier` returns NaN pieces outright. A "just
-// evaluate past the end" implementation walks straight into that.
+// None of them makes an unclamped curve. `kernel/knots.mjs` documents why:
+// its insertKnot machinery assumes clamped input, `extractSubCurve` returns a
+// different curve on unclamped input, and `decomposeToBezier` returns NaN
+// pieces. A plain "evaluate past the end" implementation would hit that.
 //
-// So SMOOTH works on the last BEZIER PIECE instead. De Casteljau is arithmetic on
-// control points and is valid at any parameter, including t > 1, where it returns
-// the control polygon of the same polynomial over the longer interval. Two splits
-// give the extension as its own ordinary CLAMPED Bezier, which the existing
-// concatenation understands. No unclamped curve is ever constructed, and nothing
-// here has to reason about a knot vector that does not exist.
+// So smooth works on the last Bezier piece instead. De Casteljau is arithmetic
+// on control points and is valid at any parameter, including t > 1, where it
+// returns the control polygon of the same polynomial over the longer interval.
+// Two splits give the extension as its own clamped Bezier, which the existing
+// concatenation understands. No unclamped curve is constructed.
 //
-// ⚠ A POLYNOMIAL EXTRAPOLATES FAST AND BADLY. Past a modest fraction of the piece
-// it came from, a cubic's continuation is not a plausible reading of the
-// designer's intent — it is what the algebra says, which diverges. The distance
-// is capped against the source piece's own size and refused beyond it, by name,
-// rather than returning a spectacular curve and calling it an extension.
-import { curvePointAndTangent, rationalCurveDerivs, reverseCurve } from './curve.mjs';
+// A polynomial extrapolates fast and badly. Past a modest fraction of the
+// piece it came from, a cubic's continuation diverges from any plausible
+// reading of the shape. The distance is capped against the source piece's size
+// and refused beyond it, by name.
+import { rationalCurveDerivs, reverseCurve } from './curve.mjs';
 import { decomposeToBezier, degreeElevateCurve, concatTwoC0, rescaleCurveDomain } from './knots.mjs';
 
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -50,15 +45,15 @@ export const EXTEND_REFUSAL = Object.freeze({
 });
 const refuse = (kind, reason) => ({ ok: false, kind, reason });
 
-// How far a SMOOTH extension may run, as a multiple of the source Bezier piece's
+// How far a smooth extension may run, as a multiple of the source Bezier piece's
 // own control-polygon length. Beyond this the continuation stops being a reading
 // of the curve and becomes a reading of its leading coefficient.
 const SMOOTH_REACH = 1.0;
 
-// ── de Casteljau, in homogeneous space so rational curves work too ───────────
+// de Casteljau, in homogeneous space so rational curves work too.
 // Splitting at parameter t returns both halves' control points. Valid for t
-// outside [0,1]: the "left" array is then the control polygon of the SAME
-// polynomial over the longer interval, which is exactly what extrapolation is.
+// outside [0,1]: the "left" array is then the control polygon of the same
+// polynomial over the longer interval, which is what extrapolation is.
 function deCasteljau(cps, t) {
   const n = cps.length;
   const rows = [cps.map((c) => c.slice())];
@@ -70,13 +65,13 @@ function deCasteljau(cps, t) {
     }
     rows.push(row);
   }
-  /* ⚠ THE RIGHT HALF IS ALREADY IN ORDER — DO NOT REVERSE IT. In the de Casteljau
-     triangle b_i^k, the two halves are left[k] = b_0^k and right[k] = b_{k}^{n-1-k}:
-     right[0] is the split point and right[n-1] is the original last control
-     point, so the array already runs start-to-end. Reversing it produced an
-     extension that ran BACKWARDS from the far end to the join — which still left
-     the original portion of the joined curve bit-perfect, so the exactness test
-     passed and only the curvature across the join gave it away. */
+  /* The right half is already in order and must not be reversed. In the de
+     Casteljau triangle b_i^k, the two halves are left[k] = b_0^k and
+     right[k] = b_{k}^{n-1-k}: right[0] is the split point and right[n-1] is the
+     original last control point, so the array already runs start-to-end.
+     Reversing it gives an extension running backwards from the far end to the
+     join, which leaves the original portion bit-exact; only the curvature
+     across the join reveals it. */
   const left = rows.map((row) => row[0]);
   const right = rows.map((row, r) => rows[n - 1 - r][r]);
   return { left, right };
@@ -105,16 +100,15 @@ function endFrame(crv, atEnd) {
   return { P, T, N: unit3(perp), kappa, speed };
 }
 
-/* THE ENTRY POINT.
+/* Entry point.
  *   crv     — a clamped NURBS curve
  *   opts.at — 'end' (default) or 'start'
  *   opts.kind — 'line' | 'arc' | 'smooth'
  *   opts.length — how far to reach, in model units along the extension
  * Returns { ok, crv, kind, length, ... } or { ok:false, kind, reason }.
  *
- * ⚠ THE START CASE IS THE END CASE ON A REVERSED CURVE, reversed back. Writing
- * it twice is how the two ends drift apart, and reverseCurve is exact and its own
- * inverse.
+ * The start case is the end case on a reversed curve, reversed back, so the
+ * two ends cannot diverge; reverseCurve is exact and its own inverse.
  */
 export function extendCurve(crv, opts = {}) {
   if (!crv || !Array.isArray(crv.ctrlPts) || crv.ctrlPts.length < 2 || !Array.isArray(crv.knots)) {
@@ -139,9 +133,9 @@ export function extendCurve(crv, opts = {}) {
   else return refuse(EXTEND_REFUSAL.BAD_INPUT, `"${kind}" is not one of line, arc or smooth`);
   if (!piece.ok) return piece;
 
-  // Both halves must be the same degree before they can be joined, and the JOIN
-  // is C0 — the continuity the extension actually has comes from how it was
-  // BUILT (along the real tangent, on the osculating circle, or as the same
+  // Both halves must be the same degree before they can be joined, and the
+  // join is C0 — the continuity the extension has comes from how it was built
+  // (along the end tangent, on the osculating circle, or as the same
   // polynomial), never from the concatenation.
   const deg = Math.max(crv.degree, piece.crv.degree);
   let A = crv.degree === deg ? crv : degreeElevateCurve(crv, deg);
@@ -162,12 +156,11 @@ function lineExtension(frame, length, degree) {
   return { ok: true, crv: degree > 1 ? degreeElevateCurve(seg, Math.min(degree, 3)) : seg };
 }
 
-/* AN ARC ON THE OSCULATING CIRCLE. Radius 1/kappa, center on the normal side, so
- * the extension leaves with the curve's own tangent AND its own curvature: G2 at
- * the join by construction rather than by fitting. A straight end has no
+/* An arc on the osculating circle. Radius 1/kappa, center on the normal side,
+ * so the extension leaves with the curve's own tangent and curvature: G2 at the
+ * join by construction rather than by fitting. A straight end has no
  * osculating circle — infinite radius — and is refused by name rather than
- * silently handed back a line, because a control that quietly does the other
- * thing is how someone ends up believing an arc extension worked. */
+ * returning a line in place of the requested arc. */
 function arcExtension(frame, length, degree) {
   if (!(frame.kappa > 1e-9)) {
     return refuse(EXTEND_REFUSAL.STRAIGHT, 'this curve is straight at that end, so it has no arc to continue — use a line extension');
@@ -195,13 +188,13 @@ function arcExtension(frame, length, degree) {
   return { ok: true, crv: degree > 2 ? degreeElevateCurve(seg, Math.min(degree, 3)) : seg };
 }
 
-/* THE SAME POLYNOMIAL, FURTHER ALONG.
- * Take the LAST Bezier piece of the clamped curve, run de Casteljau at t = 1 + s
- * to get that polynomial's control polygon over the longer interval, then split
- * THAT at 1/(1+s) to isolate the part beyond the original end. The result is an
- * ordinary clamped Bezier of the same degree, so nothing downstream ever meets an
- * unclamped knot vector. Every derivative matches at the join because it is not a
- * match — it is the same function. */
+/* The same polynomial, further along.
+ * Take the last Bezier piece of the clamped curve, run de Casteljau at
+ * t = 1 + s to get that polynomial's control polygon over the longer interval,
+ * then split that at 1/(1+s) to isolate the part beyond the original end. The
+ * result is an ordinary clamped Bezier of the same degree, so nothing
+ * downstream meets an unclamped knot vector. Every derivative matches at the
+ * join because it is the same function. */
 function smoothExtension(crv, length) {
   let pieces;
   try { pieces = decomposeToBezier(crv); } catch (e) { return refuse(EXTEND_REFUSAL.FAILED, `this curve could not be read as Bezier pieces: ${e && e.message}`); }
@@ -217,7 +210,7 @@ function smoothExtension(crv, length) {
   }
   // Solve for the parameter overshoot that yields the requested arc length,
   // by bisection on the extension's own control-polygon length. Cheap, monotone,
-  // and it keeps the units the ones the person typed.
+  // and it keeps the units the ones the user typed.
   const extAt = (s) => {
     const { left } = deCasteljau(cps, 1 + s);
     const { right } = deCasteljau(left, 1 / (1 + s));

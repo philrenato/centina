@@ -4,7 +4,7 @@ import { superbBoxCage, superbSphereCage, superbCylinderCage, superbPlaneCage, s
 import { buildTopology, subdivideCatmullClark } from '../kernel/subd.mjs';
 
 // Every boundary edge (used by exactly 1 face) counted directly off a real
-// buildTopology() pass — the honest, structural "is this cage watertight"
+// buildTopology() pass — the structural "is this cage watertight"
 // check, not an assumption from construction alone.
 function boundaryEdgeCount(cage) {
   const ctx = buildTopology(cage);
@@ -14,12 +14,8 @@ function boundaryEdgeCount(cage) {
 }
 function edgeCount(cage) { return buildTopology(cage).edgeMap.size; }
 
-// ---------------------------------------------------------------------------
-// MAKEVERTEXWELDER — NEGATIVE-ZERO ROUNDED-KEY BUGFIX (found
-// live building TOSUBD's own revolve-conversion test — see this function's
-// own header comment in kernel/subdprimitives.mjs for the full derivation
-// and the exact real seam-column repro that surfaced it)
-// ---------------------------------------------------------------------------
+// makeVertexWelder: a negative-zero rounded key (see this function's header
+// comment in kernel/subdprimitives.mjs for the derivation)
 
 test('makeVertexWelder: a tiny negative-of-zero residue (e.g. -1.47e-15, a real trig-cancellation artifact) welds to the SAME vertex as an exact 0, not a separate one', () => {
   const { vid, vertices } = makeVertexWelder();
@@ -29,7 +25,7 @@ test('makeVertexWelder: a tiny negative-of-zero residue (e.g. -1.47e-15, a real 
   assert.equal(vertices.length, 1);
 });
 
-test('makeVertexWelder: still correctly keeps two GENUINELY distinct nearby points separate (the fix must not over-weld)', () => {
+test('makeVertexWelder: keeps two distinct nearby points separate (the welder must not over-weld)', () => {
   const { vid, vertices } = makeVertexWelder();
   const a = vid(0, 0, 0);
   const b = vid(0, 0, 0.01); // 0.01mm apart — well outside the 1e-6 rounding precision
@@ -37,9 +33,7 @@ test('makeVertexWelder: still correctly keeps two GENUINELY distinct nearby poin
   assert.equal(vertices.length, 2);
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBBOX
-// ---------------------------------------------------------------------------
+// superbBoxCage
 
 test('superbBoxCage facets=1: the plain 8-vertex/6-face/12-edge cube, exactly (hand-derivable, not a formula)', () => {
   const cage = superbBoxCage([0, 0, 0], [25, 25, 25], 1);
@@ -81,9 +75,7 @@ test('superbBoxCage: no coincident-but-unwelded duplicate vertices at any facet 
   }
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBSPHERE
-// ---------------------------------------------------------------------------
+// superbSphereCage
 
 test('superbSphereCage: reuses the box\'s exact topology (same V/F/E counts) but every vertex sits exactly at the requested radius', () => {
   const box = superbBoxCage([0, 0, 0], [25, 25, 25], 1);
@@ -105,9 +97,7 @@ test('superbSphereCage: a real, off-origin center is honored exactly', () => {
   assert.equal(boundaryEdgeCount(sph), 0);
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBCYLINDER
-// ---------------------------------------------------------------------------
+// superbCylinderCage
 
 test('superbCylinderCage: facets=8 — 16 vertices (2 rings of 8), 10 faces (8 side quads + 2 n-gon caps), Euler holds, watertight', () => {
   const cage = superbCylinderCage([0, 0, 0], 10, 30, 8);
@@ -142,9 +132,7 @@ test('superbCylinderCage: facets below 3 clamps to a real, non-degenerate minimu
   assert.equal(boundaryEdgeCount(cage), 0);
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBPLANE
-// ---------------------------------------------------------------------------
+// superbPlaneCage
 
 test('superbPlaneCage facets=1: a single flat quad, 4 vertices, 1 face, OPEN (4 boundary edges, Euler char of a disk = 1)', () => {
   const cage = superbPlaneCage([0, 0, 0], 50, 50, 1);
@@ -177,9 +165,9 @@ test('superbPlaneCage: every vertex lies exactly in the cage\'s own Z plane, spa
 });
 
 // Returns true iff a fresh subdivideCatmullClark pass produces only finite,
-// non-NaN vertex coordinates — the real "is this cage genuinely
-// subdivision-ready" proof this task asks for, run against the actual
-// production refinement function, not a hand-rolled substitute.
+// non-NaN vertex coordinates — the "is this cage subdivision-ready" check,
+// run against the production refinement function, not a hand-rolled
+// substitute.
 function subdivideIsFinite(cage) {
   const next = subdivideCatmullClark(cage);
   for (const [x, y, z] of next.vertices) {
@@ -188,11 +176,8 @@ function subdivideIsFinite(cage) {
   return next;
 }
 
-// ---------------------------------------------------------------------------
-// SUPERBCONE — genuinely new: the first primitive cage in this module with a
-// real extraordinary POLE vertex (an n-triangle fan apex), not a welded-
-// corner grid.
-// ---------------------------------------------------------------------------
+// superbConeCage — a primitive cage with an extraordinary pole vertex (an
+// n-triangle fan apex), not a welded-corner grid.
 
 test('superbConeCage facets=8: 9 vertices (8 base + 1 apex), 9 faces (8 side triangles + 1 octagonal base cap), Euler holds, watertight', () => {
   const cage = superbConeCage([0, 0, 0], 10, 30, 8);
@@ -206,7 +191,7 @@ test('superbConeCage facets=8: 9 vertices (8 base + 1 apex), 9 faces (8 side tri
   assert.equal(capFaces.length, 1, 'exactly 1 octagonal base cap');
 });
 
-test('superbConeCage: the base ring sits exactly at z=center.z and the requested radius; the apex is a SINGLE genuine point shared by every side triangle', () => {
+test('superbConeCage: the base ring sits exactly at z=center.z and the requested radius; the apex is a SINGLE point shared by every side triangle', () => {
   const cage = superbConeCage([2, -3, 5], 12, 40, 6);
   const n = 6;
   for (let i = 0; i < n; i++) {
@@ -216,7 +201,7 @@ test('superbConeCage: the base ring sits exactly at z=center.z and the requested
   }
   const apex = cage.vertices[n];
   assert.ok(Math.abs(apex[0] - 2) < 1e-9 && Math.abs(apex[1] - (-3)) < 1e-9 && Math.abs(apex[2] - 45) < 1e-9);
-  // Every side triangle references the exact SAME apex index — a genuine
+  // Every side triangle references the exact SAME apex index — an
   // extraordinary vertex of valence n, not n separate near-coincident points.
   const sideFaces = cage.faces.filter((f) => f.length === 3);
   assert.equal(sideFaces.length, n);
@@ -229,7 +214,7 @@ test('superbConeCage: facets below 3 clamps to a real, non-degenerate minimum of
   assert.equal(boundaryEdgeCount(cage), 0);
 });
 
-test('superbConeCage: a real subdivideCatmullClark pass tapers cleanly to a genuinely single point at the (now-finer) apex — no NaN, no split', () => {
+test('superbConeCage: a real subdivideCatmullClark pass tapers cleanly to a single point at the finer apex — no NaN, no split', () => {
   const cage = superbConeCage([0, 0, 0], 15, 50, 8);
   const next = subdivideIsFinite(cage);
   assert.ok(next, 'a real CC pass must produce only finite vertices');
@@ -247,22 +232,20 @@ test('superbConeCage: a real subdivideCatmullClark pass tapers cleanly to a genu
   }
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBTORUS — the genus-1 case: closed in BOTH the ring and the tube
+// superbTorusCage — the genus-1 case: closed in both the ring and the tube
 // direction, no boundary anywhere.
-// ---------------------------------------------------------------------------
 
 test('superbTorusCage facets=8: 64 vertices, 64 quad faces, ZERO boundary edges (closed in both directions), and genus 1 by Euler characteristic', () => {
   const cage = superbTorusCage([0, 0, 0], 30, 10, 8);
   assert.equal(cage.vertices.length, 64);
   assert.equal(cage.faces.length, 64);
   for (const f of cage.faces) assert.equal(f.length, 4, 'every torus face is a real quad');
-  assert.equal(boundaryEdgeCount(cage), 0, 'a torus has no boundary anywhere — genuinely closed in BOTH directions');
+  assert.equal(boundaryEdgeCount(cage), 0, 'a torus has no boundary anywhere — closed in BOTH directions');
   const V = cage.vertices.length, E = edgeCount(cage), F = cage.faces.length;
   const chi = V - E + F;
   assert.equal(chi, 0, 'Euler characteristic of a torus is exactly 0');
   const genus = (2 - chi) / 2;
-  assert.equal(genus, 1, 'chi=2-2*genus -> genus 1, the actual genus-1 proof, not asserted from construction alone');
+  assert.equal(genus, 1, 'chi=2-2*genus -> genus 1, derived rather than asserted from construction');
 });
 
 test('superbTorusCage: every vertex sits exactly on the true torus surface — distance from the ring axis, then from the tube centerline, both exact', () => {
@@ -275,13 +258,13 @@ test('superbTorusCage: every vertex sits exactly on the true torus surface — d
   }
 });
 
-test('superbTorusCage: genuinely doubly-periodic — vertex(i,j) and the wrapped vertex at i+facets (or j+facets) are the IDENTICAL array slot, not a merely-coincident duplicate', () => {
+test('superbTorusCage: doubly-periodic — vertex(i,j) and the wrapped vertex at i+facets (or j+facets) are the IDENTICAL array slot, not a merely-coincident duplicate', () => {
   const cage = superbTorusCage([0, 0, 0], 25, 8, 6);
   // Re-derive the same idx() the kernel function uses internally, from its
   // own documented wraparound-modulo construction, and confirm a face
   // crossing the seam in either direction still resolves to the SAME
   // vertex COUNT as an interior face (no extra "seam row" of vertices ever
-  // got created — the strongest structural proof there's no duplicate seam).
+  // got created — the structural proof there is no duplicate seam).
   assert.equal(cage.vertices.length, 36, 'facets=6 -> 6x6=36 vertices exactly, no extra seam row/column in either direction');
   assert.equal(boundaryEdgeCount(cage), 0);
 });
@@ -292,18 +275,16 @@ test('superbTorusCage: facets below 3 clamps to a real, non-degenerate minimum o
   assert.equal(boundaryEdgeCount(cage), 0);
 });
 
-test('superbTorusCage: a real subdivideCatmullClark pass produces only finite vertices and stays genuinely closed (zero boundary edges) after refinement', () => {
+test('superbTorusCage: a real subdivideCatmullClark pass produces only finite vertices and stays closed (zero boundary edges) after refinement', () => {
   const cage = superbTorusCage([0, 0, 0], 30, 10, 6);
   const next = subdivideIsFinite(cage);
   assert.ok(next, 'a real CC pass must produce only finite vertices');
   assert.equal(boundaryEdgeCount(next), 0, 'the refined cage must stay closed — a real crack would show up as new boundary edges');
 });
 
-// ---------------------------------------------------------------------------
-// SUPERBELLIPSOID — the direct affine generalization of SuperBSphereCage.
-// ---------------------------------------------------------------------------
+// superbEllipsoidCage — the direct affine generalization of superbSphereCage.
 
-test('superbEllipsoidCage with equal radii reproduces superbSphereCage bit-for-bit (the actual proof this is a strict generalization, not a lookalike)', () => {
+test('superbEllipsoidCage with equal radii reproduces superbSphereCage bit-for-bit (a strict generalization, not a lookalike)', () => {
   const sph = superbSphereCage([3, -2, 7], 18, 2);
   const ell = superbEllipsoidCage([3, -2, 7], [18, 18, 18], 2);
   assert.equal(ell.vertices.length, sph.vertices.length);
@@ -315,7 +296,7 @@ test('superbEllipsoidCage with equal radii reproduces superbSphereCage bit-for-b
   assert.deepEqual(ell.faces, sph.faces);
 });
 
-test('superbEllipsoidCage: every vertex satisfies the true ellipsoid equation exactly, for genuinely unequal radii', () => {
+test('superbEllipsoidCage: every vertex satisfies the true ellipsoid equation exactly, for unequal radii', () => {
   const cage = superbEllipsoidCage([0, 0, 0], [30, 15, 22], 2);
   for (const [x, y, z] of cage.vertices) {
     const q = (x / 30) ** 2 + (y / 15) ** 2 + (z / 22) ** 2;
@@ -339,35 +320,34 @@ test('superbEllipsoidCage: a real subdivideCatmullClark pass produces only finit
   assert.ok(next, 'a real CC pass must produce only finite vertices');
 });
 
-// TWO INDEPENDENT DIRECTIONS (the ask, and the one place this module
-// diverges from its "every builder takes a single facets" convention): a
-// torus's ring and tube are separately meaningful, exactly like the U and V
-// control-point counts a NURBS surface already exposes. These prove BOTH
-// that the second count is genuinely independent AND that omitting it
-// reproduces the old single-count cage bit-for-bit — the back-compatibility
-// every already-stored torus depends on, since none of them carry a
-// facetsV at all.
-test('superbTorusCage: omitting facetsV reproduces the single-count cage BIT-FOR-BIT (no migration needed for any torus stored before it existed)', () => {
+// Two independent directions (the one place this module diverges from its
+// "every builder takes a single facets" convention): a torus's ring and tube
+// are separately meaningful, exactly like the U and V control-point counts a
+// NURBS surface exposes. These prove both that the second count is
+// independent and that omitting it reproduces the single-count cage
+// bit-for-bit — the back-compatibility a stored torus without a facetsV
+// depends on.
+test('superbTorusCage: omitting facetsV reproduces the single-count cage BIT-FOR-BIT (no migration needed for a stored torus without facetsV)', () => {
   const oneCount = superbTorusCage([3, -2, 7], 30, 10, 9);
   const explicitSame = superbTorusCage([3, -2, 7], 30, 10, 9, 9);
   assert.deepEqual(explicitSame.vertices, oneCount.vertices, 'facetsV omitted must equal facetsV === facetsU exactly, not approximately');
   assert.deepEqual(explicitSame.faces, oneCount.faces);
 });
 
-test('superbTorusCage: U and V counts are genuinely INDEPENDENT — an asymmetric pair gives nU*nV vertices, and swapping them is a real, different cage', () => {
+test('superbTorusCage: U and V counts are INDEPENDENT — an asymmetric pair gives nU*nV vertices, and swapping them is a real, different cage', () => {
   const cage = superbTorusCage([0, 0, 0], 30, 10, 12, 5);
   assert.equal(cage.vertices.length, 12 * 5, '12 around the ring x 5 around the tube');
   assert.equal(cage.faces.length, 12 * 5);
   for (const f of cage.faces) assert.equal(f.length, 4);
-  // Count the DISTINCT ring angles and tube angles actually present — the
-  // real proof each count drives its own direction rather than both being
+  // Count the DISTINCT ring angles and tube angles present — the check that
+  // each count drives its own direction rather than both being
   // fed by one number.
   const ringAngles = new Set(cage.vertices.map(([x, y]) => Math.atan2(y, x).toFixed(9)));
   assert.equal(ringAngles.size, 12, 'exactly 12 distinct ring (U) stations');
   const tubeHeights = new Set(cage.vertices.map(([, , z]) => z.toFixed(9)));
   assert.equal(tubeHeights.size, 5, 'exactly 5 distinct tube (V) stations, read off Z');
   const swapped = superbTorusCage([0, 0, 0], 30, 10, 5, 12);
-  assert.notDeepEqual(swapped.vertices, cage.vertices, 'swapping U and V is a genuinely different cage, not a relabeling');
+  assert.notDeepEqual(swapped.vertices, cage.vertices, 'swapping U and V is a different cage, not a relabeling');
 });
 
 test('superbTorusCage: an asymmetric U/V pair is STILL a closed genus-1 torus — the closure argument holds for any pair, not just a square grid', () => {
@@ -395,12 +375,10 @@ test('superbTorusCage: every vertex of an asymmetric cage still sits EXACTLY on 
   }
 });
 
-// ---------------------------------------------------------------------------
-// THE SECOND FACET COUNT — resolution ALONG a form, not only around it
-// ---------------------------------------------------------------------------
+// The second facet count — resolution along a form, not only around it.
 // A cylinder's `facets` shapes the section and says nothing about the profile,
-// so a form meant to be pinched or swelled along its height had no control to
-// do it with. The second count is the torus's own `facetsV` generalized to
+// so a form meant to be pinched or swelled along its height needs a second
+// count. The second count is the torus's own `facetsV` generalized to
 // every cage that has a second direction, which is all of them.
 
 test('the second facet count is omitted by default, and every cage is then bit-identical to its single-count self', () => {

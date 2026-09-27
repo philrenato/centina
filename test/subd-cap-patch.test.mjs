@@ -1,26 +1,25 @@
-// THE GATE for ToNURBS step 3 — the cap over the
-// star-point region that isolation shrinks but never removes.
+// ToNURBS caps: the patch over the star-point region that isolation shrinks
+// but never removes.
 //
-// WHAT IS ACTUALLY BEING GATED, and it is not "does a patch come out". A cap
+// What is tested here is not "does a patch come out". A cap
 // is an approximation by necessity: the Catmull-Clark limit surface over a
 // face touching an extraordinary vertex is an infinite nest of bicubic
 // patches, so no single bicubic is it. What can be exact is everything around
-// the approximation — where the cap meets surfaces that ARE the limit
+// the approximation — where the cap meets surfaces that are the limit
 // surface, and where it meets its own siblings — and that is what these tests
 // pin down, as identities rather than tolerances. The approximation itself is
-// MEASURED against independent ground truth and asserted between bounds on
+// measured against independent ground truth and asserted between bounds on
 // both sides, so a cap that silently got worse fails and so does one whose
 // error was quietly claimed away.
 //
-// GROUND TRUTH, INDEPENDENT OF THE THING UNDER TEST. Two sources, neither
+// Ground truth, independent of the code under test. Two sources, neither
 // sharing a code path with the cap builder:
 //
-//   - vertexLimitPosition, the Halstead/Kass/DeRose mask, verified three ways
-//     before any of this existed;
+//   - vertexLimitPosition, the Halstead/Kass/DeRose mask;
 //   - limitSamples below, which walks the natural parametrization down to a
 //     dyadic corner and reads that refined vertex's own limit position. Its
 //     parametrization is derived from subdivideCatmullClark's child ordering
-//     by composing forward maps, NOT by the index arithmetic the cap builder
+//     by composing forward maps, not by the index arithmetic the cap builder
 //     uses to find the same points — and the first test proves it right by
 //     making it reproduce a regular face's exact patch.
 import test from 'node:test';
@@ -34,7 +33,6 @@ import {
   patchBoundaryRow, accInteriorPoint,
 } from '../kernel/subdlimit.mjs';
 
-// ---------------------------------------------------------------------
 // Ground truth: the limit surface of face `fi` at every dyadic parameter of
 // resolution 2^-k. Child c of a quad is [v_c, edge(v_c,v_c+1), facePoint,
 // edge(v_c-1,v_c)], which fixes how its own (s,t) sits inside the parent's.
@@ -138,8 +136,7 @@ function sharedEdges(result, cage, ctx) {
   return out;
 }
 
-// ---------------------------------------------------------------------
-// FIXTURES. Measured here, asserted nowhere else — a fixture nobody measured
+// Fixtures. Measured here, asserted nowhere else — a fixture nobody measured
 // is a free variable in every result resting on it.
 const BOX = () => superbBoxCage([0, 0, 0], [10, 10, 10], 1);
 const ELLIPSOID = () => superbEllipsoidCage([0, 0, 0], [30, 20, 12], 2);
@@ -152,9 +149,9 @@ function extrudedBoxCage() {
   return extrudeFaces(base, [target], [0, 0, 1], 8).cage;
 }
 
-test('the ground-truth sampler is right: on a REGULAR face it reproduces the exact patch', () => {
+test('the ground-truth sampler is right: on a regular face it reproduces the exact patch', () => {
   // Nothing below means anything if the parametrization is wrong, and a wrong
-  // one still produces perfectly real points at perfectly real parameters.
+  // one still produces valid points at valid parameters.
   for (const cage of [subdivideCatmullClark(subdivideCatmullClark(BOX())), superbTorusCage([0, 0, 0], 30, 10, 8)]) {
     const ctx = buildTopology(cage);
     const fi = cage.faces.findIndex((_, i) => isRegularFace(cage, i, ctx));
@@ -168,7 +165,7 @@ test('the ground-truth sampler is right: on a REGULAR face it reproduces the exa
   }
 });
 
-test('the extruded-face fixture is what the app actually hits: valence 3, 4 AND 5, all quads, closed', () => {
+test('the extruded-face fixture has valence 3, 4 and 5, all quads, closed', () => {
   const cage = extrudedBoxCage();
   const ctx = buildTopology(cage);
   const hist = {};
@@ -181,13 +178,12 @@ test('the extruded-face fixture is what the app actually hits: valence 3, 4 AND 
   // Extruding one face of a facets-2 box: its four corners gain a face, and
   // four new corners appear with three faces each. The chosen face touches an
   // original box corner, so that one goes 3 -> 4 and only three corners reach
-  // valence 5 — the fixture is deliberately NOT symmetric.
+  // valence 5 — the fixture is deliberately not symmetric.
   assert.deepEqual(hist, { 3: 11, 4: 16, 5: 3 });
   assert.equal(cage.vertices.length, 30);
   assert.equal(cage.faces.length, 28);
 });
 
-// ---------------------------------------------------------------------
 test('every leftover region gets a cap, and the hole closes: uncoveredFraction goes to zero', () => {
   const cage = BOX();
   const plain = subdToPatches(cage, { maxIsolation: 3 });
@@ -214,7 +210,7 @@ test('capping is opt-in — without it the leftovers are still reported, unchang
   for (const u of plain.uncovered) assert.equal(u.reason, undefined);
 });
 
-test('a cap patch is the same KIND of surface as a regular one: clamped, degree 3, non-rational', () => {
+test('a cap patch is the same kind of surface as a regular one: clamped, degree 3, non-rational', () => {
   const { caps } = subdToPatches(BOX(), { maxIsolation: 3, cap: true });
   for (const c of caps) {
     assert.deepEqual(c.srf.knotsU, [0, 0, 0, 0, 1, 1, 1, 1]);
@@ -230,7 +226,7 @@ test('a cap patch is the same KIND of surface as a regular one: clamped, degree 
   }
 });
 
-test('EXACT: the cap\'s star corner IS the extraordinary vertex\'s own limit position, bit for bit', () => {
+test('exact: the cap\'s star corner is the extraordinary vertex\'s own limit position, bit for bit', () => {
   for (const [cage, lv] of [[BOX(), 3], [ELLIPSOID(), 2], [extrudedBoxCage(), 2]]) {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
     assert.ok(r.caps.length > 0);
@@ -246,7 +242,7 @@ test('EXACT: the cap\'s star corner IS the extraordinary vertex\'s own limit pos
   }
 });
 
-test('EXACT: two caps sharing a star edge carry the IDENTICAL control row — every coordinate ===, not a tolerance', () => {
+test('exact: two caps sharing a star edge carry the identical control row — every coordinate ===, not a tolerance', () => {
   for (const [cage, lv] of [[BOX(), 3], [ELLIPSOID(), 2], [extrudedBoxCage(), 2]]) {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
     const ctx = buildTopology(r.refinedCage);
@@ -262,9 +258,9 @@ test('EXACT: two caps sharing a star edge carry the IDENTICAL control row — ev
   }
 });
 
-test('EXACT: a cap takes its outer rows FROM its regular neighbors — every interior control point ===', () => {
+test('exact: a cap takes its outer rows from its regular neighbors — every interior control point ===', () => {
   // The two control points strictly inside a shared row are copied, so they
-  // are identical by construction. The two CORNERS are the interesting case:
+  // are identical by construction. The two corners are the interesting case:
   // a corner belongs to more than two patches and can only carry one value,
   // and the regular patches themselves do not agree on it to the last bit.
   // So the claim asserted is the one that is true — the whole row matches one
@@ -280,7 +276,7 @@ test('EXACT: a cap takes its outer rows FROM its regular neighbors — every int
       const a = patchBoundaryRow(e.A.srf, e.A.loop, e.v0, e.v1);
       const b = patchBoundaryRow(e.B.srf, e.B.loop, e.v0, e.v1);
       for (const i of [1, 2]) for (let d = 0; d < 3; d++) {
-        assert.equal(a[i][d], b[i][d], `${label}: interior control point ${i} of a cap/regular row must be COPIED, not recomputed`);
+        assert.equal(a[i][d], b[i][d], `${label}: interior control point ${i} of a cap/regular row must be copied, not recomputed`);
       }
       let same = true;
       for (let i = 0; i < 4; i++) for (let d = 0; d < 3; d++) {
@@ -294,7 +290,7 @@ test('EXACT: a cap takes its outer rows FROM its regular neighbors — every int
   }
 });
 
-test('the pre-existing set is no better than that: NO two adjacent regular patches are bit-identical once a cage has been subdivided', () => {
+test('the regular set is no better than that: no two adjacent regular patches are bit-identical once a cage has been subdivided', () => {
   // The negative control for the test above, and the reason its claim is
   // phrased the way it is. Two adjacent regular patches compute the same
   // shared row through a different order of the same arithmetic; they agree
@@ -324,9 +320,9 @@ test('the pre-existing set is no better than that: NO two adjacent regular patch
   assert.ok(worst > 0 && worst < 1e-14, `they must still agree to rounding, got ${worst}`);
 });
 
-test('NO HOLE: sampled along every shared edge, both sides give the same point', () => {
+test('no hole: sampled along every shared edge, both sides give the same point', () => {
   // Control-net identity is the strong claim; this is the one a downstream
-  // consumer actually experiences, and it covers the corners the net cannot
+  // consumer experiences, and it covers the corners the net cannot
   // make identical.
   for (const [cage, lv] of [[BOX(), 3], [extrudedBoxCage(), 2]]) {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
@@ -346,13 +342,13 @@ test('NO HOLE: sampled along every shared edge, both sides give the same point',
   }
 });
 
-test('TANGENT, MEASURED: the join to the exact regular region is smooth; the break is confined to the star edges', () => {
+test('tangency, measured: the join to the exact regular region is smooth; the break is confined to the star edges', () => {
   // ACC's own continuity claim is that patches meet smoothly except along an
-  // edge CONTAINING an extraordinary vertex. A cap's two outer edges do not
+  // edge containing an extraordinary vertex. A cap's two outer edges do not
   // contain one, so that join must come out tangent-continuous — and it is
-  // the join to the part of the surface that IS the limit surface, so it is
-  // the one that matters. The star edges are C0 only; that number is real,
-  // is asserted from BOTH sides so it can neither grow nor be claimed away,
+  // the join to the part of the surface that is the limit surface, so it is
+  // the one that matters. The star edges are C0 only; that number is
+  // asserted from both sides so it can neither grow nor be claimed away,
   // and halves as isolation rises.
   const seen = {};
   for (const [cage, lv, label] of [[BOX(), 3, 'box'], [ELLIPSOID(), 2, 'ellipsoid'], [extrudedBoxCage(), 3, 'extruded']]) {
@@ -373,12 +369,12 @@ test('TANGENT, MEASURED: the join to the exact regular region is smooth; the bre
     }
     // 1e-4 degrees, not 0: the normal is a cross product of two evaluated
     // partials, so its own floating-point noise sets the floor. That floor is
-    // measured at about 1e-6 degrees between two REGULAR patches, which is the
+    // measured at about 1e-6 degrees between two regular patches, which is the
     // control — a cap's outer join reads the same number as a join that is
     // exact by construction, and both are four orders below the star break.
     assert.ok(regular < 1e-4, `${label}: regular meets regular smoothly, got ${regular} deg`);
     assert.ok(outer < 1e-4, `${label}: a cap must meet the exact region smoothly, got ${outer} deg`);
-    assert.ok(star > 0.01, `${label}: the star-edge break is real and must not be claimed away, got ${star} deg`);
+    assert.ok(star > 0.01, `${label}: the star-edge break is nonzero and must not be claimed away, got ${star} deg`);
     seen[label] = star;
   }
   // Measured maxima: box 0.29 deg, ellipsoid 0.55 deg, extruded box 2.22 deg
@@ -389,7 +385,7 @@ test('TANGENT, MEASURED: the join to the exact regular region is smooth; the bre
   assert.ok(seen.extruded < 3, `extruded-box star break ${seen.extruded}`);
 });
 
-test('the star-edge tangent break shrinks with isolation level — it is a real knob, not a fixed cost', () => {
+test('the star-edge tangent break shrinks with isolation level — it is a knob, not a fixed cost', () => {
   const cage = BOX();
   const measure = (lv) => {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
@@ -407,12 +403,12 @@ test('the star-edge tangent break shrinks with isolation level — it is a real 
     return worst;
   };
   const a = measure(2), b = measure(3), c = measure(4);
-  assert.ok(b < a * 0.75 && c < b * 0.75, `must genuinely shrink: ${a} -> ${b} -> ${c}`);
+  assert.ok(b < a * 0.75 && c < b * 0.75, `must shrink: ${a} -> ${b} -> ${c}`);
 });
 
-test('EXACT: the cap interpolates the true limit surface at the three points it is solved for', () => {
-  // This is the gate on the whole star refinement, including the fact that it
-  // reads its ground truth out of a LOCAL neighborhood rather than the whole
+test('exact: the cap interpolates the true limit surface at the three points it is solved for', () => {
+  // This checks the whole star refinement, including the fact that it
+  // reads its ground truth out of a local neighborhood rather than the whole
   // cage: if that neighborhood were too small, these three points would be
   // wrong and the interpolation would land somewhere else. Checked against
   // the independent descent sampler, not against the index arithmetic the
@@ -433,11 +429,11 @@ test('EXACT: the cap interpolates the true limit surface at the three points it 
   }
 });
 
-test('MEASURED, not claimed: how far a cap is from the true limit surface, and that it converges', () => {
-  // The honest number. A single bicubic cannot BE the limit surface over a
+test('measured, not claimed: how far a cap is from the true limit surface, and that it converges', () => {
+  // A single bicubic cannot be the limit surface over a
   // face touching an extraordinary vertex, so this is bounded on both sides:
   // an upper bound that fails if the construction degrades, and a lower bound
-  // that fails if someone starts claiming exactness the surface does not have.
+  // that fails if exactness is claimed that the surface does not have.
   const measure = (cage, lv) => {
     const r = subdToPatches(cage, { maxIsolation: lv, cap: true });
     const cur = r.refinedCage;
@@ -458,12 +454,12 @@ test('MEASURED, not claimed: how far a cap is from the true limit surface, and t
     assert.ok(m.relative > 1e-4, 'a cap is an approximation — a zero here would mean the fixture stopped discriminating');
     assert.ok(m.relative < 0.006, `worst deviation must stay under 0.6% of the cap's own size, got ${(m.relative * 100).toFixed(2)}%`);
   }
-  // The absolute error shrinks about 2.4x per level while the RELATIVE error
+  // The absolute error shrinks about 2.4x per level while the relative error
   // holds steady — the star region is self-similar under refinement, so
   // raising the isolation level buys a smaller hole, not a better shape
-  // inside it. That is the honest characterisation of the knob.
+  // inside it.
   assert.ok(box[1].worst < box[0].worst / 2 && box[2].worst < box[1].worst / 2, `absolute error must fall: ${box.map((m) => m.worst).join(' -> ')}`);
-  assert.ok(Math.abs(box[2].relative - box[0].relative) < 0.001, `relative error does NOT fall: ${box.map((m) => m.relative).join(' -> ')}`);
+  assert.ok(Math.abs(box[2].relative - box[0].relative) < 0.001, `relative error does not fall: ${box.map((m) => m.relative).join(' -> ')}`);
 
   const ell = measure(ELLIPSOID(), 2);
   assert.ok(ell.relative < 0.01, `curved cage: ${(ell.relative * 100).toFixed(2)}%`);
@@ -471,7 +467,7 @@ test('MEASURED, not claimed: how far a cap is from the true limit surface, and t
   assert.ok(ext.relative < 0.015, `extruded cage: ${(ext.relative * 100).toFixed(2)}%`);
 });
 
-test('the ACC interior mask reduces EXACTLY to the uniform B-spline one at valence 4', () => {
+test('the ACC interior mask reduces exactly to the uniform B-spline one at valence 4', () => {
   // The correctness check that matters for a mask re-derived rather than
   // transcribed: at valence 4 it has to reproduce the number
   // clampedBicubicPatchSurface already produces for a regular face, reached a
@@ -491,13 +487,13 @@ test('the ACC interior mask reduces EXACTLY to the uniform B-spline one at valen
     worst = Math.max(worst, dist(acc, srf.ctrlNet[i][j]));
   }
   assert.ok(worst < 1e-13, `ACC's interior mask must reproduce the regular patch's own interior points, worst ${worst}`);
-  // And it must genuinely DEPEND on the valence, or the test above proves
+  // And it must depend on the valence, or the test above proves
   // nothing about the extraordinary case.
   const star = subdToPatches(BOX(), { maxIsolation: 2, cap: true }).caps[0];
   assert.ok(star, 'need a cap to look at');
 });
 
-test('a region that cannot be capped is REFUSED with a reason, never covered by a patch that is not the surface', () => {
+test('a region that cannot be capped is refused with a reason, never covered by a patch that is not the surface', () => {
   // Isolation 0 on a box: no face is regular yet, so no leftover has the two
   // emitted neighbors a cap is built from.
   const r = subdToPatches(BOX(), { maxIsolation: 0, cap: true });
@@ -546,15 +542,14 @@ test('capping does not disturb the regular patches — they are the same surface
   assert.equal(checked, plain.patches.length);
 });
 
-// ---------------------------------------------------------------------
-// LOCALIZED ISOLATION. Every face still live after the first pass touches an
+// Localized isolation. Every face still live after the first pass touches an
 // extraordinary vertex, so the refinement that isolates them is cut down to
 // their own neighborhood plus a margin of rings. The claim is that this
-// changes cost and NOTHING else, and the only oracle that can settle it is the
+// changes cost and nothing else, and the only oracle that can settle it is the
 // whole-cage computation itself — reachable as `{ localShare: 0 }`.
 //
-// ⚠ THE PREMISE IS ASSERTED FROM THE RESULT, not assumed: the two arms must
-// arrive at DIFFERENT final cages, or the fast arm never localized anything
+// The premise is asserted from the result, not assumed: the two arms must
+// arrive at different final cages, or the fast arm never localized anything
 // and the agreement below is agreement with itself.
 const LOCALIZING_CAGES = () => [
   ['box facets 8', superbBoxCage([0, 0, 0], [25, 25, 25], 8)],
@@ -577,13 +572,13 @@ const LOCALIZING_CAGES = () => [
   })()],
 ];
 
-test('localizing the isolation refinement is a COST change: every control point is bit-identical to the whole-cage answer', () => {
+test('localizing the isolation refinement is a cost change: every control point is bit-identical to the whole-cage answer', () => {
   for (const [name, cage] of LOCALIZING_CAGES()) {
     for (const cap of [false, true]) {
       const fast = subdToPatches(cage, { maxIsolation: 3, cap });
       const whole = subdToPatches(cage, { maxIsolation: 3, cap, localShare: 0 });
       assert.ok(fast.refinedCage.faces.length < whole.refinedCage.faces.length,
-        `${name}: the fast arm must actually have localized (${fast.refinedCage.faces.length} faces vs ${whole.refinedCage.faces.length})`);
+        `${name}: the fast arm must have localized (${fast.refinedCage.faces.length} faces vs ${whole.refinedCage.faces.length})`);
       assert.equal(fast.patches.length, whole.patches.length, `${name}, cap=${cap}: patch count`);
       assert.equal(fast.caps.length, whole.caps.length, `${name}, cap=${cap}: cap count`);
       assert.equal(fast.uncovered.length, whole.uncovered.length, `${name}, cap=${cap}: uncovered count`);
@@ -604,13 +599,12 @@ test('localizing the isolation refinement is a COST change: every control point 
   }
 });
 
-// ---------------------------------------------------------------------
-// THE PRE-FLIGHT ESTIMATE. A caller deciding whether to spend the conversion
+// Pre-flight estimate. A caller deciding whether to spend the conversion
 // needs the number of surfaces it will emit, and that number is not readable
 // off the cage: a regular cage emits one per face, a 6-face box emits 168.
 // The estimate runs the real isolation walk and skips only the geometry, so
 // the test that matters is that it names the number the conversion goes on to
-// produce — on cages where capping succeeds AND on open ones where hundreds of
+// produce — on cages where capping succeeds and on open ones where hundreds of
 // star regions refuse it and a count that assumed otherwise would be half
 // again too large.
 test('the pre-flight estimate names the exact number of surfaces the conversion emits', () => {
@@ -620,7 +614,7 @@ test('the pre-flight estimate names the exact number of surfaces the conversion 
     ['ellipsoid', superbEllipsoidCage([0, 0, 0], [30, 20, 12], 2)],
     ['torus — regular everywhere', superbTorusCage([0, 0, 0], 30, 10, 8)],
     ['cylinder — n-gon caps', superbCylinderCage([0, 0, 0], 25, 50, 8)],
-    ['an OPEN plane, whose whole naked border refuses capping', superbPlaneCage([0, 0, 0], 50, 50, 8)],
+    ['an open plane, whose whole naked border refuses capping', superbPlaneCage([0, 0, 0], 50, 50, 8)],
     ['an extruded cage', extrudedBoxCage()],
   ];
   for (const [name, cage] of cages) {
@@ -636,14 +630,14 @@ test('the pre-flight estimate names the exact number of surfaces the conversion 
       }
     }
   }
-  // The open plane is in that list for a reason, and the reason is a NUMBER:
-  // if refusals were not modelled the estimate would be this much too big.
+  // The open plane is in that list because
+  // if refusals were not modeled the estimate would be this much too big.
   const plane = superbPlaneCage([0, 0, 0], 50, 50, 16);
   const est = estimateSubdToPatches(plane, { maxIsolation: 3, cap: true });
   const real = subdToPatches(plane, { maxIsolation: 3, cap: true });
   assert.equal(est.patches, real.patches.length);
   assert.ok(real.uncovered.length > 100,
-    `the open-cage fixture must actually produce refusals to be testing anything (got ${real.uncovered.length})`);
+    `the open-cage fixture must produce refusals to be testing anything (got ${real.uncovered.length})`);
 });
 
 test('the estimate never mutates the cage it was given', () => {

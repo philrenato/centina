@@ -1,20 +1,20 @@
-// SUPERB SIMPLIFY — taking a Catmull-Clark control cage DOWN a level, the
-// direction subdivideCatmullClark (kernel/subd.mjs) does not go. KERNEL ONLY:
-// plain cage in, plain cage out, exactly like every other kernel/*.mjs.
+// SuperB simplify — taking a Catmull-Clark control cage down a level, the
+// direction subdivideCatmullClark (kernel/subd.mjs) does not go. Plain cage
+// in, plain cage out, like every other kernel/*.mjs.
 //
-// A CAGE is the same plain data subd.mjs defines:
+// A cage is the same plain data subd.mjs defines:
 //   { vertices: [[x,y,z], ...], faces: [[a,b,c,d], ...], creases: { "i_j": w } }
 //
-// TWO TIERS, because "coarsen this cage" is two different questions:
+// Two tiers, because "coarsen this cage" is two different questions:
 //
-//   TIER 1 — UN-SUBDIVIDE (unsubdivideCage). A cage that IS one Catmull-Clark
-//     pass of some coarser cage is taken back to that coarser cage EXACTLY,
+//   Tier 1 — un-subdivide (unsubdivideCage). A cage that is one Catmull-Clark
+//     pass of some coarser cage is taken back to that coarser cage exactly,
 //     creases included. Every candidate answer is checked by re-subdividing it
-//     with the shipped subdivider and comparing to the input, so the tier
+//     with subdivideCatmullClark and comparing to the input, so the tier
 //     either returns a cage whose subdivision is the input to floating-point
-//     tolerance, or it REFUSES BY NAME. It never returns a near-miss.
+//     tolerance, or it refuses by name. It never returns a near-miss.
 //
-//   TIER 2 — POLYCHORD COLLAPSE (polychordsOf / collapsePolychord). For every
+//   Tier 2 — polychord collapse (polychordsOf / collapsePolychord). For every
 //     other quad cage: a polychord is the maximal strip of quads reached by
 //     walking through opposite edges (Daniels, Silva, Shepherd & Cohen,
 //     "Quadrilateral Mesh Simplification", ACM TOG 27(5), SIGGRAPH Asia 2008).
@@ -22,64 +22,60 @@
 //     deletes the strip's faces; every neighboring quad keeps four corners by
 //     construction, so the result is still all quads.
 //
-// THE INVARIANT BOTH TIERS ARE HELD TO — checkSimplifyInvariants below, and
-// it is the reason this module exists rather than a face-count-driven
-// decimator: the result must be ALL QUADS, CLOSED IF THE INPUT WAS CLOSED,
-// FREE OF INTERIOR VERTICES BELOW VALENCE 3 (a boundary vertex at valence 2 is
-// the ordinary corner of an open grid, not a pinch — the two populations carry
-// different floors and cageInvariants reports them apart), and of the SAME
-// EULER CHARACTERISTIC. A cage
-// that fails any of those is one subdToPatches (kernel/subdlimit.mjs) cannot
-// turn into a surface, so producing it is worse than refusing.
+// The invariant both tiers are held to (checkSimplifyInvariants below), and
+// the reason this module is not a face-count-driven decimator: the result must
+// be all quads, closed if the input was closed, free of interior vertices
+// below valence 3 (a boundary vertex at valence 2 is the ordinary corner of an
+// open grid, not a pinch — the two populations carry different floors and
+// cageInvariants reports them apart), and of the same Euler characteristic. A
+// cage that fails any of those is one subdToPatches (kernel/subdlimit.mjs)
+// cannot turn into a surface, so producing it is worse than refusing.
 //
-// WHY EXACTNESS IS ACHIEVABLE AT ALL, and where it stops:
+// Why exactness is achievable, and where it stops:
 //
-//   Catmull-Clark is LINEAR in the vertex positions once the topology and the
+//   Catmull-Clark is linear in the vertex positions once the topology and the
 //   crease weights are fixed (every branch weight in computeEdgePoint /
 //   computeVertexPoint / computeFacePoint is position-independent), so the
 //   coarse positions are the solution of a linear system. This module never
 //   forms that system as a matrix. It uses the two rules whose right-hand
-//   sides are already known from the fine cage alone:
-//     - a FACE POINT is a vertex of the fine cage, so every coarse face
+//   sides are known from the fine cage alone:
+//     - a face point is a vertex of the fine cage, so every coarse face
 //       centroid is known outright;
-//     - an EDGE POINT therefore gives the SUM of the two coarse vertices it
+//     - an edge point therefore gives the sum of the two coarse vertices it
 //       came from: (Pa+Pb) = 2e for a sharp/boundary edge, and 4e - f0 - f1
 //       for a smooth one.
 //   Propagating those pair sums along a spanning tree of the coarse edge graph
-//   pins every coarse vertex up to ONE unknown 3-vector x per component, with
+//   pins every coarse vertex up to one unknown 3-vector x per component, with
 //   alternating sign: P_i = c_i + sigma_i x. An odd cycle in the coarse graph
 //   pins x outright. When the coarse graph is bipartite, x is fitted by
-//   re-subdividing three unit displacements with the shipped subdivider — no
+//   re-subdividing three unit displacements with subdivideCatmullClark — no
 //   second implementation of the subdivision rules exists in this file.
 //
-//   ⚠ THAT FIT IS SINGULAR FOR A CAGE WHOSE COARSE GRAPH IS BIPARTITE AND ALL
-//   VALENCE 3 — which is exactly the 8-vertex cube. The null direction is
-//   REAL, not ill-conditioning: displacing the four corners of one inscribed
-//   tetrahedron by +d and the other four by -d leaves the subdivided cage
-//   identical to floating point, because the vertex rule's own coefficient on
-//   P is (n-3)/n, which is zero at valence 3, and the two colors cancel in
-//   every other rule. No solver recovers a unique answer there, because there
-//   is not one; test/subdsimplify.test.mjs measures the two cages and their
-//   one subdivision. The family is reported through `unique: false`, and the
-//   member returned is the one closest to the fine cage's own vertex points,
-//   which is the true cube for a symmetric one.
+//   That fit is singular for a cage whose coarse graph is bipartite and all
+//   valence 3, which is the 8-vertex cube. The null direction is exact, not
+//   ill-conditioning: displacing the four corners of one inscribed tetrahedron
+//   by +d and the other four by -d leaves the subdivided cage identical to
+//   floating point, because the vertex rule's own coefficient on P is (n-3)/n,
+//   which is zero at valence 3, and the two colors cancel in every other rule.
+//   There is no unique answer to recover; test/subdsimplify.test.mjs measures
+//   the two cages and their one subdivision. The family is reported through
+//   `unique: false`, and the member returned is the one closest to the fine
+//   cage's own vertex points, which is the true cube for a symmetric one.
 //
-//   The other hard limit is a CREASE OF WEIGHT <= 1. subdivideCatmullClark
+//   The other hard limit is a crease of weight <= 1. subdivideCatmullClark
 //   decrements every crease weight by 1 and drops it at 0, so a coarse weight
-//   of 1 or less leaves NO entry in the fine cage's creases map. A weight of
+//   of 1 or less leaves no entry in the fine cage's creases map. A weight of
 //   exactly 1 is still recoverable — it is fully sharp, so its geometry is
 //   distinguishable, and this module retries with the smooth-vs-sharp
 //   hypothesis inverted for the edges the first solve could not explain. A
 //   weight strictly between 0 and 1 is a partial blend that leaves no trace at
-//   all and is REFUSED, by name, rather than returned as a smooth cage.
+//   all and is refused, by name, rather than returned as a smooth cage.
 
 import { subdivideCatmullClark, buildTopology, edgeKey, creaseWeight } from './subd.mjs';
 import { vertexLimitPosition } from './subdlimit.mjs';
 import { add, sub, scale, dot } from './vec3.mjs';
 
-// ---------------------------------------------------------------------------
-// SHARED SMALL PARTS
-// ---------------------------------------------------------------------------
+// Shared small parts
 
 const ZERO = [0, 0, 0];
 
@@ -104,7 +100,7 @@ export function cageExtent(cage) {
   return d > 0 ? d : 1;
 }
 
-// STRUCTURAL REPORT — the numbers every gate in this module and its tests
+// Structural report — the numbers every check in this module and its tests
 // assert on. `euler` counts only vertices some face actually uses, so a cage
 // carrying stray unreferenced points still reports the characteristic of the
 // surface it describes (the stray points are reported separately).
@@ -138,10 +134,10 @@ export function cageInvariants(cage) {
     if (rec.faces.length === 1) boundaryEdgeCount++;
     else if (rec.faces.length > 2) nonManifoldEdgeCount++;
   }
-  // ⚠ A VALENCE FLOOR IS NOT THE SAME NUMBER ON BOTH SIDES OF A BOUNDARY. A
-  // valence-2 vertex in the INTERIOR is a doublet — a pinch, with two faces
+  // A valence floor is not the same number on both sides of a boundary. A
+  // valence-2 vertex in the interior is a doublet — a pinch, with two faces
   // meeting along two edges, which is what the NURBS conversion refuses. A
-  // valence-2 vertex ON A BOUNDARY is the ordinary corner of an open grid:
+  // valence-2 vertex on a boundary is the ordinary corner of an open grid:
   // every corner of a plane cage is one. So the floor is reported separately
   // for the two populations rather than as one number that condemns every
   // open cage.
@@ -182,8 +178,8 @@ export function cageInvariants(cage) {
   };
 }
 
-// THE GATE BOTH TIERS RUN BEFORE HANDING A CAGE BACK. Returns the problems as
-// sentences; an empty list is the only acceptable result for a shipped
+// The check both tiers run before handing a cage back. Returns the problems
+// as sentences; an empty list is the only acceptable result for a
 // simplification.
 export function checkSimplifyInvariants(before, after) {
   const a = cageInvariants(before);
@@ -263,9 +259,7 @@ function mergeCages(list) {
   return { vertices, faces, creases };
 }
 
-// ---------------------------------------------------------------------------
-// TIER 1 — EXACT UN-SUBDIVIDE
-// ---------------------------------------------------------------------------
+// Tier 1 — exact un-subdivide
 
 const LABEL_V = 0; // a moved original vertex (a "vertex point")
 const LABEL_E = 1; // an edge point
@@ -362,7 +356,7 @@ function edgeSideProblem(cage, topo, colour, eSide) {
 }
 
 // Every fine face is [originalVertex, edgePoint, facePoint, edgePoint], so the
-// two non-edge-point corners of a face are DIAGONAL and one of them is the
+// two non-edge-point corners of a face are diagonal and one of them is the
 // face point. Two-coloring that diagonal relation splits the non-edge-point
 // vertices into the originals and the face points; the graph it runs on is the
 // coarse cage's own vertex/face incidence graph, so on a connected cage there
@@ -436,7 +430,7 @@ function diagonalColouring(cage, colour, eSide) {
   return { ok: true, dcol, pClasses };
 }
 
-// Turns one labeling into the coarse cage's TOPOLOGY, walking the wheel of
+// Turns one labeling into the coarse cage's topology, walking the wheel of
 // fine faces around each face point to recover that coarse face in its
 // original winding order.
 function buildCoarseTopology(cage, topo, label) {
@@ -553,7 +547,7 @@ function pairSums(cage, topo, label, coarse, sharpKeys) {
 
 // Propagate the pair sums along a spanning tree: P_i = c_i + sigma_i * x, one
 // unknown 3-vector x per connected component. A non-tree edge joining two
-// vertices of the SAME sign is an odd cycle and pins x outright.
+// vertices of the same sign is an odd cycle and pins x outright.
 function propagate(nCoarse, faces, sums) {
   const c = new Array(nCoarse).fill(null);
   const sigma = new Array(nCoarse).fill(0);
@@ -615,8 +609,9 @@ function solve3(M, rhs) {
   return [A[0][3] / A[0][0], A[1][3] / A[1][1], A[2][3] / A[2][2]];
 }
 
-// One candidate labeling, solved and then CHECKED by re-subdividing. The check
-// is the only thing that decides; nothing here is accepted on structure alone.
+// One candidate labeling, solved and then checked by re-subdividing. The
+// check is the only thing that decides; nothing here is accepted on structure
+// alone.
 function trySolve(cage, topo, label, tolerance) {
   const coarse = buildCoarseTopology(cage, topo, label);
   if (!coarse.ok) return { ok: false, stage: 1, detail: coarse.detail };
@@ -625,17 +620,17 @@ function trySolve(cage, topo, label, tolerance) {
 
   const sharpFromCreases = new Set(Object.keys(cr.creases));
   // Pass 1 assumes every edge with no crease entry in the fine cage was
-  // smooth. Pass 2 is the WEIGHT-ONE RETRY: a coarse crease of exactly 1 is
+  // smooth. Pass 2 is the weight-one retry: a coarse crease of exactly 1 is
   // fully sharp and yet leaves no entry behind, so the edges the face
   // equations say cannot have been smooth are re-tried as sharp. A wrong
-  // guess simply fails the same verification, so this can turn a refusal into
-  // an exact answer and can never turn one into a wrong one.
+  // guess fails the same verification, so this can turn a refusal into an
+  // exact answer and never turns one into a wrong one.
   let best = null;
   const hypotheses = [sharpFromCreases];
   const retry = sharpFromFaceEquations(cage, coarse, sharpFromCreases, 1e-9 * cageExtent(cage));
   if (retry) hypotheses.push(retry);
   for (let pass = 0; pass < hypotheses.length; pass++) {
-    // The hypothesised sharp edges have to go into the CREASE MAP the coarse
+    // The hypothesized sharp edges have to go into the crease map the coarse
     // cage carries, not just into the pair-sum arithmetic — the verification
     // re-subdivides that cage, and a cage whose creases say "smooth" produces
     // smooth edge points however the solve was set up.
@@ -648,11 +643,11 @@ function trySolve(cage, topo, label, tolerance) {
   return best || { ok: false, detail: 'no solution' };
 }
 
-// WHICH COARSE EDGES CANNOT HAVE BEEN SMOOTH, read off the face-centroid
-// equations. A coarse quad's four corners sum to four times its face point, so
-// the pair sums of two OPPOSITE edges must add to exactly that. Each opposite
-// pair therefore has four smooth/sharp combinations and usually only one of
-// them balances, which names the sharp edges without solving anything.
+// Which coarse edges cannot have been smooth, read off the face-centroid
+// equations. A coarse quad's four corners sum to four times its face point,
+// so the pair sums of two opposite edges must add to exactly that. Each
+// opposite pair therefore has four smooth/sharp combinations and usually only
+// one of them balances, which names the sharp edges without solving anything.
 function sharpFromFaceEquations(cage, coarse, already, tol) {
   const facesAtEdge = new Map();
   coarse.faces.forEach((f, fi) => {
@@ -817,7 +812,7 @@ function compareCreases(got, want) {
   return null;
 }
 
-// THE TIER-1 ENTRY POINT.
+// The tier-1 entry point.
 //   { ok: true,  cage, residual, unique, tier: 'unsubdivide', ... }
 //   { ok: false, reason, message }
 // `unique: false` means the input has a whole family of preimages and the one
@@ -836,7 +831,7 @@ export function unsubdivideCage(cage, opts = {}) {
     if (!cand.ok) return refuse('NOT_A_SUBDIVISION', NOT_SUB(cand.detail));
     const verified = [];
     let nearest = null;
-    let structural = null; // the detail from the labeling that got FURTHEST
+    let structural = null; // the detail from the labeling that got furthest
     for (const label of cand.list) {
       const r = trySolve(part.cage, topo, label, tolerance);
       if (r.ok) verified.push(r);
@@ -885,9 +880,7 @@ export function unsubdivideCage(cage, opts = {}) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// TIER 2 — POLYCHORD COLLAPSE
-// ---------------------------------------------------------------------------
+// Tier 2 — polychord collapse
 
 function faceEdgeKey(face, k) { return edgeKey(face[k], face[(k + 1) % 4]); }
 
@@ -923,7 +916,7 @@ function walkChord(cage, edgeMap, f0, j0) {
   return { faces, parities, exits, ended };
 }
 
-// EVERY POLYCHORD OF A QUAD CAGE. Each face lies on exactly two of them, so
+// Every polychord of a quad cage. Each face lies on exactly two of them, so
 // the chords are a complete, non-overlapping decomposition of what a collapse
 // can remove. Returns chords whether or not they are collapsible, each
 // carrying its own refusal when it is not.
@@ -982,7 +975,7 @@ export function polychordsOf(cage, opts = {}) {
 const MIN_FACES_DEFAULT = 6;
 
 // The rails of a chord face: its two edges that are not rungs. They are the
-// edges the collapse WELDS TOGETHER into one, which is why a disagreement
+// edges the collapse welds together into one, which is why a disagreement
 // between their crease weights has no answer.
 function chordRails(cage, chord) {
   const rungSet = new Set(chord.rungKeys);
@@ -1000,10 +993,10 @@ function chordRails(cage, chord) {
   return rails;
 }
 
-// A CHORD IS ONLY COLLAPSIBLE IF THE COLLAPSE ITSELF HOLDS THE INVARIANT, so
-// this does the collapse to find out and hands the result back rather than
-// throwing it away — the caller that accepts the chord reuses it, and there is
-// no second, unreachable copy of the same check downstream.
+// A chord is only collapsible if the collapse itself holds the invariant, so
+// this does the collapse to find out and hands the result back — the caller
+// that accepts the chord reuses it, and there is no second copy of the same
+// check downstream.
 function chordRefusalAndPreview(cage, chord, opts = {}) {
   const minFaces = opts.minFaces ?? MIN_FACES_DEFAULT;
   if (chord.selfTouching) {
@@ -1096,24 +1089,22 @@ function applyCollapse(cage, chord) {
   return { cage: { vertices, faces, creases }, vertexSources };
 }
 
-// COLLAPSE ONE POLYCHORD.
+// Collapse one polychord.
 //   { ok: true, cage, vertexSources, ... } | { ok: false, reason, message }
 // `vertexSources[i]` lists the input vertices the result's vertex i came from,
-// which is what a refit needs to know where each surviving point used to be.
+// which is what a refit needs to know where each surviving point came from.
 export function collapsePolychord(cage, chord, opts = {}) {
   const judged = chordRefusalAndPreview(cage, chord, opts);
   if (judged.refusal) return { ok: false, ...judged.refusal };
   return { ok: true, cage: judged.preview.cage, vertexSources: judged.preview.vertexSources, invariants: judged.invariants, removedFaces: chord.faces.length };
 }
 
-// ---------------------------------------------------------------------------
-// SHAPE: LIMIT-POSITION REFIT AND THE CHORD RANKING
-// ---------------------------------------------------------------------------
+// Shape: limit-position refit and the chord ranking
 
-// A vertex whose limit position vertexLimitPosition can actually speak for:
-// that function carries the SMOOTH interior mask only, so a boundary or
-// creased vertex is held still rather than refitted against a mask that does
-// not describe it.
+// A vertex whose limit position vertexLimitPosition can speak for: that
+// function carries the smooth interior mask only, so a boundary or creased
+// vertex is held still rather than refitted against a mask that does not
+// describe it.
 function smoothInteriorVertices(cage, topo) {
   const out = [];
   for (let v = 0; v < cage.vertices.length; v++) {
@@ -1130,7 +1121,7 @@ function smoothInteriorVertices(cage, topo) {
 }
 
 // The puff's own technique (kernel/puff.mjs), generalized: move control points
-// until their LIMIT positions land on a target. Each pass is a correction, not
+// until their limit positions land on a target. Each pass is a correction, not
 // a search. The best iterate is kept, so a target the cage cannot reach leaves
 // the cage no worse than the pass that got closest.
 export function refitCageToLimitTargets(cage, targets, opts = {}) {
@@ -1159,12 +1150,12 @@ export function refitCageToLimitTargets(cage, targets, opts = {}) {
   return { vertices: best, maxError: bestError, movedCount: movable.length };
 }
 
-// LIMIT DRIFT AT THE SURVIVING VERTICES — the ranking metric, and it is a
-// PROXY, stated as one: it measures how far the limit surface moved at the
-// points that are still there, and says nothing about the band the collapsed
-// strip used to occupy. It is the cheap half of the plan's own "rank by
-// measured drift", chosen because ranking by chord LENGTH gives the opposite
-// order on the two chord families of a rotationally-built cage.
+// Limit drift at the surviving vertices — the ranking metric, and a proxy: it
+// measures how far the limit surface moved at the points that are still
+// there, and says nothing about the band the collapsed strip occupied. It is
+// the cheap half of ranking by measured drift, chosen because ranking by
+// chord length gives the opposite order on the two chord families of a
+// rotationally-built cage.
 export function polychordDrift(cage, chord, opts = {}) {
   const res = collapsePolychord(cage, chord, opts);
   if (!res.ok) return { ok: false, ...res };
@@ -1205,11 +1196,9 @@ export function rankPolychords(cage, opts = {}) {
   return { ok: true, ranked, chords: all.chords };
 }
 
-// ---------------------------------------------------------------------------
-// THE COMMAND
-// ---------------------------------------------------------------------------
+// The command
 
-// SIMPLIFY ONE SUPERB CAGE. Tier 1 first, because it is exact; Tier 2 only
+// Simplify one SuperB cage. Tier 1 first, because it is exact; Tier 2 only
 // where Tier 1 refuses. The tier used is named in the result so a caller can
 // say which answer it got.
 //

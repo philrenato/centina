@@ -1,9 +1,9 @@
-// WELD VERTICES — collapse a selected vertex set into one. The interesting
+// Weld vertices — collapse a selected vertex set into one. The interesting
 // claims are not the counts: they are that a face which folds onto itself is
 // dropped rather than kept as a repeated-vertex face, that nothing is left
 // orphaned, and that a weld which would make the cage non-manifold is
 // refused rather than silently produced (it would render fine and subdivide
-// into garbage — the exact failure mode Bridge's own shared-vertex bug had).
+// into garbage).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { weldVertices } from '../kernel/subdedit.mjs';
@@ -46,7 +46,7 @@ test("'first' holds the first-picked vertex still instead of averaging", () => {
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(got[k] - cage.vertices[0][k]) < 1e-12);
 });
 
-test('THE POINT: a face that folds onto itself is DROPPED, not kept as a repeated-vertex face', () => {
+test('The point: a face that folds onto itself is dropped, not kept as a repeated-vertex face', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   // Two vertices that share a face but not an edge — a quad's own diagonal.
   const f = cage.faces[0];
@@ -64,14 +64,14 @@ test('and the welded cage still subdivides cleanly', () => {
   for (const v of refined.vertices) assert.ok(v.every(Number.isFinite));
 });
 
-test('a weld that would leave an edge shared by 3+ faces is REFUSED, not produced', () => {
+test('a weld that would leave an edge shared by 3+ faces is refused, not produced', () => {
   // A closed box: welding two opposite corners folds the surface through
   // itself, which is exactly the case that renders fine and subdivides into
   // garbage if allowed through.
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   let threw = null;
   try { weldVertices(cage, [0, 6], 'average'); } catch (e) { threw = e; }
-  // Either it refuses by name, or it produced something genuinely manifold —
+  // Either it refuses by name, or it produced something manifold —
   // asserted as an either/or so this test can never pass by accident on a
   // cage where the fold happens not to be reachable.
   if (threw) {
@@ -99,7 +99,7 @@ test('creases survive the remap, and a crease that merged onto itself is dropped
   assert.ok(total >= 1, 'the untouched crease elsewhere must survive');
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals, and the input cage is never mutated', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const before = JSON.stringify(cage);
   assert.throws(() => weldVertices(cage, [0], 'average'), /at least 2/);

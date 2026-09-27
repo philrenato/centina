@@ -1,11 +1,11 @@
-// The Phase 5 gate is a TYPE MATRIX — one case per real curve type this
-// app actually produces (line, rational arc, sketch curve, joined polycurve)
+// The tests are a type matrix — one case per real curve type this
+// app produces (line, rational arc, sketch curve, joined polycurve)
 // — deliberately not four variations on a line, because a line is the one
-// case where degree-1 control points ARE the curve and every step of the
+// case where degree-1 control points are the curve and every step of the
 // search is trivially exact. The rational and multi-span cases are where a
 // subdivision/refinement scheme actually has to be right.
 //
-// Ground truth throughout is ANALYTIC where the fixture allows it: a line
+// Ground truth throughout is analytic where the fixture allows it: a line
 // through a circle's center crosses the circle at exactly `radius`, and that
 // number comes from the geometry, not from the function under test.
 
@@ -19,7 +19,7 @@ import { curvePoint } from '../kernel/curve.mjs';
 
 const X = [1, 0, 0], Y = [0, 1, 0];
 
-// Every reported point must genuinely lie on BOTH curves at the parameters
+// Every reported point must lie on both curves at the parameters
 // reported for it — checked against the curves themselves, never against the
 // intersector's own returned point, which would be a tautology.
 function assertOnBothCurves(crvA, crvB, hit, tol, label) {
@@ -31,7 +31,7 @@ function assertOnBothCurves(crvA, crvB, hit, tol, label) {
     `${label}: the reported point is not on curve A at its own reported parameter`);
 }
 
-test('TYPE MATRIX 1 — line x line crosses at the exact analytic point', () => {
+test('Type matrix 1 — line x line crosses at the exact analytic point', () => {
   // Deliberately not axis-aligned: an axis-aligned pair makes several
   // independent bugs (a swapped x/y, a dropped term) invisible.
   const a = makeLine([-10, -10, 0], [10, 10, 0]);
@@ -45,9 +45,9 @@ test('TYPE MATRIX 1 — line x line crosses at the exact analytic point', () => 
   assertOnBothCurves(a, b, r.points[0], 1e-9, 'line x line');
 });
 
-test('TYPE MATRIX 2 — line x RATIONAL circle gives both crossings at exactly the radius', () => {
+test('Type matrix 2 — line x rational circle gives both crossings at exactly the radius', () => {
   // The load-bearing case for the rational half of the algorithm: a circle's
-  // control points are NOT on the curve (half sit at radius*sqrt(2) on the
+  // control points are not on the curve (half sit at radius*sqrt(2) on the
   // tangent corners), so a scheme that forgot to divide through by w would
   // land measurably off and this test would catch it.
   const R = 25;
@@ -62,23 +62,23 @@ test('TYPE MATRIX 2 — line x RATIONAL circle gives both crossings at exactly t
       `crossing must sit at exactly the circle's radius ${R}, got ${d}`);
     assertOnBothCurves(line, circ, hit, 1e-7, 'line x circle');
   }
-  // The two crossings are the genuinely opposite ends of a diameter.
+  // The two crossings are the opposite ends of a diameter.
   const [p0, p1] = r.points.map((h) => h.point);
   assert.ok(Math.abs(p0[0] + p1[0]) < 1e-7, 'the two crossings must be diametrically opposite');
 });
 
-test('an OFF-ORIGIN rational circle is bounded by its EUCLIDEAN control points', () => {
+test('an off-origin rational circle is bounded by its euclidean control points', () => {
   // This fixture exists because the obvious one does not discriminate. A
-  // circle centered at the ORIGIN survives a bug that bounds pieces by their
-  // HOMOGENEOUS control points instead of their euclidean ones, because
+  // circle centered at the origin survives a bug that bounds pieces by their
+  // homogeneous control points instead of their euclidean ones, because
   // multiplying by w<1 shrinks the corners toward the origin by almost exactly
   // the amount the corners overshoot — the wrong box happens to still contain
   // the curve. Move the circle away from the origin and that coincidence
   // breaks: homogeneous scaling pulls every control point toward the origin,
   // the box lands somewhere the curve is not, and the search rejects a range
-  // that genuinely contains a crossing.
+  // that contains a crossing.
   //
-  // The convex hull property is stated for the EUCLIDEAN control points, so
+  // The convex hull property is stated for the euclidean control points, so
   // that is the only bound a rejection may be proven with.
   const C = [100, 60, 0], R = 25;
   const circ = makeCircle(C, X, Y, R);
@@ -96,8 +96,8 @@ test('an OFF-ORIGIN rational circle is bounded by its EUCLIDEAN control points',
   }
 });
 
-test('TYPE MATRIX 3 — sketch curve (degree 3, multi-span) x line', () => {
-  // globalCurveInterp through 5 points gives a genuinely multi-span curve with
+test('Type matrix 3 — sketch curve (degree 3, multi-span) x line', () => {
+  // globalCurveInterp through 5 points gives a multi-span curve with
   // real interior knots, so decomposeToBezier produces several pieces and the
   // piece-pairing loop is actually exercised rather than short-circuited.
   const sketch = globalCurveInterp([
@@ -117,7 +117,7 @@ test('TYPE MATRIX 3 — sketch curve (degree 3, multi-span) x line', () => {
   }
 });
 
-test('TYPE MATRIX 4 — joined MIXED-DEGREE polycurve x line', () => {
+test('Type matrix 4 — joined mixed-degree polycurve x line', () => {
   // A joined chain of a straight segment and a rational arc: degree-elevated
   // to a common degree by joinCurvesC0, so the resulting curve is rational in
   // some spans and (elevated) straight in others. This is the shape a filleted
@@ -141,7 +141,7 @@ test('TYPE MATRIX 4 — joined MIXED-DEGREE polycurve x line', () => {
   }
 });
 
-test('curves that genuinely do not meet return an EMPTY answer, not a refusal', () => {
+test('curves that do not meet return an empty answer, not a refusal', () => {
   // ok:true with zero points is a real answer. Collapsing it into a refusal
   // would make "no intersection" indistinguishable from "could not tell".
   const a = makeLine([-10, 0, 0], [10, 0, 0]);
@@ -163,10 +163,10 @@ test('a shared endpoint is a real intersection, not an error', () => {
   assert.ok(Math.hypot(r.points[0].point[0], r.points[0].point[1]) < 1e-9);
 });
 
-test('a TANGENTIAL meeting is refused by name rather than given a number', () => {
+test('a tangential meeting is refused by name rather than given a number', () => {
   // A line grazing a circle at its top: they touch at exactly one point but do
   // not cross. The crossing angle is zero, so no transversal intersection is
-  // defined and the honest output is a named refusal.
+  // defined and the correct output is a named refusal.
   const R = 25;
   const circ = makeCircle([0, 0, 0], X, Y, R);
   const tangent = makeLine([-40, R, 0], [40, R, 0]);
@@ -176,7 +176,7 @@ test('a TANGENTIAL meeting is refused by name rather than given a number', () =>
   assert.match(r.reason, /tangential/i);
 });
 
-test('an OVERLAP is refused by name rather than returning an arbitrary point', () => {
+test('an overlap is refused by name rather than returning an arbitrary point', () => {
   // A curve against itself shares its whole length. Every leaf survives
   // subdivision, which is exactly the signature this case is detected by.
   const a = makeLine([-30, -10, 0], [30, 40, 0]);
@@ -186,7 +186,7 @@ test('an OVERLAP is refused by name rather than returning an arbitrary point', (
   assert.match(r.reason, /share a region|overlap/i);
 });
 
-test('a NON-POSITIVE weight is refused, because it breaks the hull proof', () => {
+test('a non-positive weight is refused, because it breaks the hull proof', () => {
   // The convex hull rejection is the only reason a discarded parameter range
   // is safe to discard. A negative weight makes the curve leave its control
   // points' hull, so the search would prove nothing — refused rather than run.
@@ -198,7 +198,7 @@ test('a NON-POSITIVE weight is refused, because it breaks the hull proof', () =>
   assert.match(r.reason, /weight/i);
 });
 
-test('the result is INDEPENDENT of argument order', () => {
+test('the result is independent of argument order', () => {
   // Swapping the operands must return the same crossings with uA/uB swapped —
   // an order-dependent answer would mean one curve is being treated as
   // privileged somewhere in the subdivision or the refinement.
@@ -214,9 +214,9 @@ test('the result is INDEPENDENT of argument order', () => {
     'the same two curves must produce the same crossing points regardless of which is passed first');
 });
 
-test('accuracy does not depend on the fixture SCALE', () => {
-  // The same configuration at 1000x must be solved to the same RELATIVE
-  // accuracy. This is what proves the tolerances are genuinely relative rather
+test('accuracy does not depend on the fixture scale', () => {
+  // The same configuration at 1000x must be solved to the same relative
+  // accuracy. This is what proves the tolerances are relative rather
   // than absolute constants that happen to suit one fixture's size.
   for (const R of [0.5, 25, 25000]) {
     const circ = makeCircle([0, 0, 0], X, Y, R);

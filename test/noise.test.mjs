@@ -5,8 +5,8 @@ import { fairControlNet } from '../kernel/fair.mjs';
 import { surfacePointAndPartials, surfaceClosure } from '../kernel/surface.mjs';
 import { makeCircle, revolve } from '../kernel/primitives.mjs';
 
-// A real torus — closed in BOTH U and V, the exact shape the amplitude/
-// minor-radius self-intersection was originally found on. The minor circle
+// A real torus — closed in both U and V, where an amplitude larger than the
+// minor radius self-intersects. The minor circle
 // (radius minorR) lies in the plane spanned by world Z (xAxis) and world X
 // (yAxis), centered majorR out along X, then revolved a full turn about Z.
 function torus(majorR = 30, minorR = 5) {
@@ -14,7 +14,7 @@ function torus(majorR = 30, minorR = 5) {
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 }
 
-// A 5x5 FLAT (z=0) planar net with real, non-uniform rational weights (so a
+// A 5x5 flat (z=0) planar net with real, non-uniform rational weights (so a
 // test can confirm the weight index is never touched). Degree 3, clamped.
 function flatNet() {
   const net = [];
@@ -25,7 +25,7 @@ function flatNet() {
   }
   return { degU: 3, degV: 3, knotsU: [0, 0, 0, 0, 0.5, 1, 1, 1, 1], knotsV: [0, 0, 0, 0, 0.5, 1, 1, 1, 1], ctrlNet: net };
 }
-// A 5x5 planar net TILTED so its normal is (-1,0,1)/sqrt(2) — a genuinely
+// A 5x5 planar net tilted so its normal is (-1,0,1)/sqrt(2) — a
 // non-world-axis normal, and constant across the surface, so the normal-frame
 // direction can be cross-checked exactly against surfacePointAndPartials.
 function tiltedNet() {
@@ -58,7 +58,7 @@ test('normalizeNoiseParams: fills defaults and clamps a garbage bag', () => {
   assert.equal(p.refine, 3);
 });
 
-test('amplitude 0 is an EXACT, byte-identical passthrough (the tween baseline)', () => {
+test('amplitude 0 is an exact, byte-identical passthrough (the tween baseline)', () => {
   const srf = flatNet();
   const out = noiseControlNet(srf, { amplitude: 0, style: 'value', frequency: 2, seed: 7, direction: 'world-z' });
   assert.equal(out, srf); // literally the same object — no displacement, no refine, no copy
@@ -67,33 +67,33 @@ test('amplitude 0 is an EXACT, byte-identical passthrough (the tween baseline)',
   assert.equal(out2, srf);
 });
 
-test('amplitude>0 genuinely displaces INTERIOR control points, boundary + weight pinned exactly', () => {
+test('amplitude>0 displaces interior control points, boundary + weight pinned exactly', () => {
   const srf = flatNet();
   const out = noiseControlNet(srf, { amplitude: 3, style: 'value', frequency: 1, seed: 1, direction: 'world-z' });
-  assert.ok(!netsEqual(out.ctrlNet, srf.ctrlNet), 'the net genuinely changed');
+  assert.ok(!netsEqual(out.ctrlNet, srf.ctrlNet), 'the net changed');
   // every boundary row/col is byte-identical
   for (let j = 0; j < 5; j++) { assert.deepEqual(out.ctrlNet[0][j], srf.ctrlNet[0][j]); assert.deepEqual(out.ctrlNet[4][j], srf.ctrlNet[4][j]); }
   for (let i = 0; i < 5; i++) { assert.deepEqual(out.ctrlNet[i][0], srf.ctrlNet[i][0]); assert.deepEqual(out.ctrlNet[i][4], srf.ctrlNet[i][4]); }
-  // at least one interior point genuinely moved, and NO weight ever changed
+  // at least one interior point moved, and no weight ever changed
   let interiorMoved = false;
   for (let i = 1; i < 4; i++) for (let j = 1; j < 4; j++) {
     if (Math.abs(out.ctrlNet[i][j][2] - srf.ctrlNet[i][j][2]) > 1e-9) interiorMoved = true;
     assert.equal(out.ctrlNet[i][j][3], srf.ctrlNet[i][j][3], `weight untouched at ${i},${j}`);
   }
-  assert.ok(interiorMoved, 'a genuine interior displacement happened');
+  assert.ok(interiorMoved, 'a real interior displacement happened');
 });
 
-test('DETERMINISM: same seed+params twice is bit-identical; a different seed genuinely differs', () => {
+test('Determinism: same seed+params twice is bit-identical; a different seed differs', () => {
   const srf = flatNet();
   const params = { amplitude: 3, style: 'value', frequency: 1.5, seed: 42, direction: 'world-z' };
   const a = noiseControlNet(srf, params);
   const b = noiseControlNet(srf, { ...params });
   assert.ok(netsEqual(a.ctrlNet, b.ctrlNet), 'identical params reproduce bit-for-bit');
   const c = noiseControlNet(srf, { ...params, seed: 43 });
-  assert.ok(!netsEqual(a.ctrlNet, c.ctrlNet), 'a different seed genuinely changes the noise');
+  assert.ok(!netsEqual(a.ctrlNet, c.ctrlNet), 'a different seed changes the noise');
 });
 
-test('STYLES differ: value / sine / randomWalk produce genuinely different displacement patterns', () => {
+test('Styles differ: value / sine / randomWalk produce different displacement patterns', () => {
   const srf = flatNet();
   const base = { amplitude: 3, frequency: 1.3, seed: 5, direction: 'world-z' };
   const v = noiseControlNet(srf, { ...base, style: 'value' });
@@ -104,7 +104,7 @@ test('STYLES differ: value / sine / randomWalk produce genuinely different displ
   assert.ok(maxNetDiff(s.ctrlNet, w.ctrlNet) > 1e-6, 'sine vs randomWalk differ');
 });
 
-test('DIRECTION world-x displaces ONLY x; normal follows the real surface normal (cross-checked)', () => {
+test('Direction world-x displaces only x; normal follows the real surface normal (cross-checked)', () => {
   const srf = tiltedNet();
   // world-x: interior displacement is purely along x
   const wx = noiseControlNet(srf, { amplitude: 4, style: 'value', frequency: 1, seed: 9, direction: 'world-x' });
@@ -112,7 +112,7 @@ test('DIRECTION world-x displaces ONLY x; normal follows the real surface normal
     assert.ok(Math.abs(wx.ctrlNet[i][j][1] - srf.ctrlNet[i][j][1]) < 1e-12, 'y untouched (world-x)');
     assert.ok(Math.abs(wx.ctrlNet[i][j][2] - srf.ctrlNet[i][j][2]) < 1e-12, 'z untouched (world-x)');
   }
-  // normal: interior displacement is parallel to the REAL surface normal at
+  // normal: interior displacement is parallel to the real surface normal at
   // that point's own Greville (computed independently here, not from the op).
   const nrm = noiseControlNet(srf, { amplitude: 4, style: 'value', frequency: 1, seed: 9, direction: 'normal' });
   const gU = [0, 1 / 6, 0.5, 5 / 6, 1], gV = [0, 1 / 6, 0.5, 5 / 6, 1];
@@ -128,12 +128,12 @@ test('DIRECTION world-x displaces ONLY x; normal follows the real surface normal
     const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
     const cos = Math.abs((dx * nx + dy * ny + dz * nz) / mag);
     assert.ok(cos > 1 - 1e-6, `displacement parallel to the real surface normal at ${i},${j} (|cos|=${cos})`);
-    if (Math.abs(dz) > 1e-9 && Math.abs(dx) > 1e-9) sawNonAxis = true; // this surface's normal has both x and z — genuinely NOT a world axis
+    if (Math.abs(dz) > 1e-9 && Math.abs(dx) > 1e-9) sawNonAxis = true; // this surface's normal has both x and z — not a world axis
   }
-  assert.ok(sawNonAxis, 'normal-frame displacement is genuinely off-axis (both x and z move), distinct from any world axis');
+  assert.ok(sawNonAxis, 'normal-frame displacement is off-axis (both x and z move), distinct from any world axis');
 });
 
-test('REFINE genuinely raises control-point density BEFORE displacement (real, checkable count)', () => {
+test('Refine raises control-point density before displacement (real, checkable count)', () => {
   const srf = flatNet(); // 5x5
   assert.equal(refineSurface(srf, 1).ctrlNet.length > 5, true, 'refineSurface itself adds rows');
   const out0 = noiseControlNet(srf, { amplitude: 2, refine: 0, direction: 'world-z' });
@@ -145,22 +145,22 @@ test('REFINE genuinely raises control-point density BEFORE displacement (real, c
   assert.ok(out1.ctrlNet[0].length > 5, 'refine also raises column (V) density');
 });
 
-test('REFINE is shape-preserving when amplitude 0 (exact identity, never a silent densify)', () => {
+test('Refine is shape-preserving when amplitude 0 (exact identity, never a silent densify)', () => {
   const srf = flatNet();
   const out = noiseControlNet(srf, { amplitude: 0, refine: 3 });
   assert.equal(out, srf); // amplitude 0 returns early, above refine — a true no-op
 });
 
-test('CHAIN ORDER matters: Fair-then-Noise vs Noise-then-Fair give genuinely different nets', () => {
+test('Chain order matters: Fair-then-Noise vs Noise-then-Fair give different nets', () => {
   const srf = flatNet();
   srf.ctrlNet[2][2][2] = 30; // a real bump so Fair has something to relax
   const noiseP = { amplitude: 3, style: 'value', frequency: 1.4, seed: 11, direction: 'world-z' };
   const fairThenNoise = noiseControlNet(fairControlNet(srf, 0.7), noiseP);
   const noiseThenFair = fairControlNet(noiseControlNet(srf, noiseP), 0.7);
-  assert.ok(maxNetDiff(fairThenNoise.ctrlNet, noiseThenFair.ctrlNet) > 1e-6, `order genuinely matters (max diff ${maxNetDiff(fairThenNoise.ctrlNet, noiseThenFair.ctrlNet)})`);
+  assert.ok(maxNetDiff(fairThenNoise.ctrlNet, noiseThenFair.ctrlNet) > 1e-6, `order matters (max diff ${maxNetDiff(fairThenNoise.ctrlNet, noiseThenFair.ctrlNet)})`);
 });
 
-test('COMPOSITION: two chained Noise stages (normal frame) ride the displaced geometry — non-commutative, distinct from either alone', () => {
+test('Composition: two chained Noise stages (normal frame) ride the displaced geometry — non-commutative, distinct from either alone', () => {
   const srf = tiltedNet();
   const A = { amplitude: 3, style: 'value', frequency: 1, seed: 100, direction: 'normal' };
   const B = { amplitude: 3, style: 'sine', frequency: 1.7, seed: 200, direction: 'normal' };
@@ -170,50 +170,40 @@ test('COMPOSITION: two chained Noise stages (normal frame) ride the displaced ge
   const ba = noiseControlNet(noiseControlNet(srf, B), A);
   assert.ok(maxNetDiff(ab.ctrlNet, a.ctrlNet) > 1e-6, 'composition differs from A alone');
   assert.ok(maxNetDiff(ab.ctrlNet, b.ctrlNet) > 1e-6, 'composition differs from B alone');
-  assert.ok(maxNetDiff(ab.ctrlNet, ba.ctrlNet) > 1e-6, 'genuinely non-commutative — the second stage re-derives frames from the first stage OUTPUT, not the original');
+  assert.ok(maxNetDiff(ab.ctrlNet, ba.ctrlNet) > 1e-6, 'non-commutative — the second stage re-derives frames from the first stage output, not the original');
 });
 
-// ================================================================
-// CLOSED-AXIS SEAM FIX — a real, live-reported bug: Noise (like Wave,
-// fixed separately) visibly creases exactly at a closed surface's own
-// seam. Proven here as an EXACT mathematical property of each style's
-// own underlying formula (genuine periodicity) rather than a statistical
-// "does this jump look bigger than that jump" heuristic — a ratio-based
-// version of this was tried FIRST and deliberately abandoned: noise is
-// itself an uneven/random signal, so a "seam jump vs. an ordinary jump"
-// comparison turned out to be seed-dependent (confirmed directly against
-// the pre-fix module — the same threshold correctly failed for some
-// seeds and passed right through, unchanged, for others), not a
-// reliable regression gate. These per-style helpers (`valueNoise2D`'s
-// own wrap args, `quantizeClosedFrequencySine`, `bridgedWalk1D`) each
-// abstract cleanly to ANY closed axis — a Cylinder (closed in one
-// direction) or a Torus (closed in both) both reduce to the identical
-// two `surfaceClosure` booleans, never a shape-specific branch; the live
-// end-to-end confirmation on an actual Torus lives in
-// a driven app-level check, where a real measured object is the honest way
-// to confirm "no visible crease," not a synthetic ratio.
-// ================================================================
+// Closed-axis seams: on a closed surface each style must be periodic across
+// the seam, or the displacement creases exactly there. This is proven as an
+// exact mathematical property of each style's own underlying formula (real
+// periodicity) rather than by comparing the seam jump against ordinary
+// jumps: noise is itself an uneven signal, so a "seam jump vs. an ordinary
+// jump" ratio is seed-dependent and does not discriminate. These per-style
+// helpers (`valueNoise2D`'s own wrap args, `quantizeClosedFrequencySine`,
+// `bridgedWalk1D`) each abstract cleanly to any closed axis — a Cylinder
+// (closed in one direction) or a Torus (closed in both) both reduce to the
+// identical two `surfaceClosure` booleans, never a shape-specific branch.
 
-test('EXACT PERIODICITY (value): the wrapped lattice is a genuine periodic function of x, not just matching at two integer endpoints', () => {
+test('Exact periodicity (value): the wrapped lattice is a real periodic function of x, not just matching at two integer endpoints', () => {
   const { freq, cells } = quantizeClosedFrequencyLinear(1.7, 16);
   assert.ok(Number.isInteger(cells) && cells >= 1, 'a real, positive integer cell count');
   // fractional x values too (0.3 vs cells+0.3) — proves the underlying
-  // LATTICE is periodic, not merely "the two integer boundary samples
+  // lattice is periodic, not merely "the two integer boundary samples
   // happen to agree."
   for (const frac of [0, 0.3, 0.5, 0.81]) {
     const a = valueNoise2D(frac, 2.4, 5, cells, undefined);
     const b = valueNoise2D(cells + frac, 2.4, 5, cells, undefined);
-    assert.ok(Math.abs(a - b) < 1e-12, `x=${frac} and x=${cells + frac} (one full wrap later) are EXACTLY equal (got ${a} vs ${b})`);
+    assert.ok(Math.abs(a - b) < 1e-12, `x=${frac} and x=${cells + frac} (one full wrap later) are exactly equal (got ${a} vs ${b})`);
   }
-  // an UNWRAPPED call (no period passed) does NOT have this property in
+  // an unwrapped call (no period passed) does not have this property in
   // general — confirms the wrap argument is doing real work, not just
   // coincidentally always true.
   const rawA = valueNoise2D(0.3, 2.4, 5);
   const rawB = valueNoise2D(cells + 0.3, 2.4, 5);
-  assert.ok(Math.abs(rawA - rawB) > 1e-6, 'the SAME two x values, unwrapped, are genuinely different — the wrap is real, not vacuous');
+  assert.ok(Math.abs(rawA - rawB) > 1e-6, 'the same two x values, unwrapped, are different — the wrap is real, not vacuous');
 });
 
-test('EXACT PERIODICITY (sine): frequency quantized so i*freq completes a whole number of 2*PI cycles over the closed period', () => {
+test('Exact periodicity (sine): frequency quantized so i*freq completes a whole number of 2*PI cycles over the closed period', () => {
   for (const period of [16, 12, 86]) {
     for (const requested of [0.15, 1.3, 4.0]) {
       const freq = quantizeClosedFrequencySine(requested, period);
@@ -221,20 +211,20 @@ test('EXACT PERIODICITY (sine): frequency quantized so i*freq completes a whole 
       assert.ok(Math.abs(cycles - Math.round(cycles)) < 1e-9, `period ${period}, requested ${requested} -> ${cycles} is a whole number of cycles`);
       assert.ok(Math.round(cycles) >= 1, 'never rounds down to zero wraps (Wave\'s own "min 1" precedent)');
       // the actual formula noiseScalarGrid evaluates, at i=0 and i=period,
-      // must match EXACTLY (real sin() call, not just the cycle-count math)
+      // must match exactly (real sin() call, not just the cycle-count math)
       const phase = 1.7;
       assert.ok(Math.abs(Math.sin(0 * freq + phase) - Math.sin(period * freq + phase)) < 1e-9, 'sin(phase) === sin(period*freq+phase) exactly');
     }
   }
 });
 
-test('EXACT PERIODICITY (randomWalk): bridgedWalk1D returns EXACTLY the same value at both ends when closed, genuinely differs when not', () => {
+test('Exact periodicity (randomWalk): bridgedWalk1D returns exactly the same value at both ends when closed, differs when not', () => {
   for (const n of [9, 17, 32]) {
     const closed = bridgedWalk1D(7, 101, n, true);
     assert.ok(Math.abs(closed[0] - closed[n - 1]) < 1e-12, `n=${n}: closed walk's own first and last value are exactly equal (${closed[0]} vs ${closed[n - 1]})`);
     const open = bridgedWalk1D(7, 101, n, false);
-    assert.ok(Math.abs(open[0] - open[n - 1]) > 1e-6, `n=${n}: the SAME walk, unbridged, genuinely differs at its own two ends — the bridge is doing real work`);
-    // every OTHER value is a small, honest nudge off the raw walk, not a
+    assert.ok(Math.abs(open[0] - open[n - 1]) > 1e-6, `n=${n}: the same walk, unbridged, differs at its own two ends — the bridge is doing real work`);
+    // every other value is a small nudge off the raw walk, not a
     // wholesale rewrite — bridged and open agree closely near the start
     // (where the linear correction is still tiny) and diverge more near
     // the end (where the correction has accumulated to its full amount).
@@ -242,35 +232,18 @@ test('EXACT PERIODICITY (randomWalk): bridgedWalk1D returns EXACTLY the same val
   }
 });
 
-// A ratio-based "does the seam jump look bigger than an ordinary jump"
-// ordinary jump" heuristic was tried here first and DELIBERATELY
-// abandoned, not just skipped — a real, checked-not-assumed finding:
-// noise is its own inherently uneven/random signal, so a single "seam
-// jump vs. one ordinary pair" (or even vs. the worst ordinary pair)
-// comparison turned out to be seed-dependent (confirmed directly: the
-// SAME threshold correctly failed on unfixed code for some seeds and
-// passed right through it, unchanged, for others — a genuinely
-// unreliable regression gate, not a good one, so it was not kept
-// disguised as one). The exact-math tests above (which DO reliably
-// discriminate fixed from unfixed, proven via a real negative-control
-// run against the pre-fix module) are the real proof; the live,
-// end-to-end confirmation on an actual Torus lives in
-// a driven app-level check instead, where a real screenshot/measured
-// object is the honest way to confirm "no visible crease," not a
-// synthetic ratio.
-
-test('CLOSED AXIS: an OPEN surface (both existing fixtures) is completely UNAFFECTED by any of this — byte-identical to the pre-fix construction', () => {
+test('Closed axis: an open surface is unaffected by the seam handling — byte-identical to the unwrapped construction', () => {
   const srf = flatNet();
   const { closedU, closedV } = surfaceClosure(srf);
   assert.equal(closedU, false);
   assert.equal(closedV, false);
-  // value: reproduce the ORIGINAL (unwrapped) formula by hand and confirm
-  // an exact match — proves the new wrap machinery is a true no-op here.
+  // value: reproduce the unwrapped formula by hand and confirm an exact
+  // match — the wrap machinery is a no-op here.
   const outValue = noiseControlNet(srf, { amplitude: 3, style: 'value', frequency: 1.3, seed: 9, direction: 'world-z' });
   assert.ok(!Object.is(outValue, srf), 'a real displacement happened');
   // sine: same proof — frequency is never quantized on an open axis.
   const outSine = noiseControlNet(srf, { amplitude: 3, style: 'sine', frequency: 1.3, seed: 9, direction: 'world-z' });
-  // randomWalk: the exact original single-accumulator formula, recomputed
+  // randomWalk: the exact single-accumulator formula, recomputed
   // independently right here, must match bit-for-bit.
   const nu = 5, nv = 5, freq = 1.3, seed = 9;
   let acc = 0;
@@ -281,12 +254,12 @@ test('CLOSED AXIS: an OPEN surface (both existing fixtures) is completely UNAFFE
   const outRW = noiseControlNet(srf, { amplitude: 3, style: 'randomWalk', frequency: freq, seed, direction: 'world-z' });
   for (let i = 1; i < 4; i++) for (let j = 1; j < 4; j++) {
     const expectedDisp = 3 * expected[i][j];
-    assert.ok(Math.abs((outRW.ctrlNet[i][j][2] - srf.ctrlNet[i][j][2]) - expectedDisp) < 1e-9, `randomWalk at ${i},${j} matches the exact pre-fix single-accumulator formula`);
+    assert.ok(Math.abs((outRW.ctrlNet[i][j][2] - srf.ctrlNet[i][j][2]) - expectedDisp) < 1e-9, `randomWalk at ${i},${j} matches the exact single-accumulator formula`);
   }
 });
 
-// ---- SELF-INTERSECTION-SAFE AMPLITUDE CLAMP, on a real doubly-closed torus ----
-test('SELF-INTERSECTION CLAMP: a small, safe amplitude on a real torus (closed in BOTH U and V) is left completely untouched', () => {
+// Self-intersection-safe amplitude clamp, on a real doubly-closed torus
+test('Self-intersection clamp: a small, safe amplitude on a real torus (closed in both U and V) is left completely untouched', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const out = noiseControlNet(srf, { amplitude: minorR * 0.05, style: 'sine', frequency: 2, seed: 3, direction: 'normal' });
@@ -295,7 +268,7 @@ test('SELF-INTERSECTION CLAMP: a small, safe amplitude on a real torus (closed i
   assert.equal(out.ampClamp.applied, out.ampClamp.requested);
 });
 
-test('SELF-INTERSECTION CLAMP: a large amplitude on the SAME torus (multiple times the minor radius) is auto-clamped, never silently folded', () => {
+test('Self-intersection clamp: a large amplitude on the same torus (multiple times the minor radius) is auto-clamped, never silently folded', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const requested = minorR * 5; // wildly larger than the tube can carry without self-intersecting
@@ -304,17 +277,17 @@ test('SELF-INTERSECTION CLAMP: a large amplitude on the SAME torus (multiple tim
   assert.equal(out.ampClamp.clamped, true, 'a hugely oversized amplitude on a small-radius tube must be clamped, not applied verbatim');
   assert.ok(out.ampClamp.applied < requested, 'the applied amplitude must sit strictly below the request');
   assert.ok(out.ampClamp.applied > 0, 'the clamp must still leave a real, non-zero, usable amplitude');
-  assert.equal(out.ampClamp.applied, out.ampClamp.safeMax, 'a clamped result applies EXACTLY the computed safe maximum, not an arbitrary smaller number');
+  assert.equal(out.ampClamp.applied, out.ampClamp.safeMax, 'a clamped result applies exactly the computed safe maximum, not an arbitrary smaller number');
 });
 
-test('SELF-INTERSECTION CLAMP: the clamp is real per-point protection, not a global scale-down — every interior control point still moved by the SAME clamped amplitude', () => {
+test('Self-intersection clamp: the clamp is real per-point protection, not a global scale-down — every interior control point still moved by the same clamped amplitude', () => {
   const majorR = 30, minorR = 5;
   const srf = torus(majorR, minorR);
   const requested = minorR * 5;
   const out = noiseControlNet(srf, { amplitude: requested, style: 'sine', frequency: 2, seed: 3, direction: 'normal' });
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
-  // Cross-check: re-run at the EXACT applied amplitude directly and confirm
-  // it reproduces the clamped result bit-for-bit (the clamp is a genuine
+  // Cross-check: re-run at the exact applied amplitude directly and confirm
+  // it reproduces the clamped result bit-for-bit (the clamp is a real
   // amplitude substitution, not some other, undocumented mechanism).
   const direct = noiseControlNet(srf, { amplitude: out.ampClamp.applied, style: 'sine', frequency: 2, seed: 3, direction: 'normal' });
   for (let i = 1; i < nu - 1; i++) for (let j = 1; j < nv - 1; j++) for (let k = 0; k < 3; k++) {
@@ -322,15 +295,13 @@ test('SELF-INTERSECTION CLAMP: the clamp is real per-point protection, not a glo
   }
 });
 
-// ============================================================
-// PAINT-DRIVEN WEIGHTING — Noise as a SECOND consumer of a
-// field, declaring its own sampling: per CONTROL POINT, at Greville
+// Paint-driven weighting — Noise as a second consumer of a
+// field, declaring its own sampling: per control point, at Greville
 // fractions, because control points are what Noise displaces. Tessellate
-// reads the same kind of field per CELL for the same reason in reverse.
-// ============================================================
+// reads the same kind of field per cell for the same reason in reverse.
 const R2E_PARAMS = { style: 'value', amplitude: 2, frequency: 3, direction: 'world-z', seed: 7 };
 
-test('omitting weightAt is BYTE-IDENTICAL to before the option existed', () => {
+test('omitting weightAt is byte-identical to the unweighted call', () => {
   const srf = flatNet();
   const plain = noiseControlNet(srf, R2E_PARAMS);
   assert.ok(netsEqual(noiseControlNet(srf, R2E_PARAMS, {}).ctrlNet, plain.ctrlNet));
@@ -345,18 +316,18 @@ test('a weight of exactly 1 everywhere reproduces the unweighted result exactly'
     noiseControlNet(srf, R2E_PARAMS).ctrlNet));
 });
 
-test('a weight of zero everywhere displaces nothing — the honest "painted nowhere" case', () => {
+test('a weight of zero everywhere displaces nothing — the "painted nowhere" case', () => {
   const srf = flatNet();
   const out = noiseControlNet(srf, R2E_PARAMS, { weightAt: () => 0 });
   assert.ok(netsEqual(out.ctrlNet, srf.ctrlNet), 'every control point must be exactly where it started');
 });
 
-test('the weight is genuinely POSITIONAL — asked at each point\'s own Greville fraction', () => {
+test('the weight is positional — asked at each point\'s own Greville fraction', () => {
   const srf = flatNet();
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
   // The fractions the kernel itself will ask at, derived here independently
   // from the surface's own knots rather than assumed to be i/(nu-1) — for a
-  // degree-3 clamped net those two are genuinely different numbers, and a
+  // degree-3 clamped net those two are different numbers, and a
   // test that guessed the wrong one would pass or fail for the wrong reason.
   const gU = grevilleFromKnots(srf.knotsU, srf.degU, nu);
   const uMin = srf.knotsU[srf.degU], uMax = srf.knotsU[srf.knotsU.length - 1 - srf.degU];
@@ -381,10 +352,10 @@ test('the weight is genuinely POSITIONAL — asked at each point\'s own Greville
       else { if (d > 1e-9) movedUnpainted++; if (dPlain > 1e-9) plainMovedUnpainted++; }
     }
   }
-  assert.ok(movedPainted > 0, 'the painted region must genuinely move');
+  assert.ok(movedPainted > 0, 'the painted region must move');
   assert.equal(movedUnpainted, 0, 'the unpainted region must not move at all');
   assert.ok(plainMovedUnpainted > 0,
-    'without a weight that same region DOES move — otherwise this test would pass because nothing moved anywhere');
+    'without a weight that same region does move — otherwise this test would pass because nothing moved anywhere');
 });
 
 test('a non-finite weight is treated as zero rather than producing a NaN control point', () => {
@@ -392,21 +363,21 @@ test('a non-finite weight is treated as zero rather than producing a NaN control
   for (const row of out.ctrlNet) for (const cp of row) for (const c of cp) assert.ok(Number.isFinite(c));
 });
 
-test('weighting happens BEFORE the self-intersection clamp, so the clamp stays correct', () => {
-  // The TORUS, not the flat net: a purely-Z displacement on a flat grid
+test('weighting happens before the self-intersection clamp, so the clamp stays correct', () => {
+  // The torus, not the flat net: a purely-Z displacement on a flat grid
   // never brings adjacent control-net edges across each other, so a flat
   // fixture would report "no clamp" for a reason that has nothing to do
   // with weighting and would prove nothing. This is the same fixture this
-  // file's own existing clamp tests use, for the same reason.
+  // file's own clamp tests use, for the same reason.
   const srf = torus(30, 5);
   const huge = { ...R2E_PARAMS, direction: 'normal', amplitude: 500 };
   // Weighted to zero there is no displacement field to constrain, so the
-  // clamp honestly reports no reduction — and the geometry is untouched.
+  // clamp reports no reduction — and the geometry is untouched.
   const zero = noiseControlNet(srf, huge, { weightAt: () => 0 });
   assert.equal(zero.ampClamp.clamped, false);
   assert.ok(netsEqual(zero.ctrlNet, srf.ctrlNet));
   // Weighted fully there is a real field, and an oversized amplitude is
-  // still clamped against it exactly as it was before weighting existed.
+  // still clamped against it exactly as the unweighted call is.
   const full = noiseControlNet(srf, huge, { weightAt: () => 1 });
   const plain = noiseControlNet(srf, huge);
   assert.equal(full.ampClamp.clamped, true);

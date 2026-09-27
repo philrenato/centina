@@ -12,7 +12,7 @@ function makeNet(nu, nv) {
   return { degU: 3, degV: 3, knotsU: [], knotsV: [], ctrlNet: net };
 }
 
-// ---- existing applyPointEdits (WORLD-frame) behavior — must stay unchanged
+// applyPointEdits in the world frame
 
 test('applyPointEdits: empty/undefined edits is a true no-op (same object)', () => {
   const srf = makeNet(4, 4);
@@ -41,7 +41,7 @@ test('applyPointEdits: multiple edits accumulate independently at distinct point
   assert.deepEqual(out.ctrlNet[3][3], [30, 35, 0, 1]);
 });
 
-test('applyPointEdits: two edits landing on the SAME rounded point both apply (additive, not last-wins-overwrite)', () => {
+test('applyPointEdits: two edits landing on the same rounded point both apply (additive, not last-wins-overwrite)', () => {
   const srf = makeNet(4, 4);
   const out = applyPointEdits(srf, [
     { rowFrac: 0, colFrac: 0, delta: [1, 0, 0] },
@@ -63,7 +63,7 @@ test('applyPointEdits: rational weight (index 3) is never touched', () => {
   assert.equal(out.ctrlNet[1][1][3], 0.7071);
 });
 
-// ---- BLEND (0=Edited, 1=Source) ---------------------------------------------
+// Blend (0=Edited, 1=Source)
 
 test('applyPointEdits: default (no blend arg) is byte-identical to blend=0 (full Edited)', () => {
   const srf = makeNet(4, 4);
@@ -74,33 +74,33 @@ test('applyPointEdits: default (no blend arg) is byte-identical to blend=0 (full
   assert.deepEqual(noArg.ctrlNet[0][0], [5, 6, 7, 1]);
 });
 
-test('applyPointEdits: blend=1 (fully Source) is a genuine, exact no-op — zero displacement', () => {
+test('applyPointEdits: blend=1 (fully Source) is a real, exact no-op — zero displacement', () => {
   const srf = makeNet(4, 4);
   const out = applyPointEdits(srf, [{ rowFrac: 0.5, colFrac: 0.5, delta: [9, 9, 9] }], 1);
   assert.equal(out, srf); // early-return identity, not just numerically close to unchanged
 });
 
-test('applyPointEdits: blend=0.5 is a real, provable LINEAR INTERPOLATION between Edited and Source, independently re-derived', () => {
+test('applyPointEdits: blend=0.5 is a real, provable linear interpolation between Edited and Source, independently re-derived', () => {
   const srf = makeNet(4, 4);
   const edits = [{ rowFrac: 1 / 3, colFrac: 2 / 3, delta: [10, -20, 4] }];
   const edited = applyPointEdits(srf, edits, 0); // blend=0 == fully Edited
   const source = applyPointEdits(srf, edits, 1); // blend=1 == fully Source (== srf itself)
   const half = applyPointEdits(srf, edits, 0.5);
-  // Independently compute the expected lerp in the TEST itself (never trust
+  // Independently compute the expected lerp in the test itself (never trust
   // the function's own internal math as its own proof) — the exact
   // component-wise midpoint between the Edited and Source control points.
   const i = Math.round((1 / 3) * 3), j = Math.round((2 / 3) * 3);
   const expected = [0, 1, 2].map((k) => (edited.ctrlNet[i][j][k] + source.ctrlNet[i][j][k]) / 2);
   assert.deepEqual(half.ctrlNet[i][j].slice(0, 3), expected);
   // A second, sharper cross-check: the delta actually applied at blend=0.5
-  // must be EXACTLY half the full delta (5, -10, 2), not merely "between".
+  // must be exactly half the full delta (5, -10, 2), not merely "between".
   assert.deepEqual(
     [0, 1, 2].map((k) => half.ctrlNet[i][j][k] - source.ctrlNet[i][j][k]),
     [5, -10, 2],
   );
 });
 
-test('applyPointEdits: blend scales a NORMAL-frame amount too, not just a WORLD-frame delta', () => {
+test('applyPointEdits: blend scales a normal-frame amount too, not just a world-frame delta', () => {
   // A flat XY plane (bilinear, degree 1x1) with a known analytic normal (+Z).
   const srf = {
     degU: 1, degV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1],
@@ -115,11 +115,11 @@ test('applyPointEdits: blend scales a NORMAL-frame amount too, not just a WORLD-
   assert.ok(Math.abs(half.ctrlNet[0][0][2] - 4) < 1e-9, 'exactly half the normal displacement at blend=0.5');
 });
 
-// ---- NORMAL-frame anchoring -------------------------------------------------
+// Normal-frame anchoring
 
-// A genuine bilinear (degree 1x1) surface, so surfacePointAndPartials returns
+// A real bilinear (degree 1x1) surface, so surfacePointAndPartials returns
 // a real, analytically-known normal. `xform` maps each planar (x,y,0) control
-// point to world space, so we can reorient the SAME surface and prove the
+// point to world space, so we can reorient the same surface and prove the
 // normal-frame edit rides the new orientation.
 function makeFlatSrf(xform = (p) => p) {
   const grid = [];
@@ -145,7 +145,7 @@ test('applyPointEdits (normal frame): a flat XY surface displaces the CP along +
   assert.equal(cp[3], 1);
 });
 
-test('normal frame RIDES a reoriented surface — the displacement follows the NEW normal, not the old world direction', () => {
+test('normal frame rides a reoriented surface — the displacement follows the new normal, not the old world direction', () => {
   const edit = [{ rowFrac: 0.5, colFrac: 0.5, frame: 'normal', amount: 5 }];
   const flat = makeFlatSrf();
   const rotated = makeFlatSrf(rotX90); // same surface, reoriented into the XZ plane (normal now ±Y)
@@ -164,34 +164,34 @@ test('normal frame RIDES a reoriented surface — the displacement follows the N
   // flat surface: displacement is along Z (its normal)
   assert.ok(Math.abs(flatDisp[0]) < 1e-9 && Math.abs(flatDisp[1]) < 1e-9 && Math.abs(Math.abs(flatDisp[2]) - 5) < 1e-9,
     `flat rides +/-Z, got ${flatDisp}`);
-  // reoriented surface: displacement is along Y (the NEW normal) — provably NOT the old world Z
+  // reoriented surface: displacement is along Y (the new normal) — provably not the old world Z
   assert.ok(Math.abs(rotDisp[0]) < 1e-9 && Math.abs(Math.abs(rotDisp[1]) - 5) < 1e-9 && Math.abs(rotDisp[2]) < 1e-9,
     `reoriented rides +/-Y (the new normal), got ${rotDisp}`);
-  // the whole point: the two displacements point in genuinely different directions
+  // the whole point: the two displacements point in different directions
   const dot = flatDisp[0] * rotDisp[0] + flatDisp[1] * rotDisp[1] + flatDisp[2] * rotDisp[2];
-  assert.ok(Math.abs(dot) < 1e-9, 'flat (Z) and reoriented (Y) displacements are orthogonal — the normal genuinely re-anchored');
+  assert.ok(Math.abs(dot) < 1e-9, 'flat (Z) and reoriented (Y) displacements are orthogonal — the normal re-anchored');
 });
 
-test('world frame is BYTE-IDENTICAL under reorientation — the CV-drag case is unaffected (zero regression proof)', () => {
+test('world frame is byte-identical under reorientation — the CV-drag case is unaffected', () => {
   const edit = [{ rowFrac: 0.5, colFrac: 0.5, delta: [0, 0, 5] }]; // no `frame` -> world
   const rotated = makeFlatSrf(rotX90);
   const out = applyPointEdits(rotated, edit);
   const cp = out.ctrlNet[1][1];
   const nat = rotated.ctrlNet[1][1];
-  // a world edit adds the SAME fixed world vector regardless of the surface's
+  // a world edit adds the same fixed world vector regardless of the surface's
   // orientation (numeric compare; +0 vs -0 would trip deepEqual)
   assert.ok(Math.abs(cp[0] - nat[0]) < 1e-12 && Math.abs(cp[1] - nat[1]) < 1e-12
     && Math.abs(cp[2] - (nat[2] + 5)) < 1e-12 && cp[3] === 1, `world edit unchanged by reorientation, got ${cp}`);
 });
 
-// ---- resamplePointEditsToNet ------------------------------------------------
+// resamplePointEditsToNet
 
 test('resample: empty field resamples to empty', () => {
   assert.deepEqual(resamplePointEditsToNet([], { nu: 5, nv: 5 }, { nu: 9, nv: 9 }), []);
   assert.deepEqual(resamplePointEditsToNet(undefined, { nu: 5, nv: 5 }, { nu: 9, nv: 9 }), []);
 });
 
-test('resample: a single edit onto the SAME net shape reproduces itself EXACTLY', () => {
+test('resample: a single edit onto the same net shape reproduces itself exactly', () => {
   const edits = [{ rowFrac: 0.5, colFrac: 0.25, delta: [1, 2, 3] }];
   const out = resamplePointEditsToNet(edits, { nu: 5, nv: 5 }, { nu: 5, nv: 5 });
   assert.equal(out.length, 1);
@@ -199,7 +199,7 @@ test('resample: a single edit onto the SAME net shape reproduces itself EXACTLY'
   assert.ok(Math.abs(out[0].delta[0] - 1) < 1e-12 && Math.abs(out[0].delta[1] - 2) < 1e-12 && Math.abs(out[0].delta[2] - 3) < 1e-12);
 });
 
-test('resample: a NORMAL-frame edit onto the same shape reproduces its scalar amount exactly', () => {
+test('resample: a normal-frame edit onto the same shape reproduces its scalar amount exactly', () => {
   const edits = [{ rowFrac: 0.5, colFrac: 0.5, frame: 'normal', amount: 7.5 }];
   const out = resamplePointEditsToNet(edits, { nu: 5, nv: 5 }, { nu: 5, nv: 5 });
   assert.equal(out.length, 1);
@@ -207,32 +207,32 @@ test('resample: a NORMAL-frame edit onto the same shape reproduces its scalar am
   assert.ok(Math.abs(out[0].amount - 7.5) < 1e-12);
 });
 
-test('resample REFINE (coarse->fine) fills the gaps AND conserves the area-weighted field mass', () => {
+test('resample refine (coarse->fine) fills the gaps and conserves the area-weighted field mass', () => {
   // a single central bump on a 3x3 net — the classic "a denser Rebuild leaves
   // nothing to splat into" case
   const edits = [{ rowFrac: 0.5, colFrac: 0.5, delta: [0, 0, 6] }];
   const oldShape = { nu: 3, nv: 3 }, newShape = { nu: 9, nv: 9 };
   const out = resamplePointEditsToNet(edits, oldShape, newShape);
 
-  // NO GAP: an intermediate new control point (frac 0.375,0.375), which sits
-  // strictly BETWEEN the coarse bump nodes, got a real interpolated value
+  // No gap: an intermediate new control point (frac 0.375,0.375), which sits
+  // strictly between the coarse bump nodes, got a real interpolated value
   const between = out.find((e) => Math.abs(e.rowFrac - 0.375) < 1e-9 && Math.abs(e.colFrac - 0.375) < 1e-9);
   assert.ok(between && Math.abs(between.delta[2]) > 1e-6, 'the gap between coarse nodes is filled, not left empty');
 
-  // NO OVERSHOOT/AMPLIFICATION: nothing on the fine net exceeds the coarse peak
+  // No overshoot/amplification: nothing on the fine net exceeds the coarse peak
   const peak = Math.max(...out.map((e) => Math.abs(e.delta[2])));
   assert.ok(peak <= 6 + 1e-9, `no amplification (fine peak ${peak} <= coarse 6)`);
-  // the peak IS reproduced at the coinciding center node (frac 0.5)
+  // the peak is reproduced at the coinciding center node (frac 0.5)
   const centre = out.find((e) => Math.abs(e.rowFrac - 0.5) < 1e-9 && Math.abs(e.colFrac - 0.5) < 1e-9);
   assert.ok(centre && Math.abs(centre.delta[2] - 6) < 1e-9, 'the true peak survives exactly at the coinciding node');
 
-  // MASS conserved (area-weighted "displaced volume", not raw per-node sum)
+  // Mass conserved (area-weighted "displaced volume", not raw per-node sum)
   const m0 = pointEditFieldMass(edits, oldShape).world[2];
   const m1 = pointEditFieldMass(out, newShape).world[2];
   assert.ok(Math.abs(m1 - m0) < 1e-9, `field mass conserved across refine (${m0} -> ${m1})`);
 });
 
-test('resample COARSEN (fine->coarse) NEVER lumps — each new CP is one bounded interpolated value, no additive stacking', () => {
+test('resample coarsen (fine->coarse) never lumps — each new CP is one bounded interpolated value, no additive stacking', () => {
   // a dense multi-CP bump on a 9x9 net (what a real sculpt stroke produces),
   // resampled down to a 4x4 net (a coarser Rebuild)
   const edits = [];
@@ -245,13 +245,13 @@ test('resample COARSEN (fine->coarse) NEVER lumps — each new CP is one bounded
     }
   }
   const out = resamplePointEditsToNet(edits, { nu: 9, nv: 9 }, { nu: 4, nv: 4 });
-  // NO LUMP: the coarse net's largest displacement is bounded by the input
-  // field's own max — the old nearest-round-and-stack would ADD several
+  // No lump: the coarse net's largest displacement is bounded by the input
+  // field's own max — a nearest-round-and-stack resample would add several
   // colliding entries and exceed it
   const maxOut = Math.max(...out.map((e) => Math.abs(e.delta[2])));
   assert.ok(maxOut <= maxIn + 1e-9, `coarse peak ${maxOut} bounded by input peak ${maxIn} — no additive lumping`);
   // and mass is still approximately conserved (a coarsening sub-samples, so
-  // this is an APPROXIMATE invariant, unlike the exact refine case above)
+  // this is an approximate invariant, unlike the exact refine case above)
   const m0 = pointEditFieldMass(edits, { nu: 9, nv: 9 }).world[2];
   const m1 = pointEditFieldMass(out, { nu: 4, nv: 4 }).world[2];
   assert.ok(Math.abs(m1 - m0) / Math.abs(m0) < 0.15, `field mass roughly conserved across coarsen (${m0} -> ${m1})`);

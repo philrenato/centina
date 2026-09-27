@@ -1,33 +1,33 @@
-// THE EXACT FORM OF A TRIMMED FACE'S BOUNDARY
-// ================================================================
+// The exact form of a trimmed face's boundary
+//
 // Turns one face's (u,v) trim loop — a polyline, which is what marching and
 // splitting produce — into the runs of real NURBS curves a B-rep trim loop is
 // made of, each with the 3-D edge curve that goes with it.
 //
-// WHY THIS IS NOT JUST `fitCurveToPoints` CALLED ONCE. A single smooth curve
-// cannot represent a boundary that has a corner in it. Asked for a square at a
-// 1e-3 bound the fitter refuses and says so — closest 3.1e-1 at its full
-// control-point ceiling — which is the right answer, because no spline of any
-// control-point count rounds a right angle to within a thousandth. A loop must
-// therefore be SPLIT at its corners first, one run per smooth stretch. That is
-// also the edge structure a B-rep is supposed to have: a corner of a face
-// boundary is a vertex, and the stretches between vertices are its edges.
+// Why this is not `fitCurveToPoints` called once: a single smooth curve cannot
+// represent a boundary that has a corner in it. Asked for a square at a 1e-3
+// bound the fitter refuses — closest 3.1e-1 at its full control-point ceiling
+// — because no spline of any control-point count rounds a right angle to
+// within a thousandth. A loop must therefore be split at its corners first,
+// one run per smooth stretch. That is also the edge structure a B-rep is
+// supposed to have: a corner of a face boundary is a vertex, and the stretches
+// between vertices are its edges.
 //
-// ⚠ A SMOOTH JOIN IS NOT A CORNER, and this deliberately does not split at one.
+// A smooth join is not a corner, and this deliberately does not split at one.
 // A stadium — two straight sides closed by two semicircular ends — is a single
-// tangent-continuous loop, and it comes back as ONE run, correctly: there is no
+// tangent-continuous loop, and it comes back as one run: there is no
 // vertex there for a B-rep to have. It costs control points (35 for a 50-point
 // loop) and buys a boundary with no false vertices in it. Splitting at
-// CURVATURE discontinuities as well would give the tighter description; it is
+// curvature discontinuities as well would give the tighter description; it is
 // not done here because a false vertex is a topology claim, and this module
 // would be making it up.
 //
-// ⚠⚠ THE PCURVE AND THE EDGE ARE TWO INDEPENDENT APPROXIMATIONS OF ONE
-// BOUNDARY, and they cannot be made to agree exactly: the surface image of a
+// The pcurve and the edge are two independent approximations of one
+// boundary, and they cannot be made to agree exactly: the surface image of a
 // NURBS curve in (u,v) is not itself a NURBS curve, for the same reason a
 // surface's isocurve along an arbitrary parameter path is not one. The
-// disagreement between them is precisely what an edge's TOLERANCE means in a
-// B-rep, so it is MEASURED here (`consistency`) rather than assumed, and
+// disagreement between them is precisely what an edge's tolerance means in a
+// B-rep, so it is measured here (`consistency`) rather than assumed, and
 // handed on to whoever writes the file. Every Brep Rhino writes carries the
 // same pair and the same measurement.
 import { fitCurveToPoints, maxDeviationFromCurve } from './fitcurve.mjs';
@@ -35,10 +35,10 @@ import { surfacePoint } from './surface.mjs';
 import { curvePoint } from './curve.mjs';
 
 // Above this turn between the incoming and outgoing segment, a loop vertex is
-// a CORNER. In radians, and it is a shape question rather than a tolerance
+// a corner. In radians, and it is a shape question rather than a tolerance
 // question — parameter space has no units, so no distance bound could serve.
 //
-// ⚠ THE VALUE IS A DISCRIMINATOR, NOT A TUNED CONSTANT. It has to sit above
+// The value is a discriminator, not a tuned constant. It has to sit above
 // the turn a smooth loop's own sampling shows and below the shallowest genuine
 // corner. A closed loop of N samples turns 360/N degrees per step, so 25
 // degrees admits any smooth loop sampled at 15 points or more, while the
@@ -52,10 +52,10 @@ function unitStep(a, b) {
   return L > 0 ? [dx / L, dy / L] : null;
 }
 
-// The loop is stored WITHOUT its repeated first point, the convention
+// The loop is stored without its repeated first point, the convention
 // everywhere in this project, so index arithmetic wraps.
 // Returns { runs, cornerIndices } where each run is a (u,v) point list that
-// STARTS at one corner and ENDS at the next — adjacent runs therefore SHARE
+// starts at one corner and ends at the next — adjacent runs therefore share
 // their meeting point, which is what makes the fitted curves meet exactly.
 // A loop with no corner comes back as one run carrying the repeated first
 // point, so it closes.
@@ -75,7 +75,7 @@ export function splitLoopAtCorners(uv, opts = {}) {
     if (Math.acos(cos) > cornerAngle) cornerIndices.push(i);
   }
 
-  // ONE corner is not a split. A loop with a single corner is still one run —
+  // One corner is not a split. A loop with a single corner is still one run —
   // it just happens to have a known place to start and end, which is exactly
   // where a closed run wants its seam anyway.
   if (cornerIndices.length < 2) {
@@ -100,7 +100,7 @@ export function splitLoopAtCorners(uv, opts = {}) {
   return { runs, cornerIndices };
 }
 
-// How far the SURFACE IMAGE of the fitted pcurve sits from the fitted edge
+// How far the surface image of the fitted pcurve sits from the fitted edge
 // curve — the number an ON_Edge's tolerance is supposed to be. Sampled along
 // the pcurve's own domain and measured against the edge curve by the same
 // conservative rule every other deviation here uses, so it can only
@@ -135,12 +135,12 @@ export function fitTrimLoop(srf, uv, opts = {}) {
   let worstPcurve = 0, worstEdge = 0, worstConsistency = 0, exactRuns = 0;
   for (const runUV of runsUV) {
     if (runUV.length < 2) continue;
-    // ⚠ EXACT ENDPOINTS, ALWAYS. A fitted run has to start and end exactly
+    // Exact endpoints, always. A fitted run has to start and end exactly
     // where its neighbors do, or the loop does not close and OpenNURBS
     // rejects it for not joining — a gap at a shared corner is a naked edge
     // wherever it appears. The fitter fixes its end control points to the
     // first and last input point for exactly this, at the cost of a marginally
-    // higher residual, and adjacent runs are handed the SAME shared point.
+    // higher residual, and adjacent runs are handed the same shared point.
     const pcurveFit = fitCurveToPoints(runUV.map(([u, v]) => [u, v, 0]), { tolerance, closed: false, exactEndpoints: true });
     if (!pcurveFit.ok) return { ok: false, reason: `the (u,v) boundary did not fit: ${pcurveFit.reason}` };
 

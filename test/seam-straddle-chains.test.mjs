@@ -1,13 +1,13 @@
-// A LOOP THAT STRADDLES A SEAM IS SEVERAL PIECES IN UV, AND THE POINT OF
-// seamStraddleChains IS TO SAY SO EXACTLY.
+// A loop that straddles a seam is several pieces in UV, and the point of
+// seamStraddleChains is to say so exactly.
 //
-// A closed region sitting across a closed direction's seam crosses it an EVEN
+// A closed region sitting across a closed direction's seam crosses it an even
 // number of times: out and back. It is not a wrap, and there is no single
 // chain that describes it in the surface's own parameters — the domain
-// rectangle genuinely cuts it in two. seamCrossingSpine refuses it by name
+// rectangle cuts it in two. seamCrossingSpine refuses it by name
 // for that reason; this function returns the pieces instead.
 //
-// THE INVARIANT THAT ACTUALLY PROVES IT, and the reason this file exists
+// The invariant that proves it, and the reason this file exists
 // rather than a shape check: closing each returned chain along its own edge
 // of the domain gives one polygon per piece, and their areas must sum to the
 // area of the whole region measured with the seam taken out of the way. That
@@ -74,7 +74,7 @@ function uvCircleUnwrapped(dom, aCentre, oCentre, ra, ro, n) {
   return pts;
 }
 
-test('SEAM STRADDLE: a loop across the seam returns one chain per piece, each ending on the domain boundary', () => {
+test('Seam straddle: a loop across the seam returns one chain per piece, each ending on the domain boundary', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;
@@ -82,7 +82,7 @@ test('SEAM STRADDLE: a loop across the seam returns one chain per piece, each en
   const ro = (dom.oMax - dom.oMin) * 0.12;
   const loop = uvCircle(dom, dom.aMin, oMid, ra, ro, 64);
 
-  // The fixture really is the case under test, not a wrap: seamCrossingSpine
+  // The fixture is the case under test, not a wrap: seamCrossingSpine
   // must refuse it, by that name.
   const wrapAttempt = seamCrossingSpine(loop, srf);
   assert.equal(wrapAttempt.ok, false);
@@ -96,13 +96,13 @@ test('SEAM STRADDLE: a loop across the seam returns one chain per piece, each en
   for (const chain of r.chains) {
     assert.ok(chain.length >= 3, 'each piece keeps its own samples');
     const first = chain[0], last = chain[chain.length - 1];
-    // Both ends land exactly ON the domain boundary — the property the
+    // Both ends land exactly on the domain boundary — the property the
     // arrangement needs, and the one a raw wrapped chain lacks.
     for (const end of [first, last]) {
       const onEdge = Math.abs(end[dom.ai] - dom.aMin) < 1e-12 || Math.abs(end[dom.ai] - dom.aMax) < 1e-12;
       assert.ok(onEdge, `chain end sits on the wrap axis boundary (got ${end[dom.ai]})`);
     }
-    // ...and on the SAME edge as each other, because this piece never crosses
+    // ...and on the same edge as each other, because this piece never crosses
     // the seam: it is one side of it.
     assert.ok(Math.abs(first[dom.ai] - last[dom.ai]) < 1e-12, 'both ends of a piece are on one edge');
     // Every interior sample stays on that side too.
@@ -112,13 +112,13 @@ test('SEAM STRADDLE: a loop across the seam returns one chain per piece, each en
     }
   }
 
-  // The two pieces sit on OPPOSITE edges — together they are the whole region.
+  // The two pieces sit on opposite edges — together they are the whole region.
   const edges = r.chains.map((c) => c[0][dom.ai]).sort((a, b) => a - b);
   assert.ok(Math.abs(edges[0] - dom.aMin) < 1e-12 && Math.abs(edges[1] - dom.aMax) < 1e-12,
     'one piece on each edge of the wrap axis');
 });
 
-test('SEAM STRADDLE: the pieces account for the whole region — closed areas sum to the unwrapped area', () => {
+test('Seam straddle: the pieces account for the whole region — closed areas sum to the unwrapped area', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;
@@ -129,7 +129,7 @@ test('SEAM STRADDLE: the pieces account for the whole region — closed areas su
   const r = seamStraddleChains(uvCircle(dom, dom.aMin, oMid, ra, ro, N), srf);
   assert.ok(r.ok, r.reason);
 
-  // Each chain closes along its own edge, so the chain read as a polygon IS
+  // Each chain closes along its own edge, so the chain read as a polygon is
   // the piece: the closing segment shoelace supplies runs straight down that
   // edge, which is exactly where the seam is.
   const total = r.chains.reduce((s, c) => s + Math.abs(signedArea2D(c)), 0);
@@ -138,14 +138,14 @@ test('SEAM STRADDLE: the pieces account for the whole region — closed areas su
     `pieces account for the whole region (${total} vs ${truth})`);
 });
 
-test('SEAM STRADDLE: an off-center straddle still splits into exactly the two real pieces', () => {
+test('Seam straddle: an off-center straddle still splits into exactly the two real pieces', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;
   const ra = (dom.aMax - dom.aMin) * 0.1;
   const ro = (dom.oMax - dom.oMin) * 0.1;
   const N = 96;
-  // Center pushed off the seam so the two pieces are genuinely unequal — an
+  // Center pushed off the seam so the two pieces are unequal — an
   // even split would pass a symmetric fixture for the wrong reason.
   const centre = dom.aMin + ra * 0.4;
 
@@ -153,17 +153,17 @@ test('SEAM STRADDLE: an off-center straddle still splits into exactly the two re
   assert.ok(r.ok, r.reason);
   assert.equal(r.chains.length, 2);
   const areas = r.chains.map((c) => Math.abs(signedArea2D(c))).sort((a, b) => a - b);
-  assert.ok(areas[0] > 0 && areas[1] / areas[0] > 1.5, 'the fixture is genuinely lopsided');
+  assert.ok(areas[0] > 0 && areas[1] / areas[0] > 1.5, 'the fixture is lopsided');
   const total = areas[0] + areas[1];
   const truth = Math.abs(signedArea2D(uvCircleUnwrapped(dom, centre, oMid, ra, ro, N)));
   assert.ok(Math.abs(total - truth) < truth * 1e-9, `pieces still account for the whole (${total} vs ${truth})`);
 });
 
-test('SEAM STRADDLE: a once-around wrap is refused here by name, not silently mishandled', () => {
+test('Seam straddle: a once-around wrap is refused here by name, not silently mishandled', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;
-  // A loop that genuinely goes all the way around: the wrap case, which
+  // A loop that goes all the way around: the wrap case, which
   // belongs to seamCrossingSpine.
   const n = 64;
   const loop = [];
@@ -177,12 +177,12 @@ test('SEAM STRADDLE: a once-around wrap is refused here by name, not silently mi
   const r = seamStraddleChains(loop, srf);
   assert.equal(r.ok, false);
   assert.equal(r.code, 'not-a-straddle');
-  // ...and the wrap path accepts the same loop, so the two are a genuine
+  // ...and the wrap path accepts the same loop, so the two are a
   // partition of the cases rather than both refusing.
   assert.equal(seamCrossingSpine(loop, srf).ok, true);
 });
 
-test('SEAM STRADDLE: a loop nowhere near a seam is reported as not entangled at all', () => {
+test('Seam straddle: a loop nowhere near a seam is reported as not entangled at all', () => {
   const srf = wall();
   const dom = axisOf(srf);
   const oMid = (dom.oMin + dom.oMax) / 2;

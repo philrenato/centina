@@ -1,24 +1,17 @@
-// ADAPTIVE V-DIRECTION RENDER-MESH DENSITY — see
-// kernel/surface.mjs's own `tessellationVSamples` header comment for the
-// full derivation. Short version: the rounded-Pipe-corner fix in
-// kernel/sweep.mjs only proves the swept NURBS SURFACE itself is fold-free
-// per real rail span — the app's own `tessellateSurface`, the
-// function that actually builds the mesh on screen, walked the V
-// direction with a PLAIN UNIFORM loop, blind to real span boundaries,
-// which can skip clean over a genuinely narrow (but still smooth) span at
-// the shipped default `vRes=96` and connect two far-apart points with one
-// straight mesh edge — a real, visible fold-like facet in the ACTUAL
-// render, confirmed directly below. `tessellationVSamples` fixes this by
-// guaranteeing a minimum sample density inside every genuine span.
+// Adaptive V-direction render-mesh density — see kernel/surface.mjs's
+// `tessellationVSamples` header comment for the full derivation. A swept
+// NURBS surface can be fold-free per rail span while a render mesh that walks
+// V with a plain uniform loop, blind to span boundaries, skips over a narrow
+// (but smooth) span at the default `vRes=96` and connects two far-apart
+// points with one straight mesh edge — a visible fold-like facet.
+// `tessellationVSamples` guarantees a minimum sample density inside every
+// span.
 //
-// A SECOND, separate, more severe thing the same review surfaced and this
-// file also confirms directly: the EXACT reproduction fixture (a
-// 2mm fillet next to a swept 5mm-radius tube) is not a sampling artifact at
-// all — the tube's cross-section radius exceeds the fillet's own radius of
-// curvature, so the surface GENUINELY self-intersects there. No amount of
-// render-mesh density fixes that (confirmed below: it gets slightly WORSE,
-// not better, as density increases) — named here as a real, separate,
-// NOT-fixed-here limitation, not silently asserted away.
+// Known limitation, asserted below: with a 2mm fillet next to a swept
+// 5mm-radius tube, the tube's cross-section radius exceeds the fillet's
+// radius of curvature, so the surface self-intersects there. No render-mesh
+// density fixes that; the fold reading gets slightly worse, not better, as
+// density increases.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,10 +43,9 @@ function angleBetween(n1, n2) {
 
 // Mirrors tessellateSurface's own V-direction mesh construction exactly
 // (uniform uRes across U, the vSamples list under test across V) and
-// measures the worst adjacent-face-normal angle ACROSS the full V range —
-// including straight across a genuine span boundary, unlike the prior
-// fix's own per-span-only verification, which structurally never compares
-// across a joint at all (the real gap this file exists to close).
+// measures the worst adjacent-face-normal angle across the full V range,
+// including straight across a span boundary; a per-span check never
+// compares across a joint.
 function worstFoldAcrossV(srf, uRes, vSamples) {
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const rows = vSamples.map((v) => {
@@ -80,17 +72,17 @@ function plainUniformVSamples(srf, vRes) {
   return out;
 }
 
-test('tessellationVSamples: a single-span surface (no genuine internal V break) is BYTE-IDENTICAL to the plain uniform array — zero regression risk for the overwhelming common case', () => {
+test('tessellationVSamples: a single-span surface (no internal V break) is byte-identical to the plain uniform array', () => {
   const rail = irregularFixtureRail(2); // still multi-span; use a plain unfilleted 2-point line rail for the true single-span case
   const straightRail = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [100, 0, 0, 1]] };
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], PIPE_RADIUS, 4);
   const srf = sweep1Rigid(straightRail, profile);
   const plain = plainUniformVSamples(srf, 96);
   const adaptive = tessellationVSamples(srf, 96, 48);
-  assert.deepEqual(adaptive, plain, 'a plain straight-line rail has no genuine internal V knot at all, so tessellationVSamples must take the exact untouched uniform path');
+  assert.deepEqual(adaptive, plain, 'a plain straight-line rail has no internal V knot at all, so tessellationVSamples must take the exact untouched uniform path');
 });
 
-test('tessellationVSamples: the REAL, actually-rendered mesh (not a per-span reimplementation) genuinely folds at the shipped default vRes=96 on a MILDER, non-self-intersecting irregular corner (15mm radius, comfortably above the swept 5mm tube radius) — and this fix closes most of that gap', () => {
+test('tessellationVSamples: the rendered mesh construction (not a per-span reimplementation) folds at the default vRes=96 on a milder, non-self-intersecting irregular corner (15mm radius, comfortably above the swept 5mm tube radius), and adaptive sampling closes most of that gap', () => {
   const rail = irregularFixtureRail(15);
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], PIPE_RADIUS, 4);
   const srf = sweep1Rigid(rail, profile);
@@ -98,12 +90,12 @@ test('tessellationVSamples: the REAL, actually-rendered mesh (not a per-span rei
   const NEW = tessellationVSamples(srf, 96, 48);
   const worstOld = worstFoldAcrossV(srf, 24, OLD);
   const worstNew = worstFoldAcrossV(srf, 24, NEW);
-  assert.ok(worstOld > 10, `sanity: the OLD plain-uniform render mesh should show a real double-digit fold here (this is what the review caught), got ${worstOld.toFixed(3)} degrees`);
-  assert.ok(worstNew < 5, `the NEW adaptively-densified render mesh should bring the SAME real fold reading under 5 degrees, got ${worstNew.toFixed(3)} degrees (was ${worstOld.toFixed(3)} degrees OLD)`);
-  assert.ok(worstNew < worstOld / 2, `the fix should be a genuine, large improvement, not a marginal one — NEW ${worstNew.toFixed(3)} vs OLD ${worstOld.toFixed(3)}`);
+  assert.ok(worstOld > 10, `sanity: the plain-uniform render mesh should show a double-digit fold here, got ${worstOld.toFixed(3)} degrees`);
+  assert.ok(worstNew < 5, `the adaptively densified render mesh should bring the same fold reading under 5 degrees, got ${worstNew.toFixed(3)} degrees (uniform: ${worstOld.toFixed(3)} degrees)`);
+  assert.ok(worstNew < worstOld / 2, `adaptive sampling should be a large improvement, not a marginal one — adaptive ${worstNew.toFixed(3)} vs uniform ${worstOld.toFixed(3)}`);
 });
 
-test('tessellationVSamples: the milder-disparity improvement holds at a real live-app resolution sweep (vRes 24/96/192), not just one cherry-picked value', () => {
+test('tessellationVSamples: the milder-disparity improvement holds across a resolution sweep (vRes 24/96/192), not just one value', () => {
   const rail = irregularFixtureRail(15);
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], PIPE_RADIUS, 4);
   const srf = sweep1Rigid(rail, profile);
@@ -112,11 +104,11 @@ test('tessellationVSamples: the milder-disparity improvement holds at a real liv
     const NEW = tessellationVSamples(srf, vRes, 48);
     const worstOld = worstFoldAcrossV(srf, 24, OLD);
     const worstNew = worstFoldAcrossV(srf, 24, NEW);
-    assert.ok(worstNew <= worstOld, `at vRes=${vRes}, the fix should never be WORSE than the plain uniform baseline, got NEW ${worstNew.toFixed(3)} vs OLD ${worstOld.toFixed(3)}`);
+    assert.ok(worstNew <= worstOld, `at vRes=${vRes}, adaptive sampling should never be worse than the plain uniform baseline, got adaptive ${worstNew.toFixed(3)} vs uniform ${worstOld.toFixed(3)}`);
   }
 });
 
-test('HONEST, SEPARATE limitation: the exact severe reproduction fixture (2mm fillet radius next to a swept 5mm tube) genuinely self-intersects — this fix does NOT resolve it, and density makes the reading slightly WORSE, not better, confirming it is real geometry, not a sampling artifact', () => {
+test('known limitation: a 2mm fillet radius next to a swept 5mm tube self-intersects — adaptive sampling does not resolve it, and density makes the reading slightly worse, not better, so it is geometry, not a sampling artifact', () => {
   const rail = irregularFixtureRail(2);
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], PIPE_RADIUS, 4);
   const srf = sweep1Rigid(rail, profile);
@@ -124,16 +116,16 @@ test('HONEST, SEPARATE limitation: the exact severe reproduction fixture (2mm fi
   const NEW = tessellationVSamples(srf, 96, 48);
   const worstOld = worstFoldAcrossV(srf, 24, OLD);
   const worstNew = worstFoldAcrossV(srf, 24, NEW);
-  assert.ok(worstOld > 150, `sanity: the OLD render already reads as a near-total fold here (real self-intersection), got ${worstOld.toFixed(3)} degrees`);
-  assert.ok(worstNew > 150, `the fix must NOT be asserted to resolve a genuine self-intersection — it should stay large, got ${worstNew.toFixed(3)} degrees (was ${worstOld.toFixed(3)} degrees)`);
+  assert.ok(worstOld > 150, `sanity: the uniform render reads as a near-total fold here (self-intersection), got ${worstOld.toFixed(3)} degrees`);
+  assert.ok(worstNew > 150, `adaptive sampling does not resolve a self-intersection — the reading should stay large, got ${worstNew.toFixed(3)} degrees (uniform: ${worstOld.toFixed(3)} degrees)`);
 });
 
-test('the self-intersection threshold is real: sweeping cornerRadius from below to above the swept tube radius (5mm) shows a sharp transition, confirming radius-of-curvature-vs-tube-radius as the true mechanism, not a coincidence of one fixture', () => {
+test('the self-intersection threshold: sweeping cornerRadius from below to above the swept tube radius (5mm) shows a sharp transition, confirming radius-of-curvature-vs-tube-radius as the true mechanism, not a coincidence of one fixture', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], PIPE_RADIUS, 4);
   const below = sweep1Rigid(irregularFixtureRail(4.9), profile);
   const above = sweep1Rigid(irregularFixtureRail(5.1), profile);
   const foldBelow = worstFoldAcrossV(below, 24, tessellationVSamples(below, 96, 48));
   const foldAbove = worstFoldAcrossV(above, 24, tessellationVSamples(above, 96, 48));
-  assert.ok(foldBelow > 100, `just BELOW the tube radius (cornerRadius=4.9 < radius=5), the fold should still read as a real self-intersection, got ${foldBelow.toFixed(3)} degrees`);
-  assert.ok(foldAbove < foldBelow, `just ABOVE the tube radius (cornerRadius=5.1 > radius=5), the fold should already be markedly smaller, got ${foldAbove.toFixed(3)} degrees vs ${foldBelow.toFixed(3)} below`);
+  assert.ok(foldBelow > 100, `just below the tube radius (cornerRadius=4.9 < radius=5), the fold should still read as a self-intersection, got ${foldBelow.toFixed(3)} degrees`);
+  assert.ok(foldAbove < foldBelow, `just above the tube radius (cornerRadius=5.1 > radius=5), the fold should already be markedly smaller, got ${foldAbove.toFixed(3)} degrees vs ${foldBelow.toFixed(3)} below`);
 });

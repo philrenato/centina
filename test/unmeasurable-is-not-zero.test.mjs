@@ -1,15 +1,15 @@
-// A MEASUREMENT THAT COULD NOT BE MADE MUST NOT BE REPORTED AS A MEASURED VALUE.
+// A measurement that could not be made must not be reported as a measured value.
 //
 // Every case below is one bisection or one sampling march that can fail at every
-// station. Each of them used to fall out of its loop with its accumulator still
-// sitting at the value it was initialised to — 0 for a running maximum, 0 for a
-// bisection's lower bound — and hand that back as a number somebody took. The
+// station. Unguarded, each falls out of its loop with its accumulator still
+// sitting at the value it was initialized to — 0 for a running maximum, 0 for a
+// bisection's lower bound — and hands that back as a number. The
 // caller then cannot tell "there is no room" from "I could not measure the room",
 // and in the worst case builds degenerate geometry out of the difference.
 //
-// What each fix owes, and what these tests hold it to:
+// What these tests hold each case to:
 //   · an UNMEASURABLE case yields null, or a refusal by name — never 0;
-//   · a MEASURABLE case is bit-for-bit what it was;
+//   · a MEASURABLE case returns its measured value;
 //   · and for Shell specifically, a solid whose safe thickness cannot be
 //     measured REFUSES rather than emitting a zero-thickness shell.
 import { test } from 'node:test';
@@ -20,11 +20,9 @@ import { chamferFlatnessDeviation, smoothProfileDeviation, blendSurfaceToToleran
 import { filletPolygon, filletOpenPolyline } from '../kernel/primitives.mjs';
 import { surfacePoint } from '../kernel/surface.mjs';
 
-// ---------------------------------------------------------------------------
 // fixtures — a box and a prism as flat bilinear panels, the exact shape the Box
 // primitive builds, constructed HERE so no test grades the kernel with its own
 // pencil.
-// ---------------------------------------------------------------------------
 function bilinearPanel(p00, p10, p01, p11) {
   return { srf: {
     degU: 1, knotsU: [0, 0, 1, 1], degV: 1, knotsV: [0, 0, 1, 1],
@@ -43,21 +41,20 @@ function boxPanels(hx, hy, hz) {
   ];
 }
 
-// ---------------------------------------------------------------------------
-// 1. shellSolid — THE ONE THAT DID NOT REFUSE.
+// 1. shellSolid — a bisection that fails everywhere must refuse.
 //
 // `shellWallFits` succeeds TRIVIALLY at t = 0 (the inner surface is the outer
-// surface; nothing moved), so a bisection that failed everywhere left safeLo at
-// its starting bound of 0, the clamp took the wall to 0, the confirming call got
-// that trivial success back, and a zero-thickness shell was committed.
+// surface; nothing moved), so a bisection that fails everywhere leaves safeLo at
+// its starting bound of 0; unguarded, the clamp takes the wall to 0, the
+// confirming call gets that trivial success back, and a zero-thickness shell is
+// committed.
 //
 // The reachable version of that: a solid flat enough that its opposite faces WELD
 // into one corner set. Two anti-parallel planes then meet at each corner, which
 // `shellSolveInner` refuses as contradictory once their residual passes its 1e-6
 // tolerance — so the bisection converges on 5e-7mm, an absolute constant that says
-// nothing about the solid, and a 0.0000005mm "shell" was built and announced as
-// "auto-clamped to 0.00mm".
-// ---------------------------------------------------------------------------
+// nothing about the solid; unguarded, a 0.0000005mm "shell" is built and reported
+// as "auto-clamped to 0.00mm".
 test('shellSolid: a solid whose safe thickness cannot be measured REFUSES BY NAME instead of building a zero-thickness shell', () => {
   const flat = boxPanels(20, 20, 1e-9);   // 40 x 40 x 0.000000002 mm
   assert.throws(() => shellSolid(flat, [], 2), (e) => {
@@ -77,7 +74,7 @@ test('shellSolid: an ordinary solid is completely unchanged — same wall, same 
     `the safe maximum on a half-extent-20 box is still 20mm (got ${r.safeMaxDistance})`);
 });
 
-test('shellSolid: a genuinely thin but genuinely measurable solid still shells — the refusal is not a blanket ban on thin walls', () => {
+test('shellSolid: a thin but measurable solid still shells — the refusal is not a blanket ban on thin walls', () => {
   const r = shellSolid(boxPanels(20, 20, 1e-3), [], 2);
   assert.ok(r.clamped, 'a 2mm wall does not fit a 0.002mm-thick plate, so it clamps');
   assert.ok(r.appliedDistance > 9e-4 && r.appliedDistance < 1e-3,
@@ -93,10 +90,8 @@ test('shellSolid: no accepted result can carry a zero wall — the class of defe
   }
 });
 
-// ---------------------------------------------------------------------------
-// 2. safeInwardOffset / shellRevolvedSolid — the same bisection, surfaced as
-//    "safe maximum computes as 0.0000mm".
-// ---------------------------------------------------------------------------
+// 2. safeInwardOffset / shellRevolvedSolid — the same bisection, whose failure
+//    would surface as "safe maximum computes as 0.0000mm".
 const cylinder = (radius, height) =>
   makeCylinderProfile({ center: [0, 0, 0], axis: [0, 0, 1], refDir: [1, 0, 0], radius, height });
 
@@ -120,7 +115,7 @@ test('shellRevolvedSolid: refuses by name on a profile whose safe maximum cannot
   assert.throws(() => shellRevolvedSolid(cylinder(1e-7, 2e-7), 5e-8), (e) => {
     assert.match(e.message, /^shellRevolvedSolid: /);
     assert.match(e.message, /could not be measured/);
-    assert.doesNotMatch(e.message, /computes as 0\.0000mm/, 'the fabricated zero is gone from the message too');
+    assert.doesNotMatch(e.message, /computes as 0\.0000mm/, 'the message never quotes a fabricated zero');
     return true;
   });
 });
@@ -132,12 +127,10 @@ test('shellRevolvedSolid: an ordinary cylinder still shells, with the wall it wa
   assert.ok(r.safeMaxDistance > 9.9, `and its safe maximum is still the measured ~10mm (got ${r.safeMaxDistance})`);
 });
 
-// ---------------------------------------------------------------------------
-// 3. chamferFlatnessDeviation / smoothProfileDeviation — THE INVERTED CASE.
-//    An unmeasured surface used to certify as PERFECTLY FLAT (ok: true,
-//    worst: 0) and `blendSurfaceToTolerance` stopped refining on it. Here the
-//    honest answer is "unknown", and unknown must not read as perfect.
-// ---------------------------------------------------------------------------
+// 3. chamferFlatnessDeviation / smoothProfileDeviation — the inverted case.
+//    Unguarded, an unmeasured surface certifies as perfectly flat (ok: true,
+//    worst: 0) and `blendSurfaceToTolerance` stops refining on it. Here the
+//    answer is "unknown", and unknown must not read as perfect.
 // A flat degree-1 patch, and an evaluator that refuses every station — the shape
 // of a measure that cannot be taken, whatever the reason for it.
 const FLAT = {
@@ -156,7 +149,7 @@ test('chamferFlatnessDeviation: a surface no station could be sampled on reports
 test('chamferFlatnessDeviation: a surface that CAN be sampled is unchanged — a flat patch measures flat, from real stations', () => {
   const d = chamferFlatnessDeviation(FLAT, surfacePoint);
   assert.equal(d.ok, true, d.reason);
-  assert.ok(d.worst < 1e-12, `a genuinely flat patch is genuinely flat (got ${d.worst})`);
+  assert.ok(d.worst < 1e-12, `a flat patch measures flat (got ${d.worst})`);
   assert.ok(d.stations > 0, 'and it says how many stations that verdict rests on');
 });
 
@@ -167,7 +160,7 @@ test('smoothProfileDeviation: same rule — no measurable station means NOT ok, 
   assert.match(d.reason, /UNKNOWN rather than zero/);
 });
 
-test('blendSurfaceToTolerance: an unmeasurable surface stops the refinement WITH THE MEASURE\'S OWN REASON, instead of being certified at the first attempt', () => {
+test('blendSurfaceToTolerance: an unmeasurable surface stops the refinement with the measure\'s own reason, instead of being certified at the first attempt', () => {
   const radius = 4;
   const sectionAt = (t) => {
     const s = rollingBallSection({ point: [0, 0, t * 48], coNormalA: [0, 1, 0], coNormalB: [1, 0, 0], theta: Math.PI / 2, radius });
@@ -182,12 +175,10 @@ test('blendSurfaceToTolerance: an unmeasurable surface stops the refinement WITH
     `the measure's own reason survives to the caller (got: ${r.reason})`);
 });
 
-// ---------------------------------------------------------------------------
-// 4. filletPolygon / filletOpenPolyline — the user-facing MESSAGE lied. Both
-//    other consumers were already guarded (`> 1e-6`, `> 0`), so the cost was a
-//    status line offering "the largest radius these corners allow is 0.0000mm"
+// 4. filletPolygon / filletOpenPolyline — the user-facing message. Both other
+//    consumers guard (`> 1e-6`, `> 0`), so the exposure is a status line
+//    offering "the largest radius these corners allow is 0.0000mm"
 //    for a corner spacing that was never measurable.
-// ---------------------------------------------------------------------------
 const Z = [0, 0, 1];
 
 test('filletPolygon: a too-large radius on a real polygon still reports a real, retriable maxSafeRadius', () => {
@@ -198,7 +189,7 @@ test('filletPolygon: a too-large radius on a real polygon still reports a real, 
   assert.equal(filletPolygon(pts, tooLarge.maxSafeRadius, Z).ok, true, 'and it succeeds when retried');
 });
 
-test('filletPolygon / filletOpenPolyline: the Infinity branch that used to answer 0 is UNREACHABLE — normalize refuses a sub-1e-12 edge first, so the fabricated 0 was dead code, and it is now null in any case', () => {
+test('filletPolygon / filletOpenPolyline: the Infinity branch is UNREACHABLE — normalize refuses a sub-1e-12 edge first, and the branch answers null in any case', () => {
   // Both refusals compute `needed / edgeLen`, so only an edge of length 0 (or
   // under 1e-12, which is `normalize`'s own floor) sends worstRatio to Infinity.
   // But every such edge is also one whose direction each adjacent corner has to

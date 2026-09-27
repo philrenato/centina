@@ -1,18 +1,15 @@
-// AN OPEN CUT CURVE CROSSING A CLOSED SURFACE'S SEAM.
+// An open cut curve crossing a closed surface's seam.
 //
-// Every seam path in this kernel used to assume a CLOSED cut curve, and no
-// fixture could reach the open case: two closed surfaces always meet in a
-// closed circle. A sphere meets a box PANEL in an open ARC — and that arc
-// can cross the sphere's own seam meridian in its middle. unwrapSeamCut's
-// closed-in-3D gate correctly declined to run the cyclic wrap test on it,
-// then fell through to the RAW uv, which is only valid for a curve that
-// never touches the seam at all. The result was a phantom chord across
+// Two closed surfaces meet in a closed curve, but a sphere meets a box PANEL
+// in an open ARC — and that arc can cross the sphere's own seam meridian in
+// its middle. unwrapSeamCut's closed-in-3D gate correctly declines to run the
+// cyclic wrap test on it; the RAW uv is only valid for a curve that never
+// touches the seam at all, and using it here gives a phantom chord across
 // almost the whole face, an arrangement split along that phantom, and a
 // boolean built from fragments that are not real.
 //
 // The unit tests below pin the split itself. The end-to-end test at the
-// bottom is the one that would actually have caught the bug: a real sphere
-// unioned with a real box straddling its seam, against the SAME pair with
+// bottom unions a real sphere with a real box straddling its seam, against the SAME pair with
 // the box moved clear of the seam as a control — so anything that differs
 // between the two runs is attributable to the seam and nothing else.
 import { test } from 'node:test';
@@ -38,7 +35,7 @@ function closedInV() {
 
 const V_MAX = 4;
 
-test('SEAM OPEN CHAIN: an open arc crossing the seam splits into two pieces, each reaching the domain edge', () => {
+test('seam open chain: an open arc crossing the seam splits into two pieces, each reaching the domain edge', () => {
   const srf = closedInV();
   // An open chain walking UP in v, jumping the seam once between samples 2
   // and 3 — the shape a real arc has where it crosses the meridian.
@@ -72,7 +69,7 @@ test('SEAM OPEN CHAIN: an open arc crossing the seam splits into two pieces, eac
   );
 });
 
-test('SEAM OPEN CHAIN: the crossing u is interpolated across the jump, not snapped to a neighboring sample', () => {
+test('seam open chain: the crossing u is interpolated across the jump, not snapped to a neighboring sample', () => {
   const srf = closedInV();
   // Deliberately asymmetric: the jump runs 3.9 -> 0.1, so the crossing sits
   // 3/4 of the way through it. A crossing that merely reused a neighboring
@@ -86,7 +83,7 @@ test('SEAM OPEN CHAIN: the crossing u is interpolated across the jump, not snapp
   assert.ok(Math.abs(uSeam - (2.0 + (3.0 - 2.0) * frac)) < 1e-9, `expected the interpolated crossing u, got ${uSeam}`);
 });
 
-test('SEAM OPEN CHAIN: two crossings give three pieces', () => {
+test('seam open chain: two crossings give three pieces', () => {
   const srf = closedInV();
   const chain = [
     [1.0, 3.8], [1.1, 3.95],
@@ -102,7 +99,7 @@ test('SEAM OPEN CHAIN: two crossings give three pieces', () => {
   assert.deepEqual(r.chains[2][r.chains[2].length - 1], chain[chain.length - 1]);
 });
 
-test('SEAM OPEN CHAIN: a chain nowhere near the seam is reported as not entangled at all', () => {
+test('seam open chain: a chain nowhere near the seam is reported as not entangled at all', () => {
   const srf = closedInV();
   const chain = [[1.0, 1.0], [1.1, 1.2], [1.2, 1.4], [1.3, 1.6]];
   const r = seamOpenChains(chain, srf);
@@ -113,7 +110,7 @@ test('SEAM OPEN CHAIN: a chain nowhere near the seam is reported as not entangle
   assert.equal(r.code, 'no-seam-crossing');
 });
 
-test('SEAM OPEN CHAIN: reading the same open chain CYCLICALLY misreads it — which is why this sibling exists', () => {
+test('seam open chain: reading the same open chain CYCLICALLY misreads it — which is why this sibling exists', () => {
   const srf = closedInV();
   // One real crossing in the middle. Read cyclically, the fake last->first
   // step counts as a second crossing, so the loop reader sees an even count
@@ -129,16 +126,13 @@ test('SEAM OPEN CHAIN: reading the same open chain CYCLICALLY misreads it — wh
   const cyclic = seamStraddleChains(chain, srf);
   // The cyclic reading is not merely different, it is unusable here: it
   // either refuses outright or returns a piece count that does not describe
-  // this curve. Pinned so a future "simplification" that drops the open
-  // sibling and reuses the loop reader fails loudly instead of silently
-  // handing the arrangement a phantom chord again.
+  // this curve. Pinned so replacing the open sibling with the loop reader
+  // fails here instead of silently handing the arrangement a phantom chord.
   const cyclicIsWrong = !cyclic.ok || cyclic.chains.length !== 2;
   assert.ok(cyclicIsWrong, 'the cyclic reader must NOT quietly produce the right answer for an open chain');
 });
 
-// ---------------------------------------------------------------------------
-// END TO END — the test that would have caught the reported bug.
-// ---------------------------------------------------------------------------
+// End to end — a sphere unioned with a box whose cut arc crosses its seam.
 
 const R = 170.5;
 const BH = [142, 113, 113];
@@ -204,7 +198,7 @@ function cutCurves(A, B) {
   return out;
 }
 
-test('SEAM OPEN CHAIN: a box containing the sphere\'s seam meridian still unions into a closed solid', () => {
+test('seam open chain: a box containing the sphere\'s seam meridian still unions into a closed solid', () => {
   // makeCircle starts at +X, so the sphere's seam is the half-plane y=0,
   // x>0. A box on the +X side with |dy| under its own Y half-extent (113)
   // therefore CONTAINS that seam; dy=180 puts it clear. Only the Y offset

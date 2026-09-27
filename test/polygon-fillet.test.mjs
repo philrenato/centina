@@ -20,13 +20,13 @@ function arcCrv(c) {
   return { degree: 2, knots: [0, 0, 0, 1, 1, 1], ctrlPts: [[...c.p0, 1], [...c.apex, c.weight], [...c.p2, 1]] };
 }
 // Independent cross-check: the fillet construction never computes a
-// geometric CENTER at all (apex+trim+weight only, the tangent-line-
+// geometric center at all (apex+trim+weight only, the tangent-line-
 // intersection formulation) — this derives a circumcenter from 3 sampled
 // arc points via the plain, generic, sign-agnostic circumcenter formula
-// (works for ANY 3 non-collinear points, convex or reflex, no assumption
-// about which "side" the fillet bulges toward) and then confirms OTHER,
+// (works for any 3 non-collinear points, convex or reflex, no assumption
+// about which "side" the fillet bulges toward) and then confirms other,
 // independently-sampled points on the same arc sit at exactly that
-// circumradius from it — a real proof the whole arc is one genuine circle,
+// circumradius from it — a proof the whole arc is one circle,
 // not just that 3 arbitrary points happen to fit some circle.
 function circumcenter(a, b, c) {
   const ax = a[0], ay = a[1], bx = b[0], by = b[1], cx = c[0], cy = c[1];
@@ -54,7 +54,7 @@ test('filletCornerArc on a square (90deg convex corner): trim=radius, weight=cos
   assert.ok(dist(p2MinusApex, dOut) < 1e-9, 'apex->p2 direction matches the outgoing edge exactly');
 });
 
-test('filletCornerArc: the constructed arc is a genuine circle of the requested radius, independently cross-checked via a circumcenter derived from 3 sampled points, then verified against OTHER points', () => {
+test('filletCornerArc: the constructed arc is a circle of the requested radius, independently cross-checked via a circumcenter derived from 3 sampled points, then verified against other points', () => {
   const pts = square(10);
   const radius = 2.5;
   const c = filletCornerArc(pts[1], pts[0], pts[2], radius, Z);
@@ -68,7 +68,7 @@ test('filletCornerArc: the constructed arc is a genuine circle of the requested 
   }
 });
 
-test('filletCornerArc handles a REFLEX corner (turn angle < 0, e.g. a star polygon\'s inner vertex) with the same formula, no sign-flip special case needed by the caller', () => {
+test('filletCornerArc handles a reflex corner (turn angle < 0, e.g. a star polygon\'s inner vertex) with the same formula, no sign-flip special case needed by the caller', () => {
   // A simple reflex vertex: path goes A(0,0) -> V(1,0.3) -> B(2,0), a shallow
   // "dent" — the turn at V is a right turn (reflex from the interior of the
   // upper region), i.e. phi < 0.
@@ -84,7 +84,7 @@ test('filletCornerArc handles a REFLEX corner (turn angle < 0, e.g. a star polyg
   }
 });
 
-test('filletCornerArc refuses a straight (non-corner) point honestly', () => {
+test('filletCornerArc refuses a straight (non-corner) point', () => {
   const c = filletCornerArc([1, 0, 0], [0, 0, 0], [2, 0, 0], 1, Z);
   assert.equal(c.ok, false);
 });
@@ -112,13 +112,13 @@ test('filletPolygon on a square: every corner becomes an exact quarter-circle ar
   }
 });
 
-test('filletPolygon refuses honestly when the radius is too large for the polygon\'s own edge lengths (adjacent fillets would overlap), and reports a usable maxSafeRadius', () => {
+test('filletPolygon refuses when the radius is too large for the polygon\'s own edge lengths (adjacent fillets would overlap), and reports a usable maxSafeRadius', () => {
   const half = 10; // 20mm square edges
   const pts = square(half);
   const tooLarge = filletPolygon(pts, 11, Z); // trim would be 11mm > 10mm half-edge -> overlaps well past the midpoint
   assert.equal(tooLarge.ok, false);
-  assert.ok(tooLarge.maxSafeRadius > 0 && tooLarge.maxSafeRadius < 11, 'a real, smaller safe radius should be reported');
-  // The reported maxSafeRadius should ACTUALLY be safe when re-tried.
+  assert.ok(tooLarge.maxSafeRadius > 0 && tooLarge.maxSafeRadius < 11, 'a smaller safe radius should be reported');
+  // The reported maxSafeRadius should be safe when re-tried.
   const retried = filletPolygon(pts, tooLarge.maxSafeRadius, Z);
   assert.equal(retried.ok, true, 'the reported maxSafeRadius should itself succeed when retried');
   // And just barely above it should still fail.
@@ -136,7 +136,7 @@ test('filletPolygon on a regular hexagon: a modest radius succeeds and every arc
   for (const arc of arcs) assert.ok(Math.abs(arc.weight - expectedWeight) < 1e-9);
 });
 
-test('filletPolygon on a low-side-count triangle: even a small radius can be geometrically infeasible if requested too large, and a genuinely small one still succeeds', () => {
+test('filletPolygon on a low-side-count triangle: even a small radius can be geometrically infeasible if requested too large, and a small one still succeeds', () => {
   const pts = regularPolygon(3, 10); // a small equilateral triangle - short edges, sharp 60deg corners
   const tiny = filletPolygon(pts, 0.5, Z);
   assert.equal(tiny.ok, true, 'a small enough radius on a triangle should still succeed');

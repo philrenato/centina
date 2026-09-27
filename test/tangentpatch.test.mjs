@@ -12,14 +12,14 @@ const nrm3 = (v) => { const L = Math.hypot(v[0], v[1], v[2]); return L > 0 ? [v[
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const angAbs = (a, b) => Math.acos(Math.max(-1, Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2])))) * 180 / Math.PI;
 
-/* ═══ THE FIXTURE ═══════════════════════════════════════════════════════════
-   An n-sided hole cut in a TWISTED analytic surface. The hole's boundary is a
+/* The fixture.
+   An n-sided hole cut in a twisted analytic surface. The hole's boundary is a
    polygon in the surface's own parameters, so every boundary curve lies on the
    surface exactly and the cross-boundary tangent field is the surface's own
    tangent plane pushed inward — which makes the surface itself the thing the
    patch has to be tangent to, at every sample, with no fitting anywhere.
 
-   ⚠ THE SURFACE HAS A NON-ZERO MIXED SECOND DERIVATIVE ON PURPOSE. A fixture
+   The surface has a non-zero mixed second derivative on purpose. A fixture
    built on a cylinder or a sphere of revolution has vanishing or symmetric
    twist at the hole's corners, which is exactly the condition the twist
    question is about, so such a fixture cannot ask it.                        */
@@ -55,13 +55,13 @@ function holeInSurface(n, { R = 1.2, u0 = 0.4, v0 = -0.3, wobble = 0, warp = 1 }
   return { n, boundary, tangent, surfaceNormalAt };
 }
 
-/** The same hole, with a large component ADDED ALONG each boundary to the
+/** The same hole, with a large component added along each boundary to the
  *  cross-tangent field.
  *
  *  That component is legitimate: it lies in the same tangent plane, so the G1
  *  request is unchanged and only the interior shape moves. What it does change
- *  is the ORIENTATION POLL — the chord from a boundary point to the far center
- *  swings past perpendicular partway along a side, so the sign test genuinely
+ *  is the orientation poll — the chord from a boundary point to the far center
+ *  swings past perpendicular partway along a side, so the sign test
  *  disagrees with itself along that side.
  */
 function shearedHole(n, k, { R = 1.2, u0 = 0.4, v0 = -0.3, wobble = 0.25 } = {}) {
@@ -126,12 +126,12 @@ function patchNormalAt(patch, x, y, h) {
   return nrm3(crs(sub(px, p), sub(py, p)));
 }
 
-// ── THE CORRECTNESS ANCHOR ──────────────────────────────────────────────────
+// The correctness anchor
 
-test('⚠ N=3 IS THE SAME SURFACE AS sideVertexPatch, not an approximation of it', () => {
-  /* `sideVertexPatch` files a side by the corner OPPOSITE it: its boundary[j]
+test('N=3 is the same surface as sideVertexPatch, not an approximation of it', () => {
+  /* `sideVertexPatch` files a side by the corner opposite it: its boundary[j]
      runs from corners[j+1] to corners[j+2]. This module files a side by the
-     corner it STARTS at. The two orderings differ by one index and nothing
+     corner it starts at. The two orderings differ by one index and nothing
      else, so the same hole handed to both must come back as the same points —
      if it does not, one of the two schemes is wrong and the fillet chain would
      have a discontinuity at every valence-3 corner. */
@@ -163,7 +163,7 @@ test('⚠ N=3 IS THE SAME SURFACE AS sideVertexPatch, not an approximation of it
   assert.ok(worst < 1e-13, `the three-sided patches differ by ${worst.toExponential(3)}`);
 });
 
-test('the domain coordinates ARE barycentric coordinates at N=3', () => {
+test('the domain coordinates are barycentric coordinates at N=3', () => {
   // Nothing above would catch a coordinate scheme that is wrong on a triangle
   // if the anchor test only ever feeds coordinates in directly.
   const D = regularDomain(3);
@@ -181,7 +181,7 @@ test('the domain coordinates ARE barycentric coordinates at N=3', () => {
 });
 
 test('the domain is the regular N-gon it is documented to be', () => {
-  // The parameterisation is a stated choice, so it is checkable rather than
+  // The parameterization is a stated choice, so it is checkable rather than
   // whatever the vertex loop happens to emit.
   assert.equal(regularDomain(2), null);
   assert.equal(regularDomain(3.5), null);
@@ -202,7 +202,7 @@ test('the domain is the regular N-gon it is documented to be', () => {
   }
 });
 
-test('⚠ THE COORDINATE FORMULA IS ANSWERED AT ITS OWN SINGULARITIES, not approached', () => {
+test('The coordinate formula is answered at its own singularities, not approached', () => {
   /* At a domain vertex the weight divides by a zero radius; on a domain edge
      the half-angle tangent of an angle at pi is infinite. Both have exact
      answers, and a scheme that only ever gets asked about interior points can
@@ -228,9 +228,9 @@ test('⚠ THE COORDINATE FORMULA IS ANSWERED AT ITS OWN SINGULARITIES, not appro
       }
     }
   }
-  /* LINEAR REPRODUCTION, which is the defining property and the one that fails
+  /* Linear reproduction, which is the defining property and the one that fails
      silently. sum(lambda_m V_m) must be the query point itself — everywhere the
-     coordinates are defined, including OUTSIDE the polygon and on the extension
+     coordinates are defined, including outside the polygon and on the extension
      of an edge past its ends, where the half-angle tangent is a 0/0 of the
      other kind (an angle of zero rather than of pi) and its correct limit is
      also zero. Nothing in the patch reaches those points; a wrong branch there
@@ -292,9 +292,9 @@ test('the coordinates are a positive partition of unity inside any N-gon', () =>
   }
 });
 
-// ── EXACTNESS ───────────────────────────────────────────────────────────────
+// Exactness
 
-test('a FLAT n-gon comes back EXACTLY flat, for every N — not approximately', () => {
+test('a flat n-gon comes back exactly flat, for every N — not approximately', () => {
   for (const n of [3, 4, 5, 6, 8, 10]) {
     const fx = flatNGon(n);
     const p = nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent });
@@ -315,7 +315,7 @@ test('a FLAT n-gon comes back EXACTLY flat, for every N — not approximately', 
   }
 });
 
-test('⚠ WITH STRAIGHT SIDES AND NO CROSS-TANGENT THE PATCH IS THE LINEAR MAP EXACTLY', () => {
+test('With straight sides and no cross-tangent the patch is the linear map exactly', () => {
   /* Every side's interpolant collapses to sum(lambda_m V_m) independently of
      the side, so the blend of them is that same sum whatever the weights are.
      This is linear precision, and it holds for corners placed anywhere in
@@ -354,7 +354,7 @@ test('⚠ WITH STRAIGHT SIDES AND NO CROSS-TANGENT THE PATCH IS THE LINEAR MAP E
   }
 });
 
-test('every boundary is reproduced EXACTLY, which is what watertight depends on', () => {
+test('every boundary is reproduced exactly, which is what watertight depends on', () => {
   for (const n of [3, 4, 5, 6, 7, 8]) {
     const fx = holeInSurface(n, { wobble: 0.25 });
     const p = nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent });
@@ -384,7 +384,7 @@ test('the N corners are returned outright, not approached through a 0/0', () => 
       const l = new Array(n).fill(0); l[m] = 1;
       const q = p.evaluate(l);
       assert.deepEqual(q, fx.boundary[m](0), `n=${n}: corner ${m} must be exact — every weight vanishes there`);
-      /* ⚠ AND ONLY AT THE CORNER. Naming the corner over a small DISC instead
+      /* And only at the corner. Naming the corner over a small disc instead
          of at the point flattens the patch there and leaves a region whose
          partials are both zero, so the normal is 0/0 over an area rather than
          at a point — which is the pole this construction exists without. The
@@ -410,15 +410,15 @@ test('the N corners are returned outright, not approached through a 0/0', () => 
   }
 });
 
-// ── TANGENCY: THE RESIDUAL IS THE RULER ─────────────────────────────────────
+// Tangency: the residual is the ruler
 
-test('⚠ THE PATCH IS TANGENT TO THE SURFACE AROUND THE HOLE, AND THE RESIDUAL IS THE RULER', () => {
+test('The patch is tangent to the surface around the hole, and the residual is the ruler', () => {
   /* The normal is measured by finite differences taken a small distance off the
-     boundary. Both the offset and the difference step are errors OF THE
-     MEASUREMENT. Refine them and a measurement error falls with them; a genuine
+     boundary. Both the offset and the difference step are errors of the
+     measurement. Refine them and a measurement error falls with them; a real
      tangent defect sits still. Asserting an absolute number at a coarse step
      pins the instrument, not the geometry, so the absolute bound is taken only
-     at the fine end and the CONVERGENCE is the real statement. */
+     at the fine end and the convergence is the real statement. */
   for (const n of [3, 4, 5, 6, 7, 8]) {
     const fx = holeInSurface(n, { wobble: 0.25 });
     const p = nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent });
@@ -448,8 +448,8 @@ test('⚠ THE PATCH IS TANGENT TO THE SURFACE AROUND THE HOLE, AND THE RESIDUAL 
   }
 });
 
-test('⚠ THE PATCH AGREES IN DIRECTION WITH THE SURFACE, not merely in plane', () => {
-  /* An everted patch has the RIGHT tangent plane everywhere and is folded flat
+test('The patch agrees in direction with the surface, not merely in plane', () => {
+  /* An everted patch has the right tangent plane everywhere and is folded flat
      against its neighbor; an unsigned angle reads 0.00 degrees for it. Only
      the signed comparison can see it. */
   for (const n of [3, 5, 6]) {
@@ -472,11 +472,11 @@ test('⚠ THE PATCH AGREES IN DIRECTION WITH THE SURFACE, not merely in plane', 
   }
 });
 
-// ── THE CORNERS: TWIST, MEASURED RATHER THAN ASSUMED ────────────────────────
+// The corners: twist, measured rather than assumed
 
-test('⚠ AT A CORNER THE LIMIT NORMAL EXISTS WHEN THE INPUT IS COMPATIBLE — measured, by refining the approach', () => {
+test('At a corner the limit normal exists when the input is compatible — measured, by refining the approach', () => {
   /* A corner is a 0/0: every weight vanishes. Whether the patch is G1 there is
-     therefore a question about a LIMIT, and the only honest way to ask it is to
+     therefore a question about a limit, and the only way to ask it is to
      shrink the approach radius and watch. A spread that falls linearly with the
      radius means the limit exists and the fan is merely sampling a curved
      region; a spread that stands still means there is no limit. */
@@ -498,11 +498,11 @@ test('⚠ AT A CORNER THE LIMIT NORMAL EXISTS WHEN THE INPUT IS COMPATIBLE — m
   }
 });
 
-test('⚠ AND WHEN THE INPUT CREASES AT A CORNER THE SPREAD DOES NOT FALL — so the measurement can fail', () => {
+test('And when the input creases at a corner the spread does not fall — so the measurement can fail', () => {
   /* Without this the test above is decorative: any measurement that always
      converges is measuring the ruler. One side's cross-tangent is tilted out of
-     its neighbor's plane near a shared corner, which is a genuine crease in
-     the DATA, and the spread must then stand still at every radius. */
+     its neighbor's plane near a shared corner, which is a real crease in
+     the data, and the spread must then stand still at every radius. */
   const n = 5;
   const fx = holeInSurface(n, { wobble: 0.2 });
   const bad = fx.tangent.slice();
@@ -516,7 +516,7 @@ test('⚠ AND WHEN THE INPUT CREASES AT A CORNER THE SPREAD DOES NOT FALL — so
   assert.ok(spreads[3] > spreads[0] * 0.5, 'and it must not be quietly converging either');
 });
 
-test('⚠ A CORNER WHOSE TWO SIDES NAME DIFFERENT TANGENT PLANES IS REFUSED AT BUILD TIME', () => {
+test('A corner whose two sides name different tangent planes is refused at build time', () => {
   // The refusal has to name the corner, or a caller cannot act on it.
   const fx = holeInSurface(5, { wobble: 0.2 });
   const bad = fx.tangent.slice();
@@ -526,13 +526,13 @@ test('⚠ A CORNER WHOSE TWO SIDES NAME DIFFERENT TANGENT PLANES IS REFUSED AT B
   assert.equal(r.ok, false, 'a fill that cannot be tangent to both neighbors must refuse, not reproduce the crease silently');
   assert.match(r.reason, /at corner 1 .*crease/);
   assert.ok(r.cornerAngleDeg > 20, `the reported disagreement ${r.cornerAngleDeg} must be the real one`);
-  // And a caller who genuinely wants a crease running into that corner can say so.
+  // And a caller who wants a crease running into that corner can say so.
   assert.equal(nSidedTangentPatch({ boundary: fx.boundary, tangent: bad, cornerAngleToleranceDeg: 180, validate: false }).ok, true);
-  // A well-formed hole is NOT refused by the same gate — otherwise it is a wall.
+  // A well-formed hole is not refused by the same gate — otherwise it is a wall.
   assert.equal(nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent }).ok, true);
 });
 
-// ── FOLDING ─────────────────────────────────────────────────────────────────
+// Folding
 
 test('the validator passes well-formed holes at every N it is given', () => {
   for (const n of [3, 4, 5, 6, 7, 8, 10]) {
@@ -545,7 +545,7 @@ test('the validator passes well-formed holes at every N it is given', () => {
   }
 });
 
-test('⚠ A FOLD IS DETECTED, AND THE BUILDER HONOURS THE VERDICT rather than reporting it', () => {
+test('A fold is detected, and the builder honors the verdict rather than reporting it', () => {
   // Past the cross-tangent reach the interpolant can survive, the rays cross
   // and the surface everts. The builder must refuse it by default.
   const fx = holeInSurface(5, { wobble: 0.3, R: 1.6 });
@@ -563,7 +563,7 @@ test('⚠ A FOLD IS DETECTED, AND THE BUILDER HONOURS THE VERDICT rather than re
   assert.equal(nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent }).ok, true);
 });
 
-test('⚠ A BOUNDARY-HUGGING FOLD IS CAUGHT — the interior grid alone CERTIFIES this one', () => {
+test('A boundary-hugging fold is caught — the interior grid alone certifies this one', () => {
   /* The interpolant is exact on the boundary and blends hardest just inside it,
      so a fold can live nearer a side than any grid coarse enough to run ever
      samples. This hole folds in exactly that band, and the two sweeps disagree
@@ -585,7 +585,7 @@ test('⚠ A BOUNDARY-HUGGING FOLD IS CAUGHT — the interior grid alone CERTIFIE
   assert.equal(nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent }).ok, false);
 });
 
-test('a patch too small to judge is NOT passed', () => {
+test('a patch too small to judge is not passed', () => {
   // A sweep that finds nothing must not read as a clean bill of health.
   const fx = flatNGon(5);
   const p = nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent, validate: false });
@@ -596,7 +596,7 @@ test('a patch too small to judge is NOT passed', () => {
   assert.equal(nSidedPatchFolds({ domain: { vertices: [] } }).ok, false);
 });
 
-// ── REFUSALS ────────────────────────────────────────────────────────────────
+// Refusals
 
 test('the patch refuses a malformed request rather than building something plausible', () => {
   const fx = holeInSurface(4);
@@ -607,7 +607,7 @@ test('the patch refuses a malformed request rather than building something plaus
   assert.match(nSidedTangentPatch({ boundary: [() => [0, 0, 0], () => [0, 0, 0], () => [0, 0, 0]] }).reason, /no loop to fill/);
 });
 
-test('⚠ AN OPEN LOOP IS REFUSED WITH ITS GAP, not welded over', () => {
+test('An open loop is refused with its gap, not welded over', () => {
   /* Every side would still be reproduced exactly — on a boundary that is not
      the hole's. The result looks like a patch and leaves a slot. */
   const fx = holeInSurface(4);
@@ -618,7 +618,7 @@ test('⚠ AN OPEN LOOP IS REFUSED WITH ITS GAP, not welded over', () => {
   assert.equal(r.ok, false);
   assert.match(r.reason, /do not close into a loop/);
   assert.match(r.reason, /1\.000e-2/);
-  /* ⚠ THE TOLERANCE IS PINNED FROM BOTH SIDES, or it can be widened a
+  /* The tolerance is pinned from both sides, or it can be widened a
      millionfold and this test still passes on a gap as gross as the one above.
      A gap of 1e-6 on a hole three units across is a leak a weld will not close
      and must be refused; float noise from a caller's own arithmetic must not
@@ -636,7 +636,7 @@ test('⚠ AN OPEN LOOP IS REFUSED WITH ITS GAP, not welded over', () => {
   assert.equal(nSidedTangentPatch({ boundary: fx.boundary, tangent: fx.tangent, loopTolerance: 1e-3, validate: false }).ok, true);
 });
 
-test('⚠ A MALFORMED TANGENT ARRAY IS REFUSED, NOT SILENTLY DEMOTED TO A G0 FILL', () => {
+test('A malformed tangent array is refused, not silently demoted to a G0 fill', () => {
   /* Building the positional-only patch instead hands the caller a creased fill
      that reads as a geometry problem rather than as their own bad argument.
      Absent is a request; wrong is a defect. */
@@ -672,8 +672,8 @@ test('off-domain coordinates get no answer at all', () => {
   assert.equal(p.evaluate([0.5, 0.5, 0]), null, 'the wrong number of coordinates');
   assert.equal(p.evaluate([0.25, 0.25, 0.25, NaN]), null);
   assert.equal(p.evaluate('middle'), null);
-  /* ⚠ AND A COORDINATE VECTOR CAN BE PERFECTLY WELL FORMED AND STILL NAME NO
-     POINT. Two OPPOSITE corners at a half each is non-negative and sums to one,
+  /* And a coordinate vector can be perfectly well formed and still name no
+     point. Two opposite corners at a half each is non-negative and sums to one,
      yet every side has one of its two own coordinates at zero, so every weight
      vanishes and the blend is 0/0. Nothing in the domain produces it, and a
      caller doing their own arithmetic can. The answer is that there is no
@@ -686,13 +686,13 @@ test('off-domain coordinates get no answer at all', () => {
   assert.ok(p.evaluate([0.4, 0.6, 0, 0]));
 });
 
-// ── THE POLE QUESTION, ASKED DIRECTLY ───────────────────────────────────────
+// The pole question, asked directly
 
-test('⚠ THERE IS NO CENTRAL POLE AND NO BOUNDARY 0/0 — the interior is a value, not a limit', () => {
+test('There is no central pole and no boundary 0/0 — the interior is a value, not a limit', () => {
   /* The far point of each side's Hermite is 0/0 on that side, and the
      construction removes the division algebraically instead of guarding it. If
      a guard had been left in, the patch would be discontinuous or NaN in a thin
-     band, and the way to see that is to walk INTO each side from a distance the
+     band, and the way to see that is to walk into each side from a distance the
      guard would have to be smaller than. */
   for (const n of [3, 5, 7]) {
     const fx = holeInSurface(n, { wobble: 0.3 });
@@ -719,17 +719,17 @@ test('⚠ THERE IS NO CENTRAL POLE AND NO BOUNDARY 0/0 — the interior is a val
   }
 });
 
-// ── WHAT SURVIVED THE MUTATIONS ─────────────────────────────────────────────
-// Each of these closes a mutation of the module that passed every other test
-// in this file.
+// Mutation guards
+// Each of these fails for a mutation of the module that every other test in
+// this file accepts.
 
-test('⚠ THE WEIGHT MUST VANISH ON THE OTHER SIDES TO SECOND ORDER, not merely vanish', () => {
+test('The weight must vanish on the other sides to second order, not merely vanish', () => {
   /* Dropping the square from (lambda_i lambda_i+1)^2 leaves a scheme that still
      reproduces every boundary exactly, still reproduces a flat n-gon exactly,
      and still has linear precision — because on the boundary the rival weights
      are zero either way. What it loses is G1: the rivals then fall only
      linearly with the distance from a side, so the patch's tangent plane there
-     is a blend of the wanted one and its neighbors'. It shows up ONLY in a
+     is a blend of the wanted one and its neighbors'. It shows up only in a
      tangency measurement, and only because that measurement converges.
 
      Held here by requiring the convergence to be first-order in the offset: the
@@ -755,7 +755,7 @@ test('⚠ THE WEIGHT MUST VANISH ON THE OTHER SIDES TO SECOND ORDER, not merely 
     `the tangency residual must be proportional to the offset — ${a.toExponential(2)}, ${b.toExponential(2)}, ${c.toExponential(2)}. A weight that vanishes only to first order stalls here.`);
 });
 
-test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-sample one everts the fill', () => {
+test('The cross-tangent orientation is one decision per side, and a per-sample one everts the fill', () => {
   /* The field is already smooth. Deciding its sign per sample injects a
      discontinuity it never had, wherever the chord to the far center swings
      past perpendicular — which an asymmetric hole does. The symptom is a fold,
@@ -768,7 +768,7 @@ test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-samp
   assert.equal(p.ok, true, p.reason);
   const D = regularDomain(n);
 
-  /* THE PRECONDITION, CHECKED BEFORE THE CLAIM. A fixture on which the sign
+  /* The precondition, checked before the claim. A fixture on which the sign
      test never changes its mind cannot distinguish a per-side decision from a
      per-sample one, so the poll is re-run here and the split demanded. A 4:3
      split is the knife edge: a single mid-side sample would be arbitrary there
@@ -792,8 +792,8 @@ test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-samp
   assert.ok(swinging >= 2, `only ${swinging} sides change their mind — the case is not exercised`);
   assert.ok(worstSplit <= 4, `the closest split is ${worstSplit}:${7 - worstSplit}, which is not the knife edge this guards`);
 
-  /* THE CLAIM. A sign decided per sample flips mid-side and everts the patch
-     from there on, which shows in the SIGNED agreement — not in the unsigned
+  /* The claim. A sign decided per sample flips mid-side and everts the patch
+     from there on, which shows in the signed agreement — not in the unsigned
      angle, which stays near zero for an everted surface. */
   let worstSigned = 1;
   for (let i = 0; i < n; i++) {
@@ -808,7 +808,7 @@ test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-samp
   assert.equal(nSidedPatchFolds(p).folds, false);
 
   /* And the component along the boundary must have moved the interior shape
-     WITHOUT moving the tangent plane, which is the reason it is allowed at all:
+     without moving the tangent plane, which is the reason it is allowed at all:
      the tangency residual still falls with the measuring step. */
   const measure = (eps, h) => {
     let worst = 0;
@@ -826,7 +826,7 @@ test('⚠ THE CROSS-TANGENT ORIENTATION IS ONE DECISION PER SIDE, and a per-samp
   assert.ok(fine < coarse / 5, `the sheared field must still be exactly tangent — coarse ${coarse.toExponential(2)}, fine ${fine.toExponential(2)}`);
 });
 
-test('⚠ THE FIXTURE ITSELF IS NOT FLAT AND NOT UNTWISTED — otherwise most of this file proves nothing', () => {
+test('The fixture itself is not flat and not untwisted — otherwise most of this file proves nothing', () => {
   /* A hole cut in a plane, or in a surface with no mixed second derivative,
      passes every tangency and corner test here for reasons that have nothing to
      do with the patch. The fixture is checked before it is believed. */
@@ -838,7 +838,7 @@ test('⚠ THE FIXTURE ITSELF IS NOT FLAT AND NOT UNTWISTED — otherwise most of
   assert.ok(spread > 20, `the fixture surface must actually curve around the hole, normals spread only ${spread.toFixed(1)} degrees`);
   // Non-zero twist: the mixed partial of the height field, read numerically
   // over the region the hole actually occupies. A single point can sit at a
-  // node of f_uv and read near zero on a surface that is genuinely twisted.
+  // node of f_uv and read near zero on a surface that is twisted.
   const f = (u, v) => 0.30 * Math.sin(1.3 * u) * Math.cos(1.1 * v) + 0.17 * u * v;
   const h = 1e-4;
   let maxTwist = 0;
@@ -851,7 +851,7 @@ test('⚠ THE FIXTURE ITSELF IS NOT FLAT AND NOT UNTWISTED — otherwise most of
   assert.ok(maxTwist > 0.3, `the fixture must have real twist across the hole, largest |f_uv| = ${maxTwist}`);
 });
 
-test('⚠ THE FOLD VALIDATOR CAN STILL FAIL — a widened limit or a blind sweep must be visible', () => {
+test('The fold validator can still fail — a widened limit or a blind sweep must be visible', () => {
   /* A detector that never says no is decorative. Both of its criteria are
      exercised on the same known-bad patch: the reversal count and the crease
      limit. */

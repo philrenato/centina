@@ -7,9 +7,8 @@ import { sweep2, localizeSectionToFrame } from '../kernel/sweep.mjs';
 
 const line = (p0, p1) => ({ degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[...p0, 1], [...p1, 1]] });
 
-// Two GENUINELY DIFFERENT curving rails (not straight lines — per this
-// project's own logged "too-simple test geometry can hide real bugs"
-// lesson: a straight-rail fixture can't distinguish a correct width-axis-
+// Two different curving rails (not straight lines: a straight-rail
+// fixture can't distinguish a correct width-axis-
 // per-station construction from a naive single-frame shortcut). Both built
 // via real globalCurveInterp, different shapes, different curvature.
 function railA() {
@@ -19,23 +18,23 @@ function railB() {
   return globalCurveInterp([[0, 0, 60], [50, 10, 60], [100, 55, 60], [150, 20, 60]], 3);
 }
 
-// A profile that is NOT degenerate — its own start/end are 10 units apart
+// A profile that is not degenerate — its own start/end are 10 units apart
 // along X, and its middle control point is pulled 3 units out of the
-// straight start-end line (a genuine "depth"/perpendicular extent to
+// straight start-end line (a real "depth"/perpendicular extent to
 // track), symmetric (equal chord lengths either side of the mid point, so
 // globalCurveInterp's own chord-length parametrization puts the mid data
-// point at EXACTLY u=0.5 — deliberately chosen so this test can predict
+// point at exactly u=0.5 — deliberately chosen so this test can predict
 // exactly which resampled row corresponds to it, not guess).
 function profileBow() {
   return globalCurveInterp([[0, 0, 0], [5, 3, 0], [10, 0, 0]], 2);
 }
 
-test('sweep2: reproduces the profile\'s own two endpoints EXACTLY at both rails, at EVERY station (independent cross-check against the rails\' own real curvePoint, not a self-consistency tautology)', () => {
+test('sweep2: reproduces the profile\'s own two endpoints exactly at both rails, at every station (independent cross-check against the rails\' own real curvePoint, not a self-consistency tautology)', () => {
   const rail1 = railA(), rail2 = railB();
   const profile = profileBow();
   const srf = sweep2(rail1, rail2, profile);
   assert.equal(isFiniteNet(srf.ctrlNet), true);
-  assert.ok(srf.vStations.length >= 4, 'should produce a genuinely dense station set');
+  assert.ok(srf.vStations.length >= 4, 'should produce a dense station set');
 
   // Independent ground truth: fresh arc-length tables built directly in
   // this test, not read off srf's own internals.
@@ -59,7 +58,7 @@ test('sweep2: reproduces the profile\'s own two endpoints EXACTLY at both rails,
   assert.ok(maxErrRail2 < 1e-6, `u=uMax edge should reproduce rail 2 exactly at every station, max error ${maxErrRail2}`);
 });
 
-test('sweep2: works with two rails of DIFFERENT type/degree (a straight Line + a genuinely curving degree-3 rail) — never needs a shared knot vector or curve type', () => {
+test('sweep2: works with two rails of different type/degree (a straight Line + a curving degree-3 rail) — never needs a shared knot vector or curve type', () => {
   const rail1 = line([0, 0, 0], [150, 0, 0]); // degree 1
   const rail2 = railB(); // degree 3, curving
   const profile = profileBow();
@@ -79,7 +78,7 @@ test('sweep2: works with two rails of DIFFERENT type/degree (a straight Line + a
   assert.ok(maxErr < 1e-6, `mixed-degree rails: u=uMax edge should still reproduce rail 2 exactly, max error ${maxErr}`);
 });
 
-test('sweep2: the profile\'s own width scaling genuinely VARIES station-to-station when the rails\' separation varies (not a fixed/frozen scale)', () => {
+test('sweep2: the profile\'s own width scaling varies station-to-station when the rails\' separation varies (not a fixed/frozen scale)', () => {
   const rail1 = railA(), rail2 = railB();
   const profile = profileBow();
   const srf = sweep2(rail1, rail2, profile);
@@ -90,37 +89,34 @@ test('sweep2: the profile\'s own width scaling genuinely VARIES station-to-stati
   const table2 = buildArcLengthTable(rail2, u2min, u2max);
   const len1 = table1.total, len2 = table2.total;
 
-  // Recompute the true rail-to-rail width at every station INDEPENDENTLY
-  // (not merely reading srf.widths) and confirm it genuinely varies.
+  // Recompute the true rail-to-rail width at every station independently
+  // (not merely reading srf.widths) and confirm it varies.
   const widths = srf.vStations.map((v) => {
     const p1 = curvePoint(rail1, paramAtArcLength(table1, v * len1));
     const p2 = curvePoint(rail2, paramAtArcLength(table2, v * len2));
     return Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]);
   });
   const minW = Math.min(...widths), maxW = Math.max(...widths);
-  assert.ok(maxW - minW > 1, `width should vary meaningfully station-to-station (these two rails genuinely diverge/converge), got min=${minW.toFixed(4)} max=${maxW.toFixed(4)}`);
+  assert.ok(maxW - minW > 1, `width should vary meaningfully station-to-station (these two rails diverge/converge), got min=${minW.toFixed(4)} max=${maxW.toFixed(4)}`);
   // Cross-check srf's own exposed widths match this independent recompute.
   for (let i = 0; i < widths.length; i++) {
     assert.ok(Math.abs(widths[i] - srf.widths[i]) < 1e-6, `srf.widths[${i}] should match independently recomputed rail separation`);
   }
 });
 
-test('sweep2: the profile\'s own perpendicular ("depth") extent scales PROPORTIONALLY with the width scale — the stated v1 scale decision, a real checkable proof not an assumption', () => {
+test('sweep2: the profile\'s own perpendicular ("depth") extent scales proportionally with the width scale — the stated scale rule, checked rather than assumed', () => {
   const rail1 = railA(), rail2 = railB();
   const profile = profileBow();
-  const uSampleCount = 25; // chosen so t=12/24=0.5 lands EXACTLY on the profile's own symmetric mid data point
+  const uSampleCount = 25; // chosen so t=12/24=0.5 lands exactly on the profile's own symmetric mid data point
   const srf = sweep2(rail1, rail2, profile, { uSampleCount });
   assert.ok(Array.isArray(srf.ubar) && srf.ubar.length === uSampleCount, 'ubar should be exposed, one entry per U sample, for exactly this kind of independent verification');
 
   // Independently predict the local (frame-relative) offset of the
-  // profile's own mid point, the SAME way sweep2 itself derives it —
-  // localizeSectionToFrame is separately, independently tested elsewhere
-  // (test/sweep-nprofiles.test.mjs's own frame-decomposition precedent);
-  // reusing it here to compute an INDEPENDENT expected value is the same
-  // "reconstruct ground truth via the kernel's own already-proven primitive,
-  // not the function under test's own internal numbers" technique this
-  // project already established (the Bug1 repro's own
-  // chordLengthParams reconstruction).
+  // profile's own mid point, the same way sweep2 itself derives it —
+  // localizeSectionToFrame is tested on its own in
+  // test/sweep-nprofiles.test.mjs, so reusing it here reconstructs the
+  // expected value from an already-tested primitive rather than from the
+  // function under test's own internal numbers.
   const start = profile.ctrlPts[0], end = profile.ctrlPts[profile.ctrlPts.length - 1];
   const width0 = Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
   const xAxisP = [(end[0] - start[0]) / width0, (end[1] - start[1]) / width0, (end[2] - start[2]) / width0];
@@ -143,7 +139,7 @@ test('sweep2: the profile\'s own perpendicular ("depth") extent scales PROPORTIO
   // For every station, the surface's own sample at (ubar[12], v) — the row
   // predicted to correspond to the profile's own mid point (t=12/24=0.5) —
   // should sit at perpendicular distance depthLocal*(width(v)/width0) from
-  // the R1(v)-R2(v) line, PROPORTIONAL to that station's own width, not a
+  // the R1(v)-R2(v) line, proportional to that station's own width, not a
   // fixed physical depth.
   const uMid = srf.ubar[12];
   const ratios = [];
@@ -162,21 +158,21 @@ test('sweep2: the profile\'s own perpendicular ("depth") extent scales PROPORTIO
   const expectedRatio = depthLocal / width0;
   const maxRatioErr = Math.max(...ratios.map((r) => Math.abs(r - expectedRatio)));
   assert.ok(maxRatioErr < 1e-3, `perpendicular depth / width should be the SAME constant ratio at every station (proportional scaling, not fixed depth), expected ${expectedRatio.toFixed(6)}, max deviation ${maxRatioErr.toFixed(6)}`);
-  // And confirm this ratio is genuinely non-trivial (the depth really does
+  // And confirm this ratio is non-trivial (the depth does
   // move as width changes, not merely "both happen to be constant").
   const widths = srf.vStations.map((v) => {
     const p1 = curvePoint(rail1, paramAtArcLength(table1, v * len1));
     const p2 = curvePoint(rail2, paramAtArcLength(table2, v * len2));
     return Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]);
   });
-  assert.ok(Math.max(...widths) - Math.min(...widths) > 1, 'setup: width genuinely varies across stations in this fixture too');
+  assert.ok(Math.max(...widths) - Math.min(...widths) > 1, 'setup: width varies across stations in this fixture too');
 });
 
-test('sweep2 honestly refuses when the two rails cross/coincide at a shared station (an undefined width axis), rather than producing a degenerate/garbage surface', () => {
+test('sweep2 refuses when the two rails cross/coincide at a shared station (an undefined width axis), rather than producing a degenerate/garbage surface', () => {
   // Two straight lines that cross exactly at their own shared arc-length
   // fraction v=0.5 (both run uniformly in arc-length from t=0 to t=1, so
-  // the fraction IS the linear parameter here) — deliberately picking
-  // stationSamplesPerSpan=9 so v=0.5 (5/10) is an EXACT dense station, not
+  // the fraction is the linear parameter here) — deliberately picking
+  // stationSamplesPerSpan=9 so v=0.5 (5/10) is an exact dense station, not
   // a near-miss that could pass by luck.
   const rail1 = line([0, 0, 0], [100, 0, 0]);
   const rail2 = line([0, 10, 0], [100, -10, 0]); // crosses rail1's Y=0 line exactly at x=50, v=0.5
@@ -188,7 +184,7 @@ test('sweep2 honestly refuses when the two rails cross/coincide at a shared stat
   );
 });
 
-test('sweep2 honestly refuses a profile whose own start/end coincide (no defined rail-anchor width axis)', () => {
+test('sweep2 refuses a profile whose own start/end coincide (no defined rail-anchor width axis)', () => {
   const rail1 = railA(), rail2 = railB();
   const closedProfile = {
     degree: 1,

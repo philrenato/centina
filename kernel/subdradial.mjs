@@ -1,51 +1,45 @@
-// SuperB CAGE RADIAL SYMMETRY — the cyclic-group sibling of subdreflect.mjs
-// KERNEL ONLY: pure cage/axis-in,
-// correspondence-out math, no app-layer object/UI/undo here, matching every
-// other kernel/*.mjs module's own discipline.
+// SuperB cage radial symmetry — the cyclic-group sibling of
+// subdreflect.mjs. Cage/axis in, correspondence out; no app-layer object, UI
+// or undo here.
 //
-// THE RELATIONSHIP TO REFLECT, stated plainly. Reflect needs a vertex
-// correspondence so an edit on one side can be replayed, mirrored, on the
-// other. This needs the same thing for a ROTATION: for every vertex, which
-// vertex sits where this one lands after turning `angle` about the axis.
-// The technique is identical — nearest-vertex-after-transforming, with a
-// scale-relative tolerance, refusing rather than guessing — so this module
-// is deliberately structured line-for-line on findCageMirrorPartners, and
-// reuses the ALREADY-PROVEN `rotatePoint` from transform.mjs rather than
-// re-deriving Rodrigues a fourth time in this codebase.
+// Reflect needs a vertex correspondence so an edit on one side can be
+// replayed, mirrored, on the other. This needs the same thing for a
+// rotation: for every vertex, which vertex sits where this one lands after
+// turning `angle` about the axis. The technique is the same —
+// nearest vertex after transforming, with a scale-relative tolerance,
+// refusing rather than guessing — so this module follows
+// findCageMirrorPartners line for line, and uses `rotatePoint` from
+// transform.mjs for the rotation.
 //
-// TWO THINGS ARE GENUINELY DIFFERENT, and both are real:
+// Two things differ:
 //
-// 1. A MIRROR IS AN INVOLUTION; A ROTATION IS A CYCLE. Reflect can (and
-//    does) assert partner[partner[i]] === i. That check is meaningless
-//    here: a rotation has a DIRECTION, so the correspondence is a
-//    permutation `next` (vertex -> the vertex one step around), and the
-//    honest structural check is that applying `next` exactly `order` times
-//    returns every vertex to itself while no smaller number of steps does.
-//    That is a strictly stronger claim than the involution check, and it is
-//    what actually proves the cage has the symmetry it was asked to have.
+// 1. A mirror is an involution; a rotation is a cycle. Reflect asserts
+//    partner[partner[i]] === i. That check is meaningless here: a rotation
+//    has a direction, so the correspondence is a permutation `next`
+//    (vertex -> the vertex one step around), and the structural check is
+//    that applying `next` exactly `order` times returns every vertex to
+//    itself while no smaller number of steps does. That is a strictly
+//    stronger claim than the involution check, and it is what shows the cage
+//    has the symmetry it was asked to have.
 //
-// 2. A MIRROR HAS ON-PLANE POINTS; A ROTATION HAS ON-AXIS POINTS. Reflect's
-//    self-paired vertices lie ON the plane. Here they lie ON the axis, and
-//    they differ in an important way: an on-plane vertex is fixed by the
-//    ONE reflection, whereas an on-axis vertex is fixed by EVERY rotation
-//    at once. So an on-axis vertex forms an orbit of size 1, and a naive
-//    order check that simply asked "does `next` return everything after k
-//    steps" would conclude the order is 1 the moment any on-axis vertex
-//    exists. They must be excluded from the order check explicitly, not
-//    incidentally. A SuperB torus has none; a SuperB cone or sphere has
-//    real ones (its apex/poles), so this is a reachable case, not a
-//    hypothetical.
+// 2. A mirror has on-plane points; a rotation has on-axis points. Reflect's
+//    self-paired vertices lie on the plane. Here they lie on the axis, and
+//    they differ: an on-plane vertex is fixed by the one reflection, whereas
+//    an on-axis vertex is fixed by every rotation at once. So an on-axis
+//    vertex forms an orbit of size 1, and an order check that asked "does
+//    `next` return everything after k steps" would conclude the order is 1
+//    the moment any on-axis vertex exists. They are excluded from the order
+//    check explicitly. A SuperB torus has none; a SuperB cone or sphere has
+//    them (its apex/poles).
 //
-// THE TIE-EPSILON DISCIPLINE IS INHERITED DELIBERATELY, and for a reason
-// that has an exact analog here. subdreflect.mjs documents a real bug a
-// review caught: checking "does this vertex map back onto ITSELF" FIRST,
-// as a privileged case, let a vertex self-pair even when a genuinely
-// closer real partner existed. The radial version of that bug is a vertex
-// sitting NEAR the axis: it will map close to itself, and must not be
-// allowed to claim self-pairing merely for being near. So, exactly as in
-// the mirror case, the search finds the GLOBALLY NEAREST candidate with
-// self included as just one more candidate, never checked first.
-import { add, sub, length, normalize } from './vec3.mjs';
+// The tie-epsilon rule is the same as the mirror module's: checking "does
+// this vertex map back onto itself" first, as a privileged case, would let a
+// vertex self-pair even when a closer partner exists. The radial case is a
+// vertex sitting near the axis: it maps close to itself, and must not claim
+// self-pairing merely for being near. So the search finds the globally
+// nearest candidate with self included as one more candidate, never checked
+// first.
+import { sub, length, normalize } from './vec3.mjs';
 import { rotatePoint } from './transform.mjs';
 
 function bboxDiagonal(vertices) {
@@ -56,44 +50,39 @@ function bboxDiagonal(vertices) {
 }
 
 // gcd, and the derived orbit order. This is the arithmetic behind the one
-// genuinely surprising behavior in the whole feature: "every 3rd of 12" is
-// a 4-member orbit, but "every 3rd of 10" wraps and hits ALL TEN. Exposed
-// as real exported functions specifically so the app layer and the test
-// read the SAME number rather than each deriving it, and so a status line
-// can state it before a student is surprised by it.
+// surprising behavior of the feature: "every 3rd of 12" is a 4-member orbit,
+// but "every 3rd of 10" wraps and hits all ten. Exported so the app layer
+// and the tests read the same number rather than each deriving it, and so a
+// status line can state it before it surprises the user.
 export function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = a % b; a = b; b = t; } return a; }
 export function orbitOrder(ringCount, stride) {
   const N = Math.round(ringCount), s = Math.round(stride);
   if (!(N > 0) || !Number.isFinite(s) || s === 0) throw new Error('orbitOrder: ringCount must be positive and stride nonzero');
   return N / gcd(N, s);
 }
-// The real divisors of N, for an honest refusal message that tells a
-// student which orbit sizes their cage can actually support instead of
-// only saying no.
+// The divisors of N, for a refusal message that tells the user which orbit
+// sizes their cage can support instead of only saying no.
 export function divisorsOf(n) {
   const out = [];
   for (let d = 1; d <= n; d++) if (n % d === 0) out.push(d);
   return out;
 }
 
-// THE OTHER DIRECTION: given a desired member COUNT, the stride that
-// produces it. This is what makes Count and Stride two live, two-way views
-// of one relationship rather than one input and one readout.
+// The other direction: given a desired member count, the stride that
+// produces it. This makes Count and Stride two live, two-way views of one
+// relationship rather than one input and one readout.
 //
-// THEY ARE NOT PERFECT INVERSES, AND THAT IS FINE — the reason is worth
-// stating because it looks like a bug. orbitOrder(12, 5) is 12, but
-// strideForCount(12, 12) returns 1, not 5. Verified directly against a real
-// cage: stride 1 and stride 5 on a 12-ring select the IDENTICAL member set
-// at IDENTICAL true angular positions. Stride only ever chooses WHICH
-// members are in the orbit; once that set is fixed, each member's rotation
-// comes from its own true angular offset, never from its slot label. So
-// returning the CANONICAL (smallest) stride for a count is
-// indistinguishable downstream from returning any other stride that yields
-// the same count — which is exactly what makes a two-way pair of editable
-// rows safe.
+// They are not exact inverses, and that is correct: orbitOrder(12, 5) is 12,
+// but strideForCount(12, 12) returns 1, not 5. Stride 1 and stride 5 on a
+// 12-ring select the identical member set at identical angular positions.
+// Stride only chooses which members are in the orbit; once that set is
+// fixed, each member's rotation comes from its own angular offset, never
+// from its slot label. So returning the canonical (smallest) stride for a
+// count is indistinguishable downstream from returning any other stride that
+// yields the same count, which is what makes a two-way pair of editable rows
+// safe.
 //
-// Refuses a count the ring cannot make, naming the ones it can — the same
-// "tell them what WOULD work" standard as divisorsOf's own caller.
+// Refuses a count the ring cannot make, naming the ones it can.
 export function strideForCount(ringCount, count) {
   const N = Math.round(ringCount), c = Math.round(count);
   if (!(N > 0)) throw new Error('strideForCount: ringCount must be positive');
@@ -104,10 +93,10 @@ export function strideForCount(ringCount, count) {
   return N / c;
 }
 
-// THE CORE PRIMITIVE. Returns `next` (vertex -> vertex one rotation step
-// around), the on-axis vertex count, and the tolerance actually used.
-// Throws — never guesses — when the cage is not genuinely symmetric about
-// this axis at this angle, or when a vertex's partner is ambiguous.
+// Returns `next` (vertex -> vertex one rotation step around), the on-axis
+// vertex count, and the tolerance used. Throws — never guesses — when the
+// cage is not symmetric about this axis at this angle, or when a vertex's
+// partner is ambiguous.
 export function findCageRotationPartners(cage, axisOrigin, axisDir, angleRad, opts = {}) {
   const axis = normalize(axisDir);
   if (!Number.isFinite(angleRad) || Math.abs(angleRad) < 1e-12) {
@@ -120,9 +109,9 @@ export function findCageRotationPartners(cage, axisOrigin, axisDir, angleRad, op
   const rotated = cage.vertices.map((v) => rotatePoint(v, axisOrigin, axis, angleRad));
 
   // See the module header: self is one candidate among many, never a
-  // privileged first check. tieEps distinguishes a genuine ambiguity (two
-  // candidates truly equally close) from one candidate merely being in the
-  // neighborhood of another that is actually closer.
+  // privileged first check. tieEps distinguishes a true ambiguity (two
+  // candidates equally close) from one candidate merely being in the
+  // neighborhood of another that is closer.
   const tieEps = Math.max(tol * 1e-6, 1e-12);
 
   for (let i = 0; i < nv; i++) {
@@ -142,15 +131,13 @@ export function findCageRotationPartners(cage, axisOrigin, axisDir, angleRad, op
     if (candidates.length > 1) {
       throw new Error(`findCageRotationPartners: vertex ${i} has ${candidates.length} ambiguous candidate rotational partners within tolerance ${tol.toFixed(6)} (vertex indices ${JSON.stringify(candidates)}) — too coarse/degenerate relative to this tolerance for a clean correspondence`);
     }
-    next[i] = candidates[0]; // may legitimately equal i — ON-AXIS, only when self really is the nearest
+    next[i] = candidates[0]; // may equal i — on-axis, only when self is the nearest
   }
 
-  // PERMUTATION CHECK. The nearest-search resolves each vertex
-  // independently, so verify directly that the result is a genuine
-  // bijection rather than trusting it — two vertices mapping onto the same
-  // target is a real, silent corruption otherwise (the same
-  // "verify, don't assume" standard the mirror module applies to its own
-  // involution claim).
+  // Permutation check. The nearest-search resolves each vertex
+  // independently, so verify that the result is a bijection rather than
+  // trusting it — two vertices mapping onto the same target would otherwise
+  // be a silent corruption.
   const hit = new Array(nv).fill(-1);
   for (let i = 0; i < nv; i++) {
     if (hit[next[i]] !== -1) {
@@ -162,16 +149,15 @@ export function findCageRotationPartners(cage, axisOrigin, axisDir, angleRad, op
   return { next, onAxisCount, tolerance: tol };
 }
 
-// Verifies that `next` genuinely has the claimed ORDER — the cyclic
-// analog of the mirror module's involution check, and a strictly
-// stronger statement: applying it exactly `order` times must return every
-// vertex to itself, and no smaller positive number of steps may do so for
-// any vertex that is not on the axis.
+// Verifies that `next` has the claimed order — the cyclic analog of the
+// mirror module's involution check, and a strictly stronger statement:
+// applying it exactly `order` times must return every vertex to itself, and
+// no smaller positive number of steps may do so for any vertex that is not
+// on the axis.
 //
-// ON-AXIS VERTICES ARE EXCLUDED EXPLICITLY, not incidentally — they are
-// fixed by every rotation, so they satisfy "returns to itself" at every
-// step count and would otherwise drag the measured order down to 1. See
-// the module header.
+// On-axis vertices are excluded explicitly — they are fixed by every
+// rotation, so they satisfy "returns to itself" at every step count and
+// would otherwise drag the measured order down to 1. See the module header.
 export function verifyRotationOrder(next, order) {
   const n = Math.round(order);
   if (!(n >= 2)) throw new Error('verifyRotationOrder: order must be at least 2');
@@ -196,7 +182,7 @@ export function verifyRotationOrder(next, order) {
 }
 
 // Walks the chain from one seed element and returns its ordered orbit.
-// Position in the returned array IS the group element: slot k sits k
+// Position in the returned array is the group element: slot k sits k
 // rotation steps around from the seed. Refuses if the chain does not close
 // in exactly `order` steps, rather than returning a partial ring.
 export function orbitFromSeed(next, seed, order) {
@@ -217,22 +203,20 @@ export function orbitFromSeed(next, seed, order) {
   return slots;
 }
 
-// The rotation applied to a DELTA (a free vector, not a point) — what an
+// The rotation applied to a delta (a free vector, not a point) — what an
 // orbit member `steps` positions around receives when the master is
-// dragged. This is the conjugation rule from 76 section 1b: for a pure
-// translation, R_k . T . R_k^-1 collapses to "rotate the delta by k
-// steps." Expressed as a rotation about the ORIGIN precisely because a
-// delta has no position of its own.
+// dragged. This is the conjugation rule: for a pure translation,
+// R_k . T . R_k^-1 collapses to "rotate the delta by k steps." Expressed as
+// a rotation about the origin because a delta has no position of its own.
 export function rotateDelta(delta, axisDir, angleRad, steps = 1) {
   return rotatePoint(delta, [0, 0, 0], normalize(axisDir), angleRad * steps);
 }
 
-// The rotational counterpart of mirrorFaceIndex. Matched as a vertex SET,
-// reusing the mirror module's own already-proven approach — a rotation
-// preserves winding (unlike a reflection), so a cyclic match would also
-// work, but set-matching is the technique already written and already
-// carries the degenerate-collapse guard. Returns null — an honest "no
-// counterpart" — never a guess.
+// The rotational counterpart of mirrorFaceIndex. Matched as a vertex set,
+// the mirror module's approach — a rotation preserves winding (unlike a
+// reflection), so a cyclic match would also work, but set-matching carries
+// the degenerate-collapse guard. Returns null ("no counterpart"), never a
+// guess.
 export function rotationFaceIndex(cage, next, faceIdx) {
   const face = cage.faces[faceIdx];
   const mappedSet = new Set(face.map((vi) => next[vi]));

@@ -1,22 +1,22 @@
-// A CONTROL-POINT EDIT MUST NOT DAMAGE A CLOSED SURFACE'S SEAM.
+// A control-point edit must not damage a closed surface's seam.
 //
-// Reported against a degree-3 torus: dragging control points behaves
-// differently from Rhino, which stays smooth. A closed direction is stored
-// CLAMPED, its first and last control column holding the same point with
+// On a degree-3 torus a control-point drag near a seam must stay smooth there,
+// as it does in Rhino. A closed direction is stored
+// clamped, its first and last control column holding the same point with
 // nothing structural tying the two ends, so writing one column alone both
-// TEARS the seam open and CREASES it.
+// tears the seam open and creases it.
 //
 // surfaceSeamBandGroup names the points a drag has to carry with it. The app
 // adds them to the drag's own target list, beside the pole rows and joint
 // vertices already expanded there, so each arrives at applyPointEdits as its
 // own edit carrying the same delta — which is why the checks below build
 // their edit lists that way rather than expecting applyPointEdits to spread
-// one edit itself. Spreading it there TOO would move the band once per member
+// one edit itself. Spreading it there too would move the band once per member
 // and lift the seam by several times what was dragged.
 //
-// Every seam check is stated against the SAME surface's own untouched seam
-// rather than an absolute threshold, the way the seam-crease work already
-// measures: an edit is correct when the seam is no worse than it was before.
+// Every seam check is stated against the same surface's own untouched seam
+// rather than an absolute threshold, as the seam-crease checks measure: an
+// edit is correct when the seam is no worse than it was before.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyPointEdits } from '../kernel/pointedit.mjs';
@@ -25,7 +25,7 @@ import { refitSurfaceUV } from '../kernel/loft.mjs';
 import { revolve } from '../kernel/primitives.mjs';
 import { globalCurveInterp } from '../kernel/interpolate.mjs';
 
-// A real torus, not a primitive stand-in: closed in BOTH directions, which is
+// A real torus, not a primitive stand-in: closed in both directions, which is
 // the case with its own failure mode (one seam fixed at the other's cost).
 function torusSurface(R = 50, r = 15, n = 24) {
   const pts = [];
@@ -36,8 +36,7 @@ function torusSurface(R = 50, r = 15, n = 24) {
   pts.push([...pts[0]]);
   return revolve(globalCurveInterp(pts, 3), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 }
-// The editable form the app actually hands a drag — a uniform degree-3 net,
-// which is what "degree 3 torus" in the report means.
+// The editable form the app hands a drag — a uniform degree-3 net.
 const editableTorus = () => refitSurfaceUV(torusSurface(), 34, 18, 3, 3);
 
 const angleBetween = (a, b) => {
@@ -49,7 +48,7 @@ const domain = (s) => ({
   u0: s.knotsU[0], u1: s.knotsU[s.knotsU.length - 1],
   v0: s.knotsV[0], v1: s.knotsV[s.knotsV.length - 1],
 });
-// Tangent turn ACROSS the seam, sampled just inside each side. Sampling the
+// Tangent turn across the seam, sampled just inside each side. Sampling the
 // seam parameters themselves would compare a boundary derivative with itself.
 function seamTurnV(s, u) {
   const { v0, v1 } = domain(s), eps = (v1 - v0) * 1e-5;
@@ -62,7 +61,7 @@ function seamTurnU(s, v) {
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const seamGapV = (s, u) => { const { v0, v1 } = domain(s); return dist(surfacePoint(s, u, v0), surfacePoint(s, u, v1)); };
 const seamGapU = (s, v) => { const { u0, u1 } = domain(s); return dist(surfacePoint(s, u0, v), surfacePoint(s, u1, v)); };
-// How far the surface actually moved — without this, a rule that simply
+// How far the surface moved — without this, a rule that simply
 // declined to apply the edit would pass every seam check above.
 function peakDisplacement(a, b) {
   const { u0, u1, v0, v1 } = domain(a);
@@ -73,10 +72,10 @@ function peakDisplacement(a, b) {
   }
   return m;
 }
-// EXACTLY WHAT THE APP'S EXPANSION PRODUCES: the grabbed control point plus
+// Exactly what the app's expansion produces: the grabbed control point plus
 // every point that has to travel with it, each as its own edit carrying the
 // identical delta. Duplicates are dropped the same way expandWithSeamSiblings
-// drops them, so a point named by BOTH groups is still edited once.
+// drops them, so a point named by both groups is still edited once.
 function draggedEdits(srf, i0, j0, delta) {
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
   const seen = new Set();
@@ -105,7 +104,7 @@ test('the editable torus is closed in both directions, and its untouched seams a
   assert.ok(seamTurnU(s, (v0 + v1) / 2) < 0.05, 'u seam starts smooth');
 });
 
-test('a drag at EVERY column leaves both seams no worse than untouched, and still moves the surface', () => {
+test('a drag at every column leaves both seams no worse than untouched, and still moves the surface', () => {
   const s = editableTorus();
   const nu = s.ctrlNet.length, nv = s.ctrlNet[0].length;
   const { u0, u1, v0, v1 } = domain(s);
@@ -121,7 +120,7 @@ test('a drag at EVERY column leaves both seams no worse than untouched, and stil
   }
 });
 
-test('a drag at every ROW does the same — the rule is not lopsided by direction', () => {
+test('a drag at every row does the same — the rule is not lopsided by direction', () => {
   const s = editableTorus();
   const nu = s.ctrlNet.length, nv = s.ctrlNet[0].length;
   const { u0, u1, v0, v1 } = domain(s);
@@ -137,12 +136,12 @@ test('a drag at every ROW does the same — the rule is not lopsided by directio
   }
 });
 
-// THE DRAG MUST STAY THE SIZE IT WAS ASKED FOR. This is the check that fails
+// The drag must stay the size it was asked for. This is the check that fails
 // if the band is ever expanded in two places at once: every member would carry
 // the delta into the whole band again and the seam would rise by a multiple of
 // what was dragged. The grabbed point lands exactly one delta from where it
 // started, and nothing on the surface moves further than that.
-test('the band moves by exactly ONE delta, never a multiple of it', () => {
+test('the band moves by exactly one delta, never a multiple of it', () => {
   const s = editableTorus();
   const nu = s.ctrlNet.length, nv = s.ctrlNet[0].length;
   const i = Math.floor(nu / 2);
@@ -156,10 +155,10 @@ test('the band moves by exactly ONE delta, never a multiple of it', () => {
   }
 });
 
-// THE NEGATIVE CONTROL. Without it the checks above prove only that some rule
-// fired, not that it was needed: this is the same net edited the old way, one
-// slot alone, and it must genuinely fail the very assertions the fix passes.
-test('NEGATIVE CONTROL: writing the seam column alone really does tear and crease it', () => {
+// The negative control. Without it the checks above prove only that some rule
+// fired, not that it was needed: this is the same net edited one slot alone,
+// and it must fail the very assertions the band edit passes.
+test('Negative control: writing the seam column alone does tear and crease it', () => {
   const s = editableTorus();
   const nu = s.ctrlNet.length, nv = s.ctrlNet[0].length;
   const { u0, u1 } = domain(s);
@@ -169,14 +168,14 @@ test('NEGATIVE CONTROL: writing the seam column alone really does tear and creas
   const seam = lone(0);
   assert.ok(seamGapV(seam, u) > 1, `the untied seam column must open a real gap, got ${seamGapV(seam, u)}`);
   assert.ok(seamTurnV(seam, u) > 10, `the untied seam column must break the tangent, got ${seamTurnV(seam, u)}`);
-  // And the column NEXT to the seam tears nothing yet still creases — which is
-  // why carrying only the coincident pair would not have been enough.
+  // And the column next to the seam tears nothing yet still creases — which is
+  // why carrying only the coincident pair is not enough.
   const next = lone(1);
   assert.ok(seamGapV(next, u) < 1e-9, 'the column next to the seam does not tear');
   assert.ok(seamTurnV(next, u) > 10, `it must still crease, got ${seamTurnV(next, u)}`);
 });
 
-test('an OPEN surface carries nothing — every control point stays independent', () => {
+test('an open surface carries nothing — every control point stays independent', () => {
   const open = refitSurfaceUV(revolve(globalCurveInterp([[10, 0, 0], [14, 0, 8], [9, 0, 18], [16, 0, 30]], 3),
     [0, 0, 0], [0, 0, 1], 0, Math.PI / 2), 8, 8, 3, 3);
   const c = surfaceClosure(open);
@@ -203,7 +202,7 @@ test('surfaceSeamBandGroup names the degree-wide band at each end, and only ther
   const cols = surfaceSeamBandGroup(s, midRow, 0).map((p) => p.j).sort((a, b) => a - b);
   assert.deepEqual(cols, [1, 2, nv - 3, nv - 2, nv - 1]);
   assert.ok(surfaceSeamBandGroup(s, midRow, 0).every((p) => p.i === midRow), 'an interior row stays one row');
-  // a point in BOTH bands carries the full cross-band — a torus corner
+  // a point in both bands carries the full cross-band — a torus corner
   assert.equal(surfaceSeamBandGroup(s, 0, 0).length, 6 * 6 - 1);
   // and it never names the point it was asked about
   for (const [i, j] of [[0, 0], [1, 5], [nu - 1, nv - 1], [4, nv - 2]]) {
@@ -211,10 +210,10 @@ test('surfaceSeamBandGroup names the degree-wide band at each end, and only ther
   }
 });
 
-// The band and the structural siblings OVERLAP — the coincident seam pair is
+// The band and the structural siblings overlap — the coincident seam pair is
 // in both. The app drops the duplicate; this pins that there is one to drop,
 // so the overlap is a known fact rather than something discovered later.
-test('the coincident seam pair is named by BOTH groups, so the app must dedupe', () => {
+test('the coincident seam pair is named by both groups, so the app must dedupe', () => {
   const s = editableTorus();
   const nv = s.ctrlNet[0].length, i = Math.floor(s.ctrlNet.length / 2);
   assert.ok(surfaceStructuralGroup(s, i, 0).some((p) => p.i === i && p.j === nv - 1));

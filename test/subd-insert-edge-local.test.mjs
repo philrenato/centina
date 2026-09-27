@@ -4,14 +4,14 @@ import { superbCylinderCage, superbTorusCage } from '../kernel/subdprimitives.mj
 import { buildTopology, edgeKey, subdivideCatmullClark, superbDisplayMesh } from '../kernel/subd.mjs';
 import { insertEdgeLoop, insertEdgeLocal, extrudeFaces, computeAverageNormal, recomputeInsertedLoopPositions } from '../kernel/subdedit.mjs';
 
-// LOCAL EDGE INSERT — insertEdgeLoop with { local: true } (and its named
+// Local edge insert — insertEdgeLoop with { local: true } (and its named
 // sibling insertEdgeLocal): the same cut as the whole-loop insert, stopped
 // after the seed face, leaving a T-junction at each end of the new edge.
 //
-// THE FIXTURE is a torus cage with one face extruded — genuinely curved,
+// The fixture is a torus cage with one face extruded — curved,
 // closed, and irregular (it carries valence-3 and valence-5 extraordinary
 // vertices, so nothing here can pass by accident on a regular grid). Every
-// number asserted about it below is MEASURED first, in the fixture test, and
+// number asserted about it below is measured first, in the fixture test, and
 // the rest of the file reads those measurements back out of the same builder.
 
 function buildFixture() {
@@ -34,10 +34,10 @@ function cageStats(cage) {
   return { V, E, F, euler: V - E + F, faceSizes, naked, nonManifold, valences, topo };
 }
 
-// Everything "a valid cage" has to mean here, checked on the RESULT rather
+// Everything "a valid cage" has to mean here, checked on the result rather
 // than predicted from the input: in-range indices, no vertex used twice
 // within one face, consistent winding (a consistently wound manifold uses
-// each DIRECTED edge at most once — a reused one is a face wound backwards
+// each directed edge at most once — a reused one is a face wound backwards
 // against its neighbor), no edge left non-manifold, and acceptance by
 // subdivideCatmullClark itself, which is what runs kernel/subd.mjs's own
 // validateCage over the cage.
@@ -67,11 +67,9 @@ function assertValidCage(cage, label) {
   assert.doesNotThrow(() => subdivideCatmullClark(cage), `${label}: rejected by subdivideCatmullClark`);
 }
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE, MEASURED
-// ---------------------------------------------------------------------------
+// The fixture, measured
 
-test('local insert fixture: the extruded torus cage is curved, closed, all-quad and genuinely irregular — measured, not assumed', () => {
+test('local insert fixture: the extruded torus cage is curved, closed, all-quad and irregular — measured, not assumed', () => {
   const cage = buildFixture();
   const s = cageStats(cage);
   assert.deepEqual({ V: s.V, E: s.E, F: s.F }, { V: 52, E: 104, F: 52 });
@@ -79,7 +77,7 @@ test('local insert fixture: the extruded torus cage is curved, closed, all-quad 
   assert.deepEqual(s.faceSizes, { 4: 52 }, 'every face starts as a quad');
   assert.equal(s.naked, 0, 'closed: no naked edge');
   assert.equal(s.nonManifold, 0);
-  // The extrusion is what makes this NOT a regular grid: a plain torus cage is
+  // The extrusion is what makes this not a regular grid: a plain torus cage is
   // valence-4 everywhere, and a regular grid can hide orientation and
   // continuation bugs that only an extraordinary vertex exposes.
   assert.deepEqual(s.valences, { 3: 4, 4: 44, 5: 4 });
@@ -90,17 +88,15 @@ test('local insert fixture: the extruded torus cage is curved, closed, all-quad 
   }
 });
 
-// ---------------------------------------------------------------------------
-// THE CONSTRUCTION'S OWN PREDICTED COUNTS
-// ---------------------------------------------------------------------------
+// The construction's own predicted counts
 //
 // Derived before measuring. A local insert on a quad seed face whose two
 // rungs are both interior:
-//   VERTICES  +2 — one per rung, at its own interior
-//   FACES     +1 — the seed quad is removed and two quads replace it
-//   EDGES     +3 — each rung becomes two edges (+1 each), plus the new edge
-//   EULER      0 — (V+2) - (E+3) + (F+1) = V - E + F, unchanged
-//   FACE SIZES two quads become pentagons; nothing else changes size
+//   vertices  +2 — one per rung, at its own interior
+//   faces     +1 — the seed quad is removed and two quads replace it
+//   edges     +3 — each rung becomes two edges (+1 each), plus the new edge
+//   Euler      0 — (V+2) - (E+3) + (F+1) = V - E + F, unchanged
+//   face sizes two quads become pentagons; nothing else changes size
 
 test('local insert: exact vertex/face/edge deltas the construction predicts, and Euler unchanged', () => {
   const cage = buildFixture();
@@ -132,7 +128,7 @@ test('local insert: the T-junction is exactly where the construction puts it —
 
   const pentagons = r.tJunctionFaceIndices.map((i) => r.cage.faces[i]);
   for (const p of pentagons) assert.equal(p.length, 5, 'a widened quad neighbor is a 5-gon');
-  // Every pentagon in the OUTPUT is one of the reported ones — the report is
+  // Every pentagon in the output is one of the reported ones — the report is
   // complete, not merely correct about the faces it happens to name.
   const allPentagonIdx = r.cage.faces.map((f, i) => (f.length === 5 ? i : -1)).filter((i) => i >= 0);
   assert.deepEqual(allPentagonIdx.slice().sort((a, b) => a - b), r.tJunctionFaceIndices.slice().sort((a, b) => a - b));
@@ -168,7 +164,7 @@ test('local insert: the new vertices are the exact lerp of their own rung endpoi
   }
 });
 
-test('local insert: the position slider still works — recomputeInsertedLoopPositions moves a LOCAL insert with no topology change', () => {
+test('local insert: the position slider still works — recomputeInsertedLoopPositions moves a local insert with no topology change', () => {
   const cage = buildFixture();
   const seedKey = edgeKey(cage.faces[20][0], cage.faces[20][1]);
   const r = insertEdgeLocal(cage, seedKey, 0.5, 0);
@@ -184,11 +180,9 @@ test('local insert: the position slider still works — recomputeInsertedLoopPos
   });
 });
 
-// ---------------------------------------------------------------------------
-// LOCAL IS LOCAL, AND THE SEED EDGE'S OTHER FACE IS DELIBERATELY UNTOUCHED
-// ---------------------------------------------------------------------------
+// Local is local, and the seed edge's other face is deliberately untouched
 
-test('local insert splits ONE face where the loop insert splits the whole strip, and leaves the seed edge itself intact', () => {
+test('local insert splits one face where the loop insert splits the whole strip, and leaves the seed edge itself intact', () => {
   const cage = buildFixture();
   const seedKey = edgeKey(cage.faces[20][0], cage.faces[20][1]);
   const loop = insertEdgeLoop(cage, seedKey, 0.5, 0);
@@ -201,12 +195,12 @@ test('local insert splits ONE face where the loop insert splits the whole strip,
   assert.ok(loop.insertedVertexIndices.length > 2,
     `the loop insert should place a vertex on every rung it crosses (it placed ${loop.insertedVertexIndices.length})`);
 
-  // The seed edge is reused VERBATIM by the near-half replacement quad, so it
+  // The seed edge is reused verbatim by the near-half replacement quad, so it
   // still exists as an edge of the output.
   assert.ok(buildTopology(local.cage).edgeMap.has(seedKey), 'the seed edge itself is never split');
 });
 
-test('local insert: the face on the OTHER side of the seed edge is left byte-identical — nothing to repair, because the seed edge is not split', () => {
+test('local insert: the face on the other side of the seed edge is left byte-identical — nothing to repair, because the seed edge is not split', () => {
   const cage = buildFixture();
   const seedKey = edgeKey(cage.faces[20][0], cage.faces[20][1]);
   const topo = buildTopology(cage);
@@ -223,7 +217,7 @@ test('local insert: the face on the OTHER side of the seed edge is left byte-ide
   assert.ok(!r.cage.faces.some((f) => JSON.stringify(f) === JSON.stringify(cage.faces[faceA])),
     'the chosen side\'s face must be gone, replaced by its two halves');
 
-  // side 1 is the way to reach the OTHER face: a second, independent local
+  // side 1 is the way to reach the other face: a second, independent local
   // cut, not a continuation of the first.
   const r1 = insertEdgeLocal(cage, seedKey, 0.5, 1);
   const wantedA = JSON.stringify(cage.faces[faceA]);
@@ -231,9 +225,7 @@ test('local insert: the face on the OTHER side of the seed edge is left byte-ide
   assert.notDeepEqual(r.rungPairs, r1.rungPairs, 'the two sides split different rungs — they are different cuts');
 });
 
-// ---------------------------------------------------------------------------
-// THE LIMIT SURFACE BARELY MOVES
-// ---------------------------------------------------------------------------
+// The limit surface barely moves
 
 function closestPointOnTriangleDistance(p, a, b, c) {
   const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
@@ -283,13 +275,13 @@ function surfaceDeviation(cageA, cageB, level = 2) {
   return Math.max(oneSidedHausdorff(A, B), oneSidedHausdorff(B, A));
 }
 
-test('local insert is a refinement, not a deformation: the limit surface moves no more than the already-shipped LOOP insert moves it', () => {
+test('local insert is a refinement, not a deformation: the limit surface moves no more than the whole-loop insert moves it', () => {
   const cage = buildFixture();
   const seedKey = edgeKey(cage.faces[20][0], cage.faces[20][1]);
 
   const localDev = surfaceDeviation(cage, insertEdgeLocal(cage, seedKey, 0.5, 0).cage);
-  // GROUND TRUTH, not a chosen tolerance: the whole-loop insert is the
-  // shipped, already-accepted behavior for this same seed edge and the same
+  // Ground truth, not a chosen tolerance: the whole-loop insert is the
+  // reference behavior for this same seed edge and the same
   // t. A local cut touches strictly less of the cage, so it has no business
   // disturbing the limit surface by more than the loop cut does. Comparing
   // against that number instead of an invented epsilon means the bar moves
@@ -305,16 +297,14 @@ test('local insert is a refinement, not a deformation: the limit surface moves n
   const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   assert.ok(localDev < 0.01 * diag,
     `local deviation ${localDev.toFixed(6)} should be well under 1% of the cage diagonal ${diag.toFixed(4)}`);
-  // Non-vacuous: the operation really does change the surface, so a measured
+  // Non-vacuous: the operation does change the surface, so a measured
   // zero here would mean the measurement, not the operation, is broken.
   assert.ok(localDev > 0, 'the cage changed, so some deviation is expected');
 });
 
-// ---------------------------------------------------------------------------
-// A CAGE THAT ALREADY HAS A T-JUNCTION MUST SURVIVE THE NEXT INSERT
-// ---------------------------------------------------------------------------
+// A cage that already has a T-junction must survive the next insert
 
-test('second local insert on a cage that already carries a T-junction: the pentagon widens again to a 6-gon holding BOTH new vertices', () => {
+test('second local insert on a cage that already carries a T-junction: the pentagon widens again to a 6-gon holding both new vertices', () => {
   const cage = buildFixture();
   const first = insertEdgeLocal(cage, edgeKey(cage.faces[20][0], cage.faces[20][1]), 0.5, 0);
   assertValidCage(first.cage, 'after first insert');
@@ -349,18 +339,18 @@ test('second local insert on a cage that already carries a T-junction: the penta
   assert.equal(after.nonManifold, 0);
   assertValidCage(chosen.r.cage, 'after second insert');
 
-  // The 6-gon carries BOTH T-vertices: the one from the first insert and the
+  // The 6-gon carries both T-vertices: the one from the first insert and the
   // one from the second. That is the specific thing a naive implementation
   // loses, by rebuilding the neighbor from the original quad and dropping
   // the vertex already spliced into it.
   const hex = chosen.r.cage.faces.find((f) => f.length === 6);
   const firstT = first.insertedVertexIndices.filter((v) => hex.includes(v));
   const secondT = chosen.r.insertedVertexIndices.filter((v) => hex.includes(v));
-  assert.equal(firstT.length, 1, 'the 6-gon must still hold the FIRST insert\'s T-vertex');
-  assert.equal(secondT.length, 1, 'the 6-gon must hold the SECOND insert\'s T-vertex');
+  assert.equal(firstT.length, 1, 'the 6-gon must still hold the first insert\'s T-vertex');
+  assert.equal(secondT.length, 1, 'the 6-gon must hold the second insert\'s T-vertex');
 });
 
-test('third local insert on a doubly-T-junctioned cage stays valid for every seed it accepts, and refuses an n-gon seed honestly', () => {
+test('third local insert on a doubly-T-junctioned cage stays valid for every seed it accepts, and refuses an n-gon seed', () => {
   const cage = buildFixture();
   const c1 = insertEdgeLocal(cage, edgeKey(cage.faces[20][0], cage.faces[20][1]), 0.5, 0).cage;
   const topo1 = buildTopology(c1);
@@ -404,9 +394,7 @@ test('third local insert on a doubly-T-junctioned cage stays valid for every see
     'the only refusals are exactly the (edge, side) pairs whose seed face is an n-gon');
 });
 
-// ---------------------------------------------------------------------------
-// A FULL SWEEP: EVERY EDGE, BOTH SIDES
-// ---------------------------------------------------------------------------
+// A full sweep: every edge, both sides
 
 test('local insert: every edge of the fixture, from both sides, yields a valid cage with the same predicted deltas — no seed is a special case', () => {
   const cage = buildFixture();
@@ -430,9 +418,7 @@ test('local insert: every edge of the fixture, from both sides, yields a valid c
   assert.equal(count, before.E * 2, 'every edge, both sides');
 });
 
-// ---------------------------------------------------------------------------
-// THE WHOLE-LOOP PATH IS UNCHANGED
-// ---------------------------------------------------------------------------
+// The whole-loop path is unchanged
 
 test('whole-loop insert is unchanged: a frozen hand-checkable result on the facets=6 cylinder at t=0.25', () => {
   const cyl = superbCylinderCage([0, 0, 0], 25, 50, 6);
@@ -471,7 +457,7 @@ test('whole-loop insert never reaches the T-junction repair: it leaves no widene
   assert.equal(checked, topo.edgeMap.size * 2);
 });
 
-test('the local option is genuinely opt-in: omitted, {}, and {local:false} all produce the identical whole-loop result', () => {
+test('the local option is opt-in: omitted, {}, and {local:false} all produce the identical whole-loop result', () => {
   const cage = buildFixture();
   const topo = buildTopology(cage);
   for (const [k] of topo.edgeMap) {
@@ -503,8 +489,8 @@ test('local insert keeps every guard the loop insert has: t range, side range, u
   assert.throws(() => insertEdgeLocal(cage, '9999_9998', 0.5, 0), /not a real edge/);
   assert.throws(() => insertEdgeLoop(cage, seedKey, 0.5, 2, { local: true }), /side must be 0 or 1/);
 
-  // A pentagon seed face: honestly refused, with a message that says why a
-  // LOCAL insert needs a quad rather than repeating the strip wording.
+  // A pentagon seed face: refused, with a message that says why a
+  // local insert needs a quad rather than repeating the strip wording.
   const withT = insertEdgeLocal(cage, seedKey, 0.5, 0);
   const pentagon = withT.cage.faces[withT.tJunctionFaceIndices[0]];
   const pentEdge = edgeKey(pentagon[0], pentagon[1]);
@@ -515,7 +501,7 @@ test('local insert keeps every guard the loop insert has: t range, side range, u
     /only a quad has an opposite edge[\s\S]*Seed from an edge of an adjacent quad instead/);
 });
 
-test('local insert transfers a crease on a split rung onto BOTH halves, and leaves the untouched near/far creases alone', () => {
+test('local insert transfers a crease on a split rung onto both halves, and leaves the untouched near/far creases alone', () => {
   const cage = buildFixture();
   const seedKey = edgeKey(cage.faces[20][0], cage.faces[20][1]);
   const probe = insertEdgeLocal(cage, seedKey, 0.5, 0);

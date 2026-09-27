@@ -1,21 +1,21 @@
-// CORNER BLEND — closing a valence-3 corner whose three edges have DIFFERENT
+// Corner blend — closing a valence-3 corner whose three edges have different
 // fillet radii.
 //
-// When the three radii are EQUAL there is a ball tangent to all three faces,
+// When the three radii are equal there is a ball tangent to all three faces,
 // every blend's end arc is a great circle on it, and the corner closes as a
 // spherical triangle that needs no fitting at all (see filletCornerPatch in the
 // app). That construction has no answer when the radii differ: no single sphere
 // is tangent to three faces at three different distances, and on an orthogonal
 // corner the two adjacent blends leave a gap of |r1 - r2| * sqrt(2).
 //
-// What replaces it has to be built from what the three blends actually leave
+// What replaces it has to be built from what the three blends leave
 // behind, so this module starts there — with the corners of the region to be
 // filled, which have a closed form, and the curves that bound it.
 //
-// ⚠ THE BLENDS DO NOT END ON A PLANE ANY MORE, and that is the first thing the
-// equal-radius case hides. A blend along one edge is a tube about that edge;
+// With unequal radii the blends do not end on a plane, which the equal-radius
+// case hides. A blend along one edge is a tube about that edge;
 // with equal radii it stops at a plane perpendicular to itself and its end is a
-// circle. With unequal radii its two tangency curves have to stop at DIFFERENT
+// circle. With unequal radii its two tangency curves have to stop at different
 // distances from the corner — one where it meets its neighbor on one shared
 // face, the other where it meets a different neighbor on the other — so its
 // end is a skew curve across the tube, not a planar section.
@@ -31,12 +31,12 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 function norm(a) { const L = len(a); return L > EPS ? [a[0] / L, a[1] / L, a[2] / L] : null; }
 
-/* CONVEX AND CONCAVE EDGES SHARE ONE SETBACK, AND THE SIGNED FORMULA DOES NOT.
+/* Convex and concave edges share one setback, and the signed formula does not.
 
-   phi is the INTERIOR dihedral — the angle measured through the material. A
+   phi is the interior dihedral — the angle measured through the material. A
    convex edge has phi < pi, a concave one phi > pi. The blend's rolling ball
    does not care which: it rolls in whichever of the two wedges at the edge is
-   CONVEX, which is the material for a convex edge and the void for a concave
+   convex, which is the material for a convex edge and the void for a concave
    one, and that wedge always subtends
 
        psi = phi        (convex)          psi = 2*pi - phi   (concave)
@@ -48,18 +48,17 @@ function norm(a) { const L = len(a); return L > EPS ? [a[0] / L, a[1] / L, a[2] 
 
        setback = r / tan(psi/2) = r / |tan(phi/2)|
 
-   and it is POSITIVE along the co-normal in both cases, because the co-normal
+   and it is positive along the co-normal in both cases, because the co-normal
    points into the face and the tangency is on the face.
 
-   ⚠⚠ THE UNSIGNED VALUE IS NOT A CONVENIENCE, IT IS THE GEOMETRY. Writing
-   r/tan(phi/2) makes tan negative for every concave edge, which flips the
-   setback and puts the tangency line on the far side of the edge — off the
-   face the ball actually touches, by twice the setback. The magnitude looks
-   right at every radius, so nothing downstream reads as wrong until the corner
-   lands outside the material.
+   The unsigned value is the geometry. Writing r/tan(phi/2) makes tan negative
+   for every concave edge, which flips the setback and puts the tangency line
+   on the far side of the edge — off the face the ball touches, by twice the
+   setback. The magnitude is right at every radius, so nothing downstream
+   detects it until the corner lands outside the material.
 
    The consequence for everything below: a corner of the patch depends on phi
-   only through psi, so THE CROSSINGS ARE BLIND TO CONVEXITY. An all-concave
+   only through psi, so the crossings are blind to convexity. An all-concave
    corner and the convex corner on the same three face planes return the same
    three points — they are point-set complements of one another, the rolling
    balls run in the same wedges, and the blend tubes are congruent. Which side
@@ -81,7 +80,7 @@ const DIHEDRAL_RANGE_NOTE = 'an interior dihedral runs (0, pi) convex or (pi, 2*
 /** Where a blend's tangency curve runs on one of its two faces.
  *
  *  A rolling ball of radius r along an edge touches each adjacent face along a
- *  line offset from the edge by the setback r/|tan(phi/2)|, measured INTO that
+ *  line offset from the edge by the setback r/|tan(phi/2)|, measured into that
  *  face along its co-normal. On a face shared by two filleted edges there are
  *  two such lines, one per edge, and where they cross is a corner of the region
  *  the corner patch has to fill. That crossing is the closed form this module
@@ -99,9 +98,9 @@ export function tangencyLineOnFace({ edgePoint, edgeDir, coNormal, radius, phi }
 }
 
 /** The corner of the patch on a face shared by two filleted edges: where those
- *  two edges' tangency lines cross ON that face.
+ *  two edges' tangency lines cross on that face.
  *
- *  ⚠ REFUSES A NEAR-PARALLEL CROSSING RATHER THAN RETURNING A DISTANT POINT.
+ *  Refuses a near-parallel crossing rather than returning a distant point.
  *  Two lines that nearly agree in direction meet a very long way off, and the
  *  answer is numerically meaningless well before it is geometrically wrong —
  *  which reads downstream as a corner patch stretched across the model.
@@ -113,10 +112,10 @@ export function tangencyCrossing(lineA, lineB, opts = {}) {
   if (cosT > Math.cos(minAngle)) {
     return { ok: false, reason: 'the two tangency lines on this face are within a degree of parallel — where they cross is not a usable point' };
   }
-  // Least-squares crossing of two lines: exact where they genuinely intersect,
-  // and the midpoint of the shortest connecting segment where float has moved
-  // them apart. The residual is REPORTED, so a caller can refuse a pair that
-  // does not really meet rather than be handed their near-miss.
+  // Least-squares crossing of two lines: exact where they intersect, and the
+  // midpoint of the shortest connecting segment where float has moved them
+  // apart. The residual is reported, so a caller can refuse a pair that does
+  // not meet rather than be handed their near-miss.
   const w0 = sub(pA, pB);
   const a = dot(dA, dA), b = dot(dA, dB), c = dot(dB, dB);
   const d = dot(dA, w0), e = dot(dB, w0);
@@ -136,35 +135,35 @@ export function tangencyCrossing(lineA, lineB, opts = {}) {
  *  face — together with the dihedral there. Faces are identified by index so
  *  the two edges sharing a face can be paired without geometry matching.
  *
- *  ⚠ ANY MIX OF CONVEX AND CONCAVE EDGES IS ALLOWED, and the reason it can be
- *  is that this construction never asks for a ball tangent to all three faces.
+ *  Any mix of convex and concave edges is allowed, because this construction
+ *  never asks for a ball tangent to all three faces.
  *  There is none at a mixed corner: such a ball would have to sit inside the
  *  material for the convex edges and outside it for the concave ones at the
  *  same time, which is why the rounding of a convex edge and the filleting of a
  *  concave one are different operations (Rossignac & Requicha, "Offsetting
- *  operations in solid modeling", CAGD 3(2):129-148, 1986, section 2.5), and
+ *  operations in solid modeling", CAGD 3(2):129-148, 1986), and
  *  why a spherical corner exists only where the three concavities agree. What
- *  is crossed here is the blends' OWN tangency lines, each of which needs only
+ *  is crossed here is the blends' own tangency lines, each of which needs only
  *  its own edge's rolling ball, so the mixed corner has three of them and no
  *  need of a fourth.
  *
  *  Two facts about a mixed corner follow, and both hold at every radius:
  *
- *  · At a face shared by two edges of UNLIKE convexity the two blends roll on
+ *  · At a face shared by two edges of unlike convexity the two blends roll on
  *    opposite sides of that face, so their axes are exactly rA + rB apart at
  *    the point over the crossing and nowhere closer. The tubes are externally
- *    TANGENT there — they touch at the crossing and do not overlap, where two
+ *    tangent there — they touch at the crossing and do not overlap, where two
  *    edges of like convexity give tubes that interpenetrate and have to be
  *    trimmed against each other. Either way the crossing is the corner.
  *  · At every crossing, convex or concave or mixed, both adjacent blends are
  *    tangent to the shared face along their own tangency lines, so the corner
- *    lies on both tubes and the patch's tangent plane there IS the face plane.
+ *    lies on both tubes and the patch's tangent plane there is the face plane.
  *
- *  What a mixed corner does NOT come with is a guarantee that one patch can
+ *  What a mixed corner does not come with is a guarantee that one patch can
  *  span the triangle: pushing the crossing on the third face behind the vertex
  *  makes the triangle long and thin whenever the convex edge's radius is small
- *  against the concave ones. That is the same limit `cornerPatchFolds` already
- *  polices for convex corners, measured on the same instrument, and it is a
+ *  against the concave ones. That is the same limit `cornerPatchFolds`
+ *  checks for convex corners, with the same measure, and it is a
  *  question about the triangle rather than about the convexities.
  */
 export function cornerPatchCorners(vertex, edges, opts = {}) {
@@ -182,7 +181,7 @@ export function cornerPatchCorners(vertex, edges, opts = {}) {
       lines.push({ edge: i, face, ...L });
     }
   }
-  // Pair the lines by the FACE they lie on. Each face carries exactly two.
+  // Pair the lines by the face they lie on. Each face carries exactly two.
   const byFace = new Map();
   for (const L of lines) {
     if (!byFace.has(L.face)) byFace.set(L.face, []);
@@ -199,35 +198,32 @@ export function cornerPatchCorners(vertex, edges, opts = {}) {
     corners.push({ face, point: x.point, edges: [pair[0].edge, pair[1].edge], gap: x.gap, tA: x.tA, tB: x.tB });
   }
   const worstGap = corners.reduce((m, c) => Math.max(m, c.gap), 0);
-  /* ⚠⚠ A REPORTED RESIDUAL THAT NOTHING REFUSES ON IS NOT A CHECK. This
-     returned `worstGap` and hoped a caller would read it. Swap two face labels
-     on one edge and it came back ok with a gap of 5 units and three
-     confident-looking corners that lie on neither of the lines that made them;
-     a co-normal half a degree out of its face — which is what MEASURED
-     geometry gives — produces a gap of 0.05, five hundred times a weld
-     tolerance, and a corner off the face entirely. The gap is the distance
-     between two lines that are supposed to meet, so anything above the
-     tolerance means they do not, and there is no corner there to build. */
+  /* The gap is refused on, not only reported. Swapped face labels on one
+     edge, or a co-normal half a degree out of its face (as measured geometry
+     gives), produce corners that lie on neither of the lines that made them.
+     The gap is the distance between two lines that are supposed to meet, so
+     anything above the tolerance means they do not, and there is no corner
+     there to build. */
   const gapTol = opts.gapTolerance ?? 1e-6;
   const scale = Math.max(...edges.map((e) => e.radius), 1);
   if (worstGap > gapTol * scale) {
     const bad = corners.filter((c) => c.gap > gapTol * scale).map((c) => c.face);
     return { ok: false, reason: `the two tangency lines on face(s) ${bad.join(', ')} do not meet — they pass ${worstGap.toExponential(3)} apart, so there is no crossing to put a corner at. Check that each edge's co-normals and dihedral describe the same faces.`, worstGap, corners };
   }
-  /* ⚠ AND A GAP OF ZERO IS NOT PROOF THE INPUT AGREES WITH ITSELF. Two lines
-     can genuinely intersect while the geometry that produced them is
+  /* A gap of zero is not proof the input agrees with itself. Two lines
+     can intersect while the geometry that produced them is
      inconsistent: give an orthogonal corner a dihedral of 60 degrees on one
      edge and both its lines still lie in their faces, so they cross exactly —
      at a corner 3.7 units from the right one, with a residual of zero. The
      dihedral and the co-normals are two descriptions of the same wedge, so
      they are required to agree: dot(coNormalA, coNormalB) = cos(psi), with psi
-     the wedge angle the setback is actually taken from.
+     the wedge angle the setback is taken from.
 
-     ⚠ AND THAT IS ALL THEY CAN SAY. `acos` returns [0, pi], so two co-normals
+     That is all they can say. `acos` returns [0, pi], so two co-normals
      90 degrees apart are equally consistent with a 90-degree convex edge and a
-     270-degree concave one. The two are genuinely indistinguishable from an
+     270-degree concave one. The two are indistinguishable from an
      edge direction and two in-face directions — nothing in this input names
-     which side the material is on — so phi's half of the range is a DECLARATION
+     which side the material is on — so phi's half of the range is a declaration
      the co-normals cannot corroborate. It costs nothing here, because the
      crossings do not depend on it; a caller that needs the material side reads
      phi itself. */
@@ -244,25 +240,25 @@ export function cornerPatchCorners(vertex, edges, opts = {}) {
   return { ok: true, corners, worstGap };
 }
 
-/* WHERE A BLEND STOPS WHEN ITS NEIGHBORS DISAGREE — THE APPROXIMATE FORM.
+/* Where a blend stops when its neighbors disagree — the approximate form.
 
    With equal radii a blend ends on a plane perpendicular to itself. With
-   unequal radii its two tangency curves stop at DIFFERENT distances from the
+   unequal radii its two tangency curves stop at different distances from the
    vertex, so its end runs skew across the tube.
 
-   ⚠⚠ THIS IS NOT THE CURVE `blendEndPlane` CUTS. A plane through the two
-   corners meets the tube in a CONIC, whose trace in (u, v) is a sinusoid and
-   not a line — measured at 0.105 units of disagreement on an ordinary corner,
-   a thousand weld tolerances. Trimming the face with this loop while taking
+   This is not the curve `blendEndPlane` cuts. A plane through the two
+   corners meets the tube in a conic, whose trace in (u, v) is a sinusoid and
+   not a line — on an ordinary corner the two differ by far more than a weld
+   tolerance. Trimming the face with this loop while taking
    the corner patch's boundary from the plane leaves a sliver along every
    corner.
 
    `blendEndTrimLoopFromPlane` below is the one that agrees with the patch.
-   This stays for a caller that wants the straight-line approximation
-   knowingly, and is named so it cannot be reached by accident.
+   This is for a caller that wants the straight-line approximation, and is
+   named so it cannot be reached by accident.
 
-   u runs ACROSS the section, from the tangency on one face to the tangency on
-   the other; v runs ALONG the spine. */
+   u runs across the section, from the tangency on one face to the tangency on
+   the other; v runs along the spine. */
 export function blendEndTrimLoopApprox({ vStartAtU0, vStartAtU1, vEndAtU0, vEndAtU1, uMin = 0, uMax = 1 }) {
   const vs = [vStartAtU0, vStartAtU1, vEndAtU0, vEndAtU1];
   if (!vs.every((v) => Number.isFinite(v))) return { ok: false, reason: 'a blend end parameter is not a number' };
@@ -275,7 +271,7 @@ export function blendEndTrimLoopApprox({ vStartAtU0, vStartAtU1, vEndAtU0, vEndA
   };
 }
 
-/* THE CORNER PATCH ITSELF — Nielson's side-vertex interpolant over the
+/* The corner patch itself — Nielson's side-vertex interpolant over the
    triangle bounded by the three blend end curves.
 
    For each corner V_i, a ray from V_i through the evaluation point meets the
@@ -286,79 +282,69 @@ export function blendEndTrimLoopApprox({ vStartAtU0, vStartAtU1, vEndAtU0, vEndA
    coordinates are non-zero and the two rival weights carry a factor of b_i = 0,
    so the sum collapses to that side's own interpolant.
 
-   ⚠ THE THREE CORNERS ARE 0/0 AND HAVE TO BE NAMED. Every weight carries a
+   The three corners are 0/0 and have to be handled explicitly. Every weight carries a
    factor that vanishes at a vertex, so the blend is undefined there and float
    noise decides it otherwise. The corner value is known exactly — it is the
    vertex — so it is returned outright rather than approached.
 
    G0 by construction, which is what watertightness needs. Tangent continuity
-   across the three boundaries is a further condition on the RAY interpolant
-   (a cubic Hermite carrying each blend's cross-boundary derivative rather than
-   the straight line used here), and is deliberately a separate step: a patch
-   that closes the hole is worth having before one that closes it smoothly, and
-   the two can be compared against each other only if both exist.
+   across the three boundaries is a further condition on the ray interpolant:
+   with the optional `tangent` input, each ray is a cubic Hermite carrying the
+   adjacent blend's cross-boundary derivative rather than a straight line.
 */
-/* ⚠ THE CROSS-TANGENT MAGNITUDE IS 1/4 OF THE RAY, AND THAT NUMBER IS MEASURED.
+/* The cross-tangent magnitude is 1/4 of the ray, a measured value.
    It sets how far the Hermite reaches before the vertex takes over, so it
-   controls INTERIOR SHAPE and not the tangent plane — tangency is exact at
-   every value, confirmed by refining the measuring step and watching the
-   reported angle fall linearly to zero at each of them.
+   controls interior shape and not the tangent plane — tangency is exact at
+   every value.
 
-   What it does control is FOLDING. At full ray length the patch folds once the
+   What it does control is folding. At full ray length the patch folds once the
    radii differ by about 3:1; at a quarter it is clean through 5:1 and beyond,
    and only isolated reversals appear past 8:1 — where the corner region is
-   geometrically extreme anyway. Swept across ratios rather than picked. */
+   geometrically extreme anyway. Chosen by sweeping radius ratios. */
 const CORNER_TANGENT_SCALE = 0.25;
 export function sideVertexPatch({ corners, boundary, tangent, tangentScale = CORNER_TANGENT_SCALE }) {
   if (!Array.isArray(corners) || corners.length !== 3) return { ok: false, reason: 'a triangular patch needs exactly three corners' };
   if (!Array.isArray(boundary) || boundary.length !== 3) return { ok: false, reason: 'a triangular patch needs exactly three boundary curves' };
   for (let i = 0; i < 3; i++) if (typeof boundary[i] !== 'function') return { ok: false, reason: `boundary ${i} is not an evaluable curve` };
-  /* ⚠ WITHOUT A CROSS-BOUNDARY TANGENT THIS IS G0 AND ONLY G0. A straight ray
+  /* Without a cross-boundary tangent this is G0 only. A straight ray
      from the vertex to the boundary carries no information about how the
      neighboring surface leaves that boundary, so the patch meets it at
-     whatever angle the geometry happens to give — measured at 45 to 70 degrees
-     on a (5, 8, 3) corner, which is a visible crease and not a fillet.
+     whatever angle the geometry gives — tens of degrees on an unequal-radius
+     corner, which is a visible crease.
 
-     `tangent[i](s)` supplies the direction the ADJACENT BLEND leaves boundary i
+     `tangent[i](s)` supplies the direction the adjacent blend leaves boundary i
      at parameter s. With it, each ray becomes a cubic Hermite whose derivative
-     at the boundary end IS that direction; the (b_j*b_k)^2 weights make the
-     blend reduce to that ray to FIRST order on the boundary, so the patch's
+     at the boundary end is that direction; the (b_j*b_k)^2 weights make the
+     blend reduce to that ray to first order on the boundary, so the patch's
      tangent plane there is spanned by the boundary tangent and this vector —
      which is the adjacent blend's tangent plane exactly.
 
-     The vector only has to LIE in that plane and point inward: its magnitude
+     The vector only has to lie in that plane and point inward: its magnitude
      and any component along the boundary change the interior shape, not the
      tangent plane. It is rescaled to the ray length here so a caller does not
      have to guess a magnitude, and flipped if it points the wrong way, because
-     a reversed cross-tangent everts the patch rather than failing loudly. */
+     a reversed cross-tangent everts the patch without any other failure. */
   const hasTangent = Array.isArray(tangent) && tangent.length === 3 && tangent.every((t) => typeof t === 'function');
-  /* ⚠⚠ THE ORIENTATION IS DECIDED ONCE PER SIDE, NOT ONCE PER SAMPLE, and that
-     distinction is the difference between a patch that works at any radius
-     ratio and one that folds past about 2.5:1.
+  /* The orientation is decided once per side, not once per sample; per-sample
+     flipping folds the patch past a radius ratio of about 2.5:1.
 
      The cross-tangent field is already smooth: it is the blend's normal crossed
      with the boundary tangent, and both of those vary smoothly along the
      boundary. Flipping it per sample to point at the opposite vertex injects a
      discontinuity the field never had — on an asymmetric triangle the chord to
      that vertex swings past perpendicular partway along, the test changes its
-     mind there, and the ray family reverses mid-boundary. Measured: at radii
-     (1,4,1) the sign flipped 7/10 of the way along two of the three sides, and
-     those are exactly the ratios at which adjacent normals began reversing.
+     answer there, and the ray family reverses mid-boundary.
 
-     One decision per side, taken at the middle where the chord is least
-     ambiguous, then applied to the whole side. */
+     One decision per side, then applied to the whole side. */
   const sideSign = new Array(3).fill(1);
   const sideNote = [];
   if (hasTangent) {
     for (let i = 0; i < 3; i++) {
-      /* ⚠ ONE SAMPLE CANNOT SPEAK FOR A SIDE WHOSE ANSWER CHANGES ALONG IT.
-         Taking the decision at the midpoint alone is stable for an ordinary
-         boundary and silently arbitrary for one where the chord to the
-         opposite vertex swings past perpendicular — the mid sample then sits
-         on a knife edge where an input difference of 1e-9 everts that whole
-         side. Polled across the side instead: a clear majority is the answer,
-         and a genuine split is a refusal, because no constant sign is right
-         for such a side and picking one folds the rest of it. */
+      /* Polled across the side rather than decided at the midpoint alone. A
+         single mid-side sample is stable for an ordinary boundary and
+         arbitrary for one where the chord to the opposite vertex swings past
+         perpendicular — the mid sample then sits on a knife edge where an
+         input difference of 1e-9 everts that whole side. */
       let plus = 0, minus = 0, weakest = Infinity;
       for (let k = 1; k < 8; k++) {
         const s2 = k / 8;
@@ -372,29 +358,24 @@ export function sideVertexPatch({ corners, boundary, tangent, tangentScale = COR
         weakest = Math.min(weakest, Math.abs(proj));
       }
       if (plus === 0 && minus === 0) { sideNote.push(`side ${i}: no usable cross-tangent anywhere along it`); continue; }
-      /* A SPLIT VOTE IS NOT ITSELF A REFUSAL. The chord to the opposite vertex
-         genuinely swings past perpendicular on an asymmetric triangle, so the
-         test disagrees with itself along the side without the resulting patch
-         being wrong — measured clean by the fold detector on configurations
-         that split 5:2. The majority is taken, which is what makes the choice
-         robust where a single mid-side sample sits on a knife edge and flips
-         the whole side for an input difference of 1e-9. Whether the patch is
-         actually sound is the fold detector's question, and it is asked
-         separately rather than guessed at here. */
+      /* A split vote is not itself a refusal. The chord to the opposite vertex
+         swings past perpendicular on an asymmetric triangle, so the test
+         disagrees with itself along the side without the resulting patch
+         being wrong. The majority is taken. Whether the patch is sound is
+         `cornerPatchFolds`'s question, asked separately. */
       sideSign[i] = plus >= minus ? 1 : -1;
       void weakest;
     }
   }
   if (sideNote.length) return { ok: false, reason: sideNote.join('; ') };
   // boundary[i](s) runs from corners[(i+1)%3] at s=0 to corners[(i+2)%3] at
-  // s=1 — the side OPPOSITE corner i, which is what the ray from corner i hits.
+  // s=1 — the side opposite corner i, which is what the ray from corner i hits.
   const evaluate = (b0, b1, b2) => {
-    /* ⚠ OFF-SIMPLEX INPUT MUST NOT GET A CONFIDENT ANSWER. b_i is the
-       Hermite's own parameter, so coordinates that do not sum to one — or that
-       are negative — put it outside the curve it was built from and the point
-       returned means nothing. Callers doing floating-point arithmetic drift a
-       few ulps and that is fine; gross denormalization is a bug in the caller
-       and is worth saying so. */
+    /* Off-simplex input returns null. b_i is the Hermite's own parameter, so
+       coordinates that do not sum to one — or that are negative — put it
+       outside the curve it was built from and the point returned means
+       nothing. A drift of a few ulps is accepted; gross denormalization is a
+       caller bug. */
     if (!Number.isFinite(b0) || !Number.isFinite(b1) || !Number.isFinite(b2)) return null;
     if (Math.abs(b0 + b1 + b2 - 1) > 1e-6) return null;
     if (b0 < -1e-9 || b1 < -1e-9 || b2 < -1e-9) return null;
@@ -447,15 +428,16 @@ export function sideVertexPatch({ corners, boundary, tangent, tangentScale = COR
   return { ok: true, evaluate };
 }
 
-/* WHERE ALONG A BLEND A CORNER FALLS.
+/* Where along a blend a corner falls.
 
    The corners above are 3D points that lie, by construction, on a blend's own
    tangency curves — the u = uMin and u = uMax borders of its surface. Turning
    one into the v parameter where the blend has to stop is therefore a search
    along a single curve, not on a surface, which is why it can be done by
-   bisection on a monotone distance rather than by a general inversion.
+   a coarse sweep and then a golden-section search on the distance rather
+   than by a general inversion.
 
-   ⚠ THE ANSWER IS CHECKED, NOT ASSUMED. A corner that does not actually lie on
+   The answer is checked, not assumed. A corner that does not lie on
    the border — because the edge it belongs to was never filleted, or because
    the crossing was computed against the wrong face — still yields a nearest
    parameter, and that parameter is meaningless. The residual distance is
@@ -488,29 +470,29 @@ export function blendParamAtCorner({ evalBorder, corner, vMin = 0, vMax = 1, sam
   }
   const v = (lo + hi) / 2;
   const residual = Math.sqrt(d2(v));
-  /* ⚠ THE COARSE SWEEP IS WHAT MAKES THE REFINEMENT LEGITIMATE, and it can
-     still miss a basin narrower than its own spacing. A caller cannot tell a
-     wrong basin from a right one by looking, so the residual is compared here
-     against what the caller says "on the curve" means, rather than returned to
-     be shrugged at. Without a tolerance it is reported as before. */
+  /* The coarse sweep brackets the refinement, and it can still miss a basin
+     narrower than its own spacing. A caller cannot tell a wrong basin from a
+     right one by looking, so the residual is compared here against what the
+     caller says "on the curve" means. Without a tolerance it is only
+     reported. */
   if (opts.tolerance != null && residual > opts.tolerance) {
     return { ok: false, reason: `the corner is ${residual.toExponential(3)} from this blend's border, past the ${opts.tolerance} it was given — either it belongs to a different edge, or the border doubles back inside one sweep step`, v, residual };
   }
   return { ok: true, v, residual };
 }
 
-/* THE PLANE A BLEND ENDS ON, WHEN ITS TWO ENDS DISAGREE.
+/* The plane a blend ends on, when its two ends disagree.
 
    A blend has to reach one corner on one of its faces and a different corner on
    the other, and with unequal radii those sit at different distances from the
-   vertex. Cutting the tube with a PLANE through both of them keeps the end
+   vertex. Cutting the tube with a plane through both of them keeps the end
    curve an exact conic — a circle when the plane is perpendicular to the axis,
    an ellipse when it is tilted — which this kernel represents exactly, rather
    than a curve that has to be sampled and fitted.
 
-   ⚠ THE PLANE THROUGH TWO POINTS IS A PENCIL, and the choice tunes how full the
-   corner looks. Taken here as the member whose normal is CLOSEST TO THE AXIS,
-   which is the one honest anchor available: it is the unique plane through the
+   The planes through two points form a pencil, and the choice tunes how full
+   the corner looks. Taken here as the member whose normal is closest to the
+   axis: it is the unique plane through the
    chord that tilts as little as possible away from the section a blend would
    have used anyway. It reduces exactly to the perpendicular section when the
    two radii agree, so the equal-radius case is recovered rather than
@@ -532,10 +514,10 @@ export function blendEndPlane({ axisDir, cornerA, cornerB }) {
   return { ok: true, normal: n, offset: dot(n, cornerA), tiltRad: tilt };
 }
 
-/** Does the corner region actually fit on the faces it needs?
+/** Does the corner region fit on the faces it needs?
  *
- *  ⚠ THE CROSSING CAN FALL OFF THE FACE. Two tangency lines always meet
- *  somewhere; whether they meet WITHIN the face is a different question, and
+ *  The crossing can fall off the face. Two tangency lines always meet
+ *  somewhere; whether they meet within the face is a different question, and
  *  when they do not there is no corner to build — the ball has rolled off the
  *  rails, at a vertex rather than along an edge. Refused by name, in the same
  *  terms `maxRadiusForSetback` refuses the edge case.
@@ -557,8 +539,8 @@ export function cornerFitsOnFaces(cornerResult, faceExtents) {
   return cornerResult;
 }
 
-/* ═══ THE EXACT CASE: TWO RADII EQUAL ═══════════════════════════════════════
-   Three distinct radii have no closed form. TWO equal ones do, and it is worth
+/* The exact case: two radii equal.
+   Three distinct radii have no closed form. Two equal ones do, and it gets
    its own path rather than being handed to a fitter, because the answer is a
    torus and two spherical lunes — all rational, all exactly tangent.
 
@@ -569,20 +551,19 @@ export function cornerFitsOnFaces(cornerResult, faceExtents) {
    distance a + c from C's axis. Center path = (plane parallel to the shared
    face at height a) INTERSECT (cylinder of radius a + c about C's axis).
 
-   ⚠⚠ THAT INTERSECTION IS A CIRCLE ONLY WHEN C'S AXIS IS PERPENDICULAR TO THE
-   SHARED FACE, and that is the whole condition for the exact answer. It holds
+   That intersection is a circle only when C's axis is perpendicular to the
+   shared face, and that is the condition for the exact answer. It holds
    on a box and it does not hold in general: tilt the third edge and the
-   intersection becomes an ELLIPSE, the swept surface a general canal rather
-   than a torus, and no rational form survives. Checked, not assumed — the
-   alternative is a torus that is quietly the wrong surface.
+   intersection becomes an ellipse, the swept surface a general canal rather
+   than a torus, and no rational form survives. Checked, not assumed.
 
    The handoff station falls out of the same condition. The A-blend's own axis
-   IS the path of that ball (a ball of radius a tangent to both of A's faces has
+   is the path of that ball (a ball of radius a tangent to both of A's faces has
    its center on A's axis), so the handoff is where that axis first reaches
    distance a + c from C's axis:
        offset^2 = (a + c)^2 - (a - c)^2 = 4ac   ->   offset = 2*sqrt(ac)
    measured along the edge from the foot of C's axis. At exactly that station
-   the ball is tangent to BOTH of A's faces and to the C-blend at once — a
+   the ball is tangent to both of A's faces and to the C-blend at once — a
    triple tangency — and the piece of it between the two envelopes' contact
    circles is a spherical lune, which is the corner representation already
    built for the equal-radius case.
@@ -602,15 +583,15 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
       return { ok: false, reason: `the ${nm} edge's dihedral angle is out of range; got phi=${e.phi} — ${DIHEDRAL_RANGE_NOTE}` };
     }
   }
-  /* ⚠⚠ THIS PATH IS A ROLLING BALL, AND A ROLLING BALL CANNOT CHANGE SIDES.
+  /* This path is a rolling ball, and a rolling ball cannot change sides.
      The whole construction is one ball of radius a that stays tangent to the
      shared face while it travels from the first blend to the second, and the
-     side of that face it rides on is the side its edge's CONVEX wedge is on —
+     side of that face it rides on is the side its edge's convex wedge is on —
      the material at a convex edge, the void at a concave one. Two edges of
      unlike convexity therefore need it on both sides of the same plane at
      once, and there is no such path.
 
-     The third edge fails differently and just as hard. The center path is the
+     The third edge fails differently. The center path is the
      circle at distance a + c from that edge's axis; when the third edge's
      convexity disagrees with the other two, its axis sits a + c from the first
      blend's axis already, so the handoff offset 2*sqrt(ac) collapses — the two
@@ -628,12 +609,12 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
       reason: `this corner mixes convex and concave edges (interior angles ${deg(edgeA.phi)}, ${deg(edgeB.phi)}, ${deg(edgeC.phi)} degrees) — the rolling ball rides the material side of the shared face at a convex edge and the void side at a concave one, so no one ball travels between these blends, and a third edge of unlike convexity touches its path at a single station rather than crossing it`,
     };
   }
-  // ⚠ The condition that makes this exact rather than approximately right.
-  /* ⚠ THE GATE IS AN ANGLE, NOT A COSINE. `1 - 1e-9` in a dot product is
-     0.0026 degrees, which refuses any face normal fitted from real geometry
-     while still accepting a tilt big enough to put the torus a weld tolerance
-     out of place. Stated in radians so it can be read against the accuracy the
-     input actually has. */
+  // The condition that makes this exact rather than approximately right.
+  /* The tolerance is an angle, not a cosine. `1 - 1e-9` in a dot product is
+     0.0026 degrees, which refuses any face normal fitted from measured
+     geometry while still accepting a tilt big enough to put the torus a weld
+     tolerance out of place. Stated in radians so it can be read against the
+     accuracy the input has. */
   const alignTolRad = opts && opts.alignToleranceRad != null ? opts.alignToleranceRad : 1e-4;
   const align = Math.abs(dot(dC, nF));
   if (align < Math.cos(alignTolRad)) {
@@ -642,29 +623,27 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
       reason: `the third edge is ${(Math.acos(Math.min(1, align)) * 180 / Math.PI).toFixed(3)} degrees off the shared face's normal — the rolling ball's center traces an ellipse rather than a circle, so the corner is a general canal surface and not a torus`,
     };
   }
-  // C's axis: offset from the vertex into each of ITS two faces by its own
+  // C's axis: offset from the vertex into each of its two faces by its own
   // setback, which on the shared face is what puts the torus center in place.
   const axisPoint = add(vertex, add(mul(norm(edgeC.coNormalA), setbackFor(c, edgeC.phi)),
     mul(norm(edgeC.coNormalB), setbackFor(c, edgeC.phi))));
   /* The torus: center on C's axis, one ball-radius off the shared face on the
-     side the ball ROLLS, with C's axis for its own. Which side that is comes
-     from a co-normal rather than from the face normal's stored sign, which is
-     whatever the producing recipe happened to build.
+     side the ball rolls, with C's axis for its own. Which side that is comes
+     from a co-normal rather than from the face normal's stored sign, which
+     depends on the recipe that produced the face.
 
      A co-normal points from an edge into one of its faces, so the pair spans
      the wedge the ball rolls in — the material for a convex corner and the
      void for a concave one. The test below therefore needs no convexity flag:
      it reads the rolling side directly, and gives the same torus for a corner
      and for its point-set complement, which is what the two share. */
-  /* ⚠⚠ PICK THE CO-NORMAL BY WHICH ONE IS ACTUALLY OFF THE SHARED FACE, not by
-     a fixed threshold. One of edge A's two co-normals lies IN the shared face
+  /* Pick the co-normal by which one is off the shared face, not by a fixed
+     threshold. One of edge A's two co-normals lies in the shared face
      (dot with its normal ~ 0) and the other leans out of it by sin(phi_A). A
-     `> 0.5` test therefore fails for any dihedral under 30 degrees, falls
-     through to the in-plane one, and its dot being exactly 0 makes the sign
-     test false every time — putting the torus a full radius on the WRONG SIDE
-     of the face, in air, with ok:true. Deterministically wrong for sharp
-     corners rather than occasionally. Comparing the two and taking the larger
-     needs no threshold at all. */
+     `> 0.5` test would fail for any dihedral under 30 degrees, fall through
+     to the in-plane one, and its dot being exactly 0 would make the sign test
+     false — putting the torus a full radius on the wrong side of the face.
+     Comparing the two and taking the larger needs no threshold. */
   const cnA = norm(edgeA.coNormalA), cnB = norm(edgeA.coNormalB);
   if (!cnA || !cnB) return { ok: false, reason: 'the first edge has no usable co-normals' };
   const outward = Math.abs(dot(cnB, nF)) >= Math.abs(dot(cnA, nF)) ? cnB : cnA;
@@ -692,18 +671,18 @@ export function twoEqualRadiiCorner({ vertex, sharedFaceNormal, edgeA, edgeB, ed
   };
 }
 
-/* WOULD THIS PATCH FOLD? Sampled, because the scheme has no closed-form answer.
+/* Would this patch fold? Sampled, because the scheme has no closed-form answer.
 
-   A fold is a LOCAL reversal of the surface normal, so it is found by comparing
-   ADJACENT samples — a patch that wraps a corner sweeps its normal through
+   A fold is a local reversal of the surface normal, so it is found by comparing
+   adjacent samples — a patch that wraps a corner sweeps its normal through
    ninety degrees or more quite legitimately, and comparing everything to one
    reference calls that a failure.
 
-   ⚠ THE DIFFERENCES MUST STAY INSIDE THE TRIANGLE. The normal is taken by
+   The differences must stay inside the triangle. The normal is taken by
    stepping one barycentric coordinate down and the others up; at a coordinate
-   of zero that samples a NEGATIVE one, where the interpolant is extrapolating
-   and its answer means nothing. Every reversal a first version of this reported
-   on the boundary was exactly that. Samples are kept a few steps clear.
+   of zero that samples a negative one, where the interpolant is extrapolating
+   and would report spurious reversals on the boundary. Samples are kept a few
+   steps clear.
 */
 export function cornerPatchFolds(patch, opts = {}) {
   if (!patch || typeof patch.evaluate !== 'function') return { ok: false, reason: 'not an evaluable patch' };
@@ -717,14 +696,12 @@ export function cornerPatchFolds(patch, opts = {}) {
     if (!p || !pu || !pv) return null;
     return nrm3(cross([pu[0] - p[0], pu[1] - p[1], pu[2] - p[2]], [pv[0] - p[0], pv[1] - p[1], pv[2] - p[2]]));
   };
-  /* ⚠⚠ A UNIFORM GRID IS BLIND WHERE THE FOLDS ARE. The interpolant is exact on
-     the boundary and blends hardest just inside it, so a fold lives in a thin
-     ribbon at small barycentric coordinate — and a 14-step grid's first sample
-     sits at 1/14 = 0.071, past it. Measured: three configurations this reported
-     as clean at grid 14 show 12 to 21 reversals at grid 90. The detector was
-     certifying exactly the patches it existed to catch.
+  /* A uniform grid misses the folds. The interpolant is exact on the boundary
+     and blends hardest just inside it, so a fold lives in a thin ribbon at
+     small barycentric coordinate — and a 14-step grid's first sample sits at
+     1/14 = 0.071, past it.
 
-     So the sweep is a coarse interior grid PLUS a dense ribbon hugging each
+     So the sweep is a coarse interior grid plus a dense ribbon hugging each
      boundary, down to the guard the finite difference itself imposes. Cost is
      linear in the ribbon and this runs once per corner, not per frame. */
   const grid = new Map();
@@ -765,9 +742,9 @@ export function cornerPatchFolds(patch, opts = {}) {
       if (dd < 0) reversals += 1;
     }
   }
-  /* ⚠ A SIGN FLIP IS NOT THE ONLY WAY TO FAIL. A patch creased at eighty-nine
-     degrees between neighboring samples has not technically reversed and is
-     not a surface anyone wants; the old criterion returned ok for it. */
+  /* A sign flip is not the only way to fail. A patch creased at eighty-nine
+     degrees between neighboring samples has not reversed and is still not a
+     usable surface, so a crease limit applies too. */
   const creaseLimit = opts.creaseLimitDeg ?? 75;
   const folds = reversals > 0 || worstDeg > creaseLimit;
   return {
@@ -780,10 +757,10 @@ export function cornerPatchFolds(patch, opts = {}) {
   };
 }
 
-/** The blend's end trim loop taken from the PLANES that actually cut it, so the
+/** The blend's end trim loop taken from the planes that cut it, so the
  *  face's boundary and the corner patch's boundary are one curve.
  *
- *  ⚠ SAMPLED, BECAUSE A PLANAR CUT OF A TUBE IS NOT A LINE IN (u, v). Every
+ *  Sampled, because a planar cut of a tube is not a line in (u, v). Every
  *  sample is solved against the same plane the corner patch is built from, so
  *  the two cannot drift apart the way the straight-line form does.
  *
@@ -815,47 +792,46 @@ export function blendEndTrimLoopFromPlane({ startPlane, endPlane, stationAt, uMi
   return { ok: true, loop: lo.concat(hi) };
 }
 
-/* THE PATCH AS A SURFACE THE REST OF A MODELER CAN HOLD.
+/* The patch as a surface the rest of a modeler can hold.
 
    `sideVertexPatch` returns an evaluator over barycentric coordinates, which is
    the right thing for a triangular patch and the wrong shape for everything
    downstream: a closure classifier, a trim splice and a `.3dm` export all read
-   a tensor-product surface with a trim loop. So the evaluator is SAMPLED and
-   INTERPOLATED, never approximated by a fit that refits its own boundary — the
+   a tensor-product surface with a trim loop. So the evaluator is sampled and
+   interpolated, never approximated by a fit that refits its own boundary — the
    neighboring blends carry the boundary points, and a patch that merely comes
    close to them opens the corner it was built to close.
 
-   ⚠ THE TRIANGLE BECOMES A SQUARE BY COLLAPSING ONE CORNER, and the map is
+   The triangle becomes a square by collapsing one corner, and the map is
    chosen so the other three sides are exact isocurves:
 
        b0 = 1 - v      b1 = v(1 - u)      b2 = v*u
 
-   v = 0 collapses the whole row onto corner 0 — a POLE, and the closing edge a
+   v = 0 collapses the whole row onto corner 0 — a pole, and the closing edge a
    seam. v = 1 runs along the side opposite corner 0, u = 0 and u = 1 along the
    other two. On each of those the evaluator reduces to the boundary curve
    exactly (the two rays whose weights vanish there contribute nothing), so the
    interpolated surface reproduces all three boundaries at every station.
 
-   A pole and a seam are not a compromise made here: they are what the existing
-   corner fill already produces, and the classifier reads both natively.
+   A pole and a seam are what the equal-radius corner fill also produces, and
+   the classifier reads both natively.
 
-   ⚠ SAMPLING IS UNIFORM IN (u, v), NOT CHORD-LENGTH. The collapsed row has zero
-   chord length along it, so a chord-length parameterisation of this grid is
+   Sampling is uniform in (u, v), not chord-length. The collapsed row has zero
+   chord length along it, so a chord-length parameterization of this grid is
    degenerate by construction — it is not a tuning choice. */
 export function cornerPatchSurface({ corners, boundary, tangent, uSamples = 13, vSamples = 13, degU = 3, degV = 3, spacing = 'uniform', ...opts }) {
   const patch = sideVertexPatch({ corners, boundary, tangent, ...opts });
   if (!patch.ok) return patch;
   if (!(uSamples >= 2 && vSamples >= 2)) return { ok: false, reason: 'a patch needs at least two samples in each direction' };
-  /* ⚠ UNIFORM, AND CLUSTERING THE STATIONS AT THE BOUNDARIES WAS MEASURED AND IS
-     WORSE. The reasoning for clustering is sound-sounding — the three ray terms
-     are weighted by (b_j*b_k)^2, which vanish at the sides, so the shape looks
-     like it moves fastest there. It does not pay: on a bowed triangle at 13
-     stations the worst boundary deviation is 1.06e-4 uniform against 2.08e-4
-     Chebyshev-Lobatto, and the gap holds at every count tried (9, 13, 25, 41).
-     Uniform also converges at fourth order — 1.06e-4, 3.34e-6, 2.74e-7 — which
-     is what a cubic interpolant of a smooth boundary should do, and is the
-     evidence that a SLOWER rate seen at a real corner is about the boundary
-     curve being handed in, not about this grid. */
+  /* Uniform by default; clustering the stations at the boundaries is less
+     accurate. The three ray terms are weighted by (b_j*b_k)^2, which vanish
+     at the sides, which suggests clustering there, but on a bowed triangle at
+     13 stations the worst boundary deviation is 1.06e-4 uniform against
+     2.08e-4 Chebyshev-Lobatto, and the gap holds at 9, 13, 25 and 41
+     stations. Uniform also converges at fourth order — 1.06e-4, 3.34e-6,
+     2.74e-7 — as a cubic interpolant of a smooth boundary should, so a slower
+     rate at a given corner comes from the boundary curve handed in, not from
+     this grid. */
   const node = (i, n) => (spacing === 'chebyshev' ? (1 - Math.cos(Math.PI * i / (n - 1))) / 2 : i / (n - 1));
   const uParams = Array.from({ length: uSamples }, (_, i) => node(i, uSamples));
   const vParams = Array.from({ length: vSamples }, (_, j) => node(j, vSamples));
@@ -875,7 +851,7 @@ export function cornerPatchSurface({ corners, boundary, tangent, uSamples = 13, 
   return {
     ok: true,
     srf,
-    // The whole domain: the triangle IS the square under the collapse map, so
+    // The whole domain: the triangle is the square under the collapse map, so
     // there is nothing to trim away and the loop is the domain's own corners.
     trimLoop: [[0, 0], [1, 0], [1, 1], [0, 1]],
     trimHoles: [],

@@ -32,8 +32,8 @@ function surfNormal(srf, u, v) {
   return [n[0] / len, n[1] / len, n[2] / len];
 }
 
-// ---- THE FLAT-PLANE EXACTNESS ANCHOR ----
-test('offsetSurface: a flat plane offset by d is EXACTLY a parallel plane at distance d (float precision)', () => {
+// The flat-plane exactness anchor
+test('offsetSurface: a flat plane offset by d is exactly a parallel plane at distance d (float precision)', () => {
   const srf = flatPlane();
   const d = 4.5;
   const { surface, clamped, appliedDistance } = offsetSurface(srf, d);
@@ -56,7 +56,7 @@ test('offsetSurface: a flat plane offset by d is EXACTLY a parallel plane at dis
   assert.ok(worst < 1e-12, `flat-plane offset should be exact to float precision, worst deviation ${worst}`);
 });
 
-// ---- CURVED SURFACE OFFSETS IN THE CORRECT DIRECTION ----
+// Curved surface offsets in the correct direction
 test('offsetSurface: a curved surface offsets along its own local normal (correct direction), sampled points move the right way', () => {
   const srf = cylinder(10, 40);
   const u = srf.knotsU[0] + (srf.knotsU[srf.knotsU.length - 1] - srf.knotsU[0]) * 0.37;
@@ -70,9 +70,9 @@ test('offsetSurface: a curved surface offsets along its own local normal (correc
   const moved = [Q[0] - P[0], Q[1] - P[1], Q[2] - P[2]];
   const alongN = moved[0] * N[0] + moved[1] * N[1] + moved[2] * N[2];
   assert.ok(alongN > d * 0.6, `offset should move ~d along the surface normal (got ${alongN.toFixed(4)} for d=${d})`);
-  // And genuinely farther from the cylinder axis (the surface's own center of
+  // And farther from the cylinder axis (the surface's own center of
   // curvature is the axis) whenever the normal points outward, or nearer when
-  // it points inward — either way the radial change must MATCH the normal
+  // it points inward — either way the radial change must match the normal
   // direction, not be an arbitrary "some new surface exists".
   const rP = Math.hypot(P[0], P[1]), rQ = Math.hypot(Q[0], Q[1]);
   const nRadial = N[0] * P[0] / rP + N[1] * P[1] / rP; // normal's own radial component sign
@@ -80,7 +80,7 @@ test('offsetSurface: a curved surface offsets along its own local normal (correc
   else assert.ok(rQ < rP - 1, `inward normal, +d must move nearer the axis: ${rP.toFixed(3)} -> ${rQ.toFixed(3)}`);
 });
 
-// ---- SELF-INTERSECTION DETECTION / AUTO-CLAMP ----
+// Self-intersection detection / auto-clamp
 test('offsetSurface: a cylinder radius R offset by more than R in the collapsing direction is flagged and clamped to ~R', () => {
   const R = 10;
   const srf = cylinder(R, 40);
@@ -92,21 +92,21 @@ test('offsetSurface: a cylinder radius R offset by more than R in the collapsing
   const rProbe = Math.hypot(...surfacePoint(probe.surface, u, v));
   const collapseSign = rProbe < rBase ? 1 : -1; // sign of d that moves toward the axis
 
-  // A small, genuinely safe offset in the collapsing direction is NOT flagged.
+  // A small, safe offset in the collapsing direction is not flagged.
   const safe = offsetSurface(srf, collapseSign * (R * 0.3));
   assert.equal(safe.clamped, false, `a small ${R * 0.3}mm offset (well under R) must not be flagged`);
 
   // An offset of more than R in the collapsing direction (which would fold
-  // the tube through its own axis) IS flagged and clamped to a real computed
-  // safe maximum, strictly below the request. HONEST PROXY NOTE: the
+  // the tube through its own axis) is flagged and clamped to a real computed
+  // safe maximum, strictly below the request. Proxy note: the
   // adjacent-control-point-crossing check detects a rational cylinder's fold
   // at ~1.39R (where the off-circle rational "corner" control points of the
-  // arc-span construction get involved), NOT exactly at the true surface
+  // arc-span construction get involved), not exactly at the true surface
   // collapse of R — the on-circle control points reach the axis at exactly R
-  // but that is not an adjacent-CP reversal, so the cheap local proxy the
-  // task specifies (control points crossed, not a full global self-
-  // intersection test) is more permissive here. The load-bearing behaviors
-  // hold: a genuinely too-large offset (2R) is flagged and clamped, a small
+  // but that is not an adjacent-CP reversal, so the local proxy (control
+  // points crossed, not a full global self-intersection test) is more
+  // permissive here. The load-bearing behaviors
+  // hold: a too-large offset (2R) is flagged and clamped, a small
   // safe one is not.
   const big = offsetSurface(srf, collapseSign * (R * 2));
   assert.equal(big.clamped, true, 'offset by more than R inward must self-intersect and be flagged');
@@ -116,11 +116,11 @@ test('offsetSurface: a cylinder radius R offset by more than R in the collapsing
   assert.equal(isFiniteNet(big.surface.ctrlNet), true);
 });
 
-test('offsetSurface: refuses a non-finite distance honestly', () => {
+test('offsetSurface: refuses a non-finite distance', () => {
   assert.throws(() => offsetSurface(flatPlane(), NaN), /finite/);
 });
 
-// ---- REVERSE WINDING ----
+// Reverse winding
 test('reverseSurfaceU: flips the surface normal while preserving geometry exactly', () => {
   const srf = cylinder(10, 40);
   const rev = reverseSurfaceU(srf);
@@ -141,10 +141,10 @@ test('reverseSurfaceU: flips the surface normal while preserving geometry exactl
   assert.ok(worstDot < -0.999, `the reversed surface's normal must point opposite (dot ~ -1), got ${worstDot.toFixed(4)}`);
 });
 
-// ---- THICKEN: a valid, correctly-wound closed solid ----
+// Thicken: a valid, correctly-wound closed solid
 // Signed volume of a triangle soup via the divergence theorem: a consistently
-// wound closed solid returns |V| == true enclosed volume; ANY flipped panel
-// partially cancels and drops |V| below it — so |V| == expected IS the
+// wound closed solid returns |V| == true enclosed volume; any flipped panel
+// partially cancels and drops |V| below it — so |V| == expected is the
 // winding-consistency proof.
 function bilinearTris(net) {
   const c00 = net[0][0], c01 = net[0][1], c10 = net[1][0], c11 = net[1][1];
@@ -180,7 +180,7 @@ test('thickenSolid: a flat plate thickened is a valid, consistently-wound closed
     `enclosed volume must equal W*H*t (=${expected}); got ${V} — a mismatch means a panel is inconsistently wound`);
 });
 
-test('thickenSolid: clamps a too-large thickness on a small-radius cylinder honestly', () => {
+test('thickenSolid: clamps a too-large thickness on a small-radius cylinder', () => {
   const R = 10;
   const srf = cylinder(R, 40);
   const u = 0.5 * (srf.knotsU[0] + srf.knotsU[srf.knotsU.length - 1]);
@@ -194,7 +194,7 @@ test('thickenSolid: clamps a too-large thickness on a small-radius cylinder hone
   assert.ok(panels.length > 2, 'a clamped Thicken still builds a real multi-panel container');
 });
 
-// ---- SHELL (Rhino: Shell) — hollow a multi-panel solid, uniform thickness ----
+// Shell (Rhino: Shell) — hollow a multi-panel solid, uniform thickness
 // A box as 6 flat bilinear panels (the exact shape the Box primitive builds).
 // bilinearPanelArr(p00,p10,p01,p11) — a flat degree-1 x degree-1 panel through
 // 4 coplanar corners, U-first ctrlNet, weight 1 (the app's own bilinearPanelArr).
@@ -221,11 +221,10 @@ function panelCentroid(srf) {
   return [x / n, y / n, z / n];
 }
 
-// --- the shared measuring tools these shell tests use -----------------
+// Shared measuring tools for the shell tests.
 // A panel's own corner loop, consecutive duplicates collapsed (so a fan
 // triangle reads as a triangle) — the same rule the app's surfaceCornerLoop
-// uses, reproduced HERE so the test never grades the app's homework with the
-// app's own pencil.
+// uses, reproduced here so the test does not depend on the code it checks.
 function cornerLoop(srf) {
   const net = srf.ctrlNet, nu = net.length, nv = net[0].length;
   const raw = [net[0][0], net[nu - 1][0], net[nu - 1][nv - 1], net[0][nv - 1]].map((cp) => [cp[0], cp[1], cp[2]]);
@@ -245,7 +244,7 @@ function allCtrlPts(panels) {
   for (const { srf } of panels) for (const row of srf.ctrlNet) for (const cp of row) out.push([cp[0], cp[1], cp[2]]);
   return out;
 }
-// The six box face planes, derived HERE from the box's own half-extent —
+// The six box face planes, derived here from the box's own half-extent —
 // never read back from the shell.
 function boxFacePlanes(h) {
   return [
@@ -255,7 +254,7 @@ function boxFacePlanes(h) {
   ];
 }
 
-test('shellSolid: a closed box (zero faces removed) is a genuinely hollow closed solid of exactly the requested wall thickness', () => {
+test('shellSolid: a closed box (zero faces removed) is a hollow closed solid of exactly the requested wall thickness', () => {
   const h = 20, t = 3;
   const panels = boxPanels(h);
   const r = shellSolid(panels, [], t);
@@ -265,7 +264,7 @@ test('shellSolid: a closed box (zero faces removed) is a genuinely hollow closed
   // 6 outer + 6 inner + 0 rim
   assert.equal(r.panels.length, 12, `expected 12 panels (6 outer + 6 inner), got ${r.panels.length}`);
   for (const { srf: p } of r.panels) assert.equal(isFiniteNet(p.ctrlNet), true);
-  // THE HOLLOW-WALL-THICKNESS PROOF: each inner twin sits exactly `t` inward
+  // The hollow-wall-thickness proof: each inner twin sits exactly `t` inward
   // from its own outer face. Out order is [6 outer..., 6 inner...] in the same
   // face order, so out[i] and out[6+i] are the same face's outer/inner pair.
   for (let i = 0; i < 6; i++) {
@@ -273,19 +272,18 @@ test('shellSolid: a closed box (zero faces removed) is a genuinely hollow closed
     const ci = panelCentroid(r.panels[6 + i].srf);
     const d = Math.hypot(co[0] - ci[0], co[1] - ci[1], co[2] - ci[2]);
     assert.ok(Math.abs(d - t) < 1e-9, `face ${i}: inner twin must be exactly ${t}mm from the outer face; got ${d}`);
-    // ...and genuinely INWARD (toward the solid centroid at origin): the inner
+    // ...and inward (toward the solid centroid at origin): the inner
     // face centroid is exactly a wall-thickness closer to origin than the outer.
     const ro = Math.hypot(...co), ri = Math.hypot(...ci);
-    assert.ok(ro - ri > 0 && Math.abs((ro - ri) - t) < 1e-9, `face ${i}: inner twin must sit ${t}mm INWARD toward the centroid; outer dist ${ro}, inner dist ${ri}`);
+    assert.ok(ro - ri > 0 && Math.abs((ro - ri) - t) < 1e-9, `face ${i}: inner twin must sit ${t}mm inward toward the centroid; outer dist ${ro}, inner dist ${ri}`);
   }
 });
 
-// THE CORNER TEST. This is the one that fails on the old per-face-normal
-// construction and passes on the exact plane-intersection one: three inner
-// walls meeting at a corner must meet at ONE point. The old build gave each
-// of them its own corner, a few millimeters apart, which is exactly the
-// gapping-and-crossing a shelled box showed.
-test('shellSolid: three inner walls meeting at a corner meet at ONE point — the inner cavity has exactly 8 corners, not 24', () => {
+// The corner test: three inner walls meeting at a corner must meet at one
+// point. A per-face-normal offset gives each wall its own corner, a few
+// millimeters apart, so the shelled box gaps and crosses there; the exact
+// plane-intersection construction does not.
+test('shellSolid: three inner walls meeting at a corner meet at one point — the inner cavity has exactly 8 corners, not 24', () => {
   const h = 20, t = 3;
   const r = shellSolid(boxPanels(h), [], t);
   const innerPts = allCtrlPts(r.panels.slice(6));
@@ -298,7 +296,7 @@ test('shellSolid: three inner walls meeting at a corner meet at ONE point — th
     assert.ok(distinct.some((p) => Math.hypot(p[0] - want[0], p[1] - want[1], p[2] - want[2]) < 1e-9),
       `expected an inner corner at ${want.join(',')}`);
   }
-  // WORST CORNER GAP, measured: group every inner control point by the outer
+  // Worst corner gap, measured: group every inner control point by the outer
   // corner it belongs to, and take the widest spread inside a group.
   let worstGap = 0;
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
@@ -310,11 +308,11 @@ test('shellSolid: three inner walls meeting at a corner meet at ONE point — th
   assert.ok(worstGap < 1e-9, `three inner walls must land on the SAME corner point; worst gap ${worstGap}`);
 });
 
-// THE CORNER WALL-THICKNESS TEST — the discriminating measurement. At a
-// corner the old build put face +X's inner corner flush against the +Y face
-// (zero wall there); the exact build puts it on all three offset planes at
-// once, so the wall is `t` measured against EVERY face it touches.
-test('shellSolid: the wall is exactly the requested thickness at the CORNERS, measured against every face that meets there', () => {
+// The corner wall-thickness test — the discriminating measurement. At a
+// corner a per-face-normal offset puts face +X's inner corner flush against
+// the +Y face (zero wall there); the exact construction puts it on all
+// three offset planes at once, so the wall is `t` measured against every face it touches.
+test('shellSolid: the wall is exactly the requested thickness at the corners, measured against every face that meets there', () => {
   const h = 20, t = 3;
   const r = shellSolid(boxPanels(h), [], t);
   const planes = boxFacePlanes(h);
@@ -330,7 +328,7 @@ test('shellSolid: the wall is exactly the requested thickness at the CORNERS, me
   assert.ok(worst < 1e-9, `every inner corner must sit exactly ${t}mm from each face meeting there; worst error ${worst}`);
 });
 
-test('shellSolid: removing one face opens it, and the rim is a FLAT lip in the opening’s own plane, bridging outer to inner with no gap', () => {
+test('shellSolid: removing one face opens it, and the rim is a flat lip in the opening’s own plane, bridging outer to inner with no gap', () => {
   const h = 20, t = 3;
   const panels = boxPanels(h);
   const removedIdx = 0; // the +Z top face
@@ -341,16 +339,15 @@ test('shellSolid: removing one face opens it, and the rim is a FLAT lip in the o
   assert.equal(r.panels.length, 5 + 5 + 4, `expected 14 panels (5 outer + 5 inner + 4 rim), got ${r.panels.length}`);
   for (const { srf: p } of r.panels) assert.equal(isFiniteNet(p.ctrlNet), true);
   const rimPanels = r.panels.slice(10);
-  // THE RIM IS FLAT. Every rim control point lies in the removed face's own
-  // plane, z = h. The old build ran the rim DOWN the wall from z=h to z=h-t,
-  // i.e. buried inside the side wall it sat in, which is why the opening
-  // read as having no lip at all.
+  // The rim is flat. Every rim control point lies in the removed face's own
+  // plane, z = h. A rim run down the wall from z=h to z=h-t would be buried
+  // inside the side wall, and the opening would have no lip.
   for (const { srf: p } of rimPanels) {
     for (const cp of p.ctrlNet.flat()) {
       assert.ok(Math.abs(cp[2] - h) < 1e-9, `rim points must lie in the opening's own plane z=${h}; got z=${cp[2]}`);
     }
   }
-  // and it genuinely BRIDGES: each rim quad has two corners on the outer
+  // and it bridges: each rim quad has two corners on the outer
   // opening edge (|x| or |y| = h) and two on the inner wall's top edge
   // (|x| and |y| = h - t), so outer and inner are connected with no gap.
   for (const { srf: p } of rimPanels) {
@@ -360,10 +357,8 @@ test('shellSolid: removing one face opens it, and the rim is a FLAT lip in the o
     assert.equal(outerSide.length, 2, 'two rim corners on the outer opening edge');
     assert.equal(innerSide.length, 2, 'two rim corners on the inner wall top edge');
   }
-  // THE INNER WALL REACHES THE OPENING. Its top edge sits exactly in the
-  // opening plane (z = h), not a wall-thickness below it — the old build
-  // stopped the inner wall at z = h and then ran the rim down INSIDE the
-  // outer wall, which is the same defect seen from the other side.
+  // The inner wall reaches the opening. Its top edge sits exactly in the
+  // opening plane (z = h), not a wall-thickness below it.
   const innerPanels = r.panels.slice(5, 10);
   const topInner = allCtrlPts(innerPanels).filter((q) => Math.abs(q[2] - h) < 1e-9);
   assert.equal(distinctPoints(topInner, 1e-9).length, 4, 'the inner wall meets the opening plane on exactly 4 corners');
@@ -372,12 +367,12 @@ test('shellSolid: removing one face opens it, and the rim is a FLAT lip in the o
   assert.ok(Math.abs(floorZ - (-h + t)) < 1e-9, `the inner floor must sit at z=${-h + t}; got ${floorZ}`);
 });
 
-// REAL TOPOLOGY, from kernel/brepbuild.mjs — a separate implementation with
-// its own error codes, so this is a genuine cross-check rather than the
-// shell grading its own homework. Ground truth is derived here by hand:
-//   closed shell  = TWO closed shells (outer box + inner box), no genus
+// Real topology, from kernel/brepbuild.mjs — a separate implementation with
+// its own error codes, so this is an independent cross-check of the
+// shell. Ground truth is derived here by hand:
+//   closed shell  = two closed shells (outer box + inner box), no genus
 //                   -> V16 E24 F12, chi = V - E + F = 4 = 2(S - G) with S=2, G=0
-//   one face open = ONE closed shell (a cup)
+//   one face open = one closed shell (a cup)
 //                   -> V16 E28 F14, chi = 2 = 2(S - G) with S=1, G=0
 test('shellSolid: a closed box shell is a valid two-shell solid — chi = 16 - 24 + 12 = 4, zero naked and zero non-manifold edges', () => {
   const r = shellSolid(boxPanels(20), [], 3);
@@ -389,7 +384,7 @@ test('shellSolid: a closed box shell is a valid two-shell solid — chi = 16 - 2
   assert.equal(res.stats.chi, 4);
   assert.equal(res.stats.nakedEdgeCount, 0);
   assert.equal(res.stats.nonManifoldEdgeCount, 0);
-  assert.equal(res.stats.shellCount, 2, 'a closed shell is genuinely two shells: the outer skin and the cavity');
+  assert.equal(res.stats.shellCount, 2, 'a closed shell is two shells: the outer skin and the cavity');
   assert.equal(res.stats.genus, 0);
   const v = validateBrep(res.solid);
   assert.equal(v.ok, true, `validateBrep should pass: ${JSON.stringify(v.errors.map((e) => e.code))}`);
@@ -405,7 +400,7 @@ test('shellSolid: a box shelled with one face open is a valid single closed soli
   assert.equal(res.stats.E, 28);
   assert.equal(res.stats.F, 14);
   assert.equal(res.stats.chi, 2);
-  assert.equal(res.stats.nakedEdgeCount, 0, 'an opened shell is still a CLOSED solid — the rim closes it');
+  assert.equal(res.stats.nakedEdgeCount, 0, 'an opened shell is still a closed solid — the rim closes it');
   assert.equal(res.stats.nonManifoldEdgeCount, 0);
   assert.equal(res.stats.shellCount, 1);
   assert.equal(res.stats.genus, 0);
@@ -423,8 +418,8 @@ test('shellSolid: two adjacent faces opened still weld into one valid closed sol
   assert.equal(validateBrep(res.solid).ok, true);
 });
 
-test('shellSolid: an EXTRUDED POLYGON (one degree-1 tube panel with N columns) takes the exact path too', () => {
-  // a triangular prism: the wall is ONE degree-1 x degree-1 panel with 4
+test('shellSolid: an extruded polygon (one degree-1 tube panel with N columns) takes the exact path too', () => {
+  // a triangular prism: the wall is one degree-1 x degree-1 panel with 4
   // control columns (closed profile), plus a flat top and bottom cap.
   const R = 20, H = 30, t = 2;
   const ring = [0, 1, 2].map((i) => [R * Math.cos((i * 2 * Math.PI) / 3), R * Math.sin((i * 2 * Math.PI) / 3)]);
@@ -451,7 +446,7 @@ test('shellSolid: an EXTRUDED POLYGON (one degree-1 tube panel with N columns) t
   }
 });
 
-test('shellSolid: the safe maximum wall is COMPUTED, and a too-thick request clamps to it', () => {
+test('shellSolid: the safe maximum wall is computed, and a too-thick request clamps to it', () => {
   const h = 20;
   const r = shellSolid(boxPanels(h), [], 25);
   assert.equal(r.clamped, true, 'a 25mm wall cannot fit inside a 40mm box');
@@ -467,48 +462,47 @@ test('shellSolid: the safe maximum wall is COMPUTED, and a too-thick request cla
   assert.equal(safe.appliedDistance, 2);
 });
 
-// THE HONEST REFUSAL. A curved wall meeting a flat cap has no exact junction
-// in this kernel, so a solid with any curved face is refused BY NAME rather
+// A curved wall meeting a flat cap has no exact junction
+// in this kernel, so a solid with any curved face is refused by name rather
 // than shelled into something that is not a valid solid.
-test('shellSolid: a curved face is REFUSED BY NAME, not approximated', () => {
+test('shellSolid: a curved face is refused by name, not approximated', () => {
   const wall = cylinder(10, 40); // a real rational curved surface
   assert.throws(() => shellSolid([{ srf: wall }], [], 2), /CURVED/);
   assert.throws(() => shellSolid([{ srf: wall }], [], 2), /junction blend/i);
 });
 
-test('shellSolid: a MIXED solid (planar caps + a curved wall) is refused for the same reason, naming the curved face', () => {
+test('shellSolid: a mixed solid (planar caps + a curved wall) is refused for the same reason, naming the curved face', () => {
   const wall = cylinder(10, 40);
   const capA = bilinearPanel([-10, -10, 0], [10, -10, 0], [-10, 10, 0], [10, 10, 0]);
   const panels = [capA, { srf: wall }];
   assert.throws(() => shellSolid(panels, [], 2), /1 of 2 faces is CURVED \(face 1\)/);
 });
 
-test('shellSolid: a solid that is not closed is refused honestly (there is no inside to hollow)', () => {
+test('shellSolid: a solid that is not closed is refused (there is no inside to hollow)', () => {
   const one = [boxPanels(20)[0]];
   assert.throws(() => shellSolid(one, [], 2), /not a closed solid/i);
 });
 
-// A single panel's own corner lifted with NO corresponding move in the
+// A single panel's own corner lifted with no corresponding move in the
 // neighboring panels that share that physical vertex is not a real
-// push-pull edit (solidVertexGroups moves a topological vertex in EVERY
+// push-pull edit (solidVertexGroups moves a topological vertex in every
 // panel that owns it, consistently) — it is an inconsistent mutation that
-// tears the solid open at that corner, and shellSolid still refuses it
-// honestly, now for the true reason (a real gap in the topology) rather
-// than the old "not flat" message that generalization below retires.
-test('shellSolid: moving ONE panel\'s corner without its neighbors tears the solid open, and is still refused honestly', () => {
+// tears the solid open at that corner, and shellSolid refuses it for that
+// reason (a real gap in the topology).
+test('shellSolid: moving one panel\'s corner without its neighbors tears the solid open, and is refused', () => {
   const panels = boxPanels(20);
   panels[0].srf.ctrlNet[1][1][2] += 5; // only the top face's own corner moves
   assert.throws(() => shellSolid(panels, [], 2), /not a closed solid/i);
 });
 
-// ---- THE TANGENT-PLANE GENERALIZATION — a push-pull-warped face is exact
-// at its corners, approximate only in its interior, and no longer refused ----
+// Tangent-plane generalization: a push-pull-warped face is exact at its
+// corners, approximate only in its interior, and shelled rather than refused.
 //
-// A real push-pull moves ONE topological vertex consistently across every
+// A real push-pull moves one topological vertex consistently across every
 // panel that shares it (solidVertexGroups' own convention in the app) —
-// simulated here the same way: the SAME displaced corner is written into
+// simulated here the same way: the same displaced corner is written into
 // every box panel that meets at it, exactly the shape a single-vertex drag
-// in the app actually produces.
+// in the app produces.
 function pushPulledBoxPanels(h = 20, delta = [4, 3, 2]) {
   const panels = boxPanels(h);
   // corner c(1,1,1) = (h,h,h) is panels[0]/[2]/[4]'s own ctrlNet[1][1]
@@ -517,10 +511,9 @@ function pushPulledBoxPanels(h = 20, delta = [4, 3, 2]) {
   for (const i of [0, 2, 4]) panels[i].srf.ctrlNet[1][1] = moved.slice();
   return panels;
 }
-// Reproduced HERE, independent of shellFaceCornerNormals in the kernel, so
-// this is a genuine cross-check of the tangent-plane math rather than the
-// kernel grading its own homework. The cross product of a bilinear quad's
-// two edges meeting at a corner IS that surface's own Su x Sv there (see
+// Reproduced here, independent of shellFaceCornerNormals in the kernel, so
+// this is an independent cross-check of the tangent-plane math. The cross product of a bilinear quad's
+// two edges meeting at a corner is that surface's own Su x Sv there (see
 // offset.mjs's own header derivation) — a real geometric fact, not an
 // implementation detail borrowed from the code under test.
 function tangentNormalAt(loopPts, k) {
@@ -533,22 +526,22 @@ function tangentNormalAt(loopPts, k) {
   return [c[0] / m, c[1] / m, c[2] / m];
 }
 
-test('shellSolid: a push-pulled box (one vertex moved, three adjacent faces genuinely warped) now shells into a valid solid instead of refusing', () => {
+test('shellSolid: a push-pulled box (one vertex moved, three adjacent faces warped) shells into a valid solid', () => {
   const h = 20, t = 3;
   const panels = pushPulledBoxPanels(h, [4, 3, 2]);
   const r = shellSolid(panels, [], t);
   assert.equal(r.warpedFaceCount, 3, 'exactly the 3 faces sharing the pushed vertex should read as warped');
-  assert.equal(r.exact, false, 'a shell with any warped face is honestly reported as not fully exact');
+  assert.equal(r.exact, false, 'a shell with any warped face is reported as not fully exact');
   assert.ok(r.interiorApprox, 'a warped shell must report a measured interior deviation, not silently claim full exactness');
   assert.equal(r.interiorApprox.warpedFaceCount, 3);
   assert.ok(Number.isFinite(r.interiorApprox.worstAbsoluteError) && r.interiorApprox.worstAbsoluteError >= 0);
   assert.ok(Number.isFinite(r.interiorApprox.worstRelativeError) && r.interiorApprox.worstRelativeError >= 0);
   // a real, non-vacuous measurement — a push of magnitude ~5.4mm against a
-  // 3mm wall genuinely moves the interior thickness a real fraction off
+  // 3mm wall moves the interior thickness a real fraction off
   // nominal (not a rounding-noise number, and bounded well away from a
   // computation that blew up).
   assert.ok(r.interiorApprox.worstRelativeError > 0.01 && r.interiorApprox.worstRelativeError < 1, `expected a real, bounded interior deviation, got ${r.interiorApprox.worstRelativeError}`);
-  // still a real, VALID, watertight solid — independently re-checked
+  // still a real, valid, watertight solid — independently re-checked
   // through kernel/brepbuild.mjs, not just "no exception was thrown".
   const res = buildBrepSolid(r.panels.map((p) => cornerLoop(p.srf)), { tolerance: 1e-6 });
   assert.equal(res.ok, true, `a push-pulled box must still weld into a valid closed solid, got ${res.reason}`);
@@ -561,9 +554,9 @@ test('shellSolid: a push-pulled box (one vertex moved, three adjacent faces genu
   assert.equal(validateBrep(res.solid).ok, true);
 });
 
-// A SMALLER push genuinely measures a SMALLER interior deviation — proof
+// A smaller push measures a smaller interior deviation — proof
 // the reported number tracks the real warp, not a fixed placeholder.
-test('shellSolid: interiorApprox genuinely scales with how warped a face is — a gentle push measures a small deviation, a hard one a bigger one', () => {
+test('shellSolid: interiorApprox scales with how warped a face is — a gentle push measures a small deviation, a hard one a bigger one', () => {
   const h = 20, t = 3;
   const gentle = shellSolid(pushPulledBoxPanels(h, [0.3, 0.2, 0.1]), [], t);
   const hard = shellSolid(pushPulledBoxPanels(h, [4, 3, 2]), [], t);
@@ -576,18 +569,18 @@ test('shellSolid: interiorApprox genuinely scales with how warped a face is — 
   assert.equal(validateBrep(res.solid).ok, true);
 });
 
-test('shellSolid: every corner of a push-pulled shell — warped or still-planar — sits exactly the wall thickness inward on EVERY incident face\'s own tangent plane', () => {
+test('shellSolid: every corner of a push-pulled shell — warped or still-planar — sits exactly the wall thickness inward on every incident face\'s own tangent plane', () => {
   const h = 20, t = 3;
   const panels = pushPulledBoxPanels(h, [4, 3, 2]);
   const r = shellSolid(panels, [], t);
   // out = [6 outer..., 6 inner...] in face order (see shellSolid's own
-  // "OUTPUT ORDER" comment) — r.panels[fi] / r.panels[6+fi] are one
+  // "output order" comment) — r.panels[fi] / r.panels[6+fi] are one
   // face's outer/inner pair.
   let worst = 0, checked = 0;
   for (let fi = 0; fi < 6; fi++) {
     const outerNet = r.panels[fi].srf.ctrlNet;
     const outer = [outerNet[0][0], outerNet[1][0], outerNet[1][1], outerNet[0][1]].map((cp) => [cp[0], cp[1], cp[2]]);
-    // the inner twin is stored with its loop REVERSED (shellSolid's own
+    // the inner twin is stored with its loop reversed (shellSolid's own
     // comment: "so its normal points back at the outer face") — undo that
     // to line the inner corners up index-for-index with `outer`.
     const innerNet = r.panels[6 + fi].srf.ctrlNet;
@@ -612,11 +605,11 @@ test('shellSolid: an ordinary (fully planar) box is completely unaffected by the
   assert.equal(r.interiorApprox, null, 'a fully planar shell has nothing to approximate, so there is no interior-deviation report at all');
 });
 
-// ---- SHELL ON A REBUILT BOX ------------------------------------------
+// Shell on a rebuilt box
 // A dense N x N bilinear grid over 4 flat, coplanar corners — exactly
 // boxPanelsWithResolution/bilinearPanelGridArr's own app-layer construction
-// (in the app), reproduced here so this kernel test never grades the
-// app's own homework with the app's own pencil.
+// (in the app), reproduced here so this kernel test does not depend on the
+// app code it mirrors.
 function bilinearPanelGrid(p00, p10, p01, p11, n) {
   const ctrlNet = [];
   for (let i = 0; i < n; i++) {
@@ -650,18 +643,17 @@ function rebuiltBoxPanels(h, n) {
   ];
 }
 
-test('shellSolid: a Box REBUILT to a dense N x N control grid still shells validly (watertight, non-self-intersecting)', () => {
+test('shellSolid: a Box rebuilt to a dense N x N control grid still shells validly (watertight, non-self-intersecting)', () => {
   const h = 20, t = 3, n = 5;
   const r = shellSolid(rebuiltBoxPanels(h, n), [], t);
   assert.equal(r.clamped, false);
   assert.equal(r.appliedDistance, t);
   // 6 faces x (n-1)^2 sub-quads each — the decomposition is per-cell, not
-  // per-macro-panel (unchanged by this fix, named directly in the module's
-  // own header comment).
+  // per-macro-panel (as the module's own header comment states).
   assert.equal(r.faceCount, 6 * (n - 1) * (n - 1));
 });
 
-test('shellSolid: a REBUILT box\'s inner wall is a genuine clean inset lattice — every interior grid point sits at the SAME uniform in-plane shrink as the border, not left at its original position', () => {
+test('shellSolid: a rebuilt box\'s inner wall is a real clean inset lattice — every interior grid point sits at the same uniform in-plane shrink as the border, not left at its original position', () => {
   const h = 20, t = 3, n = 6;
   const r = shellSolid(rebuiltBoxPanels(h, n), [], t);
   const remainingCount = r.remainingCount;
@@ -675,9 +667,9 @@ test('shellSolid: a REBUILT box\'s inner wall is a genuine clean inset lattice �
     return out;
   };
   const distinct = dedupe(allInnerPts);
-  // Isolate the TOP face's own inner wall (z close to h - t = 17) — its
-  // neighbors (the 4 side faces) are ALSO offset inward by t, so a UNIFORM
-  // box shell's top face genuinely shrinks by t on every edge too: the true
+  // Isolate the top face's own inner wall (z close to h - t = 17) — its
+  // neighbors (the 4 side faces) are also offset inward by t, so a uniform
+  // box shell's top face shrinks by t on every edge too: the true
   // inner-top footprint is x,y in [-(h-t), h-t], a real, independently
   // derived prediction, never read back from the shell itself.
   const topPts = distinct.filter((p) => Math.abs(p[2] - (h - t)) < 1e-3);
@@ -694,38 +686,37 @@ test('shellSolid: a REBUILT box\'s inner wall is a genuine clean inset lattice �
     if (nearest > worst) worst = nearest;
   }
   assert.ok(worst < 1e-6, `every predicted clean-inset-lattice point must have a real match on the inner wall; worst distance ${worst}`);
-  // The negative control this test is actually built to catch: an
-  // UN-fixed interior point stays at its ORIGINAL in-plane (x,y) — i.e.
-  // still spanning the full un-shrunk [-h, h] footprint, not [-(h-t), h-t].
-  // Confirm no inner point is still sitting out at the wide, unshrunk
-  // extent (this would be true of a genuinely interior, uncorrected point).
+  // The failure this test catches: an uncorrected interior point stays at
+  // its original in-plane (x,y) — i.e. still spanning the full un-shrunk
+  // [-h, h] footprint, not [-(h-t), h-t]. Confirm no inner point is still
+  // sitting out at the wide, unshrunk extent.
   const stillWide = topPts.filter((p) => Math.abs(p[0]) > inset + 1e-3 || Math.abs(p[1]) > inset + 1e-3);
   assert.equal(stillWide.length, 0, 'no inner-wall point should still sit at the original, un-inset footprint');
 });
 
-test('shellSolid: removing EVERY face refuses honestly (nothing left to shell)', () => {
+test('shellSolid: removing every face refuses (nothing left to shell)', () => {
   const panels = boxPanels(20);
   assert.throws(() => shellSolid(panels, [0, 1, 2, 3, 4, 5], 3), /every face was removed/i);
 });
 
-test('shellSolid: a zero / non-finite thickness refuses honestly', () => {
+test('shellSolid: a zero / non-finite thickness refuses', () => {
   const panels = boxPanels(20);
   assert.throws(() => shellSolid(panels, [], 0), /nonzero finite/i);
   assert.throws(() => shellSolid(panels, [], NaN), /nonzero finite/i);
 });
 
-// A CURVED-FACE REFUSAL SAYS HOW CURVED, not only which faces.
+// A curved-face refusal says how curved, not only which faces.
 //
 // The curvature test is structural (degree, rationality), not a threshold, so
 // there is no tolerance gap to invert the way a coincidence refusal has. The
-// number that actually helps is different: whether the face is a real curve or
+// number that helps is different: whether the face is a real curve or
 // a nearly-flat one the modeler could rebuild as a plane and shell.
 //
-// The bound is measured over the CONTROL NET rather than the surface, so by
-// the convex-hull property it OVERSTATES the true sagitta and can never claim
+// The bound is measured over the control net rather than the surface, so by
+// the convex-hull property it overstates the true sagitta and can never claim
 // a face is flatter than it is. The fixture below makes that checkable: a
 // six-point net with z ∈ {0, 12} has centroid z = 4, so the exact bound is 8.
-test('shellSolid: a curved face is refused WITH a measured bow, not just named', () => {
+test('shellSolid: a curved face is refused with a measured bow, not just named', () => {
   const rationalArch = { srf: {
     degU: 1, knotsU: [0, 0, 1, 1],
     degV: 2, knotsV: [0, 0, 0, 1, 1, 1],
@@ -749,7 +740,7 @@ test('shellSolid: a curved face is refused WITH a measured bow, not just named',
   assert.ok(Math.abs(Number(m[1]) - 8) < 1e-6, `the bound is the exact control-net deviation (expected 8, got ${m[1]})`);
 });
 
-test('shellSolid: the bow is an UPPER bound — it never claims a face is flatter than it is', () => {
+test('shellSolid: the bow is an upper bound — it never claims a face is flatter than it is', () => {
   // The same arch evaluated on its own surface never leaves the control net's
   // z range, so the reported bound must be at least the true deviation. This
   // is the direction that matters: understating it would invite a modeler to

@@ -5,8 +5,8 @@ import { rollingBallSection, maxRadiusForSetback, variableRadiusFeasible, sectio
 // Every expected number below is worked out from the geometry, never read off
 // the implementation. A ball of radius r resting in a right-angled corner
 // touches each wall at distance r from the corner and has its center at
-// r*sqrt(2) along the 45-degree bisector — that is the whole of TEST 1, and it
-// is checkable on paper.
+// r*sqrt(2) along the 45-degree bisector — that is the whole of the first test,
+// and it is checkable on paper.
 const R = 5;
 const near = (a, b, tol = 1e-12) => Math.abs(a - b) < tol;
 const nearPt = (p, q, tol = 1e-12) => p.every((v, i) => Math.abs(v - q[i]) < tol);
@@ -25,12 +25,12 @@ test('a convex right-angled edge: setback r, center at r*sqrt(2) on the bisector
   assert.ok(nearPt(s.centre, [R, R, 0]), `centre ${s.centre}`);
   assert.equal(s.convex, true);
   // The defining property, asserted rather than assumed: the center is exactly
-  // r from BOTH tangency points.
+  // r from both tangency points.
   assert.ok(near(Math.hypot(...s.centre.map((v, i) => v - s.tangencyA[i])), R));
   assert.ok(near(Math.hypot(...s.centre.map((v, i) => v - s.tangencyB[i])), R));
 });
 
-test('a CONCAVE 270-degree edge sets back the SAME way — the sign trap', () => {
+test('a concave 270-degree edge sets back the same way — the sign trap', () => {
   // The concave edge of an L-shaped solid. The co-normals are unchanged in
   // character (each points along its own face, away from the edge); only theta
   // differs. Writing the setback against theta gives r/tan(135) = -r, which
@@ -48,9 +48,8 @@ test('a CONCAVE 270-degree edge sets back the SAME way — the sign trap', () =>
   assert.equal(s.convex, false, 'theta > pi is concave, and that is what theta is still for');
 });
 
-test('a SHARP edge sets back further than a flat one — the setback diverges as the wedge closes', () => {
-  // The direction of this is worth stating, because it is the opposite of the
-  // first guess. A ball in a narrow wedge cannot get near the apex, so it
+test('a sharp edge sets back further than a flat one — the setback diverges as the wedge closes', () => {
+  // A ball in a narrow wedge cannot get near the apex, so it
   // touches far along both faces: at phi = 34 degrees the setback is over three
   // radii. A nearly-flat junction is almost a plane, the ball rests right by
   // the edge, and the setback nearly vanishes: at phi = 160 degrees it is under
@@ -74,7 +73,7 @@ test('refuses a tangent junction and a knife edge by name, rather than returning
   assert.equal(knife.ok, false);
   assert.match(knife.reason, /knife|fold/i, 'a knife edge must not be described as a tangency — they are opposite failures');
   // And the reflex twin: a thin slot is phi near zero as well, so it must reach
-  // the same honest message rather than a separate wrong one.
+  // the same message rather than a separate wrong one.
   const slot = rollingBallSection({ point: [0, 0, 0], coNormalA: [1, 0, 0], coNormalB: [Math.cos(0.001), Math.sin(0.001), 0], theta: 2 * Math.PI - 0.001, radius: R });
   assert.equal(slot.ok, false);
   assert.match(slot.reason, /knife|fold/i);
@@ -88,9 +87,9 @@ test('maxRadiusForSetback names the number and which face is the limit', () => {
   assert.ok(near(m.rMax, 12), `rMax ${m.rMax}`);
   assert.equal(m.limitedBy, 'A');
   assert.equal(m.bound, 'setback-only', 'it must not claim to be a curvature bound it cannot compute');
-  // A SHARPER edge sets back further, so the same face caps a SMALLER radius —
+  // A sharper edge sets back further, so the same face caps a smaller radius —
   // and a flatter one caps a larger. rMax = w * tan(phi/2) runs the same way the
-  // setback does, which is the consistency check worth having here.
+  // setback does, which is the consistency check here.
   const sharp = maxRadiusForSetback({ phi: 0.6, widthA: 12, widthB: 40 });
   assert.ok(sharp.rMax < m.rMax, `a sharp edge caps lower: ${sharp.rMax.toFixed(3)} vs ${m.rMax.toFixed(3)}`);
   const flat = maxRadiusForSetback({ phi: 2.6, widthA: 12, widthB: 40 });
@@ -108,7 +107,7 @@ test('variable radius: refuses exactly when the radius outruns the spine', () =>
   assert.equal(ok.ok, true, `margin ${ok.worstMargin}`);
   const bad = variableRadiusFeasible(spine, [1, 2.5, 4, 5.5]);
   assert.equal(bad.ok, false);
-  assert.equal(bad.worstAt, 0, 'and it names WHERE, not just that');
+  assert.equal(bad.worstAt, 0, 'and it names where, not just that');
   assert.match(bad.reason, /faster than the spine/);
   // Exactly at the boundary the characteristic circle degenerates to a point;
   // margin zero is admitted, since the condition is >= 0.
@@ -117,24 +116,22 @@ test('variable radius: refuses exactly when the radius outruns the spine', () =>
   assert.ok(near(edge.worstMargin, 0, 1e-12), `${edge.worstMargin}`);
 });
 
-test('the section arc is a real circular arc of the requested radius', () => {
+test('the section arc is a circular arc of the requested radius', () => {
   const s = rollingBallSection({ point: [0, 0, 0], coNormalA: [0, 1, 0], coNormalB: [1, 0, 0], theta: Math.PI / 2, radius: R });
   const arc = sectionArc(s);
   assert.equal(arc.degree, 2);
   assert.ok(near(arc.radius, R));
-  // A convex 90-degree edge is rounded by a QUARTER circle: the sweep is
+  // A convex 90-degree edge is rounded by a quarter circle: the sweep is
   // pi - theta... measured between the two radii, which are 90 degrees apart.
   assert.ok(near(arc.sweep, Math.PI / 2), `sweep ${arc.sweep}`);
   // Evaluate the rational quadratic at t = 0.5 and check it is exactly r from
-  // the center — the property that makes it an ARC rather than a parabola.
-  /* ⚠ THE NUMERATOR CARRIES THE WEIGHT. Control points are stored CARTESIAN
-     with the weight appended, so a rational evaluation is sum(N*w*x) / sum(N*w)
-     — an earlier version of this omitted the w from the numerator and passed
-     anyway, because a 90-degree arc's middle control point is the corner itself
-     and this fixture's corner is the ORIGIN, where the two formulas agree. Moved
-     off the origin it reported 4.687 for a correct arc of radius 5, and it could
-     not detect the premultiplication bug the module's own comments memorialise.
-     Verified below at a corner that is NOT the origin, for that reason. */
+  // the center — the property that makes it an arc rather than a parabola.
+  /* The numerator carries the weight. Control points are stored Cartesian
+     with the weight appended, so a rational evaluation is sum(N*w*x) / sum(N*w).
+     A 90-degree arc's middle control point is the corner itself, and with the
+     corner at the origin an evaluation that omits w from the numerator agrees
+     with the correct one; off the origin it gives 4.687 for a correct arc of
+     radius 5. So it is also checked below at a corner away from the origin. */
   const [p0, p1, p2] = arc.ctrlPts;
   const wMid = 0.25 * p0[3] + 0.5 * p1[3] + 0.25 * p2[3];
   const num = (i) => 0.25 * p0[i] * p0[3] + 0.5 * p1[i] * p1[3] + 0.25 * p2[i] * p2[3];
@@ -142,8 +139,8 @@ test('the section arc is a real circular arc of the requested radius', () => {
   const d = Math.hypot(mid[0] - s.centre[0], mid[1] - s.centre[1], mid[2] - s.centre[2]);
   assert.ok(near(d, R, 1e-12), `midpoint is ${d} from the center, should be exactly ${R}`);
 
-  // AND AWAY FROM THE ORIGIN, which is the only place the broken evaluator and
-  // the correct one disagree. Same 90-degree corner, translated.
+  // Away from the origin, which is where an evaluator missing the numerator
+  // weight and the correct one disagree. Same 90-degree corner, translated.
   const off = [7, -3, 2];
   const s2 = rollingBallSection({ point: off, coNormalA: [0, 1, 0], coNormalB: [1, 0, 0], theta: Math.PI / 2, radius: R });
   const arc2 = sectionArc(s2);
@@ -158,9 +155,9 @@ test('the section arc is a real circular arc of the requested radius', () => {
 import { surfacePoint } from '../kernel/surface.mjs';
 import { rollingBallSection as sec2, blendSurfaceFromSections, blendRadiusDeviation } from '../kernel/fillet.mjs';
 
-// Build the blend along a STRAIGHT box edge running up +z, faces at x=0 and
+// Build the blend along a straight box edge running up +z, faces at x=0 and
 // y=0 with material in the first quadrant. The spine is then the straight line
-// x=y=r, and EVERY point of a correct blend is exactly r from it — which makes
+// x=y=r, and every point of a correct blend is exactly r from it — which makes
 // this checkable to machine precision rather than to a tolerance.
 function boxEdgeBlend(radius, zs) {
   const arcs = [];
@@ -171,7 +168,7 @@ function boxEdgeBlend(radius, zs) {
   return blendSurfaceFromSections(arcs);
 }
 
-test('the blend on a straight edge is EXACTLY a cylindrical patch — every point r from the spine', () => {
+test('the blend on a straight edge is exactly a cylindrical patch — every point r from the spine', () => {
   const r = 4;
   const built = boxEdgeBlend(r, [0, 10, 20, 30]);
   assert.equal(built.ok, true, built.reason);
@@ -179,11 +176,11 @@ test('the blend on a straight edge is EXACTLY a cylindrical patch — every poin
   // The spine is the straight line x = y = r running up +z.
   const spine = [[r, r, -10], [r, r, 40]];
   const dev = blendRadiusDeviation(built.srf, spine, r, surfacePoint, 13, 13);
-  assert.ok(dev.worst < 1e-12, `a straight edge of constant angle must be EXACT, worst deviation ${dev.worst}`);
-  // ⚠ AND THE POSITION ALONG THE EDGE, which distance-to-a-parallel-line cannot
-  // see at all. A weight applied twice displaces the middle control point along
-  // z and leaves its distance from the spine line untouched, so the check above
-  // passed while the surface was wrong. The endpoints of this run are z = 0 and
+  assert.ok(dev.worst < 1e-12, `a straight edge of constant angle must be exact, worst deviation ${dev.worst}`);
+  // The position along the edge, which distance to a parallel line cannot see
+  // at all. A weight applied twice displaces the middle control point along z
+  // and leaves its distance from the spine line untouched, so the check above
+  // would pass on a wrong surface. The endpoints of this run are z = 0 and
   // z = 30, and v must map monotonically across that span.
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     const p = surfacePoint(built.srf, 0.5, v);
@@ -215,54 +212,51 @@ test('the tangency curves are where the supports must be trimmed back to', () =>
 
 import { envelopeSection, envelopeSectionArc } from '../kernel/fillet.mjs';
 
-/* A GENUINELY VARYING DIHEDRAL, WHICH THE PREVIOUS FIXTURE WAS NOT.
-   Two PLANAR faces meeting along a STRAIGHT edge have a constant dihedral by
-   definition — imposing a sweeping angle on that configuration describes no
-   solid that exists, and the 3.28% it reported was an artifact of the fixture
-   rather than a property of either construction. Worse, the first envelope test
-   derived its face normals FROM the sliding-disc tangency points, so it handed
-   the envelope form its own answer back and could only ever agree.
+/* A varying dihedral. Two planar faces meeting along a straight edge have a
+   constant dihedral by definition, so imposing a sweeping angle on them
+   describes no solid that exists. Face normals must also not be derived from
+   the sliding-disc tangency points, or the envelope form is handed its own
+   answer back and can only agree.
 
-   A real one: a CYLINDER of radius Rc about +z, cut by a PLANE inclined at
+   The fixture: a cylinder of radius Rc about +z, cut by a plane inclined at
    alpha. Their intersection is an ellipse, and the angle between the cylinder
-   wall and the plane genuinely varies around it — cos(angle) = -sin(alpha)*cos(t)
-   — which is exactly the S-shaped / blob-derived case a fillet has to survive.
+   wall and the plane varies around it — cos(angle) = -sin(alpha)*cos(t) —
+   which is the S-shaped / blob-derived case a fillet has to survive.
    A ball of radius r tangent to both sits at distance (Rc - r) from the axis and
    r from the plane, both of which are closed form. */
-// alpha and the arc span are chosen so the dihedral genuinely sweeps: at 35
-// degrees over a 1.8-radian arc it only moved 14, and the anti-vacuity guard
-// below caught that rather than letting a near-constant angle pass as a test of
-// a varying one.
+// alpha and the arc span are chosen so the dihedral sweeps: at 35 degrees over
+// a 1.8-radian arc it moves only 14, below the 15-degree spread the test below
+// requires so that a near-constant angle cannot pass as a varying one.
 const Rc = 20, alpha = 60 * Math.PI / 180, rBall = 3;
 function realRollingBall(sParam) {
-  /* ⚠ NEGATED, because this must point from the ball CENTER towards the plane.
+  /* Negated, because this must point from the ball center toward the plane.
      The plane is x*sin(a) - z*cos(a) = 0 and the center sits at +r along its
-     normal, so reaching the plane means traveling along MINUS that normal.
-     Passing the plane's own normal put the tangency point 2r away on the far
-     side — still exactly r from the center, so the radius check reported a
-     perfect blend that touched nothing. */
+     normal, so reaching the plane means traveling along minus that normal.
+     The plane's own normal would put the tangency point 2r away on the far
+     side — still exactly r from the center, so a radius check alone would
+     report a perfect blend that touches nothing. */
   const nPlane = [-Math.sin(alpha), 0, Math.cos(alpha)];
   const rho = Rc - rBall;
   const x = rho * Math.cos(sParam), y = rho * Math.sin(sParam);
   // x*sin(alpha) - z*cos(alpha) = r  =>  z = (x*sin(alpha) - r)/cos(alpha)
   const z = (x * Math.sin(alpha) - rBall) / Math.cos(alpha);
   const centre = [x, y, z];
-  // The cylinder's OUTWARD normal where the ball touches it (material inside).
+  // The cylinder's outward normal where the ball touches it (material inside).
   const nCyl = [Math.cos(sParam), Math.sin(sParam), 0];
   return { centre, nCyl, nPlane };
 }
 
-/* ⚠ THE SPINE USED TO MEASURE IS SAMPLED FAR FINER THAN THE SECTIONS.
-   Measuring against the section centers themselves reports the RULER's own
-   chord error — a polyline through a curving spine is second order by
-   construction — and that is what made every surface, at every V degree, look
-   like O(h^2). With the instrument pushed two orders down, the same surfaces
-   measure O(h^4): cubic interpolation behaving as cubic interpolation. */
-/* ⚠ FIXED DENSITY, NOT A MULTIPLE OF THE SECTION COUNT. Scaling the spine with
+/* The measuring spine is sampled far finer than the sections. Measuring
+   against the section centers themselves reports the ruler's own chord error —
+   a polyline through a curving spine is second order by construction — which
+   makes every surface, at every V degree, look like O(h^2). With the
+   instrument two orders finer, the same surfaces measure O(h^4): cubic
+   interpolation behaving as cubic interpolation. */
+/* Fixed density, not a multiple of the section count. Scaling the spine with
    the sections makes the ruler improve at exactly the rate the surface does, so
    their ratio never moves and the measurement stays instrument-bound at every
-   density — which is what the first attempt did. One fixed, very fine spine
-   keeps the sagitta constant while the surface error falls past it.
+   density. One fixed, very fine spine keeps the sagitta constant while the
+   surface error falls past it.
 
    40001 points over a spine roughly 48mm long with curvature radius near 17mm
    gives a segment of 1.2e-3mm and a sagitta of L^2/(8*rho) around 1e-8mm, two
@@ -285,31 +279,30 @@ function buildAt(count) {
   return { n: count, dev: d.worst, instrumentBound: d.instrumentBound, sagitta: d.spineSagitta };
 }
 
-test('the tangency points actually LIE ON both supporting surfaces', () => {
-  /* THE CHECK A RADIUS-ONLY INSTRUMENT CANNOT MAKE. Every tangency point is r
+test('the tangency points lie on both supporting surfaces', () => {
+  /* The check a radius-only instrument cannot make. Every tangency point is r
      from the ball center by construction, whichever way the direction points —
      so "the radius is right" is true even when the blend touches neither face.
-     What has to be asserted is CONTACT: the point lies on the cylinder wall and
-     on the plane. This is the assertion whose absence hid a 2r sign error. */
+     What has to be asserted is contact: the point lies on the cylinder wall and
+     on the plane. Without it, a sign error that moves the point 2r is invisible. */
   const planeDist = (p) => -p[0] * Math.sin(alpha) + p[2] * Math.cos(alpha);
   const cylDist = (p) => Math.abs(Math.hypot(p[0], p[1]) - Rc);
   for (let i = 0; i < 9; i++) {
     const b = realRollingBall(-1.4 + 2.8 * (i / 8));
     const e = envelopeSection({ centre: b.centre, radius: rBall, toTouchA: b.nCyl, toTouchB: b.nPlane });
     assert.equal(e.ok, true, e.reason);
-    assert.ok(cylDist(e.tangencyA) < 1e-9, `tangency A must lie ON the cylinder wall (${cylDist(e.tangencyA)})`);
-    assert.ok(Math.abs(planeDist(e.tangencyB)) < 1e-9, `tangency B must lie ON the plane (${planeDist(e.tangencyB)})`);
+    assert.ok(cylDist(e.tangencyA) < 1e-9, `tangency A must lie on the cylinder wall (${cylDist(e.tangencyA)})`);
+    assert.ok(Math.abs(planeDist(e.tangencyB)) < 1e-9, `tangency B must lie on the plane (${planeDist(e.tangencyB)})`);
   }
 });
 
-test('a REAL varying dihedral: the surface converges at FOURTH order once the ruler stops dominating', () => {
+test('a varying dihedral: the surface converges at fourth order once the ruler stops dominating', () => {
   const N = 25;
-  const envArcs = [], centres = [];
+  const envArcs = [];
   let minAng = Infinity, maxAng = -Infinity;
   for (let i = 0; i < N; i++) {
     const sParam = -1.4 + 2.8 * (i / (N - 1));
     const { centre, nCyl, nPlane } = realRollingBall(sParam);
-    centres.push(centre);
     const ang = Math.acos(Math.max(-1, Math.min(1, nCyl[0] * nPlane[0] + nCyl[1] * nPlane[1] + nCyl[2] * nPlane[2])));
     minAng = Math.min(minAng, ang); maxAng = Math.max(maxAng, ang);
     const e = envelopeSection({ centre, radius: rBall, toTouchA: nCyl, toTouchB: nPlane });
@@ -317,41 +310,28 @@ test('a REAL varying dihedral: the surface converges at FOURTH order once the ru
     envArcs.push(envelopeSectionArc(e));
   }
   const spread = (maxAng - minAng) * 180 / Math.PI;
-  assert.ok(spread > 15, `the dihedral must genuinely vary or the test is vacuous (${spread.toFixed(1)} degrees)`);
+  assert.ok(spread > 15, `the dihedral must vary or the test is vacuous (${spread.toFixed(1)} degrees)`);
   const env = blendSurfaceFromSections(envArcs);
   assert.equal(env.ok, true, env.reason);
-  const devEnv = blendRadiusDeviation(env.srf, centres, rBall, surfacePoint, 9, 41);
-  console.log(`      REAL varying dihedral (${spread.toFixed(1)} deg sweep), ${N} sections: ${devEnv.worst.toExponential(2)}mm = ${(100 * devEnv.worst / rBall).toFixed(4)}% of r`);
 
-  /* THE REMAINING ERROR IS STRUCTURAL, NOT A SAMPLING OR DEGREE CHOICE, and
-     saying which it is decides whether raising the degree or raising the
-     density is the fix.
-
-     Skinning the characteristic circles is exact AT each section and departs
-     from the true tube BETWEEN them, because consecutive circles lie in planes
-     of different orientation. That departure is second order in the section
-     spacing whatever degree V carries — measured at O(h^2) for both degree 1
-     and degree 3, which is the give-away: cubic INTERPOLATION would be O(h^4)
-     if interpolation error were what was being measured. So density is the only
-     control, and the honest thing is to derive it from a tolerance and report
-     what was achieved rather than to claim exactness. */
-  /* ⚠ THE RULER HAS ITS OWN FLOOR, AND THE TEST STOPS WHERE THE RULER DOES.
-     Even a 40x-denser spine polyline carries a sagitta around 9e-6mm, so by 97
-     sections the SURFACE (about 1.3e-6mm) is finer than the instrument
-     measuring it and the reported number becomes the ruler's. `instrumentBound`
-     says when that has happened, and the order is asserted only across the
-     range where it has not. Claiming fourth order from numbers the instrument
-     cannot resolve would be the same mistake as claiming second order was the
-     surface — one level up. */
+  /* Skinning the characteristic circles is exact at each section and departs
+     from the true tube between them, because consecutive circles lie in planes
+     of different orientation. Section density is therefore derived from a
+     tolerance, and the achieved deviation is reported rather than exactness
+     claimed (see blendSurfaceToTolerance below). */
+  /* The ruler has its own floor, and the test stops where the ruler does.
+     Once the surface error falls below the spine polyline's sagitta, the
+     reported number is the ruler's. `instrumentBound` says when that has
+     happened, and the order is asserted only across the range where it has
+     not. */
   const a1 = buildAt(13), a2 = buildAt(25), a3 = buildAt(49);
   assert.ok(!a1.instrumentBound && !a2.instrumentBound && !a3.instrumentBound,
     `the order is only asserted where the spine polyline is well below the surface (sagittas ${[a1, a2, a3].map((x) => x.sagitta.toExponential(1)).join(', ')} vs deviations ${[a1, a2, a3].map((x) => x.dev.toExponential(1)).join(', ')})`);
   const order1 = Math.log2(a1.dev / a2.dev), order2 = Math.log2(a2.dev / a3.dev);
   assert.ok(order1 > 3 && order2 > 3,
-    `the surface converges at better than THIRD order — second would mean the spine polyline is what is being measured (${order1.toFixed(2)}, ${order2.toFixed(2)})`);
+    `the surface converges at better than third order — second would mean the spine polyline is what is being measured (${order1.toFixed(2)}, ${order2.toFixed(2)})`);
   assert.ok(a3.dev < rBall * 1e-4,
     `and by 49 sections it is under 0.01% of the radius (${(100 * a3.dev / rBall).toExponential(2)}%)`);
-  console.log(`      converges O(h^4): 13 sections ${a1.dev.toExponential(2)}mm -> 25 ${a2.dev.toExponential(2)}mm -> 49 ${a3.dev.toExponential(2)}mm  (orders ${order1.toFixed(2)}, ${order2.toFixed(2)})`);
 });
 
 test('envelopeSection refuses tangent and opposed faces by name', () => {
@@ -376,24 +356,22 @@ test('building to a tolerance reaches it, and reports the deviation it actually 
   assert.equal(built.metTolerance, true, `must reach 0.01mm (got ${built.deviation})`);
   assert.ok(built.deviation <= 0.01, `${built.deviation}`);
   assert.ok(built.sections < 200, `and not by brute force (${built.sections} sections)`);
-  console.log(`      to 0.01mm: ${built.sections} sections, achieved ${built.deviation.toExponential(2)}mm in ${built.rounds} round(s)`);
 
-  // A tighter ask costs more sections, and the count must MOVE with the ask —
+  // A tighter ask costs more sections, and the count must move with the ask —
   // a builder that ignores its tolerance would return the same number twice.
   const tight = blendSurfaceToTolerance(sectionAt, 0.001, { evalSrf: surfacePoint });
   assert.equal(tight.ok, true);
   assert.ok(tight.sections > built.sections,
     `a tighter tolerance must cost more sections (${tight.sections} vs ${built.sections})`);
   assert.ok(tight.deviation < built.deviation, `and achieve less deviation (${tight.deviation} vs ${built.deviation})`);
-  console.log(`      to 0.001mm: ${tight.sections} sections, achieved ${tight.deviation.toExponential(2)}mm in ${tight.rounds} round(s)`);
 
-  // An impossible ask returns a real surface and says it fell short, rather
-  // than throwing or quietly pretending.
+  // An impossible ask returns a surface and says it fell short, rather than
+  // throwing or quietly pretending.
   const impossible = blendSurfaceToTolerance(sectionAt, 1e-12, { evalSrf: surfacePoint, maxSections: 41 });
   assert.equal(impossible.ok, true, 'a surface that missed the target is still a surface');
-  assert.equal(impossible.metTolerance, false, 'and it must SAY it missed');
+  assert.equal(impossible.metTolerance, false, 'and it must say it missed');
   assert.ok(impossible.deviation > 1e-12);
-  assert.ok(impossible.sections <= 41, 'and must honour the section ceiling it was given');
+  assert.ok(impossible.sections <= 41, 'and must honor the section ceiling it was given');
 });
 
 import { spliceLoopWithChain } from '../kernel/fillet.mjs';
@@ -408,10 +386,10 @@ test('splicing a tangency chain cuts the face back, and drops the side the blend
   const chain = [[0, 0.25], [0.5, 0.25], [1, 0.25]];
   const r = spliceLoopWithChain(SQUARE, chain, [0.5, 0]); // the edge being filleted is along v = 0
   assert.equal(r.ok, true, r.reason);
-  assert.ok(r.headGap < 1e-12 && r.tailGap < 1e-12, `both ends must land ON the loop (${r.headGap}, ${r.tailGap})`);
+  assert.ok(r.headGap < 1e-12 && r.tailGap < 1e-12, `both ends must land on the loop (${r.headGap}, ${r.tailGap})`);
   // The result must be the upper rectangle: nothing below v = 0.25 survives.
   for (const p of r.loop) assert.ok(p[1] >= 0.25 - 1e-12, `a point at v=${p[1]} survived below the cut`);
-  // And it must still contain the part of the face that was NOT cut away.
+  // And it must still contain the part of the face that was not cut away.
   assert.equal(pointInUVPolygon(r.loop, 0.5, 0.6), 'inside', 'the kept half of the face is still inside the loop');
   assert.equal(pointInUVPolygon(r.loop, 0.5, 0.1), 'outside', 'and the trimmed strip is not');
   // Area check, exact: a unit square cut back to v >= 0.25 has area 0.75.
@@ -449,7 +427,7 @@ test('a curved tangency chain is kept in full, not straightened', () => {
     const found = r.loop.some((p) => Math.hypot(p[0] - c[0], p[1] - c[1]) < 1e-12);
     assert.ok(found, `interior chain point ${c} must survive the splice`);
   }
-  // And the bulge is genuinely inside the kept region rather than cutting it.
+  // And the bulge is inside the kept region rather than cutting it.
   assert.equal(pointInUVPolygon(r.loop, 0.5, 0.5), 'inside');
   assert.equal(pointInUVPolygon(r.loop, 0.5, 0.3), 'outside', 'under the bulge is trimmed away');
 });
@@ -492,7 +470,7 @@ test('a chamfer skins into a surface through the same path a fillet does', () =>
   }
   const built = blendSurfaceFromSections(arcs);
   assert.equal(built.ok, true, built.reason);
-  // A chamfer on a straight constant edge is a FLAT band: every point on it must
+  // A chamfer on a straight constant edge is a flat band: every point on it must
   // lie in the plane through the two tangency lines. Checked by the plane
   // equation rather than by eye — x + y = r for a 45-degree cut at radius r on
   // this corner.
@@ -505,10 +483,9 @@ test('a chamfer skins into a surface through the same path a fillet does', () =>
 });
 
 test('the splice refuses a chain that never reaches the loop, instead of snapping it', () => {
-  // `nearest()` always returns a segment, so a floating chain used to splice
-  // anyway: both ends snapping to whichever walls were closest, cutting the
-  // face along a line the chain never described. It reported a 0.4 gap on a
-  // unit square and nothing read it.
+  // `nearest()` always returns a segment, so without a gap check a floating
+  // chain would splice anyway: both ends snapping to whichever walls were
+  // closest, cutting the face along a line the chain never described.
   const r = spliceLoopWithChain(SQUARE, [[0.4, 0.5], [0.6, 0.5]], [0.5, 0]);
   assert.equal(r.ok, false, 'a chain floating 0.4 from every wall must be refused');
   assert.match(r.reason, /does not reach the loop/);
@@ -516,53 +493,53 @@ test('the splice refuses a chain that never reaches the loop, instead of snappin
 });
 
 test('the splice refuses an ambiguous reference rather than tie-breaking in silence', () => {
-  // The center of a square is equidistant from all four sides. Picking the
-  // lowest segment index there is a coin toss dressed as a decision.
+  // The center of a square is equidistant from all four sides, so picking the
+  // lowest segment index there would be arbitrary.
   const r = spliceLoopWithChain(SQUARE, [[0, 0.25], [1, 0.25]], [0.5, 0.5]);
   assert.equal(r.ok, false);
   assert.match(r.reason, /ambiguous|equidistant/);
 });
 
-test('dropNear must name the span being REMOVED, and a reference outside it is caller error', () => {
+test('dropNear must name the span being removed, and a reference outside it is caller error', () => {
   // Both of these are well-formed inputs differing only in the reference point.
-  // Inside the removed span, the notch goes and 0.96 survives; the reviewer's
-  // case put the reference at 0.05 — on the filleted edge but outside the
-  // chain's landing span — which names the arc going the long way round.
+  // Inside the removed span, the notch goes and 0.96 survives; a reference at
+  // 0.05 — on the filleted edge but outside the chain's landing span — names
+  // the arc going the long way round.
   const chain = [[0.3, 0], [0.5, 0.2], [0.7, 0]];
   const good = spliceLoopWithChain(SQUARE, chain, [0.5, 0.02]);
   assert.equal(good.ok, true, good.reason);
   assert.ok(Math.abs(Math.abs(signedArea2D(good.loop)) - 0.96) > 0.5 || Math.abs(Math.abs(signedArea2D(good.loop)) - 0.96) < 1e-9,
     `area ${Math.abs(signedArea2D(good.loop))}`);
-  // The documented-but-wrong reference produces the OTHER arc. Asserted so the
-  // behavior is pinned rather than discovered again later.
+  // A reference outside the removed span produces the other arc; asserted so
+  // the behavior is pinned.
   const outside = spliceLoopWithChain(SQUARE, chain, [0.05, 0]);
   if (outside.ok) {
     const a = Math.abs(signedArea2D(outside.loop));
     assert.ok(a < 0.5,
-      `a reference outside the removed span selects the other arc — pinned at ${a}, and the fix is for the CALLER to pass a point in the span`);
+      `a reference outside the removed span selects the other arc — pinned at ${a}, and the fix is for the caller to pass a point in the span`);
   }
 });
 
 import { sphericalTriangleArea } from '../kernel/fillet.mjs';
 
 test('the corner patch area agrees with an independent solid-angle formula', () => {
-  // A CUBE CORNER cannot distinguish the interior angle from the dihedral —
-  // both are 90 degrees — so it is checked first only to anchor the octant, and
-  // the real work is the skewed case below.
+  // A cube corner cannot distinguish the interior angle from the dihedral —
+  // both are 90 degrees — so it is checked first only to anchor the octant;
+  // the skewed case below is the discriminating one.
   const cube = sphericalTriangleArea([[-1, 0, 0], [0, -1, 0], [0, 0, -1]], 4);
   assert.equal(cube.ok, true);
   assert.ok(Math.abs(cube.excess - Math.PI / 2) < 1e-12, `cube excess ${cube.excess}`);
   assert.ok(Math.abs(cube.area - Math.PI * 16 / 2) < 1e-12, `octant area ${cube.area}`);
   assert.ok(cube.agreement < 1e-12, `Girard and Van Oosterom must agree (${cube.agreement})`);
 
-  // A SKEWED TRIHEDRON, where interior angle and dihedral genuinely differ.
+  // A skewed trihedron, where interior angle and dihedral differ.
   const skew = sphericalTriangleArea([[-1, 0, -0.4], [0.3, -1, -0.2], [0, 0.25, -1]], 4);
   assert.equal(skew.ok, true);
   assert.ok(skew.agreement < 1e-12,
     `the two routes must still agree off the cube (${skew.agreement}; Girard ${skew.excess}, Van Oosterom ${skew.solidAngle})`);
-  // And it is NOT an octant — otherwise the test proves nothing beyond the cube.
+  // And it is not an octant — otherwise the test proves nothing beyond the cube.
   assert.ok(Math.abs(skew.excess - Math.PI / 2) > 0.1,
-    `the skewed corner must genuinely differ from a right one (${skew.excess} vs ${Math.PI / 2})`);
+    `the skewed corner must differ from a right one (${skew.excess} vs ${Math.PI / 2})`);
   // The interior angles differ from the dihedrals, which is the claim the cube
   // could not test. Dihedral = pi - angle between the two touch directions.
   const d = [[-1, 0, -0.4], [0.3, -1, -0.2], [0, 0.25, -1]].map((v) => {
@@ -573,24 +550,24 @@ test('the corner patch area agrees with an independent solid-angle formula', () 
     `interior angle ${skew.interiorAngles[0]} must differ from dihedral ${dihedral01} — a cube hides this`);
 });
 
-test('theta must be a real angle in radians — the convex flag is read from it and nothing else', () => {
+test('theta must be a valid angle in radians — the convex flag is read from it and nothing else', () => {
   // phi comes from the co-normals, so it cannot see theta at all. That makes an
   // absent or wrongly-scaled theta invisible to every other guard while still
-  // deciding whether the blend REMOVES material or ADDS it.
+  // deciding whether the blend removes material or adds it.
   const base = { point: [0, 0, 0], coNormalA: [1, 0, 0], coNormalB: [0, 1, 0], radius: 1 };
   assert.equal(rollingBallSection(base).ok, false, 'an omitted theta must refuse, not default to concave');
   assert.equal(rollingBallSection({ ...base, theta: NaN }).ok, false, 'NaN must refuse');
-  assert.equal(rollingBallSection({ ...base, theta: 90 }).ok, false, 'a value in DEGREES must refuse — 90 < pi is false, so it read as concave');
+  assert.equal(rollingBallSection({ ...base, theta: 90 }).ok, false, 'a value in degrees must refuse — 90 < pi is false, so it would read as concave');
   assert.equal(rollingBallSection({ ...base, theta: 0 }).ok, false);
   assert.equal(rollingBallSection({ ...base, theta: 7 }).ok, false, 'past 2*pi is not an angle this can interpret');
-  // And the two real cases still classify correctly.
+  // And the two valid cases still classify correctly.
   assert.equal(rollingBallSection({ ...base, theta: Math.PI / 2 }).convex, true);
   assert.equal(rollingBallSection({ ...base, theta: 3 * Math.PI / 2 }).convex, false);
 });
 
 import { blendSectionCurvature, chamferFlatnessDeviation, chamferSectionArcFor } from '../kernel/fillet.mjs';
 
-// THE ORACLE HAS TO SEPARATE THE TWO SHAPES BEFORE IT CAN JUDGE EITHER. Every
+// The oracle has to separate the two shapes before it can judge either. Every
 // other observable a fillet and a chamfer expose is identical — same tangency
 // points, same setback, same footprint, same record — so an instrument that
 // cannot tell a built arc from a built chord certifies nothing about which one
@@ -623,7 +600,7 @@ test('the curvature oracle reads a built chamfer as flat', () => {
   assert.equal(c.curvature, 0, 'and its curvature is reported as exactly zero');
 });
 
-test('the default deviation measure MISJUDGES a correct chamfer, which is why it needs its own', () => {
+test('the default deviation measure misjudges a correct chamfer, which is why it needs its own', () => {
   // The number this produces is not a defect in the chamfer — it is the radius
   // measure being asked a question it cannot answer. Pinned here so that a
   // future change that silently routes chamfers back through it fails loudly.
@@ -659,20 +636,18 @@ test('the chamfer section hook composes envelope-then-chord, not the reverse', (
   const made = chamferSectionArcFor(spec);
   assert.equal(made.ok, true, made.reason);
   assert.equal(made.arc.straight, true, 'the hook yields a straight section');
-  // The failure this guards: handing a raw SPEC to chamferSectionArc returns
+  // The failure this guards: handing a raw spec to chamferSectionArc returns
   // null, which the tolerance builder reports as "the caller could not supply a
-  // section" — a total refusal wearing the costume of a missing generator.
+  // section" — a total refusal reported as a missing generator.
   assert.equal(chamferSectionArc(spec), null, 'a raw spec is not a completed section');
 });
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE CURVATURE-CONTINUOUS SECTION
-   ─────────────────────────────────────────────────────────────────────────
-   The one property that makes it worth having is that the curvature is ZERO
+// The curvature-continuous section
+/* The property that makes it worth having is that the curvature is zero
    where the blend lands on each face, so there is no line across the surface
    where curvature jumps from 0 to 1/r. That is what is tested here, against a
    circular section of the same radius as the control — whose end curvature is
-   1/r by definition, so the two cannot both pass.                          */
+   1/r by definition, so the two cannot both pass. */
 
 const bez5At = (P, t) => {
   const s = 1 - t;
@@ -696,28 +671,28 @@ const sweptSection = (sweepDeg, r) => {
   return { ok: true, centre: [0, 0, 0], radius: r, tangencyA: nA.map((x) => x * r), tangencyB: nB.map((x) => x * r) };
 };
 
-test('a smooth section has ZERO curvature where it meets each face, and a circular one has 1/r', () => {
+test('a smooth section has zero curvature where it meets each face, and a circular one has 1/r', () => {
   for (const deg of [45, 90, 120]) {
     const sec = sweptSection(deg, 8);
     const q = smoothSectionArc(sec);
     assert.ok(q && q.degree === 5 && q.ctrlPts.length === 6, `${deg}deg: a quintic with six control points`);
-    /* ⚠ MEASURED JUST INSIDE EACH END, AND IT VANISHES LINEARLY FROM THERE. The
+    /* Measured just inside each end, where it vanishes linearly. The
        derivative estimate needs a symmetric window, so t = 0 itself cannot be
        sampled — and the curvature of a quintic with collinear first three points
-       is zero AT the end and grows as O(t) away from it. So a single small
+       is zero at the end and grows as O(t) away from it. So a single small
        reading proves nothing on its own: 0.0022 at t = 0.001 could be a curve
        heading for zero or one that levels off there. Both are asserted — that
-       it is negligible beside the arc's own 1/r, and that HALVING the distance
-       from the end halves it, which is the signature of a real zero. */
+       it is negligible beside the arc's own 1/r, and that halving the distance
+       from the end halves it, which is the signature of a true zero. */
     const kArc = 1 / 8; // the circular section of the same radius, for scale
     const kNear = curvatureAt(q.ctrlPts, 0.001);
     const kHalf = curvatureAt(q.ctrlPts, 0.0005);
     const kEnd = curvatureAt(q.ctrlPts, 0.999);
     assert.ok(kNear < 0.05 * kArc, `${deg}deg: curvature next to the face is ${kNear.toFixed(5)}, under 5% of the arc's ${kArc}`);
     assert.ok(kEnd < 0.05 * kArc, `${deg}deg: and the same at the other end (${kEnd.toFixed(5)})`);
-    assert.ok(kHalf < kNear * 0.6, `${deg}deg: it HALVES when the sample moves half as far from the end (${kHalf.toFixed(6)} against ${kNear.toFixed(6)}) — it is going to zero, not leveling off`);
+    assert.ok(kHalf < kNear * 0.6, `${deg}deg: it halves when the sample moves half as far from the end (${kHalf.toFixed(6)} against ${kNear.toFixed(6)}) — it is going to zero, not leveling off`);
     // And it is not zero everywhere — a straight line would pass everything above.
-    assert.ok(curvatureAt(q.ctrlPts, 0.5) > 0.5 * kArc, `${deg}deg: the middle genuinely curves`);
+    assert.ok(curvatureAt(q.ctrlPts, 0.5) > 0.5 * kArc, `${deg}deg: the middle curves`);
   }
 });
 
@@ -730,11 +705,11 @@ test('the smooth section keeps the ball\'s own footprint, so "radius" still mean
   assert.ok(q.ctrlPts.every((p) => near(p[3], 1, 1e-15)), 'every weight is 1 — the collinearity has to survive the surface builder\'s homogeneous interpolation');
 });
 
-test('collinear ends, which is WHY the curvature is zero and what the skinning preserves', () => {
+test('collinear ends, which is why the curvature is zero and what the skinning preserves', () => {
   const q = smoothSectionArc(sweptSection(90, 8));
   const P = q.ctrlPts.map((p) => p.slice(0, 3));
   // P2 - P0 == 2*(P1 - P0), exactly. The surface builder interpolates each
-  // control ROW independently along the edge, and that relation is linear in the
+  // control row independently along the edge, and that relation is linear in the
   // data, so it holds at every station in between rather than only at these.
   for (const [i0, i1, i2] of [[0, 1, 2], [5, 4, 3]]) {
     for (let c = 0; c < 3; c++) {

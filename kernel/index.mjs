@@ -1,29 +1,22 @@
-// CENTINA — the public surface of the kernel.
+// Centina: the public surface of the kernel.
 //
 // Every module under `kernel/` is re-exported here, so `import { ... } from
-// "centina"` reaches the whole kernel. Individual modules are ALSO importable
-// directly — `import { curvePoint } from "centina/curve.mjs"` — and that is a
-// supported way to use this, not a workaround: it is how you take one routine
-// without pulling in the rest.
+// "centina"` reaches the whole kernel. Individual modules are also importable
+// directly — `import { curvePoint } from "centina/curve.mjs"` — which is how
+// you take one routine without pulling in the rest.
 //
-// ⚠⚠ THIS FILE IS COMPLETE ON PURPOSE, AND A GATE HOLDS IT THAT WAY. It used to
-// re-export 13 of the 74 modules, because it was written to be hand-pasted into
-// the single-file app rather than to be an API — which left `booleanSolids`,
-// `loft`, `intersectSurfaces`, `fitCurveToPoints` and exact SubD limit
-// evaluation unreachable by name from the package that exists to provide them.
-// A hand-kept list of modules is exactly the thing this project has watched go
-// stale over and over, so a gate asserts that every
-// `kernel/*.mjs` is reachable from here and fails when one is not.
+// The list is complete by contract: a check asserts that every `kernel/*.mjs`
+// is reachable from here and fails when one is not.
 //
-// ⚠ TWO NAMES COLLIDE ACROSS MODULES, and an ambiguous `export *` drops them
-// SILENTLY rather than erroring — so both would simply vanish from the API with
-// nothing said. They are re-exported explicitly under qualified names below,
-// and the bare names are deliberately not exported at all: a bare `mergeFaces`
-// would have to mean one of two unrelated things.
+// Three names collide across modules, and an ambiguous `export *` drops such a
+// name silently rather than erroring. They are re-exported explicitly under
+// qualified names below, and the bare names are not exported: a bare
+// `mergeFaces` would have to mean one of two unrelated things.
 
 export * from './arrangement.mjs';
 export * from './basis.mjs';
 export * from './blend.mjs';
+export * from './blendsrf.mjs';
 export * from './boolean.mjs';
 export * from './booleansew.mjs';
 export * from './brep.mjs';
@@ -33,6 +26,7 @@ export * from './breprecord.mjs';
 export * from './cage.mjs';
 export * from './classify.mjs';
 export * from './conform.mjs';
+export * from './coons.mjs';
 export * from './cornerblend.mjs';
 export * from './curvature.mjs';
 export * from './curve.mjs';
@@ -52,7 +46,9 @@ export * from './fitcurve.mjs';
 export * from './flatten.mjs';
 export * from './flipseam.mjs';
 export * from './interpolate.mjs';
+export * from './infill.mjs';
 export * from './isocurve.mjs';
+export * from './lightformer.mjs';
 export * from './knots.mjs';
 export * from './loft.mjs';
 export * from './marchingsquares.mjs';
@@ -113,8 +109,13 @@ export * from './spine.mjs';
 export * from './vec3.mjs';
 export * from './wave.mjs';
 
-// The two disambiguations. Import the module directly if you want the bare name.
+// The three disambiguations. Import the module directly for the bare name.
 export { mergeFaces as mergeArrangementFaces } from './arrangement.mjs';
 export { mergeFaces as mergeSubDFaces } from './subdedit.mjs';
 export { hash01 as hashCurveGen01 } from './curvegen.mjs';
 export { hash01 as hashTessellate01 } from './tessellate.mjs';
+export { smoothstep as smoothstepCage } from './cage.mjs';
+export { smoothstep as smoothstepLightformer } from './lightformer.mjs';
+
+export * from './xpbd.mjs';
+export * from './dynamicbond.mjs';

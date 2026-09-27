@@ -3,16 +3,14 @@
 // n = index of last control point (n+1 control points total, 0-indexed).
 // p = degree. U = knot vector, length n+p+2.
 //
-// ⚠ THESE THREE FUNCTIONS ARE THE FLOOR OF EVERY SURFACE EVALUATION IN THE
-// PROJECT, so their allocation behavior is a whole-app performance fact rather
-// than a local detail. Written the way the book prints them — `Array.from`,
-// `new Array(p+1).fill(0)` — A2.3 allocates NINE arrays per call at degree 3,
-// and a single fillet rebuild calls it often enough that it measured 36% of the
-// total on a CPU profile, garbage collection on top. The arithmetic below is
-// unchanged from the book; only the storage is. Scratch is module-level and
-// reused, which is safe because none of these recurses or yields, and the
-// buffers never escape: every public function still returns freshly allocated
-// arrays, so no caller can be handed a buffer that will change underneath it.
+// These three functions are the floor of every surface evaluation, so their
+// allocation behavior matters for the whole app. Written as the book prints
+// them — `Array.from`, `new Array(p+1).fill(0)` — A2.3 allocates nine arrays
+// per call at degree 3 in the innermost evaluation loop. The arithmetic below
+// is the book's; only the storage differs. Scratch is module-level and reused,
+// which is safe because none of these recurses or yields, and the buffers
+// never escape: every public function returns freshly allocated arrays, so no
+// caller is handed a buffer that will change underneath it.
 // The `*Into` variants exist for hot loops that own their own output.
 
 // Scratch, grown on demand. Indices are computed against `scratchP`, so a call
@@ -65,7 +63,7 @@ export function basisFuns(i, u, p, U) {
   return basisFunsInto(i, u, p, U, new Array(p + 1).fill(0));
 }
 
-// A2.3 — basis functions AND their derivatives up to order `n` (n<=p), at
+// A2.3 — basis functions and their derivatives up to order `n` (n<=p), at
 // span i. Returns ders[k][j] = d^k/du^k of the j-th nonzero basis function.
 // `out` must be an array of n+1 rows, each with room for p+1 entries.
 export function dersBasisFunsInto(i, u, p, n, U, out) {

@@ -600,7 +600,7 @@
   "excluded": [
    {
     "prefix": "Media",
-    "reason": "smoke/volume participating media — excluded by the user. ⚠ This is where Amber and Glass, Bottle Green live: they ARE jewellery/product materials, excluded on IMPLEMENTATION grounds, not domain grounds."
+    "reason": "smoke/volume participating media. Amber and Glass, Bottle Green live here: they are jewelry/product materials, excluded on implementation grounds, not domain grounds."
    },
    {
     "prefix": "Illuminated",
@@ -648,7 +648,7 @@
    },
    {
     "prefix": "Studio · Floor",
-    "reason": "⚠ Rendre-owned SCENE FURNITURE, not a pickable material. Excluded from the LIBRARY only — the ground plane itself still ships."
+    "reason": "Rendre-owned scene furniture, not a pickable material. Excluded from the library only; the ground plane itself still ships."
    },
    {
     "prefix": "Solution",

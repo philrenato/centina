@@ -1,26 +1,22 @@
-// CLOSED-RAIL SEAM WELD. A closed pentagon-shaped Polyline rail, piped at a
-// default radius, produced visibly broken geometry — a hollow,
-// disconnected-looking gap at one point around the loop, plus creasing at the
-// sharp corners. Degenerate geometry, not a robust tool.
+// Closed-rail seam weld: a closed pentagon-shaped Polyline rail, piped at a
+// default radius.
 //
-// ROOT CAUSE, confirmed numerically before any fix (see this file's own
-// "ground truth" test below): `getProfileCrv`'s closed-Polyline branch
-// already repeats the rail's first control point at the end (the
-// established convention `isCurveClosed` recognizes) — one CONTROL POINT,
+// `getProfileCrv`'s closed-Polyline branch repeats the rail's first control
+// point at the end (the convention `isCurveClosed` recognizes), and
 // `buildParallelTransportFrames` builds one frame per rail control point,
 // so a closed rail gets TWO frames (frames[0] and frames[last]) for the
-// SAME physical vertex. Their origins coincide exactly, but their
+// SAME physical vertex. Their origins coincide exactly, but unwelded their
 // orientations do NOT: frame[0] seeds fresh off the OUTGOING edge's
 // tangent (the first segment leaving the vertex); frame[last] carries the
 // accumulated parallel-transport chain off the INCOMING edge's tangent (a
 // DIFFERENT edge of the polygon meeting at the same corner). `sweep1Rigid`'s
 // free path (any degree<=1 rail — Line/Polyline) reuses these two frames
 // directly as the swept surface's own v=0/v=vMax rings, with zero closure
-// awareness — the tube ends up as a genuinely OPEN surface with two
+// awareness — without a weld the tube is an OPEN surface with two
 // independently-oriented, uncapped rings sitting on top of the same 3D
-// point, exactly the hollow gap described above.
+// point: a visible gap at one point around the loop.
 //
-// THE FIX (kernel/sweep.mjs, buildParallelTransportFrames): weld the loop
+// buildParallelTransportFrames (kernel/sweep.mjs) therefore welds the loop
 // shut with ONE shared MITER frame at that one seam corner — the angle
 // bisector of the outgoing/incoming edge tangents, with a normal that
 // continues frame[0]'s own original seed one more parallel-transport step
@@ -28,10 +24,9 @@
 // frames[frames.length-1]. See that function's own header comment for the
 // full derivation and the two named degenerate-corner fallbacks.
 //
-// SCOPE: this welds only the ONE seam corner. Every OTHER interior corner
-// of a degree<=1 rail keeps its existing single-adjacent-tangent frame (the
-// more general "ruled interpolation creases at a sharp turn" limitation) —
-// deliberately NOT attempted in this file.
+// Scope: this welds only the ONE seam corner. Every OTHER interior corner
+// of a degree<=1 rail keeps its single-adjacent-tangent frame (the more
+// general "ruled interpolation creases at a sharp turn" limitation).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -66,13 +61,13 @@ function openPolylineRail(points) {
 const PENTAGON = [[-80, 40, 0], [0, 90, 0], [90, 30, 0], [50, -70, 0], [-70, -60, 0]];
 const RADIUS = 5;
 
-test('ground truth: an UNPATCHED closed-pentagon rail really does produce two differently-oriented frames at its own seam (proves the bug is real, not assumed)', () => {
+test('ground truth: a closed-pentagon rail\'s first and last edges meet at its seam in different directions, so unwelded frames there would differ', () => {
   const rail = closedPolylineRail(PENTAGON);
-  assert.equal(isCurveClosed(rail), true, 'a closed Polyline profile-as-rail really is recognized as closed by this kernel\'s own established convention');
-  assert.equal(railFrameOriginsExact(rail), true, 'a degree-1 Polyline rail is on sweep1Rigid\'s FREE path — the one this bug actually reaches');
+  assert.equal(isCurveClosed(rail), true, 'a closed Polyline profile-as-rail is recognized as closed by this kernel\'s own convention');
+  assert.equal(railFrameOriginsExact(rail), true, 'a degree-1 Polyline rail is on sweep1Rigid\'s FREE path — the one that reuses the frames directly');
 
-  // Independently re-derive what the OLD (pre-fix) per-step loop would have
-  // produced at frame[0]/frame[last], without relying on any saved number:
+  // Independently re-derive what a per-step loop without the weld produces
+  // at frame[0]/frame[last], without relying on any saved number:
   // frame[0]'s tangent is the FIRST segment's direction; frame[last]'s
   // tangent is the LAST segment's direction — two different edges of the
   // same polygon, meeting at the one shared vertex.
@@ -82,17 +77,17 @@ test('ground truth: an UNPATCHED closed-pentagon rail really does produce two di
   const norm = (v) => { const l = Math.hypot(...v); return v.map((c) => c / l); };
   const tOut = norm(firstSeg), tIn = norm(lastSeg);
   const tangentDot = tOut[0] * tIn[0] + tOut[1] * tIn[1] + tOut[2] * tIn[2];
-  assert.ok(tangentDot < 0.999, `sanity: the pentagon's own first and last edges really do point in genuinely different directions at the seam (tangent dot ${tangentDot.toFixed(6)}) — otherwise this repro isn't reproducing a real corner`);
+  assert.ok(tangentDot < 0.999, `sanity: the pentagon's own first and last edges point in different directions at the seam (tangent dot ${tangentDot.toFixed(6)}) — otherwise this fixture has no corner at the seam`);
 });
 
-test('THE FIX: buildParallelTransportFrames welds a closed rail\'s seam — frame[0] and frame[last] are now the identical shared miter frame', () => {
+test('seam weld: buildParallelTransportFrames welds a closed rail\'s seam — frame[0] and frame[last] are the identical shared miter frame', () => {
   const rail = closedPolylineRail(PENTAGON);
   const frames = buildParallelTransportFrames(rail);
   assert.equal(frames.length, PENTAGON.length + 1, 'one frame per control point, including the repeated closing one');
   const first = frames[0], last = frames[frames.length - 1];
-  assert.ok(first === last, 'frame[0] and frame[last] are now the SAME frame object — a genuine weld, not two coincidentally-equal copies');
+  assert.ok(first === last, 'frame[0] and frame[last] are the SAME frame object — a weld, not two coincidentally-equal copies');
   // Orthonormal, well-formed (not merely non-crashing): the standard
-  // acceptance property every OTHER frame in this file already proves.
+  // acceptance property every OTHER frame in this file proves.
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   assert.ok(Math.abs(dot(first.xAxis, first.yAxis)) < 1e-9, 'xAxis ⊥ yAxis');
   assert.ok(Math.abs(dot(first.xAxis, first.zAxis)) < 1e-9, 'xAxis ⊥ zAxis');
@@ -102,7 +97,7 @@ test('THE FIX: buildParallelTransportFrames welds a closed rail\'s seam — fram
   assert.ok(Math.abs(Math.hypot(...first.zAxis) - 1) < 1e-9, 'zAxis unit length');
 });
 
-test('THE FIX, end to end: sweep1Rigid on a closed pentagon rail produces a genuinely closed tube — zero seam gap, both rings match exactly', () => {
+test('seam weld, end to end: sweep1Rigid on a closed pentagon rail produces a closed tube — zero seam gap, both rings match exactly', () => {
   const rail = closedPolylineRail(PENTAGON);
   const circleProfile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], RADIUS);
   const srf = sweep1Rigid(rail, circleProfile);
@@ -116,21 +111,21 @@ test('THE FIX, end to end: sweep1Rigid on a closed pentagon rail produces a genu
     const d = Math.hypot(...firstRing[i].slice(0, 3).map((v, k) => v - lastRing[i][k]));
     maxRingDiff = Math.max(maxRingDiff, d);
   }
-  assert.ok(maxRingDiff < 1e-9, `FIX: the tube's own first and last V-rings are now IDENTICAL (max per-point diff ${maxRingDiff}mm) — was ~5.28mm before the fix, a real gap, not a rounding artifact`);
+  assert.ok(maxRingDiff < 1e-9, `the tube's own first and last V-rings are IDENTICAL (max per-point diff ${maxRingDiff}mm)`);
 });
 
-test('an OPEN rail (the ordinary, already-working case) is completely unaffected — frame[0] and frame[last] stay two genuinely distinct endpoints', () => {
+test('an OPEN rail is not welded — frame[0] and frame[last] stay two distinct endpoints', () => {
   const rail = openPolylineRail(PENTAGON);
   assert.equal(isCurveClosed(rail), false, 'an open pentagon polyline (no repeated closing point) is correctly NOT recognized as closed');
   const frames = buildParallelTransportFrames(rail);
   const first = frames[0], last = frames[frames.length - 1];
-  assert.ok(first !== last, 'no weld applied — the two ends of an open rail are genuinely different points, not merged');
+  assert.ok(first !== last, 'no weld applied — the two ends of an open rail are different points, not merged');
   const originDist = Math.hypot(...first.origin.map((v, i) => v - last.origin[i]));
-  assert.ok(originDist > 1, `sanity: the open rail's own start/end really are far apart (${originDist.toFixed(2)}mm) — proves this test is exercising the open-rail path, not accidentally still closed`);
+  assert.ok(originDist > 1, `sanity: the open rail's own start/end are far apart (${originDist.toFixed(2)}mm) — proves this test is exercising the open-rail path, not accidentally still closed`);
 
   const circleProfile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], RADIUS);
   const srf = sweep1Rigid(rail, circleProfile);
-  assert.equal(isFiniteNet(srf.ctrlNet), true, 'an open rail still sweeps to a valid, finite tube exactly as before');
+  assert.equal(isFiniteNet(srf.ctrlNet), true, 'an open rail sweeps to a valid, finite tube');
 });
 
 test('MultiPipe-equivalent: TWO independent closed rails, each swept via its own separate sweep1Rigid call, each weld their OWN seam independently', () => {
@@ -152,7 +147,7 @@ test('degenerate-corner fallback: a closed rail with a near-180-degree fold-back
   // A "spike" pentagon variant: pull one vertex almost exactly onto the
   // line between its two neighbors' shared direction at the SEAM vertex,
   // so the outgoing/incoming edge tangents at vertex 0 point nearly exactly
-  // opposite each other (a genuine near-fold-back corner at the seam).
+  // opposite each other (a near-fold-back corner at the seam).
   const spike = [[0, 0, 0], [100, 0.001, 0], [50, 80, 0], [-50, 80, 0], [-100, 0.001, 0]];
   const rail = closedPolylineRail(spike);
   const frames = buildParallelTransportFrames(rail);

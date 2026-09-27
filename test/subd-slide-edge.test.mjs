@@ -1,7 +1,7 @@
-// SLIDE EDGE — move an edge (or a loop of them) along the surface. Pure
+// Slide edge — move an edge (or a loop of them) along the surface. Pure
 // geometry: the claims worth checking are that topology does not move at all,
 // that each vertex lands on a real rail of its own rather than drifting off
-// the surface, that the loop slides COHERENTLY (all one way, not zig-zag),
+// the surface, that the loop slides coherently (all one way, not zig-zag),
 // and that a slide big enough to collapse an edge is refused.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ test('topology is completely unchanged — a slide moves positions and nothing e
   assert.deepEqual(out.creases, cage.creases);
 });
 
-test('THE POINT: every slid vertex lands ON one of its own rails — not off the surface', () => {
+test('every slid vertex lands on one of its own rails — not off the surface', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const t = 0.4;
   const { cage: out, slidVertexCount } = slideEdges(cage, midColumnKeys(cage), t);
@@ -33,7 +33,7 @@ test('THE POINT: every slid vertex lands ON one of its own rails — not off the
   const ctx = buildTopology(cage);
   for (const vi of [1, 4, 7]) {
     const before = cage.vertices[vi], after = out.vertices[vi];
-    // The move must be exactly t of the way along SOME real incident edge.
+    // The move must be exactly t of the way along some incident edge.
     const ok = ctx.vertexEdges[vi].some((e) => {
       const other = e.v0 === vi ? e.v1 : e.v0;
       const expect = [0, 1, 2].map((k) => before[k] + (cage.vertices[other][k] - before[k]) * t);
@@ -43,11 +43,11 @@ test('THE POINT: every slid vertex lands ON one of its own rails — not off the
   }
 });
 
-test('and the whole loop slides the SAME way — a per-vertex choice would zig-zag', () => {
+test('and the whole loop slides the same way — a per-vertex choice would zig-zag', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const { cage: out } = slideEdges(cage, midColumnKeys(cage), 0.4);
   const dx = [1, 4, 7].map((vi) => out.vertices[vi][0] - cage.vertices[vi][0]);
-  assert.ok(dx.every((d) => Math.abs(d) > 1e-9), 'every vertex genuinely moved');
+  assert.ok(dx.every((d) => Math.abs(d) > 1e-9), 'every vertex moved');
   assert.ok(dx.every((d) => Math.sign(d) === Math.sign(dx[0])), `all three must move the same direction, got ${dx}`);
 });
 
@@ -77,7 +77,7 @@ test('the result still subdivides cleanly', () => {
   for (const v of refined.vertices) assert.ok(v.every(Number.isFinite));
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals, and the input cage is never mutated', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const before = JSON.stringify(cage);
   assert.throws(() => slideEdges(cage, [], 0.3), /non-empty/);

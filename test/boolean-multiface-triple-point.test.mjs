@@ -1,20 +1,20 @@
-// A MULTI-FACE OPERAND MEETS THE OTHER SOLID AT TRIPLE POINTS, AND THEY HAVE
-// TO BE SHARED.
+// A multi-face operand meets the other solid at triple points, and they have
+// to be shared.
 //
 // One surface against one surface has no triple point: the two faces share one
 // curve and take their boundary points from the same sample array. Give either
 // operand a second face and the picture changes — a prism's side face and its
 // cap share an edge, so the other solid's surface crosses all three at once,
 // and each of those faces finds that corner its own way. The side face's march
-// ENDS there, on all three surfaces to machine precision; the cap's curve has
+// ends there, on all three surfaces to machine precision; the cap's curve has
 // no sample there at all and its face falls back to a chord crossing, a
 // thousand times further out than the weld tolerance. The shell then comes back
 // with one sliver triangle per triple point.
 //
-// EVERY OPERAND HERE IS MEASURED BEFORE ANYTHING IS ASSERTED ABOUT IT. A
+// Every operand here is measured before anything is asserted about it. A
 // fixture nobody measured is a free variable in every result resting on it, and
-// this file's operands are built by control-point arithmetic, which is exactly
-// where a fixture has silently drifted before.
+// this file's operands are built by control-point arithmetic, which is where a
+// fixture drifts silently.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { booleanSolids, shareTriplePoints } from '../kernel/boolean.mjs';
@@ -54,7 +54,7 @@ function tess(faces, res) {
   }
   return tris;
 }
-// SIDE FACES FIRST, THEN THE TWO CAPS, so a face index reads directly: 0-9 are
+// Side faces first, then the two caps, so a face index reads directly: 0-9 are
 // the star's own walls and 10/11 are its ends. The tests below name faces by
 // index and the ordering is what makes that legible.
 function starPrism(outerR, innerR, z0, z1, cx = 0, cy = 0) {
@@ -68,8 +68,8 @@ function starPrism(outerR, innerR, z0, z1, cx = 0, cy = 0) {
   faces.push({ srf: capPlane(z1), trimLoop: capTrimLoop(pts) });
   return { faces, triangles: tess(faces, 8), corners: pts, z0, z1 };
 }
-// A REVOLVED PROFILE THAT GOES IN AND OUT AGAIN, not a ball. The radius has to
-// rise, fall and rise for the operand to be genuinely curved rather than a
+// A revolved profile that goes in and out again, not a ball. The radius has to
+// rise, fall and rise for the operand to be curved rather than a
 // primitive wearing a NURBS coat, and the test below measures that it does.
 const BLOB_PROFILE = [[0, 0, 0], [12, 0, 6], [8, 0, 14], [15, 0, 24], [6, 0, 34], [0, 0, 40]];
 function blob() {
@@ -91,12 +91,12 @@ function sweepCurves(A, B) {
   }
   return curves;
 }
-// Every point of a (u,v) grid on the surface, as { r, z }. Read off the SURFACE
+// Every point of a (u,v) grid on the surface, as { r, z }. Read off the surface
 // rather than off the profile's control points: a rational control net's stored
 // xyz is not the curve, and reading one as if it were lets a "radius 20 ball"
 // span 17.73 to 22.42 while every assertion resting on it still passes.
 //
-// BOTH PARAMETER DIRECTIONS ARE SWEPT, deliberately. Which of u and v carries
+// Both parameter directions are swept, deliberately. Which of u and v carries
 // the profile and which the revolve angle is a fact about `revolve`'s own
 // output ordering; holding one axis fixed on the assumption that it is the
 // angular one samples a single meridian at best and the axis itself at worst,
@@ -121,7 +121,7 @@ function radiusAtZ(samples, z, band = 0.4) {
   return r;
 }
 
-test('the operands are what this file claims: a genuinely wavy revolve and a 12-face star prism that really interpenetrate', () => {
+test('the operands are what this file claims: a wavy revolve and a 12-face star prism that interpenetrate', () => {
   const A = blob();
   const B = starPrism(18, 7, 10, 28);
 
@@ -131,7 +131,7 @@ test('the operands are what this file claims: a genuinely wavy revolve and a 12-
   const zMin = Math.min(...samples.map((s) => s.z)), zMax = Math.max(...samples.map((s) => s.z));
   assert.ok(zMax - zMin > 39 && zMax - zMin < 41, `blob height ${(zMax - zMin).toFixed(3)}`);
   assert.ok(rMax > 14 && rMax < 16, `blob max radius ${rMax.toFixed(3)}`);
-  // NOT MONOTONE — the waist between the two bulges is what makes this organic
+  // Not monotone — the waist between the two bulges is what makes this organic
   // rather than a ball, and a ball would pass every other check here.
   const rWaist = radiusAtZ(samples, 14);
   const rBelly = radiusAtZ(samples, 24);
@@ -149,7 +149,7 @@ test('the operands are what this file claims: a genuinely wavy revolve and a 12-
     assert.equal(Math.max(...zs), 28);
   }
 
-  // AND THEY REALLY CROSS. At each cap height the blob's radius must fall
+  // And they cross. At each cap height the blob's radius must fall
   // strictly between the star's inner and outer radius, or the cap's own trim
   // loop is never cut and there is no triple point to share.
   for (const z of [10, 28]) {
@@ -166,7 +166,7 @@ test('the triple point is already computed exactly — it is only missing from t
   const sideCurve = curves.find((c) => c.faceB === 9);
   assert.ok(capCurve && sideCurve, 'the blob must cut both the bottom cap and side face 9');
 
-  // The side face's march runs out of its own domain ON the cap plane, and that
+  // The side face's march runs out of its own domain on the cap plane, and that
   // endpoint is the triple point: it lies on the blob, on the side face and on
   // the cap plane at once.
   const s = sideCurve.samples;
@@ -176,14 +176,14 @@ test('the triple point is already computed exactly — it is only missing from t
   assert.ok(closestPointOnSurface(B.faces[9].srf, end).distance < 1e-12, 'triple point is not on its own side face');
   assert.ok(closestPointOnSurface(B.faces[10].srf, end).distance < 1e-12, 'triple point is not on the cap plane');
 
-  // And the cap curve — which is the ONLY curve the cap face is split by — does
+  // And the cap curve — which is the only curve the cap face is split by — does
   // not carry it. This gap is the whole defect: the cap face has to invent the
   // corner from a chord, and lands far outside the sew's 1e-4 weld tolerance.
   const nearest = Math.min(...capCurve.samples.map((q) => d3(q, end)));
   assert.ok(nearest > 1e-2, `the cap curve already has a sample ${nearest.toExponential(2)} away, so the premise does not hold`);
 
   // Sharing puts it there, and nowhere else: the enriched curve gains exactly
-  // the reported number of samples, and the endpoint is now on it exactly.
+  // the reported number of samples, and the endpoint is on it exactly.
   const shared = shareTriplePoints(curves, A, B, {});
   assert.ok(shared.inserted > 0, 'no triple point was shared at all');
   const before = curves.reduce((n, c) => n + c.samples.length, 0);
@@ -193,8 +193,8 @@ test('the triple point is already computed exactly — it is only missing from t
   assert.ok(Math.min(...enrichedCap.samples.map((q) => d3(q, end))) < 1e-12,
     'the shared curve still does not pass through the triple point');
 
-  // Every point put into a curve lies on BOTH of that curve's surfaces, which
-  // is the property that makes it a point OF that curve rather than a point
+  // Every point put into a curve lies on both of that curve's surfaces, which
+  // is the property that makes it a point of that curve rather than a point
   // that merely passed nearby.
   for (let i = 0; i < curves.length; i++) {
     const raw = new Set(curves[i].samples);
@@ -207,7 +207,7 @@ test('the triple point is already computed exactly — it is only missing from t
   }
 });
 
-test('sharing is refused between curves with no face in common, and between two COMPONENTS of one face pair', () => {
+test('sharing is refused between curves with no face in common, and between two components of one face pair', () => {
   const A = blob();
   const B = starPrism(18, 7, 10, 28);
   const curves = sweepCurves(A, B);
@@ -222,7 +222,7 @@ test('sharing is refused between curves with no face in common, and between two 
   ];
   assert.equal(shareTriplePoints(disjoint, { faces: [...A.faces, ...A.faces] }, B, {}).inserted, 0);
 
-  // BOTH faces in common: these are separate components of one surface-surface
+  // Both faces in common: these are separate components of one surface-surface
   // intersection and are disjoint by construction, so no endpoint of either is
   // a point of the other. The on-surface test cannot see that — every sample of
   // either lies on both surfaces — so the exclusion has to be structural.
@@ -247,7 +247,7 @@ test('a 12-face star prism against a wavy revolve closes under all three operato
       assert.equal(res.stats.nakedEdgeCount, 0, `${name} ${op} naked edges`);
       assert.equal(res.stats.nonManifoldEdgeCount, 0, `${name} ${op} non-manifold edges`);
       assert.ok(res.triplePoints > 0, `${name} ${op}: nothing was shared, so this closed for some other reason`);
-      // The residual actually welded across the shared curves, reported so a
+      // The residual welded across the shared curves, reported so a
       // pass here is visibly comfortable rather than scraping the tolerance.
       assert.ok(res.worstSharedGap < 1e-6, `${name} ${op}: worst weld gap ${res.worstSharedGap.toExponential(2)}`);
     }
@@ -259,7 +259,7 @@ test('one face against one face has no triple point, so the sharing pass is a no
   // nothing to share. This is the control that says the pass changed the
   // multi-face result and left the one-face case exactly as it was.
   //
-  // Two OVERLAPPING organic bodies, not two that miss each other: a pair with
+  // Two overlapping organic bodies, not two that miss each other: a pair with
   // no intersection curve at all would make every assertion below vacuous, and
   // the count is checked rather than assumed.
   const A = blob();
@@ -275,10 +275,10 @@ test('one face against one face has no triple point, so the sharing pass is a no
   assert.equal(shareTriplePoints(curves, A, B, {}).inserted, 0);
 });
 
-test('a one-surface pair that DOES close still closes, and closes without sharing anything', () => {
+test('a one-surface pair that does close still closes, and closes without sharing anything', () => {
   // The revolved-sphere union is the standing single-pair case. It has to stay
-  // at zero naked edges AND report that nothing was shared, so a pass here
-  // cannot be the new machinery quietly rescuing it.
+  // at zero naked edges and report that nothing was shared, so a pass here
+  // cannot be the sharing pass quietly rescuing it.
   const ball = (cx) => {
     const pts = [];
     for (let i = 0; i < 7; i++) {
@@ -286,7 +286,7 @@ test('a one-surface pair that DOES close still closes, and closes without sharin
       pts.push([40 * Math.cos(th), 0, 40 * Math.sin(th)]);
     }
     const s = revolve(globalCurveInterp(pts, 3), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
-    // TRANSLATE WITHOUT THE WEIGHT. This control net stores EUCLIDEAN xyz
+    // Translate without the weight. This control net stores euclidean xyz
     // alongside the weight, and a revolve's rational circle carries
     // w = sqrt(2)/2 on half its columns — scaling the offset by w moves those
     // columns only 0.707 as far, and the "radius 40 sphere" then measures
@@ -295,8 +295,8 @@ test('a one-surface pair that DOES close still closes, and closes without sharin
     return { faces: [{ srf }], triangles: tess([{ srf }], 40), srf };
   };
   const A = ball(0), B = ball(55);
-  // MEASURED, not assumed: both bodies really are radius 40 about their own
-  // stated center, and 55 apart, so they genuinely overlap. Distance from the
+  // Measured, not assumed: both bodies are radius 40 about their own
+  // stated center, and 55 apart, so they overlap. Distance from the
   // center, not from the axis — a body translated in x has no radial symmetry
   // about the z axis to read.
   for (const [cx, X] of [[0, A], [55, B]]) {

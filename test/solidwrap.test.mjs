@@ -1,8 +1,8 @@
-// WRAPPING SOLIDS: THE BLEND MUST MEAN WHAT ITS LABEL SAYS, AND THE REFUSAL
-// MUST FIRE BEFORE A WEB GETS STRETCHED BETWEEN TWO THINGS THAT DO NOT TOUCH.
+// Wrapping solids: the blend must mean what its label says, and the refusal
+// must fire before a web gets stretched between two things that do not touch.
 //
 // The two numbers a person actually types here are Fuse and Skin, and both are
-// claims about millimetres. A blend radius that is merely "some smoothing" is
+// claims about millimeters. A blend radius that is merely "some smoothing" is
 // not a control, so the bridging test below is written against the arithmetic
 // the label promises — two surfaces a gap g apart fuse exactly when Fuse
 // reaches g — rather than against whatever the implementation happened to do.
@@ -60,9 +60,7 @@ function torusSoup(center, R, r, nu = 48, nv = 24) {
 
 const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size + cage.faces.length;
 
-// ---------------------------------------------------------------------------
-// TEST 1 — the smooth minimum's own algebra.
-// ---------------------------------------------------------------------------
+// Test 1 — the smooth minimum's own algebra.
 {
   assert.equal(smoothMinPoly(3, 7, 0), 3, 'at k = 0 the blend must be the exact union');
   assert.equal(smoothMinPoly(-2, 5, 0), -2, 'at k = 0, again, on the other sign');
@@ -79,12 +77,9 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   }
   assert.equal(fuseBlendRadius(5), 10, 'Fuse must halve into the formula, or its label is a lie');
   assert.equal(fuseBlendRadius(-3), 0, 'a negative Fuse is not a negative blend');
-  console.log('  smooth min:     exact union at 0, never above min, symmetric, a - k/4 on the diagonal');
 }
 
-// ---------------------------------------------------------------------------
-// TEST 2 — bridging happens at the gap the control names, and not before.
-// ---------------------------------------------------------------------------
+// Test 2 — bridging happens at the gap the control names, and not before.
 {
   const R = 10, gap = 6;
   const left = { positions: sphereSoup([-(R + gap / 2), 0, 0], R) };
@@ -111,12 +106,9 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
     assert.ok(v <= prev + 1e-9, `raising Fuse to ${f} moved the midpoint back outward`);
     prev = v;
   }
-  console.log(`  bridging:       gap ${gap} -> midpoint ${at(0).toFixed(3)} at Fuse 0, ${at(gap / 2).toFixed(3)} at ${gap / 2}, ${at(gap).toFixed(4)} at ${gap}, ${at(gap * 1.5).toFixed(3)} at ${gap * 1.5}`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 3 — members too far apart are refused BY NAME, not fudged.
-// ---------------------------------------------------------------------------
+// Test 3 — members too far apart are refused by name, not fudged.
 {
   const R = 10;
   const a = { positions: sphereSoup([-20, 0, 0], R) };
@@ -143,12 +135,9 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   const wrapped = wrapSolidsToSuperbCage([a, b], { fuse: 2, density: 4 });
   assert.equal(wrapped.ok, false, 'the command must carry the refusal out');
   assert.equal(wrapped.reason, SOLID_WRAP_REFUSAL.MEMBERS_DO_NOT_FUSE);
-  console.log(`  refusal:        gap ${gap} refused at Fuse 0 and 5, accepted at ${gap + 5} — "${wrapped.message.slice(0, 60)}..."`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 4 — nothing that encloses space is refused too, and separately.
-// ---------------------------------------------------------------------------
+// Test 4 — nothing that encloses space is refused too, and separately.
 {
   const openQuad = new Float32Array([0, 0, 0, 10, 0, 0, 10, 10, 0, 0, 0, 0, 10, 10, 0, 0, 10, 0]);
   const field = makeSolidsField([{ positions: openQuad }], {});
@@ -160,13 +149,10 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
 
   const empty = wrapSolidsRefusal(makeSolidsField([], {}));
   assert.equal(empty.reason, SOLID_WRAP_REFUSAL.NO_VOLUME, 'an empty selection has nothing to wrap');
-  console.log('  no volume:      an open mesh and an empty selection refuse under their own name');
 }
 
-// ---------------------------------------------------------------------------
-// TEST 5 — the cage is all quads with the topology it started with, and the
-// LIMIT surface, not the cage, is what lands on the field.
-// ---------------------------------------------------------------------------
+// Test 5 — the cage is all quads with the topology it started with, and the
+// limit surface, not the cage, is what lands on the field.
 {
   const R = 20;
   const solid = { positions: sphereSoup([0, 0, 0], R) };
@@ -185,9 +171,9 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   assert.equal(valence3, 8, `expected 8 valence-3 corners, got ${valence3}`);
   assert.equal(valence3 + valence4, res.cage.vertices.length, 'a vertex appeared with a valence that is neither 3 nor 4');
 
-  /* ⚠ THE CAGE IS NOT THE SURFACE, AND THIS IS THE CONTROL THAT SAYS SO. With
-     the limit refit off, the control points sit on the field and the LIMIT
-     surface hovers well inside them — more than a millimetre on a 20 mm
+  /* The cage is not the surface, and this is the control that says so. With
+     the limit refit off, the control points sit on the field and the limit
+     surface hovers well inside them — more than a millimeter on a 20 mm
      sphere. The refit is what makes a Skin of 0 mean anything. */
   const worstAtLimit = (r) => {
     const ctx = buildTopology(r.cage);
@@ -202,16 +188,13 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   assert.ok(without > 0.5, `the un-refitted control only missed by ${without} — it is not showing the drift it exists to show`);
   assert.ok(withRefit < without / 2, `the refit did not close the gap: ${withRefit} against ${without} un-refitted`);
 
-  /* ⚠⚠ THE TIGHT NUMBER BELONGS AT THE CONFORMITY END OF FIT, AND ONLY THERE.
-     This assertion used to read `withRefit < 0.05` at Fit 60 and it was true when
-     it was written. Fit was then redefined (00001-128, "Fit bought passes past
-     its own conformity optimum so 100 was worse than 25") into a trade: it buys
-     snap passes and spends melt passes, `melt = 60 * (1 - fit/100) * meltScale`,
-     capped at 240. Below 100 the melt runs AFTER the snapping with no snap to
-     follow it, so the cage drifts off the field and `targets` — which the refit
-     aims at — is that drifted cage. The refit then lands the limit surface
-     exactly where it was told to, which is 0.2-0.4mm off a 20mm sphere.
-     Measured across the whole control, worst limit-to-field in mm:
+  /* The tight number belongs at the conformity end of Fit, and only there.
+     Fit is a trade: it buys snap passes and spends melt passes,
+     `melt = 60 * (1 - fit/100) * meltScale`, capped at 240. Below 100 the melt
+     runs after the snapping with no snap to follow it, so the cage drifts off
+     the field and `targets` — which the refit aims at — is that drifted cage.
+     The refit then lands the limit surface exactly where it was told to, which
+     is 0.2-0.4mm off a 20mm sphere. Worst limit-to-field in mm across the control:
 
          density   Fit 0    25      50      75      100
               4   0.4264  0.4194  0.4132  0.4036  0.0008
@@ -222,34 +205,26 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
      travel and then improves 200-1400x in the last step, where the melt reaches
      zero. It is not a dead control — the melt it spends is the fairness half,
      and that half does move across the range — but nothing here measures
-     fairness, so this file may only speak for the half it can see.
-     ⚠ AND AT DENSITY 12 THE REFIT IS NET NEGATIVE for conformity below Fit 100:
-     0.2036 refitted against 0.1176 un-refitted, because the drift it faithfully
-     targets is larger than the hover it removes. That is a real defect in the
-     order of operations and it is NOT fixed here — fixing it moves the geometry
-     of every wrapped cage in every existing document, which needs the 39-case
-     torture suite behind it rather than a QC round. It is named in the handoff
-     with these numbers. What this file pins meanwhile is the promise that still
-     holds: at the conformity end the refit puts the limit surface ON the field,
-     and the trade is real rather than imagined. */
+     fairness, so this file speaks only for the half it can see.
+     Known limitation: at density 12 the refit is net negative for conformity
+     below Fit 100, 0.2036 refitted against 0.1176 un-refitted, because the drift
+     it targets is larger than the hover it removes. That is a defect in the
+     order of operations; changing it moves the geometry of every wrapped cage in
+     every existing document. What this file pins is the promise that holds: at
+     the conformity end the refit puts the limit surface on the field, and the
+     trade is real rather than imagined. */
   const conform = wrapSolidsToSuperbCage([solid], { density: 4, fit: 100 });
   const conformAtLimit = worstAtLimit(conform);
   assert.ok(conformAtLimit < 0.05,
     `at Fit 100 the refitted limit surface must land on the field, and it missed by ${conformAtLimit}`);
   assert.ok(conformAtLimit < withRefit / 10,
     `Fit must actually buy conformity: ${conformAtLimit} at 100 against ${withRefit} at 60`);
-  /* ⚠ THIS READ `withRefit < without / 10` and it was the same stale claim as the
-     0.05 above, from the same build: at Fit 60 the measured ratio is 2.9, not 10.
-     The honest bound is asserted once, at the top of this block, with the number
-     in its message; a second copy at a factor the redefinition invalidated is
-     what made this file fail twice for one reason. */
-  console.log(`  cage:           ${res.quadCount} quads, Euler 2, ${valence3} valence-3 corners; limit surface off the field by ${withRefit.toFixed(4)} with the refit and ${without.toFixed(4)} without`);
+  /* At Fit 60 the refitted-to-unrefitted ratio is 2.9, so `withRefit < without / 2`
+     above is the bound at that end; the tight bound is the Fit 100 one. */
 }
 
-// ---------------------------------------------------------------------------
-// TEST 6 — two solids that DO fuse become one cage, and a torus comes back
-// genus 0. The second is the reduction, demonstrated rather than claimed.
-// ---------------------------------------------------------------------------
+// Test 6 — two solids that do fuse become one cage, and an axis-aligned torus
+// keeps its hole.
 {
   const R = 10, gap = 6;
   const pair = [
@@ -259,17 +234,16 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   const res = wrapSolidsToSuperbCage(pair, { density: 5, fit: 70, fuse: gap + 2 });
   assert.equal(res.ok, true, `the wrap refused a pair that fuses: ${res.message}`);
   assert.ok(res.allQuads && euler(res.cage) === 2, 'the fused pair must still be one all-quad genus-0 cage');
-  /* ⚠ THE SAME MELT DRIFT AS TEST 5, ON AN INDEPENDENT FIXTURE — which is what
+  /* The same melt drift as test 5, on an independent fixture — which is what
      makes it a property of the wrap rather than of one sphere. `worstFieldError`
-     is the CAGE's own distance to the field, taken after the melt passes, and it
+     is the cage's own distance to the field, taken after the melt passes, and it
      falls off the same cliff. Measured on this pair, R 10, density 5:
 
          Fit          0      25      50      70      85     100
          worst   0.8030  0.7796  0.7595  0.7437  0.7319  0.0258
 
      So the tight bound belongs at Fit 100 here too, and the shape of the trade
-     is what this pins below it. See TEST 5's own block for the mechanism and for
-     why it is not being fixed in this pass. */
+     is what this pins below it. See test 5's own block for the mechanism. */
   const tight = wrapSolidsToSuperbCage(pair, { density: 5, fit: 100, fuse: gap + 2 });
   assert.equal(tight.ok, true, `the wrap refused the fusing pair at Fit 100: ${tight.message}`);
   assert.ok(tight.allQuads && euler(tight.cage) === 2, 'the fused pair at Fit 100 must still be one all-quad genus-0 cage');
@@ -278,27 +252,18 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   assert.ok(tight.worstFieldError < res.worstFieldError / 5,
     `Fit must buy conformity on a fused pair too: ${tight.worstFieldError} at 100 against ${res.worstFieldError} at 70`);
 
-  /* ⭐⭐⭐ A THROUGH-HOLE IS HELD. This assertion used to read `euler === 2` with a
-     paragraph above it explaining that a genus-1 input CANNOT come back genus 1,
-     because the cage's topology was fixed before the solve began — "a wrap of a
-     torus is a ring-shaped bag with a skinned-over hole", pinned so that the cost
-     was a measured property rather than a design note. It was true when it was
-     written. The start cage learned to find a hole since, and nothing came back
-     to the test that pinned the cost: a torus now wraps to 72 quads at Euler 0,
-     a real genus-1 cage, at every density and Fit tried.
-     ⚠ The claim that expired is the interesting one here — a check that pins a
-     LIMITATION goes stale silently in the good direction, and reads as a failure
-     when the limitation is lifted. */
+  /* A through-hole is held: the start cage finds the hole, so a torus wraps to
+     72 quads at Euler 0, a genus-1 cage, at every density and Fit tried. */
   const torus = wrapSolidsToSuperbCage([{ positions: torusSoup([0, 0, 0], 30, 10) }], { density: 5, fit: 80 });
   assert.equal(torus.ok, true, `the wrap refused a torus: ${torus.message}`);
   assert.equal(euler(torus.cage), 0, `an axis-aligned torus must come back as a genus-1 cage, and its Euler characteristic is ${euler(torus.cage)}`);
   assert.ok(torus.allQuads && torus.cage.faces.every((f) => f.length === 4),
     'the genus-1 cage must be all quads like every other');
-  /* ⚠ AND THE HOLE IS FOUND ON THE WORLD AXES ONLY. `findHoleAxis` probes X, Y
-     and Z, so a ring tilted far enough off all three is not recognised and comes
-     back genus 0 — the bag the comment above used to describe, now the exception
-     rather than the rule. Asserted so the remaining limit is measured too, and so
-     that lifting it fails here rather than passing silently. */
+  /* And the hole is found on the world axes only. `findHoleAxis` probes X, Y
+     and Z, so a ring tilted far enough off all three is not recognized and comes
+     back genus 0 — a ring-shaped bag with a skinned-over hole. Asserted so the
+     limit is measured, and so that lifting it fails here rather than passing
+     silently. */
   const tilt = (pts, a) => { const c = Math.cos(a), sn = Math.sin(a); const o = [];
     for (let i = 0; i < pts.length; i += 3) { const x = pts[i], y = pts[i + 1], z = pts[i + 2];
       o.push(x, y * c - z * sn, y * sn + z * c); } return o; };
@@ -306,12 +271,9 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   assert.equal(tilted.ok, true, `the wrap refused a tilted torus: ${tilted.message}`);
   assert.equal(euler(tilted.cage), 2,
     `a torus tilted off the world axes is a KNOWN limit and should still fill — Euler came back ${euler(tilted.cage)}, so either the limit was lifted (update this) or something else moved`);
-  console.log(`  fused pair:     ${res.quadCount} quads at ${res.worstFieldError.toFixed(4)} off the field; an axis-aligned torus wraps to ${torus.quadCount} quads at Euler ${euler(torus.cage)} (the hole is HELD), a tilted one to Euler ${euler(tilted.cage)}`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 7 — Skin is signed millimetres, and Density changes the cage.
-// ---------------------------------------------------------------------------
+// Test 7 — Skin is signed millimeters, and Density changes the cage.
 {
   const solid = { positions: sphereSoup([0, 0, 0], 20) };
   const p = [30, 0, 0];
@@ -325,14 +287,11 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
   const fine = wrapSolidsToSuperbCage([solid], { density: 8 });
   assert.ok(fine.quadCount > coarse.quadCount * 4, `density 8 gave ${fine.quadCount} quads against ${coarse.quadCount} at density 2`);
   assert.ok(coarse.allQuads && fine.allQuads, 'both densities must stay all-quad');
-  console.log(`  controls:       Skin is exact signed millimetres; density 2 -> ${coarse.quadCount} quads, density 8 -> ${fine.quadCount}`);
 }
 
-// ---------------------------------------------------------------------------
-// TEST 8 — the solve is a pure function of its inputs and its parameters.
-// ---------------------------------------------------------------------------
+// Test 8 — the solve is a pure function of its inputs and its parameters.
 {
-  /* THE CONTROLS ABOVE THIS ARE LIVE, so a rebuild re-runs the whole solve on
+  /* The controls above this are live, so a rebuild re-runs the whole solve on
      every slider change. Any hidden state — a cached tree, a counter, a random
      seed carried between calls — shows up as the shape moving when nothing was
      dragged, which reads as the tool being unreliable rather than as a defect
@@ -355,23 +314,20 @@ const euler = (cage) => cage.vertices.length - buildTopology(cage).edgeMap.size 
     }
   }
   assert.equal(again.worstFieldError, first.worstFieldError, 'the reported error moved between two identical solves');
-  console.log(`  purity:         ${first.cage.vertices.length} vertices reproduce bit-for-bit across an intervening solve at other parameters`);
 }
 
-console.log('solidwrap: ok');
-
-/* FIT MUST NOT LOOSEN THE WRAP — the control names closeness, and it used to buy
- * step length as well as passes. The Newton step `-s*g/|g|^2` lands on the zero
- * set only where |g| = 1; a smooth minimum is not a metric field, so through the
- * blend it overshoots and the clamp was all that held it. Raising Fit raised the
- * clamp, so on a box and a cone 2mm apart the furthest cage vertex from any
- * input went 18.1mm at Fit 50 to 39.0mm at Fit 100, and the cage's bounding box
- * to nearly four times the inputs'.
+/* Fit must not loosen the wrap — the control names closeness, so it buys passes
+ * and not step length. The Newton step `-s*g/|g|^2` lands on the zero set only
+ * where |g| = 1; a smooth minimum is not a metric field, so through the blend it
+ * overshoots and the step clamp is what holds it. A clamp that grows with Fit
+ * lets the cage balloon: on a box and a cone 2mm apart the furthest cage vertex
+ * from any input goes from 18.1mm at Fit 50 to 39.0mm at Fit 100, and the cage's
+ * bounding box to nearly four times the inputs'.
  *
- * ⚠ THE RULER IS POINT-TO-TRIANGLE, NOT POINT-TO-EDGE. Written the easy way it
- * reported ~22mm for a vertex lying flat against the middle of an 80mm face —
- * the distance to that face's nearest EDGE — which is a number about the fixture
- * rather than the wrap, and it nearly bought a defect that was not there.
+ * The ruler is point-to-triangle, not point-to-edge. A point-to-edge distance
+ * reports ~22mm for a vertex lying flat against the middle of an 80mm face —
+ * the distance to that face's nearest edge — which is a number about the fixture
+ * rather than the wrap.
  */
 {
   const box = (cx, h) => {
@@ -419,39 +375,32 @@ console.log('solidwrap: ok');
     return worst;
   };
   const low = worstAtFit(0), high = worstAtFit(100);
-  // The fixture has to be one the wrap can actually get wrong, or this passes on
+  // The fixture has to be one the wrap can get wrong, or this passes on
   // anything: at Fit 0 it is a loose bag and must measurably be one.
   assert.ok(low > 4, `Fit 0 is already tight (${low}) — the fixture cannot show a difference`);
 
-  /* ⚠⚠⚠ THIS READ `high <= low` AND IT IS STILL THE RIGHT PROMISE. It is not
-     kept at the very top of the range, and that is recorded here rather than
-     narrowed away or left as a single dead assertion — a file that stops at its
-     first failure hides everything after it, and this one had been stopping at
-     TEST 5 for eight builds, so nothing below that point had run at all.
-     Measured on this fixture, worst cage-vertex distance to the input triangles:
+  /* The promise is `high <= low`, and it does not hold at the very top of the
+     range. Measured on this fixture, worst cage-vertex distance to the input
+     triangles:
 
          Fit         0      25      50      75      90     100
          fuse 10.33  6.055  5.180  4.803  4.663  4.622   8.541
          fuse 0      4.704      -   4.547      -      -  11.627
 
      Fit tightens monotonically the whole way to 90 — the control does what it
-     names — and then jumps to LOOSER THAN FIT 0 in the last step, on both a
+     names — and then jumps to looser than fit 0 in the last step, on both a
      fused and an unfused field. At 100 the melt term `60 * (1 - fit/100) * s`
      reaches exactly zero, so the relaxation that drags a stranded vertex out of
      a concave crease is gone entirely; the cage lands on the field almost
      perfectly on a lone sphere (0.0008mm) and strands vertices here.
-     ⚠ Not fixed in this pass: the melt schedule governs the geometry of every
-     wrapped cage in every existing document, and changing it needs the 39-case
-     torture suite behind it rather than a QC round. Named in the handoff.
-     ⚠⚠ AND THIS ASSERTION IS TWO-SIDED ON PURPOSE — it fails if the break gets
-     worse AND if it is fixed, so neither can happen silently. */
+     Known limitation: the melt schedule governs the geometry of every wrapped
+     cage in every existing document, so it is left as it is.
+     This assertion is two-sided on purpose — it fails if the break gets worse
+     and if it is fixed, so neither can happen silently. */
   const mid = worstAtFit(90);
   assert.ok(mid < low, `Fit must tighten across its usable range: 90 gave ${mid} against ${low} at 0`);
-  assert.ok(high > low, `Fit 100 is no longer looser than Fit 0 (${high} against ${low}) — the melt-schedule defect this pins has been FIXED; restore \`high <= low\` and delete this note`);
+  assert.ok(high > low, `Fit 100 is no longer looser than Fit 0 (${high} against ${low}) — the melt-schedule defect this pins has been fixed; restore \`high <= low\` and delete this note`);
   assert.ok(high < 3 * low, `Fit 100 has got worse than the ${(8.541 / 6.055).toFixed(2)}x recorded: ${high} against ${low}`);
-  /* ⚠ THIS READ `high < 8` — the second half of the same expired claim, from the
-     same build, and it fails for the same one reason. Its bound lives in the
-     two-sided pair above now, where it is beside the measurement that explains
-     it; a lone absolute number here says nothing about why 8 was the number. */
-  console.log(`  fit sweep:      furthest cage vertex from any input ${low.toFixed(1)}mm at Fit 0, ${high.toFixed(1)}mm at Fit 100`);
+  /* The bound on Fit 100 is the two-sided pair above, beside the measurement
+     that explains it, rather than a lone absolute number. */
 }

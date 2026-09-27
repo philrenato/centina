@@ -1,4 +1,4 @@
-// A PARAMETER THAT CHANGES NOTHING IS A PARAMETER NOBODY CAN READ.
+// A parameter that changes nothing is a parameter nobody can read.
 //
 // `PUFF_PARAMS` is what a UI builds rows from, so everything a row needs has to
 // be in it and everything in it has to be true of the code. Two failures this
@@ -17,7 +17,7 @@ const bean = ring(64, (a) => 1 + 0.45 * Math.cos(a * 2) - 0.2 * Math.sin(a * 3))
 const SHAPES = [['circle', circle], ['ellipse 3:1', ellipse3], ['bean', bean]];
 const extent = (poly) => { let e = 0; for (let i = 0; i < poly.length; i += 2) e = Math.max(e, Math.hypot(poly[i], poly[i + 1])); return e; };
 
-// ── THE DECLARATION IS COMPLETE AND INTERNALLY HONEST ────────────────────────
+// The declaration is complete and internally consistent
 const keys = Object.keys(PUFF_PARAMS);
 assert.ok(keys.length >= 3, 'a puff needs at least density, puffiness and width-follow');
 for (const key of ['density', 'puffiness', 'follow']) {
@@ -39,17 +39,16 @@ for (const key of keys) {
   if (s.integer) assert.equal(s.default, Math.round(s.default), `${key}: integer control with a fractional default`);
   assert.ok(!orders.has(s.order), `${key}: two controls claim row ${s.order}`);
   orders.add(s.order);
-  // ⚠ FROZEN, because a UI holding a reference to this could otherwise write a
+  // Frozen, because a UI holding a reference to this could otherwise write a
   // user's dragged value back into the declaration and move everyone's default.
   assert.ok(Object.isFrozen(s), `${key}: the declaration is writable`);
 }
 assert.ok(Object.isFrozen(PUFF_PARAMS));
-console.log(`  ${keys.length} declared controls: ${keys.map((k) => `${k} ${PUFF_PARAMS[k].min}..${PUFF_PARAMS[k].max} step ${PUFF_PARAMS[k].step} default ${PUFF_PARAMS[k].default}`).join(' | ')}`);
 
-// ── THE CODE CLAMPS TO THE DECLARATION, NOT TO LITERALS OF ITS OWN ───────────
-/* ⚠ A BOUND STATED IN ONE PLACE AND ENFORCED IN ANOTHER DRIFTS SILENTLY: the UI
+// The code clamps to the declaration, not to literals of its own
+/* A bound stated in one place and enforced in another drifts silently: the UI
    builds a slider from the declaration, the kernel obeys its own number, and the
-   end of the slider does nothing. So the clamp is asserted against the SAME
+   end of the slider does nothing. So the clamp is asserted against the same
    object the row is built from, and every declared control is walked — a
    hand-written list of three would pass while a fourth went unenforced. */
 for (const key of keys) {
@@ -70,26 +69,26 @@ for (const key of keys) {
   assert.equal(r.density, PUFF_PARAMS.density.max);
   assert.equal(r.quads, 6 * PUFF_PARAMS.density.max ** 2, 'density does not mean what its help says');
 }
-// `faces` is the older spelling and still lands on the coarsest rung that reaches it.
+// `faces` is an alias of density: it lands on the coarsest rung that reaches it.
 assert.equal(puffDensityForFaces(24), 2);
 assert.equal(puffDensityForFaces(25), 3);
 assert.equal(puffDensityForFaces(96), 4);
 assert.equal(puffCage(circle, { ...opts, faces: 96 }).quads, 96);
-assert.equal(puffCage(circle, { ...opts, faces: 96, density: 2 }).quads, 24, 'density must win over the older spelling');
+assert.equal(puffCage(circle, { ...opts, faces: 96, density: 2 }).quads, 24, 'density must win over the faces alias');
 for (let d = PUFF_PARAMS.density.min; d <= PUFF_PARAMS.density.max; d += 1) {
   assert.equal(puffCage(circle, { ...opts, density: d }).quads, 6 * d * d, `density ${d} does not give 6d^2 faces`);
 }
 
-// ── EVERY CONTROL MOVES THE GEOMETRY, AND BY HOW MUCH IS MEASURED ────────────
-/* ⚠ PROVED ON SEVERAL SHAPES, because a control can be alive on one and dead on
+// Every control moves the geometry, and by how much is measured
+/* Checked on several shapes, because a control can be alive on one and dead on
    another: width-follow has nothing to say about a circle's own uniform width
    and everything to say about a bean's, and a single round fixture would have
    passed it either way. */
 const MOVE = 0.05;                       // of the outline's own reach
 for (const key of keys) {
   const s = PUFF_PARAMS[key];
-  /* ⚠ A CONTROL WITH A PRECONDITION IS SWEPT WITH THAT PRECONDITION MET, and the
-     precondition is read from the DECLARATION rather than listed here. Swept at
+  /* A control with a precondition is swept with that precondition met, and the
+     precondition is read from the declaration rather than listed here. Swept at
      the bare defaults, `flipFlat` moves the cage 0% — correctly, because there
      is no flat side to flip — and this check would have to be either weakened or
      given an exception by name, both of which turn "every control moves the
@@ -113,16 +112,15 @@ for (const key of keys) {
     assert.ok(moved > MOVE, `${key} on ${name}: end to end it moves the cage ${(100 * moved).toFixed(1)}% of the drawing — a control nobody can read`);
   }
 }
-console.log('  every declared control moves the geometry on every shape tried');
 
-// ── PUFFINESS AT ITS EXTREMES, AND WHY ZERO IS NOT ONE OF THEM ───────────────
-/* ⚠⚠ AT PUFFINESS 0 THE CAGE FOLDS ONTO A PLANE, AND NOTHING IN THE RESULT
-   MEASURES IT. The quad ball carries a vertex at (x, y, +z) for every
+// Puffiness at its extremes, and why zero is not one of them
+/* At puffiness 0 the cage folds onto a plane, and nothing in the result
+   measures it. The quad ball carries a vertex at (x, y, +z) for every
    (x, y, -z); flattened, those become the same point, the two sheets lie on each
    other, and the enclosed volume is exactly zero. The worst face ratio of that
    object is 4.2:1 — a clean number, well inside any bar this module asserts.
-   Face aspect was added here because face COUNTS could not see a sliver, and it
-   cannot see this either. So 0 is outside the declared range, and this is the
+   Face aspect sees a sliver that face counts cannot, and it cannot see this
+   either. So 0 is outside the declared range, and this is the
    demonstration that it has to be rather than an assertion that it is. */
 {
   const flat = puffCage(circle, opts).cage;
@@ -145,10 +143,7 @@ console.log('  every declared control moves the geometry on every shape tried');
   assert.equal(signedVolume(collapsed), 0, 'a flattened cage should enclose nothing');
   assert.ok(signedVolume(flat) > 0, 'the control is wrong: the inflated cage encloses nothing either');
   assert.ok(puffFaceAspect(collapsed) < 8,
-    'the finding has expired: face aspect now DOES report the flattened cage — say so and re-argue the bound');
-  console.log(`  puffiness 0 would coincide ${coincident} of ${collapsed.vertices.length} vertices and enclose zero volume, `
-    + `while face aspect reads ${puffFaceAspect(collapsed).toFixed(1)}:1 against ${puffFaceAspect(flat).toFixed(1)}:1 inflated — `
-    + `the declared floor of ${PUFF_PARAMS.puffiness.min} is the only thing that catches it`);
+    'face aspect reports the flattened cage — the argument for the declared puffiness floor must be restated');
   assert.ok(PUFF_PARAMS.puffiness.min > 0, 'puffiness must not be allowed to reach 0');
   assert.equal(puffResolveParams({ puffiness: 0 }).puffiness, PUFF_PARAMS.puffiness.min);
   assert.ok(PUFF_PARAMS.bottomScale === undefined || PUFF_PARAMS.bottomScale.min > 0,
@@ -176,5 +171,3 @@ for (const p of [PUFF_PARAMS.puffiness.min, PUFF_PARAMS.puffiness.max]) {
     }
   }
 }
-console.log('  both ends of puffiness give a non-degenerate cage the subdivider accepts');
-console.log('puff-params: ok');

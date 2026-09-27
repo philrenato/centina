@@ -1,68 +1,64 @@
-// CONFORM — map/bend a set of object curves so they follow a TARGET
-// reference curve instead of the BASE reference curve they were built
-// around (Rhino's own Flow command, exactly). CONFORM has two modes:
-// Mode A (curve-to-curve) and Mode B
-// (curve-to-surface-isocurve) BUILD; Mode C (surface-to-surface) DEFERRED
-// (needs least-squares NURBS refit machinery this kernel doesn't have yet —
-// mapping raw control points through a nonlinear surface map does not
-// correctly map a curve between two surfaces).
+// Conform — map/bend a set of object curves so they follow a target
+// reference curve instead of the base reference curve they were built
+// around (Rhino's Flow command). Two modes: Mode A (curve-to-curve) and
+// Mode B (curve-to-surface-isocurve). Known limitation: there is no Mode C
+// (surface-to-surface); it needs a least-squares NURBS refit, since mapping
+// raw control points through a nonlinear surface map does not correctly map
+// a curve between two surfaces.
 //
-// THE OPERATION (Mode A), stated precisely so the two provable properties
-// below are unambiguous. For each point P of an object curve:
-//   (1) find its CLOSEST point C_b = C_base(u_b) on the BASE curve
-//       (closestPointOnCurve — already proven/shipped), express u_b as an
-//       arc-length FRACTION f along the base curve's own length, and record
-//       the OFFSET P - C_b decomposed into (a, b, c) in the base curve's own
-//       parallel-transport frame AT u_b (buildParallelTransportFrames — the
-//       exact machinery Sweep1 already uses: a continuously-varying
+// The operation (Mode A). For each point P of an object curve:
+//   (1) find its closest point C_b = C_base(u_b) on the base curve
+//       (closestPointOnCurve), express u_b as an
+//       arc-length fraction f along the base curve's own length, and record
+//       the offset P - C_b decomposed into (a, b, c) in the base curve's own
+//       parallel-transport frame at u_b (buildParallelTransportFrames — the
+//       same machinery Sweep1 uses: a continuously-varying
 //       orthonormal frame along a curve);
-//   (2) reconstruct the mapped point by looking up the SAME fraction f on
-//       the TARGET curve (u_t = its own param at that arc-length fraction),
+//   (2) reconstruct the mapped point by looking up the same fraction f on
+//       the target curve (u_t = its own param at that arc-length fraction),
 //       reading the target's own parallel-transport frame there, and
-//       re-applying the SAME local offset (a, b, c) in the TARGET frame:
+//       re-applying the same local offset (a, b, c) in the target frame:
 //       C_target(u_t) + a·xAxis_t + b·yAxis_t + c·zAxis_t.
 //
-// TWO PROVABLE PROPERTIES (verified numerically in test/conform.test.mjs on
-// real CURVED base/target fixtures, never two straight lines):
-//   - EXACT REPRODUCTION ON BASE: an object point that lies EXACTLY ON the
+// Two properties follow:
+//   - Exact reproduction on base: an object point that lies on the
 //     base curve has offset (a,b,c) ≈ (0,0,0), so it maps to C_target(u_t) —
 //     a point exactly on the target curve. So conforming the base curve
-//     itself reproduces the target curve. (Frame-INDEPENDENT: holds by
+//     itself reproduces the target curve. (Frame-independent: holds by
 //     construction regardless of how the two transport frames are seeded.)
-//   - OFFSET-MAGNITUDE PRESERVATION: because both frames are ORTHONORMAL,
-//     |mapped - C_target| = sqrt(a²+b²+c²) = |P - C_base| EXACTLY. The local
-//     offset MAGNITUDE (a point's distance from its reference curve) is
-//     preserved even though the offset DIRECTION rotates with the frame.
+//   - Offset-magnitude preservation: because both frames are orthonormal,
+//     |mapped - C_target| = sqrt(a²+b²+c²) = |P - C_base| exactly. The local
+//     offset magnitude (a point's distance from its reference curve) is
+//     preserved even though the offset direction rotates with the frame.
 //     (Additionally, since the closest point makes P-C_b ⊥ the base tangent,
-//     c ≈ 0, so the mapped point's own closest-distance to the TARGET curve
-//     also matches its original closest-distance to the BASE curve, up to a
-//     small target-curvature correction — reported, not over-tightened.)
+//     c ≈ 0, so the mapped point's own closest-distance to the target curve
+//     also matches its original closest-distance to the base curve, up to a
+//     small target-curvature correction.)
 //
-// The mapped POINT SET is refit into a fresh NURBS curve by interpolation —
-// the SAME "resample, map continuously, refit" pattern sweepNProfiles/loft
-// already use, not a new one. THREE PROPERTIES OF THE INPUT SURVIVE THAT
-// REFIT, because a single open interpolation through the whole point set
-// destroys all three:
-//   - CLOSURE. A closed object curve is refit with closedCurveInterp, whose
+// The mapped point set is refit into a fresh NURBS curve by interpolation —
+// the same "resample, map continuously, refit" pattern sweepNProfiles/loft
+// use. Three properties of the input survive that refit, where a single
+// open interpolation through the whole point set would destroy all three:
+//   - Closure. A closed object curve is refit with closedCurveInterp, whose
 //     cyclic wrap gives real tangent continuity across the seam; a clamped
 //     open interpolation leaves a kink there instead. On a conformed circle
 //     the open refit turns 0.15deg at the default sample density and 10.7deg
 //     at one interior sample per span, where the closed refit stays at the
 //     wrap approximation's own floor (0.08deg and 0.65deg). The defect hides
-//     at high density precisely because a clamped end reads its tangent off
+//     at high density because a clamped end reads its tangent off
 //     the samples nearest the seam.
-//   - CORNERS. An interior knot at full multiplicity MAY carry a genuine
+//   - Corners. An interior knot at full multiplicity may carry a
 //     tangent break, and an open interpolation through sampled points cannot
 //     know that and smooths it away. The curve is split at its real corners,
 //     each run is conformed on its own, and the runs are chained with
 //     joinCurvesC0 — the knot multiplicity the join leaves at each corner is
 //     what makes the corner sharp. This is contourToCurve's (kernel/text.mjs)
 //     split-fit-join shape, applied to the same problem.
-//     ⚠ MULTIPLICITY ALONE IS NOT A CORNER: a rational arc/circle carries
+//     Multiplicity alone is not a corner: a rational arc/circle carries
 //     interior knots at multiplicity == degree and is perfectly smooth
 //     across them. Every candidate is confirmed by comparing the one-sided
 //     chord directions either side of it before it is treated as a corner.
-//   - DETAIL. The density cap is spent on the interior samples, never on the
+//   - Detail. The density cap is spent on the interior samples, never on the
 //     curve's own knot stations, so a curve whose detail is concentrated in a
 //     few dense spans keeps those spans rather than being decimated evenly
 //     into its flat parts.
@@ -83,30 +79,29 @@ import { buildParallelTransportFrames } from './sweep.mjs';
 import { extractIsocurveU, extractIsocurveV } from './isocurve.mjs';
 
 // Default number of extra samples inserted per object-curve knot span (on
-// top of the curve's own distinct knot values) before mapping+refitting —
-// enough to capture a curved object's shape faithfully, matching the
-// "resample at a reasonable density" spirit of loft/sweepNProfiles.
+// top of the curve's own distinct knot values) before mapping+refitting,
+// matching the resample density of loft/sweepNProfiles.
 const DEFAULT_INTERIOR_SAMPLES_PER_SPAN = 8;
-// Density cap: a genuinely wild object curve's adaptive resample can produce
-// far more points than a refit needs — a huge linear system for no shape
-// benefit. Applied PER RUN, since each run between two corners is its own
+// Density cap: a high-curvature object curve's adaptive resample can produce
+// far more points than a refit needs — a large linear system for no shape
+// benefit. Applied per run, since each run between two corners is its own
 // independent interpolation and its own linear system, which is the cost the
 // cap exists to bound (the refit degree is preserved either way).
 const MAX_REFIT_POINTS = 80;
 // A tangent break of more than this at a full-multiplicity interior knot is
 // treated as a real corner and split at. Small, because a NURBS corner is
 // exact rather than estimated from traced points: the question is only
-// whether the break is genuine or floating-point noise around zero.
+// whether the break is real or floating-point noise around zero.
 const DEFAULT_CORNER_ANGLE_DEG = 0.5;
 
-// Map an arbitrary set of world-space points from the BASE curve's frame
-// field into the TARGET curve's frame field (the core Mode-A transform).
+// Map an arbitrary set of world-space points from the base curve's frame
+// field into the target curve's frame field (the core Mode-A transform).
 // Returns { mapped, baseDistances, frameOffsetMagnitudes } — `mapped` the
 // mapped points, `baseDistances[i]` the i-th point's own closest-distance to
 // the base curve (|P - C_base|), and `frameOffsetMagnitudes[i]` the i-th
 // mapped point's own frame-offset magnitude |mapped - C_target| (equal to
-// baseDistances[i] by orthonormality — the load-bearing invariant, exposed
-// here so a verify script can prove it directly rather than recompute it).
+// baseDistances[i] by orthonormality, exposed so a caller can check the
+// invariant directly).
 export function mapPointsBaseToTarget(baseCrv, targetCrv, points) {
   if (!points.length) return { mapped: [], baseDistances: [], frameOffsetMagnitudes: [] };
 
@@ -125,8 +120,8 @@ export function mapPointsBaseToTarget(baseCrv, targetCrv, points) {
   const baseUs = cps.map((cp) => cp.u);
 
   // one parallel-transport frame per object point, read at that point's own
-  // closest base parameter (extraParams — the exact arbitrary-parameter frame
-  // mechanism Sweep1's N-profiles already established)
+  // closest base parameter (extraParams — the arbitrary-parameter frame
+  // mechanism Sweep1's N-profiles use)
   const baseFrames = buildParallelTransportFrames(baseCrv, baseUs).extra;
 
   // (2) same arc-length fraction on the target -> its own parameter -> frame
@@ -149,15 +144,14 @@ export function mapPointsBaseToTarget(baseCrv, targetCrv, points) {
     const tf = targetFrames[i];
     const m = add(add(add(tf.origin, scale(tf.xAxis, a)), scale(tf.yAxis, b)), scale(tf.zAxis, c));
     mapped.push(m);
-    // TRUE closest-distance |P - C_base|, computed from the closest curve
-    // POINT itself (which is also the frame origin, exactly) — NOT
-    // closestPointOnCurve's own `.distance` field, which reports the coarse
+    // True closest-distance |P - C_base|, computed from the closest curve
+    // point itself (which is also the frame origin) — not
+    // closestPointOnCurve's `.distance` field, which reports the coarse
     // polyline-projection distance whenever its Newton refinement rejects
-    // its first step (a real, pre-existing quirk of that shipped function:
-    // its `.point` is the true curve point but `.distance` can be the
-    // polyline approximation, the two differing by the chord deviation).
-    // Using the frame origin here keeps the orthonormal invariant
-    // (frameOffsetMagnitude == baseDistance) EXACT, since both are |P -
+    // its first step (its `.point` is the true curve point but `.distance`
+    // can be the polyline approximation, the two differing by the chord
+    // deviation). Using the frame origin keeps the orthonormal invariant
+    // (frameOffsetMagnitude == baseDistance) exact, since both are |P -
     // bf.origin| computed the same way.
     baseDistances.push(length(off));
     frameOffsetMagnitudes.push(Math.sqrt(a * a + b * b + c * c));
@@ -166,8 +160,8 @@ export function mapPointsBaseToTarget(baseCrv, targetCrv, points) {
 }
 
 // Even decimation down to the cap, keeping both ends. Correct for a list
-// that is ALREADY density-weighted (an adaptive arc-length resample puts its
-// samples where the curvature is, so thinning it evenly BY INDEX keeps that
+// that is already density-weighted (an adaptive arc-length resample puts its
+// samples where the curvature is, so thinning it evenly by index keeps that
 // weighting); wrong for a list of uniform samples, which is why the uniform
 // path below never reaches for it while it still has interior samples to
 // spend instead.
@@ -192,7 +186,7 @@ function stationSamples(stations, interior) {
   return params;
 }
 
-// THE DENSITY CAP IS SPENT ON THE INTERIOR SAMPLES, NOT ON THE STATIONS.
+// The density cap is spent on the interior samples, not on the stations.
 // The stations are the curve's own knot values — where its detail is
 // declared to be — and an even decimation across the combined list drops
 // them at exactly the same rate as the filler samples between them, so a
@@ -200,7 +194,7 @@ function stationSamples(stations, interior) {
 // and keeps its flat parts. Interior density is uniform per span and is
 // therefore the part that can be traded away; the largest per-span count
 // that still fits under the cap is used instead. Only when the stations
-// ALONE exceed the cap is there anything left to decimate, and then it is
+// alone exceed the cap is there anything left to decimate, and then it is
 // the stations, evenly, because nothing better is available.
 function cappedStationSamples(stations, interior) {
   const params = stationSamples(stations, interior);
@@ -223,7 +217,7 @@ function objectSampleParams(objectCrv, interiorSamplesPerSpan, u0, u1) {
   return cappedStationSamples(stations, interiorSamplesPerSpan);
 }
 
-// Distinct interior knot values, at or above full multiplicity — the ONLY
+// Distinct interior knot values, at or above full multiplicity — the only
 // parameters at which a NURBS curve is allowed to have a tangent break.
 function fullMultiplicityInteriorKnots(crv) {
   const knots = crv.knots;
@@ -243,7 +237,7 @@ function fullMultiplicityInteriorKnots(crv) {
 
 // The angle, in degrees, between the chord directions arriving at and
 // leaving `u` — the one-sided tangent directions, read geometrically so a
-// curve whose knot ALLOWS a break but does not take one (a rational
+// curve whose knot allows a break but does not take one (a rational
 // arc/circle: interior knots at multiplicity == degree, perfectly smooth
 // across them) is not mistaken for a corner.
 function turnAngleDeg(crv, u, h) {
@@ -256,9 +250,9 @@ function turnAngleDeg(crv, u, h) {
   return Math.acos(cosA) * 180 / Math.PI;
 }
 
-// The object curve's GENUINE corners: full-multiplicity interior knots that
-// actually break tangency there by more than `cornerAngleDeg`. A degree-1
-// curve is excluded outright — it IS its own control polygon and the refit
+// The object curve's corners: full-multiplicity interior knots that
+// break tangency there by more than `cornerAngleDeg`. A degree-1
+// curve is excluded outright — it is its own control polygon and the refit
 // is degree 1 too, so its corners survive by construction and splitting at
 // every vertex would only produce two-point runs.
 function objectCornerParams(objectCrv, cornerAngleDeg) {
@@ -268,7 +262,7 @@ function objectCornerParams(objectCrv, cornerAngleDeg) {
   return fullMultiplicityInteriorKnots(objectCrv).filter((u) => turnAngleDeg(objectCrv, u, h) > cornerAngleDeg);
 }
 
-// MODE A — conform one object curve from BASE onto TARGET, returning a fresh
+// Mode A — conform one object curve from base onto target, returning a fresh
 // NURBS curve fit through the mapped points. The result also carries
 // `.conform = { mapped, sampleParams, baseDistances, frameOffsetMagnitudes }`
 // for verification (the raw mapped point set and per-point invariants above).
@@ -278,7 +272,7 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
   const uMax = objectCrv.knots[objectCrv.knots.length - 1];
   const refitDegree = opts.refitDegree ?? objectCrv.degree;
 
-  // adaptive resample for genuinely wild curves, falling back to the
+  // adaptive resample for high-curvature curves, falling back to the
   // knot-span sampling for ordinary ones — both are "resample at a
   // reasonable density"; the adaptive path catches a high-curvature object
   // between sparse knots the uniform path would under-sample.
@@ -292,7 +286,7 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
   const closed = isCurveClosed(objectCrv);
   const corners = objectCornerParams(objectCrv, opts.cornerAngleDeg ?? DEFAULT_CORNER_ANGLE_DEG);
   const h = (uMax - uMin) * 1e-6;
-  // A closed curve's SEAM is a corner candidate too, and it is not an
+  // A closed curve's seam is a corner candidate too, and it is not an
   // interior knot, so it is asked the same geometric question separately:
   // does the tangent leaving u=uMin match the one arriving at u=uMax.
   const seamIsCorner = closed && objectCrv.degree >= 2 && (() => {
@@ -304,13 +298,13 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
     const cosA = Math.max(-1, Math.min(1, dot(arriving, leaving) / (la * ll)));
     return Math.acos(cosA) * 180 / Math.PI > (opts.cornerAngleDeg ?? DEFAULT_CORNER_ANGLE_DEG);
   })();
-  // The seam of a closed curve can only be carried through a run's INTERIOR
+  // The seam of a closed curve can only be carried through a run's interior
   // (where an ordinary interpolation is smooth) when the seam isn't itself a
   // corner; otherwise the chain simply starts and ends there, and the join
   // leaves the corner where it belongs.
   const wrapAtSeam = closed && !seamIsCorner && corners.length > 0;
   let closedRefit = closed && corners.length === 0 && !seamIsCorner && refitDegree >= 2;
-  // Whether the chain of runs shuts on itself (its last point IS its first).
+  // Whether the chain of runs shuts on itself (its last point is its first).
   const chainCloses = closed && corners.length > 0;
 
   const runs = [];
@@ -319,7 +313,7 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
       const a = corners[i], b = corners[(i + 1) % corners.length];
       if (i < corners.length - 1) runs.push(sampleRange(a, b));
       // the wrapping run: from the last corner over the seam to the first.
-      // u=uMax and u=uMin are the SAME physical point, so the second half
+      // u=uMax and u=uMin are the same physical point, so the second half
       // contributes everything but its first sample.
       else runs.push([...sampleRange(a, uMax), ...sampleRange(uMin, b).slice(1)]);
     }
@@ -328,7 +322,7 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
     for (let i = 0; i < cuts.length - 1; i++) runs.push(sampleRange(cuts[i], cuts[i + 1]));
   } else {
     const params = sampleRange(uMin, uMax);
-    // a closed curve refit closed must NOT repeat its seam point: the wrap
+    // a closed curve refit closed must not repeat its seam point: the wrap
     // closedCurveInterp does is cyclic over the points it is given, and it
     // needs at least three of them to have anything to wrap. Too few (an
     // opts.interiorSamplesPerSpan of 0 on a two-station curve) falls back to
@@ -337,11 +331,11 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
     else { closedRefit = false; runs.push(params); }
   }
 
-  // ONE mapping pass over the whole object, with each run's shared endpoint
-  // contributing a SINGLE mapped point that both neighboring runs then
-  // interpolate exactly — which is what makes the chain watertight at every
-  // corner and what keeps `mapped[i]` aligned with `sampleParams[i]` for the
-  // two invariants this module is gated on.
+  // One mapping pass over the whole object, with each run's shared endpoint
+  // contributing a single mapped point that both neighboring runs then
+  // interpolate exactly — which makes the chain watertight at every
+  // corner and keeps `mapped[i]` aligned with `sampleParams[i]` for the
+  // two invariants above.
   const sampleParams = [];
   const runIndices = [];
   for (let r = 0; r < runs.length; r++) {
@@ -380,18 +374,16 @@ export function conformCurveToCurve(baseCrv, targetCrv, objectCrv, opts = {}) {
   return fit;
 }
 
-// MODE B — conform one object curve onto a surface's own ISOCURVE (the
-// "genuine Rhino-beating win": Rhino's Flow needs an explicit curve for both
-// ends; here the base curve is IMPLICITLY the isocurve running through a
-// clicked surface point, extracted live rather than requiring a separate
-// ExtractIsocurve step first). Reuses extractIsocurveU/V directly for the
-// implicit base-curve extraction, then the identical Mode-A mapping runs
-// against that extracted curve.
-//   direction: 'u' -> the base curve is the FIXED-U isocurve (runs along V)
-//              'v' -> the base curve is the FIXED-V isocurve (runs along U)
+// Mode B — conform one object curve onto a surface's own isocurve. The
+// base curve is implicitly the isocurve running through a clicked surface
+// point, extracted live rather than requiring a separate ExtractIsocurve
+// step first (extractIsocurveU/V), then the Mode-A mapping runs against
+// that extracted curve.
+//   direction: 'u' -> the base curve is the fixed-U isocurve (runs along V)
+//              'v' -> the base curve is the fixed-V isocurve (runs along U)
 // The returned curve also carries `.baseIsocurve` (the extracted implicit
-// base) so a verify script can prove it genuinely matches a direct
-// extractIsocurveU/V call on the same (u,v).
+// base) so a caller can compare it with a direct extractIsocurveU/V call
+// on the same (u,v).
 export function conformCurveToSurface(srf, pickU, pickV, direction, targetCrv, objectCrv, opts = {}) {
   const baseIsocurve = direction === 'u'
     ? extractIsocurveU(srf, pickU)

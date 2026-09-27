@@ -1,7 +1,7 @@
 // kernel/fitcurve.mjs — fitting a NURBS curve through sampled points to a
 // stated tolerance.
 //
-// EVERY EXPECTED ANSWER HERE IS ANALYTIC. A fitter checked against its own
+// Every expected answer here is analytic. A fitter checked against its own
 // output only proves it is self-consistent; these fixtures are shapes whose
 // exact form is known before the fitter runs (a circle of known radius, a
 // straight line, a helix with a closed-form point at every parameter), so a
@@ -16,7 +16,7 @@ const circlePts = (R, n, cz = 0) => Array.from({ length: n }, (_, i) => {
   return [R * Math.cos(t), R * Math.sin(t), cz];
 });
 
-test('A SAMPLED CIRCLE COMES BACK AS AN EXACT CIRCLE, not a spline that looks round', () => {
+test('a sampled circle comes back as an exact circle, not a spline that looks round', () => {
   const pts = circlePts(25, 120);
   const res = fitCurveToPoints(pts, { tolerance: 1e-6, closed: true });
   assert.ok(res.ok, `refused: ${res.reason}`);
@@ -31,7 +31,7 @@ test('A SAMPLED CIRCLE COMES BACK AS AN EXACT CIRCLE, not a spline that looks ro
   assert.ok(res.maxDeviation < 1e-9, `an exact circle deviates by ~0 (got ${res.maxDeviation})`);
 });
 
-test('AND ITS RADIUS IS THE ONE THAT WENT IN — measured off the curve, not off the fit report', () => {
+test('and its radius is the one that went in — measured off the curve, not off the fit report', () => {
   const pts = circlePts(25, 120);
   const { curve } = fitCurveToPoints(pts, { tolerance: 1e-6, closed: true });
   for (let i = 0; i <= 32; i++) {
@@ -41,7 +41,7 @@ test('AND ITS RADIUS IS THE ONE THAT WENT IN — measured off the curve, not off
   }
 });
 
-test('A STRAIGHT RUN OF POINTS COMES BACK AS A DEGREE-1 LINE', () => {
+test('a straight run of points comes back as a degree-1 line', () => {
   const pts = Array.from({ length: 40 }, (_, i) => [i * 0.5, 3 + i * 0.25, -2 + i * 0.125]);
   const res = fitCurveToPoints(pts, { tolerance: 1e-6, closed: false });
   assert.ok(res.ok, `refused: ${res.reason}`);
@@ -50,7 +50,7 @@ test('A STRAIGHT RUN OF POINTS COMES BACK AS A DEGREE-1 LINE', () => {
   assert.ok(res.maxDeviation < 1e-9);
 });
 
-test('A HELIX IS NOT A PRIMITIVE, so it takes the least-squares path and still meets its bound', () => {
+test('a helix is not a primitive, so it takes the least-squares path and still meets its bound', () => {
   const pts = Array.from({ length: 200 }, (_, i) => {
     const t = (i / 199) * Math.PI * 4;
     return [10 * Math.cos(t), 10 * Math.sin(t), t * 1.5];
@@ -60,13 +60,13 @@ test('A HELIX IS NOT A PRIMITIVE, so it takes the least-squares path and still m
   assert.ok(res.ok, `refused: ${res.reason}`);
   assert.equal(res.kind, 'nurbs');
   assert.ok(res.maxDeviation <= TOL, `deviation ${res.maxDeviation} must clear ${TOL}`);
-  // THE POINT OF FITTING AT ALL: far fewer control points than samples. A fit
+  // The purpose of fitting: far fewer control points than samples. A fit
   // that just interpolated all 200 would meet the tolerance and buy nothing.
   assert.ok(res.ctrlPtCount < pts.length / 3,
     `${res.ctrlPtCount} control points for 200 samples — a fit, not an interpolation`);
 });
 
-test('A TIGHTER BOUND COSTS MORE CONTROL POINTS — the loop genuinely responds to its tolerance', () => {
+test('a tighter bound costs more control points — the loop responds to its tolerance', () => {
   const pts = Array.from({ length: 200 }, (_, i) => {
     const t = (i / 199) * Math.PI * 4;
     return [10 * Math.cos(t), 10 * Math.sin(t), t * 1.5];
@@ -79,7 +79,7 @@ test('A TIGHTER BOUND COSTS MORE CONTROL POINTS — the loop genuinely responds 
   assert.ok(tight.maxDeviation <= 0.0005 && loose.maxDeviation <= 0.05);
 });
 
-test('THE ENDPOINTS ARE INTERPOLATED EXACTLY — a shared corner cannot drift into a naked edge', () => {
+test('the endpoints are interpolated exactly — a shared corner cannot drift into a naked edge', () => {
   const pts = Array.from({ length: 120 }, (_, i) => {
     const t = (i / 119) * Math.PI * 2;
     return [8 * Math.cos(t) + 0.4 * Math.sin(5 * t), 5 * Math.sin(t), 0.3 * Math.cos(3 * t)];
@@ -93,7 +93,7 @@ test('THE ENDPOINTS ARE INTERPOLATED EXACTLY — a shared corner cannot drift in
   }
 });
 
-test('AN UNREACHABLE BOUND IS REFUSED, not met with a curve that misses it', () => {
+test('an unreachable bound is refused, not met with a curve that misses it', () => {
   // Random-ish noise no smooth curve of any control-point count can follow to
   // a micron. The refusal is the feature: a fitter that always returns
   // something makes its own tolerance meaningless.
@@ -105,18 +105,17 @@ test('AN UNREACHABLE BOUND IS REFUSED, not met with a curve that misses it', () 
   const res = fitCurveToPoints(pts, { tolerance: 1e-9, closed: false });
   assert.equal(res.ok, false, 'must refuse rather than return a curve outside its bound');
   assert.match(res.reason, /no curve within/);
-  // ⚠ THIS IS THE TEST THE INTERPOLATING FALLBACK BROKE, and fixing it fixed a
-  // real hole rather than the test. Interpolation threads every sample, so a
-  // one-sided "how far is each sample from the curve" check scored it ZERO and
-  // certified a 1e-9 bound on noise. Only measuring the curve BACK to the
-  // polyline sees the oscillation between the samples.
+  // Interpolation threads every sample, so a one-sided "how far is each sample
+  // from the curve" check scores it zero and would certify a 1e-9 bound on
+  // noise. Only measuring the curve back to the polyline sees the oscillation
+  // between the samples.
 });
 
-test('THE DEVIATION MEASURE CANNOT UNDER-REPORT — an offset curve reads at least its offset', () => {
+test('the deviation measure cannot under-report — an offset curve reads at least its offset', () => {
   // Conservative by construction: distance to a dense inscribed polyline is
   // never less than distance to the curve. Checked against a case whose true
   // answer is known — points sitting exactly 2.0 off a straight line.
-  // The two spans are made to match exactly (both 0..10), so BOTH directions
+  // The two spans are made to match exactly (both 0..10), so both directions
   // of the two-sided measure have the same true answer of 2.0 and the test is
   // about the measure rather than about mismatched endpoints.
   const line = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [10, 0, 0, 1]] };
@@ -126,7 +125,7 @@ test('THE DEVIATION MEASURE CANNOT UNDER-REPORT — an offset curve reads at lea
   assert.ok(dev < 2 + 1e-6, `and must not wildly over-report (got ${dev})`);
 });
 
-test('A CLOSED NON-CIRCULAR LOOP FITS WITHOUT A SEAM KINK', () => {
+test('a closed non-circular loop fits without a seam kink', () => {
   const pts = Array.from({ length: 160 }, (_, i) => {
     const t = (i / 160) * Math.PI * 2;
     const r = 12 + 2 * Math.cos(3 * t);
@@ -139,11 +138,9 @@ test('A CLOSED NON-CIRCULAR LOOP FITS WITHOUT A SEAM KINK', () => {
   assert.ok(res.ctrlPtCount < pts.length, 'a fit, not an interpolation');
 });
 
-// ---------------------------------------------------------------------------
-// THE REAL TARGET. Synthetic shapes prove the algorithm; this proves it on the
-// thing it was written for — the marched SSI component behind a real boolean,
-// from the same banked fixture test/boolean-torus-pair-sew.test.mjs drives.
-// ---------------------------------------------------------------------------
+// The production input. Synthetic shapes prove the algorithm; this proves it
+// on the marched SSI component behind a boolean, from the same banked fixture
+// test/boolean-torus-pair-sew.test.mjs drives.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,13 +163,13 @@ const fixSrfs = [];
 }
 const realSSI = intersectSurfacesComplete(fixSrfs[0], fixSrfs[1]);
 
-test('THE INPUT LANDS: the fixture still yields one densely marched intersection component', () => {
+test('the input lands: the fixture yields one densely marched intersection component', () => {
   assert.ok(realSSI && realSSI.ok, 'SSI refused — nothing below means anything');
   assert.equal(realSSI.components.length, 1);
   assert.ok(realSSI.components[0].samples.length > 100, 'marched densely enough to be worth fitting');
 });
 
-test("A REAL BOOLEAN'S CUT CURVE FITS AT MODEL TOLERANCE, with far fewer control points than samples", () => {
+test("a boolean's cut curve fits at model tolerance, with far fewer control points than samples", () => {
   const pts = realSSI.components[0].samples.map((s) => s.point);
   const closed = Math.hypot(...pts[0].map((v, k) => v - pts[pts.length - 1][k])) < 1e-6;
   const body = closed ? pts.slice(0, -1) : pts;
@@ -180,13 +177,13 @@ test("A REAL BOOLEAN'S CUT CURVE FITS AT MODEL TOLERANCE, with far fewer control
   const res = fitCurveToPoints(body, { tolerance: TOL, closed });
   assert.ok(res.ok, `refused: ${res.reason}`);
   assert.ok(res.maxDeviation <= TOL, `deviation ${res.maxDeviation} must clear ${TOL}`);
-  // This IS the win: the boundary stops being a few hundred straight segments.
+  // The boundary stops being a few hundred straight segments.
   assert.ok(res.ctrlPtCount < body.length / 3,
     `${res.ctrlPtCount} control points for ${body.length} samples`);
 });
 
-test('AND A BOUND BELOW THE MARCHER\'S OWN ACCURACY IS REFUSED WITH THAT SAID PLAINLY', () => {
-  // Not a defect — an honest limit. The samples are only as good as the march
+test('and a bound below the marcher\'s own accuracy is refused with that said plainly', () => {
+  // A limit of the input, not a defect. The samples are only as good as the march
   // that produced them, and a fit asked to sit closer than that would be
   // reproducing noise. What matters is that it says so instead of returning a
   // curve with hundreds of control points and a tolerance it cannot support.
@@ -200,18 +197,18 @@ test('AND A BOUND BELOW THE MARCHER\'S OWN ACCURACY IS REFUSED WITH THAT SAID PL
   assert.ok(res.bestDeviation > 1e-7, 'and it reports how close it actually got');
 });
 
-test('A SHORT COARSE CHAIN IS INTERPOLATED — the bounded fallback, positive control', () => {
-  // The case the bound exists FOR: few points, far apart, turning hard. No
+test('a short coarse chain is interpolated — the bounded fallback, positive control', () => {
+  // The case the bound exists for: few points, far apart, turning hard. No
   // least-squares curve under the n < m cap can follow it, and interpolation
   // through 7 points is exactly determined and well-conditioned.
   const pts = [[0, 0, 0], [40, 10, 5], [70, 45, -5], [60, 90, 10], [15, 100, 0], [-30, 70, -8], [-20, 20, 4]];
   const res = fitCurveToPoints(pts, { tolerance: 0.01, closed: false });
   assert.ok(res.ok, `refused: ${res.reason}`);
-  assert.equal(res.kind, 'interpolated', 'reported as threaded, not as a genuine reduction');
+  assert.equal(res.kind, 'interpolated', 'reported as threaded, not as a reduction');
   assert.equal(res.ctrlPtCount, pts.length, 'exactly determined — one control point per sample');
 });
 
-test('AND A LONG CHAIN IS NOT — the guard is load-bearing, not decorative', () => {
+test('and a long chain is not — the guard is load-bearing, not decorative', () => {
   // Same shape resampled to 60 points with noise. Without the length bound
   // this would interpolate, score zero at every sample, and certify 1e-9 on
   // data that supports nothing of the kind.
@@ -225,13 +222,13 @@ test('AND A LONG CHAIN IS NOT — the guard is load-bearing, not decorative', ()
   assert.match(res.reason, /too long to fall back on interpolation/);
 });
 
-/* A CLOSED, CORNERLESS CONTOUR SHORT ENOUGH TO INTERPOLATE MUST ACTUALLY
-   INTERPOLATE. `closedCurveInterp` returns `{ crv, uStart, uEnd }` while
-   `globalCurveInterp` returns a curve, and the shared `interp.ctrlPts` guard
-   was therefore always false on the closed branch — so this path had never
-   run, and a closed contour of ten points came back `ok: false`, not merely
-   fitted less well. Asserting the KIND and the deviation, because a
-   least-squares fallback that happens to succeed would satisfy `ok` alone. */
+/* A closed, cornerless contour short enough to interpolate must interpolate.
+   `closedCurveInterp` returns `{ crv, uStart, uEnd }` while
+   `globalCurveInterp` returns a curve, so a guard shared between them that
+   reads `interp.ctrlPts` is always false on the closed branch and a closed
+   contour of ten points comes back `ok: false`. Asserting the kind and the
+   deviation, because a least-squares fallback that happens to succeed would
+   satisfy `ok` alone. */
 test('fitCurveToPoints interpolates a short closed cornerless contour', () => {
   const points = [];
   for (let i = 0; i < 10; i++) {
@@ -242,20 +239,18 @@ test('fitCurveToPoints interpolates a short closed cornerless contour', () => {
   assert.ok(r.ok, 'a ten-point closed contour must fit at all');
   assert.equal(r.kind, 'interpolated', 'it must take the interpolation path, not fall through to least squares');
   assert.ok(r.maxDeviation < 1e-6, `interpolation passes through its own points (got ${r.maxDeviation})`);
-  /* The curve really closes — the whole point of the closed branch. */
+  /* The curve closes. */
   const cp = r.curve.ctrlPts;
   const gap = Math.hypot(cp[0][0] - cp[cp.length - 1][0], cp[0][1] - cp[cp.length - 1][1], cp[0][2] - cp[cp.length - 1][2]);
   assert.ok(gap < 1e-6, `the fitted closed contour closes (endpoint gap ${gap})`);
 });
 
-// ---------------------------------------------------------------------------
-// AN EXCURSION IS INVISIBLE TO THE DEVIATION MEASURE, so it is asserted by
-// LENGTH. Deviation is one-sided and measured AT the samples; a curve that
+// An excursion is invisible to the deviation measure, so it is asserted by
+// length. Deviation is one-sided and measured at the samples; a curve that
 // swings clear of the data between two samples moves no sample and scores
 // perfectly. Arc length is the cheapest quantity it cannot hide from — a curve
-// threading a polyline is a fraction of a per cent LONGER than that polyline,
-// and anything past a couple of per cent is shape nobody asked for.
-// ---------------------------------------------------------------------------
+// threading a polyline is a fraction of a percent longer than that polyline,
+// and anything past a couple of percent is shape nobody asked for.
 const polylineLength = (pts) => {
   let L = 0;
   for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
@@ -273,8 +268,8 @@ const sampledArcLength = (crv, n = 4000) => {
   return L;
 };
 
-/* A RUN WITH ONE VERY LONG LEG IS THE CASE THAT BREAKS A CHORD-LENGTH FIT, and
-   four points is not few enough to be safe from it. These are real coordinates
+/* A run with one very long leg is the case that breaks a chord-length fit, and
+   four points is not few enough to be safe from it. These are coordinates
    off a traced letter "j": three points a fraction of a unit apart at one end
    and a seventeen-unit straight leg to the other. Chord-length parametrization
    spends 96% of the domain on that leg, so all the shape change has to happen
@@ -283,7 +278,7 @@ const sampledArcLength = (crv, n = 4000) => {
 
    The deviation at the four samples is 4e-11 either way. Only the length
    separates them. */
-test('A RUN WITH ONE LONG LEG IS NOT THREADED INTO A LOOP — four points is not too few to oscillate', () => {
+test('a run with one long leg is not threaded into a loop — four points is not too few to oscillate', () => {
   const pts = [[1.70, 14.58, 0], [1.66, -2.28, 0], [1.56, -2.92, 0], [1.39, -3.20, 0]];
   const res = fitCurveToPoints(pts, { tolerance: 0.114, closed: false, exactEndpoints: true });
   assert.ok(res.ok, `refused: ${res.reason}`);
@@ -299,10 +294,10 @@ test('A RUN WITH ONE LONG LEG IS NOT THREADED INTO A LOOP — four points is not
   }
 });
 
-/* THE SAME FAILURE ON THE LEAST-SQUARES BRANCH, where the count is chosen
+/* The same failure on the least-squares branch, where the count is chosen
    rather than forced. Six points off a traced letter "t": four of them clustered
    at one end and a nine-unit leg to the last. */
-test('A LEAST-SQUARES FIT DOES NOT BULGE OFF A LONG UNSAMPLED LEG', () => {
+test('a least-squares fit does not bulge off a long unsampled leg', () => {
   const pts = [[6.97, 2.09, 0], [5.58, 2.09, 0], [5.20, 2.23, 0], [4.90, 2.53, 0], [4.77, 2.92, 0], [4.75, 12.55, 0]];
   const res = fitCurveToPoints(pts, { tolerance: 0.114, closed: false, exactEndpoints: true });
   assert.ok(res.ok, `refused: ${res.reason}`);
@@ -311,12 +306,12 @@ test('A LEAST-SQUARES FIT DOES NOT BULGE OFF A LONG UNSAMPLED LEG', () => {
   assert.ok(res.maxDeviation <= 0.114, `and still holds its bound (${res.maxDeviation})`);
 });
 
-/* EVERY CANDIDATE CARRIES ITS OWN EXCURSION, so a caller reading `triedCounts`
-   can see WHY a count was passed over rather than only that it was. A candidate
+/* Every candidate carries its own excursion, so a caller reading `triedCounts`
+   can see why a count was passed over rather than only that it was. A candidate
    inside the corridor scores zero or less. */
-test('EVERY TRIED COUNT REPORTS HOW FAR IT LEFT THE CORRIDOR', () => {
+test('every tried count reports how far it left the corridor', () => {
   // A superellipse, so the circle/ellipse recognizer cannot answer first and
-  // the least-squares search actually runs.
+  // the least-squares search runs.
   const pts = Array.from({ length: 24 }, (_, i) => {
     const t = (i / 24) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
     return [25 * Math.sign(c) * Math.abs(c) ** (2 / 2.6), 25 * Math.sign(s) * Math.abs(s) ** (2 / 2.6), 0];
@@ -328,7 +323,7 @@ test('EVERY TRIED COUNT REPORTS HOW FAR IT LEFT THE CORRIDOR', () => {
     assert.equal(typeof t.corridorExcess, 'number', `candidate at ${t.ctrlPts} control points reports no corridor excess`);
     assert.ok(Number.isFinite(t.corridorExcess), 'and it is a real number');
   }
-  // The search really discriminated: it saw at least one candidate outside the
+  // The search discriminated: it saw at least one candidate outside the
   // corridor and at least one inside. A corridor that were always satisfied, or
   // never, would be a number nobody reads.
   assert.ok(res.triedCounts.some((t) => t.corridorExcess > 0), 'some candidate must have left the corridor');

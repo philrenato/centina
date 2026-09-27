@@ -1,12 +1,10 @@
-// EXPORTING A TRIMMED FACE AS A REAL TRIMMED BREP — the delivery end of the
-// write path. Everything upstream of this (fitted curves, pcurves, authoring
-// bindings) was reachable only from tests; this is what an Export .3dm
-// actually produces.
+// Exporting a trimmed face as a trimmed B-rep — the delivery end of the
+// write path (fitted curves, pcurves, authoring bindings); this is what an
+// Export .3dm produces.
 //
-// Until the authoring bindings existed the app REFUSED a trimmed face by name,
-// because writing the uncut base surface would have been a plausible-looking
-// wrong answer — and the reason to open a boolean in Rhino is to check whether
-// it is right. That refusal was correct then and is the wrong answer now.
+// Writing the uncut base surface instead would be a plausible-looking wrong
+// answer, and the reason to open a boolean in Rhino is to check whether it
+// is right.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -31,12 +29,12 @@ const ring = (r, n, cx = 0, cy = 0) => Array.from({ length: n }, (_, i) => {
   return [cx + r * Math.cos(t), cy + r * Math.sin(t)];
 });
 
-test('THE FIXTURE IS SANE: the plane maps (u,v) straight onto (x,y)', () => {
+test('fixture check: the plane maps (u,v) straight onto (x,y)', () => {
   // Everything below reads trim parameters as if they were coordinates, which
-  // is only true if this holds. Asserted against the SURFACE's own domain and
-  // an evaluated point — not against ON_Brep's bounding box, whose looseness
-  // is its own business and was measured at [-6, 6] for a radius-5 trim on a
-  // 20x20 plane, matching neither the trim nor the surface.
+  // is only true if this holds. Asserted against the surface's own domain and
+  // an evaluated point — not against ON_Brep's bounding box, which is loose:
+  // [-6, 6] for a radius-5 trim on a 20x20 plane, matching neither the trim
+  // nor the surface.
   const built = trimmedSurfaceToRhinoBrep(rhino, { ...PLANE, trimLoop: ring(5, 64), trimHoles: [] }, 0.001);
   assert.ok(built && built.brep, `refused: ${built && built.log}`);
   const srf = built.brep.faces().get(0).underlyingSurface();
@@ -47,7 +45,7 @@ test('THE FIXTURE IS SANE: the plane maps (u,v) straight onto (x,y)', () => {
     `(u,v)=(3,-4) must evaluate to (3,-4,0), got ${JSON.stringify(p)}`);
 });
 
-test('A TRIMMED FACE BECOMES A VALID BREP, judged by OpenNURBS', () => {
+test('a trimmed face becomes a valid B-rep, judged by OpenNURBS', () => {
   const built = trimmedSurfaceToRhinoBrep(rhino, { ...PLANE, trimLoop: ring(5, 64), trimHoles: [] }, 0.001);
   assert.ok(built.brep, `refused: ${built.log}`);
   assert.equal(built.log, '', 'valid with an empty log');
@@ -55,7 +53,7 @@ test('A TRIMMED FACE BECOMES A VALID BREP, judged by OpenNURBS', () => {
   assert.equal(built.brep.faces().get(0).loops.count, 1);
 });
 
-test('AND A FACE WITH A HOLE KEEPS BOTH LOOPS', () => {
+test('and a face with a hole keeps both loops', () => {
   const built = trimmedSurfaceToRhinoBrep(rhino, {
     ...PLANE, trimLoop: ring(8, 64), trimHoles: [ring(3, 48).reverse()],
   }, 0.001);
@@ -63,8 +61,8 @@ test('AND A FACE WITH A HOLE KEEPS BOTH LOOPS', () => {
   assert.equal(built.brep.faces().get(0).loops.count, 2, 'outer plus hole');
 });
 
-test('THE WHOLE DOCUMENT EXPORT CARRIES IT — through exportDocument, not the helper', () => {
-  // The helper working proves the conversion; this proves the PAYLOAD KIND is
+test('the whole-document export carries it — through exportDocument, not the helper', () => {
+  // The helper test covers the conversion; this checks that the payload kind is
   // wired, which is the part an Export button depends on.
   const { bytes, skipped } = exportDocument(rhino, {
     tolerance: 0.001,
@@ -81,9 +79,9 @@ test('THE WHOLE DOCUMENT EXPORT CARRIES IT — through exportDocument, not the h
   assert.equal(valid, true, 'and still valid after the round trip');
 });
 
-test('AN UNBUILDABLE TRIM IS NAMED, NOT SILENTLY DROPPED', () => {
-  // Two points cannot bound a region. The export must say so by name — a
-  // silently missing face is the failure this whole path exists to avoid.
+test('an unbuildable trim is named, not silently dropped', () => {
+  // Two points cannot bound a region. The export must say so by name rather
+  // than leave a face silently missing.
   const { skipped } = exportDocument(rhino, {
     tolerance: 0.001, layers: [],
     objects: [{ kind: 'trimmedsurface', layerId: null, name: 'degenerate', ...PLANE, trimLoop: [[0, 0], [1, 1]], trimHoles: [] }],

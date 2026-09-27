@@ -1,19 +1,13 @@
-// A REAL BOOLEAN, ASSEMBLED INTO AN ON_Brep AND JUDGED BY OPENNURBS ITSELF.
+// A boolean result, assembled into an ON_Brep and checked by OpenNURBS.
 //
-// This is the end of the .3dm write path and the point of everything under it:
-// our own sewn solid -> merged edges with fitted curves -> pcurves per
+// This is the end of the .3dm write path: our own sewn solid -> merged edges with fitted curves -> pcurves per
 // half-edge -> ON_Brep through the authoring bindings -> ON_Brep::IsValid.
 //
-// ⚠ THE VERDICT HERE IS NOT OURS. Every other check in this suite is our own
-// kernel marking its own homework — naked-edge counts, Euler characteristics,
-// deviations we defined and measured. OpenNURBS's validator knows nothing
-// about our conventions and has no reason to be kind. Whatever it says about
-// these breps is the first genuinely independent opinion this project has had
-// on whether its booleans are valid solids or merely closed-looking ones.
-//
-// So a FAILURE here is a result, not a broken test. The log is recorded and
-// asserted on for shape, and the tests are written to say what OpenNURBS found
-// rather than to insist it approve.
+// The verdict here comes from an independent validator. Every other check in
+// this suite is the kernel checking against its own conventions — naked-edge
+// counts, Euler characteristics, deviations we defined and measured.
+// OpenNURBS's validator knows none of those conventions, so it tells a valid
+// solid from a merely closed-looking one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,7 +24,7 @@ import { surfaceToRhino, curveToRhino } from '../io3dm.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-// ⚠ THE VENDORED BUILD, NOT THE npm PACKAGE. The released rhino3dm has no
+// The vendored build, not the npm package: the released rhino3dm has no
 // authoring at all, so `import 'rhino3dm'` here would test nothing. The .cjs
 // is the same build the browser loads; the ES module beside it takes
 // emscripten's ENVIRONMENT_IS_NODE branch and calls a bare `require`, which an
@@ -55,7 +49,7 @@ const operands = [];
 const ssi = intersectSurfacesComplete(operands[0].faces[0].srf, operands[1].faces[0].srf);
 const curves = ssi.components.map((c) => ({ samples: c.samples.map((s) => s.point), faceA: 0, faceB: 0 }));
 
-// Assemble one ON_Brep from our own solid. Faces SHARE their edges, which is
+// Assemble one ON_Brep from our own solid. Faces share their edges, which is
 // how a multi-face solid is built — ON_Brep has no join, and needs none.
 function assemble(solid, fitted, pcurves, loops) {
   const brep = new rhino.Brep();
@@ -67,7 +61,7 @@ function assemble(solid, fitted, pcurves, loops) {
     const si = brep.addSurface(surfaceToRhino(rhino, f.surface));
     faceSurfaceIndex.set(f, si);
   }
-  // Vertices: only the CORNERS survive the merge, and a fitted chain names its
+  // Vertices: only the corners survive the merge, and a fitted chain names its
   // own endpoints, so vertices are minted per distinct chain endpoint.
   const vertexIndex = new Map();
   const keyOf = (p) => `${p[0].toFixed(6)},${p[1].toFixed(6)},${p[2].toFixed(6)}`;
@@ -92,8 +86,8 @@ function assemble(solid, fitted, pcurves, loops) {
     if (!bySideFace.has(p.faceId)) bySideFace.set(p.faceId, []);
     bySideFace.get(p.faceId).push(p);
   }
-  // TRIMS IN LOOP-TRAVERSAL ORDER, with each one's own orientation — the
-  // thing the first assembly got wrong and OpenNURBS named exactly.
+  // Trims in loop-traversal order, each with its own orientation; OpenNURBS
+  // rejects trims emitted in edge order.
   let trimCount = 0, skippedFaces = 0;
   for (const rec of loops.faces) {
     const f = faces.find((x) => x.id === rec.faceId);
@@ -128,7 +122,7 @@ for (const op of ['union', 'intersect', 'difference']) {
   results[op] = { boolean: r, fitted, pcurves, loops, ...assemble(r.solid, fitted, pcurves, loops) };
 }
 
-test('THE INPUT LANDS: all three booleans close, fit and project before any of this means anything', () => {
+test('input: all three booleans close, fit and project', () => {
   for (const op of ['union', 'intersect', 'difference']) {
     const r = results[op];
     assert.ok(!r.refused, `${op} refused: ${r.refused}`);
@@ -138,14 +132,14 @@ test('THE INPUT LANDS: all three booleans close, fit and project before any of t
   }
 });
 
-test('THE VENDORED BUILD IS REACHABLE FROM NODE, with its authoring intact', () => {
+test('the vendored build is reachable from node, with its authoring intact', () => {
   // Without this the whole file would be testing the released package, which
   // has no authoring and would fail for a reason that says nothing.
   assert.equal(typeof rhino.Brep.prototype.newTrim, 'function');
   assert.equal(typeof rhino.Brep.prototype.addTrimCurve, 'function');
 });
 
-test('EVERY BOOLEAN ASSEMBLES INTO AN ON_Brep — no call refused mid-build', () => {
+test('every boolean assembles into an ON_Brep — no call refused mid-build', () => {
   for (const op of ['union', 'intersect', 'difference']) {
     const c = results[op].counts;
     assert.ok(c.faces > 0 && c.edges > 0 && c.trims > 0,
@@ -154,42 +148,36 @@ test('EVERY BOOLEAN ASSEMBLES INTO AN ON_Brep — no call refused mid-build', ()
   }
 });
 
-test('AND OPENNURBS GIVES ITS OWN VERDICT ON EACH — recorded whatever it is', () => {
-  // ⚠ This test asserts that a verdict EXISTS and is legible, not that it is
-  // favorable. An honest first contact with an independent validator is worth
-  // more than a green check, and the log below is the finding.
+test('OpenNURBS returns a legible verdict on each', () => {
+  // Asserts that a verdict exists and is legible, not that it is favorable;
+  // the next test asserts validity.
   for (const op of ['union', 'intersect', 'difference']) {
     const r = results[op];
-    console.log(`  ${op}: valid=${r.valid} counts=${JSON.stringify(r.counts)}`);
-    if (!r.valid) console.log(`     log: ${String(r.log).split('\n').slice(0, 4).join(' | ')}`);
     assert.equal(typeof r.valid, 'boolean');
     assert.equal(typeof r.log, 'string');
     if (!r.valid) assert.ok(r.log.length > 0, 'an invalid brep must say why');
   }
 });
 
-test('⭐ OPENNURBS CALLS ALL THREE VALID — the first independent verdict on this kernel', () => {
-  // Every other check in this project is our own kernel marking its own
-  // homework. This one is not: ON_Brep::IsValid knows none of our conventions
-  // and had no reason to agree. It refused four times first, and each refusal
-  // was a real defect of ours:
-  //   1. trims emitted in fitted-EDGE order, not loop-traversal order
+test('OpenNURBS reports all three valid', () => {
+  // ON_Brep::IsValid knows none of this kernel's conventions. Assembly
+  // defects it rejects:
+  //   1. trims emitted in fitted-edge order, not loop-traversal order
   //   2. no per-trim orientation (half of them run against their edge)
-  //   3. a PRIMITIVE fit moving a pcurve endpoint outside the domain
+  //   3. a primitive fit moving a pcurve endpoint outside the domain
   //   4. a whole-period shift computed with round() instead of floor(),
-  //      which pushed a run OUT of the rectangle so the clamp squashed a
+  //      which pushes a run out of the rectangle so the clamp squashes a
   //      391-unit 3-D run onto a single parameter
-  // None of them were geometry. The geometry was right the whole way.
   for (const op of ['union', 'intersect', 'difference']) {
     const r = results[op];
     assert.equal(r.valid, true, `${op} rejected: ${r.log}`);
-    assert.equal(r.log, '', `${op} must validate with an EMPTY log, not a quiet pass`);
+    assert.equal(r.log, '', `${op} must validate with an empty log, not a quiet pass`);
   }
 });
 
-test('AND A VALID BREP SURVIVES A REAL .3dm ROUND TRIP, still valid', () => {
+test('a valid brep stays valid through a .3dm round trip', () => {
   // Valid in memory is not the deliverable; valid after being written and read
-  // back is. This is the whole write path's actual claim.
+  // back is. This is the write path's claim.
   for (const op of ['union', 'intersect', 'difference']) {
     const doc3 = new rhino.File3dm();
     doc3.settings().modelAbsoluteTolerance = TOL;
@@ -204,11 +192,10 @@ test('AND A VALID BREP SURVIVES A REAL .3dm ROUND TRIP, still valid', () => {
   }
 });
 
-test('AND THE OPERANDS THEMSELVES ARE NOT WHAT IS WRONG', () => {
-  // Guards against reading the verdict above as "our booleans are bad
-  // geometry". Each result still satisfies every check our own kernel makes:
-  // closed, manifold, and on the Euler characteristic inclusion-exclusion
-  // predicts. Whatever OpenNURBS is rejecting, it is not that.
+test('each boolean result passes the kernel\'s own closed, manifold and Euler checks', () => {
+  // Each result satisfies every check the kernel makes: closed, manifold,
+  // and on the Euler characteristic inclusion-exclusion predicts. A validator
+  // rejection therefore points at assembly, not geometry.
   for (const [op, chi] of [['union', -2], ['intersect', 2], ['difference', 0]]) {
     const s = results[op].boolean.stats;
     assert.equal(s.nakedEdgeCount, 0, `${op} closed`);

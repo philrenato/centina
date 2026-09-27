@@ -1,20 +1,20 @@
 // Tests for kernel/blend.mjs — curvature-continuous (G2) and third-order
 // (G3) corner blends.
 //
-// EVERY continuity claim in this file is MEASURED, never asserted. The
+// Every continuity claim in this file is measured, never asserted. The
 // quantities measured are the reparametrization-invariant (geometric) ones —
 // unit tangent, curvature vector, d(kappa)/ds, torsion — because those are
-// what G^k actually means and what a highlight running across a surface
-// actually sees. Parametric (C^k) agreement is neither claimed nor tested;
+// what G^k means and what a highlight running across a surface
+// sees. Parametric (C^k) agreement is neither claimed nor tested;
 // see the module header for why the two are different claims.
 //
 // Two disciplines this file holds itself to:
-//  1. EVERY continuity assertion has a CONTRAST assertion next to it showing
-//     the same measurement FAILS for the next lower order (G1 fails the
+//  1. Every continuity assertion has a contrast assertion next to it showing
+//     the same measurement fails for the next lower order (G1 fails the
 //     curvature test, G2 fails the dkappa/ds and torsion tests). A test that
 //     cannot fail is not a proof, and a curvature test that a plain arc would
 //     also pass would prove nothing at all about this module.
-//  2. NO SYMMETRIC FIXTURES. A symmetric corner or an equal-length polyline
+//  2. No symmetric fixtures. A symmetric corner or an equal-length polyline
 //     hides a whole class of construction errors (a swapped end, a mirrored
 //     shape fraction). Every polyline here has unequal edge lengths and
 //     unequal turn angles; the curve/curve fixtures are non-planar and of
@@ -46,45 +46,40 @@ function sub3(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function len3(a) { return Math.hypot(a[0], a[1], a[2]); }
 function unit3(a) { const l = len3(a); return [a[0] / l, a[1] / l, a[2] / l]; }
 
-// Finite-difference unit tangent — the SAME instrument
-// test/interpolate.test.mjs already uses to check seam tangency (its own
-// closedCurveInterp G1 test asserts dot > 0.999). Kept here so the G1
-// assertions below are comparable to that established bar, and so they can be
-// shown to beat it by orders of magnitude.
+// Finite-difference unit tangent — the same instrument
+// test/interpolate.test.mjs uses to check seam tangency (its
+// closedCurveInterp G1 test asserts dot > 0.999), so the G1 assertions below
+// are comparable to that bar.
 function fdUnitTangent(crv, u, du) {
   const a = curvePoint(crv, u - du);
   const b = curvePoint(crv, u + du);
   return unit3(sub3(b, a));
 }
 
-// ---------------------------------------------------------------------------
-// FIXTURES — deliberately irregular. `RAIL` has four distinct turn angles
+// Fixtures, deliberately irregular. `RAIL` has four distinct turn angles
 // (about 48, 43, 52 and 39 degrees) and five distinct edge lengths.
-// ---------------------------------------------------------------------------
 const RAIL = [[0, 0, 0], [70, 0, 0], [123, 47, 0], [196, 43, 0], [231, 112, 0], [312, 96, 0]];
 const LOOP = [[0, 0, 0], [96, -14, 0], [147, 58, 0], [83, 121, 0], [-26, 74, 0]]; // irregular closed pentagon, no two edges equal
 
 // A rational quadratic neighbor (degree 2, a non-unit weight) and a degree-4
 // non-planar polynomial neighbor — mismatched degree, mismatched rationality,
-// genuinely 3D, both with nonzero curvature at the join.
+// non-planar, both with nonzero curvature at the join.
 const NEIGHBOR_A = { degree: 2, knots: [0, 0, 0, 1, 1, 1], ctrlPts: [[-60, -20, 5, 1], [-25, 15, -8, Math.SQRT1_2], [0, 0, 0, 1]] };
 const NEIGHBOR_B = { degree: 4, knots: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1], ctrlPts: [[30, 10, 4, 1], [52, 34, -6, 1], [80, 20, 18, 1], [95, 60, 3, 1], [130, 44, 25, 1]] };
-// A second pair where BOTH ends carry genuinely nonzero torsion (a 3-control-
+// A second pair where both ends carry nonzero torsion (a 3-control-
 // point rational is always planar, so NEIGHBOR_A's torsion is exactly zero —
 // a torsion test against it alone would pass vacuously).
 const TWIST_A = { degree: 3, knots: [0, 0, 0, 0, 1, 1, 1, 1], ctrlPts: [[-90, 30, -40, 1], [-55, -10, 12, 1], [-28, 26, 33, 1], [0, 0, 0, 1]] };
 const TWIST_B = { degree: 3, knots: [0, 0, 0, 0, 1, 1, 1, 1], ctrlPts: [[45, 18, 22, 1], [77, -14, -19, 1], [104, 41, 30, 1], [151, 12, -8, 1]] };
 
-// ===========================================================================
-// 0. THE MEASURING INSTRUMENT ITSELF
-// ===========================================================================
+// 0. The measuring instrument
 
-test('curveGeometryAt: validated against an EXACT analytic curve first — a real NURBS circle reads back constant curvature 1/R and zero torsion', () => {
+test('curveGeometryAt: validated against an exact analytic curve first — a NURBS circle reads back constant curvature 1/R and zero torsion', () => {
   // Every claim below is made with this instrument, so it is checked against
   // geometry whose invariants are known in closed form before it is trusted
   // anywhere else. A rational circle is the right probe: it exercises the
   // weight bookkeeping in rationalCurveDerivs that a polynomial curve would
-  // leave completely untested.
+  // leave untested.
   const R = 17.5;
   const circle = makeCircle([3, -8, 2], [1, 0, 0], [0, 1, 0], R, 4);
   const uEnd = circle.knots[circle.knots.length - 1];
@@ -92,11 +87,11 @@ test('curveGeometryAt: validated against an EXACT analytic curve first — a rea
     const u = (i / 40) * uEnd;
     const g = curveGeometryAt(circle, u, Z);
     assert.ok(Math.abs(g.kappa - 1 / R) < 1e-12, `circle curvature at u=${u} should be exactly 1/R=${1 / R}, got ${g.kappa}`);
-    assert.ok(Math.abs(g.signedKappa - 1 / R) < 1e-12, `circle SIGNED curvature (CCW about +Z) should be +1/R, got ${g.signedKappa}`);
+    assert.ok(Math.abs(g.signedKappa - 1 / R) < 1e-12, `circle signed curvature (CCW about +Z) should be +1/R, got ${g.signedKappa}`);
     assert.ok(Math.abs(g.dKappaDs) < 1e-11, `a circle's curvature is constant, so dkappa/ds must be 0, got ${g.dKappaDs}`);
     assert.ok(Math.abs(g.torsion) < 1e-12, `a planar circle has zero torsion, got ${g.torsion}`);
     assert.ok(Math.abs(len3(g.tangent) - 1) < 1e-12, 'reported tangent must be a unit vector');
-    // The curvature VECTOR must point at the center, magnitude 1/R.
+    // The curvature vector must point at the center, magnitude 1/R.
     const toCenter = unit3(sub3([3, -8, 2], curvePoint(circle, u)));
     assert.ok(dot3(unit3(g.kappaVec), toCenter) > 1 - 1e-11, 'curvature vector must point at the circle center');
     assert.ok(Math.abs(len3(g.kappaVec) - 1 / R) < 1e-12, 'curvature vector magnitude must equal 1/R');
@@ -108,12 +103,10 @@ test('curveGeometryAt: a straight degree-1 line reads exactly zero curvature, an
   const g = curveGeometryAt(line, 0.37, Z);
   assert.equal(g.kappa, 0);
   assert.equal(g.signedKappa, 0);
-  assert.ok(Number.isNaN(g.torsion), 'torsion is genuinely undefined on a straight run — reporting 0 would let a torsion assertion pass for free');
+  assert.ok(Number.isNaN(g.torsion), 'torsion is undefined on a straight run; reporting 0 would let a torsion assertion pass vacuously');
 });
 
-// ===========================================================================
-// 1. REFUSALS AND INPUT VALIDATION
-// ===========================================================================
+// 1. Refusals and input validation
 
 test('geometricBlend: refuses any continuity order outside {1,2,3}, including non-integers', () => {
   const a = blendFrameFromLine([0, 0, 0], [1, 0, 0]);
@@ -125,7 +118,7 @@ test('geometricBlend: refuses any continuity order outside {1,2,3}, including no
   }
 });
 
-test('geometricBlend: refuses a zero-speed frame, coincident endpoints, and non-finite input — honestly, by name, never silently', () => {
+test('geometricBlend: refuses a zero-speed frame, coincident endpoints, and non-finite input, by name, never silently', () => {
   const good = blendFrameFromLine([10, 10, 0], [0, 1, 0]);
   const dead = blendFrameFromLine([0, 0, 0], [0, 0, 0]);
   assert.match(geometricBlend(dead, good).reason, /zero-speed/);
@@ -137,7 +130,7 @@ test('geometricBlend: refuses a zero-speed frame, coincident endpoints, and non-
   assert.match(geometricBlend(a, good, { startMagnitude: 0 }).reason, /magnitudes must be positive/);
 });
 
-test('blendCornerCurve / blendPolyline: a collinear run and a near-180 reversal are refused with filletCornerArc\'s OWN wording — one source of truth for what a corner is', () => {
+test('blendCornerCurve / blendPolyline: a collinear run and a near-180 reversal are refused with filletCornerArc\'s own wording — one source of truth for what a corner is', () => {
   const straight = blendCornerCurve([10, 0, 0], [0, 0, 0], [20, 0, 0], 3, Z, { continuity: 2 });
   assert.equal(straight.ok, false);
   assert.equal(straight.reason, filletCornerArc([10, 0, 0], [0, 0, 0], [20, 0, 0], 3, Z).reason);
@@ -151,22 +144,19 @@ test('blendCornerCurve / blendPolyline: a collinear run and a near-180 reversal 
   assert.match(blendCornerCurve([10, 0, 0], [0, 0, 0], [10, 20, 0], 3, Z, { continuity: 2, tangentScale: NaN }).reason, /tangentScale/);
 });
 
-// ===========================================================================
-// 2. G1 REGRESSION GUARD — the path that already ships must not move
-// ===========================================================================
+// 2. G1 delegation: continuity 1 is the arc fillet, unchanged
 
-test('REGRESSION GUARD: blendPolyline at continuity 1 returns filletOpenPolyline\'s OWN result, byte for byte', () => {
-  // Not "equivalent to" — literally the same object graph, because the G1
-  // path delegates rather than reimplementing. This is the guard on shipped
-  // FilletCrv behavior: if this ever diverges, the Fillet command changed
-  // shape without anyone asking it to.
+test('G1 delegation: blendPolyline at continuity 1 returns filletOpenPolyline\'s own result, byte for byte', () => {
+  // Not "equivalent to" — the same object graph, because the G1 path
+  // delegates rather than reimplementing. If this diverges, the output of the
+  // Fillet command has changed shape.
   for (const r of [3, 12, 25]) {
     assert.deepEqual(blendPolyline(RAIL, r, { continuity: 1 }), filletOpenPolyline(RAIL, r));
     assert.deepEqual(blendPolyline(LOOP, r, { continuity: 1, closed: true }), filletOpenPolyline(LOOP, r, { closed: true }));
   }
 });
 
-test('REGRESSION GUARD: blendCornerCurve at continuity 1 reproduces filletCornerArc exactly (p0/apex/p2/weight/trim/turnAngle)', () => {
+test('G1 delegation: blendCornerCurve at continuity 1 reproduces filletCornerArc exactly (p0/apex/p2/weight/trim/turnAngle)', () => {
   const g1 = blendCornerCurve([70, 0, 0], [0, 0, 0], [123, 47, 0], 14, Z, { continuity: 1 });
   const arc = filletCornerArc([70, 0, 0], [0, 0, 0], [123, 47, 0], 14, Z);
   assert.equal(g1.segment.type, 'arc');
@@ -178,7 +168,7 @@ test('REGRESSION GUARD: blendCornerCurve at continuity 1 reproduces filletCorner
   assert.equal(g1.turnAngle, arc.turnAngle);
 });
 
-test('a G2 blend keeps the arc\'s OWN tangent points, so it is a true drop-in: the straight runs either side do not move', () => {
+test('a G2 blend keeps the arc\'s own tangent points, so it is a true drop-in: the straight runs either side do not move', () => {
   const g1 = blendPolyline(RAIL, 12, { continuity: 1 });
   const g2 = blendPolyline(RAIL, 12, { continuity: 2 });
   const g3 = blendPolyline(RAIL, 12, { continuity: 3 });
@@ -200,11 +190,9 @@ test('a G2 blend keeps the arc\'s OWN tangent points, so it is a true drop-in: t
   }
 });
 
-// ===========================================================================
-// 3. G1 — POSITION AND TANGENT AT EVERY SEAM
-// ===========================================================================
+// 3. G1: position and tangent at every seam
 
-test('G0/G1 at every seam of a blended rail: position to 1e-12, and unit tangent by BOTH analytic and finite-difference measurement (dot > 1 - 1e-11, beating the project\'s established 0.999 bar by 8 orders of magnitude)', () => {
+test('G0/G1 at every seam of a blended rail: position to 1e-12, and unit tangent by both analytic and finite-difference measurement (dot > 1 - 1e-11, eight orders of magnitude tighter than the 0.999 bar in interpolate.test.mjs)', () => {
   for (const k of [2, 3]) {
     const res = blendPolyline(RAIL, 12, { continuity: k });
     assert.equal(res.ok, true);
@@ -219,7 +207,7 @@ test('G0/G1 at every seam of a blended rail: position to 1e-12, and unit tangent
       assert.ok(dot3(tOut, tIn) > 1 - 1e-11, `k=${k} seam ${i}: analytic tangent dot ${dot3(tOut, tIn)}`);
 
       // Independent finite-difference cross-check, the same instrument the
-      // existing closedCurveInterp seam test uses. Catches an analytic
+      // closedCurveInterp seam test uses. Catches an analytic
       // derivative that is self-consistently wrong.
       const fdOut = cur.type === 'line' ? unit3(sub3(cur.b, cur.a)) : fdUnitTangent(cur.crv, 1 - 1e-5, 1e-5);
       const fdIn = nxt.type === 'line' ? unit3(sub3(nxt.b, nxt.a)) : fdUnitTangent(nxt.crv, 1e-5, 1e-5);
@@ -228,11 +216,9 @@ test('G0/G1 at every seam of a blended rail: position to 1e-12, and unit tangent
   }
 });
 
-// ===========================================================================
-// 4. G2 — THE ASSERTION THAT DISTINGUISHES THIS FROM THE SHIPPED ARC
-// ===========================================================================
+// 4. G2: the assertion that distinguishes a blend from the arc
 
-test('G2: a blend meets a STRAIGHT neighbor at exactly zero curvature at both ends — and the CONTRAST that makes this a real test: the G1 arc it replaces jumps straight to 1/R there', () => {
+test('G2: a blend meets a straight neighbor at exactly zero curvature at both ends — contrast: the G1 arc it replaces jumps to 1/R there', () => {
   for (const [radius, turnDeg] of [[10, 90], [4.5, 31], [40, 118], [2, 152], [77, 61]]) {
     const phi = turnDeg * Math.PI / 180;
     const vertex = [0, 0, 0];
@@ -248,20 +234,20 @@ test('G2: a blend meets a STRAIGHT neighbor at exactly zero curvature at both en
       // numbers. Stated as an absolute bound scaled by the corner's own
       // 1/radius so it reads as a relative claim against what the arc does.
       assert.ok(Math.abs(g.kappa) < 1e-12 / radius, `G2 blend curvature at u=${u} (R=${radius}, turn ${turnDeg}deg) must be 0, got ${g.kappa}`);
-      assert.ok(len3(g.kappaVec) < 1e-12 / radius, 'the curvature VECTOR, not just its magnitude, must vanish at the seam');
+      assert.ok(len3(g.kappaVec) < 1e-12 / radius, 'the curvature vector, not just its magnitude, must vanish at the seam');
     }
-    // CONTRAST: the shipped G1 arc for the identical corner. Its curvature at
+    // Contrast: the G1 arc for the identical corner. Its curvature at
     // its own start is 1/R against the edge's 0 — the jump this module exists
     // to remove. Measured, so the test above cannot be passing vacuously.
     const g1 = blendCornerCurve(vertex, prev, next, radius, Z, { continuity: 1 });
     const arcCrv = { degree: 2, knots: [0, 0, 0, 1, 1, 1], ctrlPts: [[...g1.segment.p0, 1], [...g1.segment.apex, g1.segment.weight], [...g1.segment.p2, 1]] };
     const arcK = curveGeometryAt(arcCrv, 0, Z).kappa;
-    assert.ok(Math.abs(arcK * radius - 1) < 1e-9, `sanity: the G1 arc really is a radius-${radius} arc (kappa*R = ${arcK * radius})`);
-    assert.ok(arcK > 0.9 / radius, 'CONTRAST: the arc jumps from 0 curvature on the edge to 1/R — a real G2 violation this same measurement detects');
+    assert.ok(Math.abs(arcK * radius - 1) < 1e-9, `sanity: the G1 arc is a radius-${radius} arc (kappa*R = ${arcK * radius})`);
+    assert.ok(arcK > 0.9 / radius, 'contrast: the arc jumps from 0 curvature on the edge to 1/R, a G2 violation this same measurement detects');
   }
 });
 
-test('G2 continuity is INDEPENDENT of the shape parameter — the beta-constraint argument says so, and five different shape fractions confirm it against the same tolerance', () => {
+test('G2 continuity is independent of the shape parameter — the beta-constraint argument says so, and five different shape fractions confirm it against the same tolerance', () => {
   // b1 (the tangent magnitude, here `tangentScale`) is the construction's
   // only free scalar, and curvature is reparametrization-invariant, so the
   // continuity order cannot depend on it. Demonstrated rather than asserted.
@@ -272,20 +258,18 @@ test('G2 continuity is INDEPENDENT of the shape parameter — the beta-constrain
     for (const u of [0, 1]) {
       assert.ok(Math.abs(curveGeometryAt(r.crv, u).kappa) < 1e-12 / 11, `tangentScale ${lam} u=${u}: curvature must still vanish`);
     }
-    // ...but it genuinely changes the SHAPE, otherwise the parameter is dead.
+    // ...but it changes the shape; otherwise the parameter is dead.
     assert.ok(peakCurvature(r.crv).kappa > 0, 'a real curve, not a straight line');
   }
   const tight = blendCornerCurve([0, 0, 0], [-90, 0, 0], [60, 80, 0], 11, Z, { continuity: 2, tangentScale: 0.6 });
   const loose = blendCornerCurve([0, 0, 0], [-90, 0, 0], [60, 80, 0], 11, Z, { continuity: 2, tangentScale: 2.6 });
-  assert.ok(Math.abs(peakCurvature(tight.crv).kappa - peakCurvature(loose.crv).kappa) > 0.05 / 11, 'the shape parameter must actually change the shape');
+  assert.ok(Math.abs(peakCurvature(tight.crv).kappa - peakCurvature(loose.crv).kappa) > 0.05 / 11, 'the shape parameter must change the shape');
 });
 
-// ===========================================================================
-// 5. G3 — CLAIMED ONLY WHERE PROVEN
-// ===========================================================================
+// 5. G3: claimed only where proven
 
-test('G3 on a straight-edge corner: curvature AND d(kappa)/ds both vanish at both seams — with the CONTRAST that the G2 blend fails exactly the d(kappa)/ds half', () => {
-  // For a PLANAR curve, third-order geometric contact means agreement of
+test('G3 on a straight-edge corner: curvature and d(kappa)/ds both vanish at both seams — contrast: the G2 blend fails exactly the d(kappa)/ds half', () => {
+  // For a planar curve, third-order geometric contact means agreement of
   // position, unit tangent, signed curvature and d(kappa)/ds (torsion is
   // identically zero on both sides and carries no information). Signed
   // curvature is used deliberately: |kappa| has a non-differentiable minimum
@@ -302,24 +286,22 @@ test('G3 on a straight-edge corner: curvature AND d(kappa)/ds both vanish at bot
       assert.ok(Math.abs(g.signedKappa) < 1e-12 / radius, `G3 u=${u}: curvature must vanish, got ${g.signedKappa}`);
       assert.ok(Math.abs(g.dSignedKappaDs) < 1e-12 / (radius * radius), `G3 u=${u}: d(kappa)/ds must vanish too, got ${g.dSignedKappaDs}`);
     }
-    // CONTRAST — the G2 blend across the identical corner matches curvature
-    // but NOT its arc-length derivative. Without this the G3 test above could
+    // Contrast: the G2 blend across the identical corner matches curvature
+    // but not its arc-length derivative. Without this the G3 test above could
     // be passing for a reason unrelated to the extra two control points.
     const g2 = blendCornerCurve(...args, { continuity: 2 });
     const d2 = Math.abs(curveGeometryAt(g2.crv, 0, Z).dSignedKappaDs);
-    assert.ok(d2 > 1e-4 / (radius * radius), `CONTRAST: the G2 blend's d(kappa)/ds at the seam is genuinely nonzero (${d2}) — G2 is not G3`);
+    assert.ok(d2 > 1e-4 / (radius * radius), `contrast: the G2 blend's d(kappa)/ds at the seam is nonzero (${d2}) — G2 is not G3`);
   }
 });
 
-// ===========================================================================
-// 6. GENERAL CURVE-TO-CURVE — CURVED, RATIONAL, MISMATCHED-DEGREE NEIGHBORS
-// ===========================================================================
+// 6. General curve-to-curve: curved, rational, mismatched-degree neighbors
 
-test('G2 between a degree-2 RATIONAL neighbor (non-unit weight) and a degree-4 non-planar one: the full curvature VECTOR matches at both ends to 1e-14 relative — and G1 across the same pair misses it by 50%+', () => {
+test('G2 between a degree-2 rational neighbor (non-unit weight) and a degree-4 non-planar one: the full curvature vector matches at both ends to 1e-13 relative — and G1 across the same pair misses it by more than 10%', () => {
   const gA = curveGeometryAt(NEIGHBOR_A, 1);
   const gB = curveGeometryAt(NEIGHBOR_B, 0);
-  assert.ok(gA.kappa > 1e-3 && gB.kappa > 1e-3, 'sanity: both neighbors genuinely curve at the join (a zero-curvature fixture would make this test vacuous)');
-  assert.notEqual(NEIGHBOR_A.degree, NEIGHBOR_B.degree, 'sanity: the neighbors really are of mismatched degree');
+  assert.ok(gA.kappa > 1e-3 && gB.kappa > 1e-3, 'sanity: both neighbors curve at the join (a zero-curvature fixture would make this test vacuous)');
+  assert.notEqual(NEIGHBOR_A.degree, NEIGHBOR_B.degree, 'sanity: the neighbors are of mismatched degree');
 
   const g2 = blendCurves(NEIGHBOR_A, 1, NEIGHBOR_B, 0, { continuity: 2 });
   assert.equal(g2.ok, true, g2.reason);
@@ -330,22 +312,22 @@ test('G2 between a degree-2 RATIONAL neighbor (non-unit weight) and a degree-4 n
   assert.ok(len3(sub3(s.kappaVec, gA.kappaVec)) / gA.kappa < 1e-13, `start curvature vector relative error ${len3(sub3(s.kappaVec, gA.kappaVec)) / gA.kappa}`);
   assert.ok(len3(sub3(e.kappaVec, gB.kappaVec)) / gB.kappa < 1e-13, `end curvature vector relative error ${len3(sub3(e.kappaVec, gB.kappaVec)) / gB.kappa}`);
 
-  // CONTRAST: G1 across the identical pair matches tangent only.
+  // Contrast: G1 across the identical pair matches tangent only.
   const g1 = blendCurves(NEIGHBOR_A, 1, NEIGHBOR_B, 0, { continuity: 1 });
   assert.equal(g1.degree, 3);
   const s1 = curveGeometryAt(g1.crv, 0);
   assert.ok(dot3(s1.tangent, gA.tangent) > 1 - 1e-14, 'G1 still matches the tangent exactly');
-  assert.ok(Math.abs(s1.kappa - gA.kappa) / gA.kappa > 0.1, `CONTRAST: G1 curvature error is large (${Math.abs(s1.kappa - gA.kappa) / gA.kappa}), which is what G1 means`);
+  assert.ok(Math.abs(s1.kappa - gA.kappa) / gA.kappa > 0.1, `contrast: G1 curvature error is large (${Math.abs(s1.kappa - gA.kappa) / gA.kappa}), which is what G1 means`);
 });
 
-test('G3 between two genuinely NON-PLANAR neighbors: curvature, d(kappa)/ds AND torsion all match at both ends — with the CONTRAST that G2 matches curvature and misses the other two', () => {
+test('G3 between two non-planar neighbors: curvature, d(kappa)/ds and torsion all match at both ends — contrast: G2 matches curvature and misses the other two', () => {
   // Torsion is the part of the G3 claim that a planar fixture cannot test at
   // all. Both neighbors here are degree-3 space curves with nonzero torsion
   // at the join, checked first so the assertions below cannot pass vacuously.
   const gA = curveGeometryAt(TWIST_A, 1);
   const gB = curveGeometryAt(TWIST_B, 0);
-  assert.ok(Math.abs(gA.torsion) > 1e-4 && Math.abs(gB.torsion) > 1e-4, `sanity: both neighbors carry real torsion (${gA.torsion}, ${gB.torsion})`);
-  assert.ok(Math.abs(gA.dKappaDs) > 1e-8 && Math.abs(gB.dKappaDs) > 1e-8, 'sanity: both neighbors have genuinely varying curvature at the join');
+  assert.ok(Math.abs(gA.torsion) > 1e-4 && Math.abs(gB.torsion) > 1e-4, `sanity: both neighbors carry nonzero torsion (${gA.torsion}, ${gB.torsion})`);
+  assert.ok(Math.abs(gA.dKappaDs) > 1e-8 && Math.abs(gB.dKappaDs) > 1e-8, 'sanity: both neighbors have varying curvature at the join');
 
   const g3 = blendCurves(TWIST_A, 1, TWIST_B, 0, { continuity: 3 });
   assert.equal(g3.ok, true, g3.reason);
@@ -361,11 +343,11 @@ test('G3 between two genuinely NON-PLANAR neighbors: curvature, d(kappa)/ds AND 
   const g2 = blendCurves(TWIST_A, 1, TWIST_B, 0, { continuity: 2 });
   const s2 = curveGeometryAt(g2.crv, 0);
   assert.ok(len3(sub3(s2.kappaVec, gA.kappaVec)) / gA.kappa < 1e-12, 'G2 does match the curvature vector');
-  assert.ok(Math.abs(s2.dKappaDs - gA.dKappaDs) / Math.abs(gA.dKappaDs) > 0.1, `CONTRAST: G2 misses d(kappa)/ds (relative error ${Math.abs(s2.dKappaDs - gA.dKappaDs) / Math.abs(gA.dKappaDs)})`);
-  assert.ok(Math.abs(s2.torsion - gA.torsion) / Math.abs(gA.torsion) > 0.1, 'CONTRAST: G2 misses torsion');
+  assert.ok(Math.abs(s2.dKappaDs - gA.dKappaDs) / Math.abs(gA.dKappaDs) > 0.1, `contrast: G2 misses d(kappa)/ds (relative error ${Math.abs(s2.dKappaDs - gA.dKappaDs) / Math.abs(gA.dKappaDs)})`);
+  assert.ok(Math.abs(s2.torsion - gA.torsion) / Math.abs(gA.torsion) > 0.1, 'contrast: G2 misses torsion');
 });
 
-test('blendFrameFromCurve: the reverse flag negates the ODD derivatives only — the identity the far end of every blend is built on', () => {
+test('blendFrameFromCurve: the reverse flag negates the odd derivatives only — the identity the far end of every blend is built on', () => {
   const f = blendFrameFromCurve(NEIGHBOR_B, 0.4);
   const r = blendFrameFromCurve(NEIGHBOR_B, 0.4, { reverse: true });
   for (let i = 0; i < 3; i++) {
@@ -374,7 +356,7 @@ test('blendFrameFromCurve: the reverse flag negates the ODD derivatives only —
     assert.equal(r.d2[i], f.d2[i]);
     assert.equal(r.d3[i], -f.d3[i]);
   }
-  // The geometry a reversed frame reports is the SAME geometry: curvature and
+  // The geometry a reversed frame reports is the same geometry: curvature and
   // torsion are direction-independent, the unit tangent flips.
   const a = frameGeometry(f.point, f.d1, f.d2, f.d3);
   const b = frameGeometry(r.point, r.d1, r.d2, r.d3);
@@ -383,11 +365,9 @@ test('blendFrameFromCurve: the reverse flag negates the ODD derivatives only —
   assert.ok(dot3(a.tangent, b.tangent) < -1 + 1e-14);
 });
 
-// ===========================================================================
-// 7. THE MEASURED PRICE OF CURVATURE CONTINUITY
-// ===========================================================================
+// 7. The measured price of curvature continuity
 
-test('THE PRICE, pinned numerically: across turn angles 5-179 degrees the min-curvature G2 blend peaks at 1.10-1.18 x the arc\'s 1/R (G3: 1.12-1.32) — always MORE than the arc, never less', () => {
+test('peak curvature, pinned numerically: across turn angles 5-179 degrees the min-curvature G2 blend peaks at 1.10-1.18 x the arc\'s 1/R (G3: 1.12-1.32), always more than the arc, never less', () => {
   // A G2 blend spanning the same corner as an R arc must ramp curvature from
   // 0 up and back to 0 while turning through the same total angle, so its
   // peak cannot be 1/R. This records exactly how much that costs, so a caller
@@ -422,14 +402,12 @@ test('scale invariance: the chosen tangent scale depends only on turn angle, and
   }
 });
 
-// ===========================================================================
-// 8. DEGENERATE-ADJACENT INPUT
-// ===========================================================================
+// 8. Near-degenerate input
 
-test('a VERY SHALLOW corner (0.4 degrees of turn) still produces a finite, regular, curvature-continuous blend at every order', () => {
+test('a very shallow corner (0.4 degrees of turn) still produces a finite, regular, curvature-continuous blend at every order', () => {
   // The trim distance collapses like tan(phi/2), so this is the case where a
   // naive construction divides a tiny number by a tiny number. Tolerances
-  // here are stated RELATIVE to the corner's own 1/R, because the absolute
+  // here are stated relative to the corner's own 1/R, because the absolute
   // curvature values are large while the geometry is nearly straight.
   const phi = 0.4 * Math.PI / 180;
   const R = 8;
@@ -447,7 +425,7 @@ test('a VERY SHALLOW corner (0.4 degrees of turn) still produces a finite, regul
   }
 });
 
-test('a VERY TIGHT corner (175 degrees of turn, a near-reversal) still blends; 179.9999 degrees is refused, exactly where filletCornerArc refuses', () => {
+test('a very tight corner (175 degrees of turn, a near-reversal) still blends; 179.9999 degrees is refused, exactly where filletCornerArc refuses', () => {
   const R = 6;
   for (const turnDeg of [170, 175, 179]) {
     const phi = turnDeg * Math.PI / 180;
@@ -460,10 +438,9 @@ test('a VERY TIGHT corner (175 degrees of turn, a near-reversal) still blends; 1
     }
   }
   // filletCornerArc's own threshold is |turn| > PI - 1e-6, i.e. within about
-  // 5.7e-5 degrees of a full reversal — checked against that number, not
-  // guessed, so this asserts the real shared boundary rather than a
-  // comfortably-far-past-it value that would pass for the wrong reason.
-  const justInside = 179.9999 * Math.PI / 180; // still ACCEPTED: PI - 1.75e-6 has not crossed PI - 1e-6
+  // 5.7e-5 degrees of a full reversal, so this asserts the shared boundary
+  // itself rather than a value far past it.
+  const justInside = 179.9999 * Math.PI / 180; // still accepted: PI - 1.75e-6 has not crossed PI - 1e-6
   const inside = blendCornerCurve([0, 0, 0], [-1e7, 0, 0], [1e7 * Math.cos(justInside), 1e7 * Math.sin(justInside), 0], R, Z, { continuity: 2 });
   assert.equal(inside.ok, true, `179.9999 deg is still inside filletCornerArc's own threshold: ${inside.reason}`);
   for (let i = 0; i <= 32; i++) {
@@ -477,15 +454,15 @@ test('a VERY TIGHT corner (175 degrees of turn, a near-reversal) still blends; 1
 });
 
 test('a collinear vertex inside a rail is skipped, not blended and not fatal — the blend path inherits filletOpenPolyline\'s per-corner skip', () => {
-  const withStraight = [[0, 0, 0], [60, 0, 0], [130, 0, 0], [190, 55, 0], [265, 42, 0]]; // vertex 1 is a genuine straight-through
+  const withStraight = [[0, 0, 0], [60, 0, 0], [130, 0, 0], [190, 55, 0], [265, 42, 0]]; // vertex 1 is a straight-through
   const res = blendPolyline(withStraight, 9, { continuity: 2 });
   assert.equal(res.ok, true);
   assert.equal(res.cornerCount, 2, 'exactly the two real corners are blended; the collinear vertex is passed through');
   assert.equal(res.segments.filter((s) => s.type === 'blend').length, 2);
-  assert.equal(res.cornerCount, filletOpenPolyline(withStraight, 9).cornerCount, 'the same corner set the shipped fillet finds');
+  assert.equal(res.cornerCount, filletOpenPolyline(withStraight, 9).cornerCount, 'the same corner set filletOpenPolyline finds');
 });
 
-test('a radius too large for the rail is refused with the SAME maxSafeRadius the shipped fillet reports — and that clamped radius then blends successfully', () => {
+test('a radius too large for the rail is refused with the same maxSafeRadius filletOpenPolyline reports — and that clamped radius then blends successfully', () => {
   const tooBig = blendPolyline(RAIL, 200, { continuity: 2 });
   const shipped = filletOpenPolyline(RAIL, 200);
   assert.equal(tooBig.ok, false);
@@ -493,24 +470,24 @@ test('a radius too large for the rail is refused with the SAME maxSafeRadius the
   assert.equal(tooBig.maxSafeRadius, shipped.maxSafeRadius);
   assert.equal(tooBig.reason, shipped.reason);
   const clamped = blendPolyline(RAIL, tooBig.maxSafeRadius, { continuity: 2 });
-  assert.equal(clamped.ok, true, 'the reported clamp must actually be usable — an unretriable refusal would be a dead end');
+  assert.equal(clamped.ok, true, 'the reported clamp must be usable — an unretriable refusal would be a dead end');
 });
 
-test('BLEND MEETS BLEND across a vanishing straight run: at the tightest radius the shipped budget allows, the residual line is a fraction of a percent of the trim and BOTH of its seams are G2 — so the limiting case where it disappears entirely is G2 too', () => {
+test('blend meets blend across a vanishing straight run: at the tightest radius the trim budget allows, the residual line is a fraction of a percent of the trim and both of its seams are G2 — so the limiting case where it disappears entirely is G2 too', () => {
   // The interesting case is two corners so tight that the straight run
   // between them all but disappears. filletOpenPolyline's own zero-length
   // remainder omission (which would make two blends literally adjacent) is
   // effectively unreachable: its trim budget already refuses at
   // needed/edgeLen >= 1 - 1e-9, while the omission needs the remainder under
-  // 1e-9 ABSOLUTE — for any edge longer than 1 unit those two windows do not
+  // 1e-9 absolute — for any edge longer than 1 unit those two windows do not
   // overlap. So this tests the reachable limit instead, and the limit case
   // follows from it directly: the residual run is a straight segment, whose
   // curvature is exactly zero along its whole length, so shrinking it to
   // nothing cannot change what either seam measures.
   const pts = [[0, 0, 0], [80, 0, 0], [104, 34, 0], [190, 26, 0]];
   const tooBig = filletOpenPolyline(pts, 500);
-  assert.equal(tooBig.ok, false, 'fixture sanity: 500 really is too large for this rail');
-  const R = tooBig.maxSafeRadius; // the tightest the shipped budget will allow on this rail
+  assert.equal(tooBig.ok, false, 'fixture sanity: 500 is too large for this rail');
+  const R = tooBig.maxSafeRadius; // the tightest the trim budget allows on this rail
   const res = blendPolyline(pts, R, { continuity: 2 });
   assert.equal(res.ok, true, res.reason);
 
@@ -527,7 +504,7 @@ test('BLEND MEETS BLEND across a vanishing straight run: at the tightest radius 
   const runDir = unit3(sub3(line.b, line.a));
   assert.ok(dot3(unit3(rationalCurveDerivs(a.crv, 1, 1)[1]), runDir) > 1 - 1e-9, 'tangent match into the run');
   assert.ok(dot3(runDir, unit3(rationalCurveDerivs(b.crv, 0, 1)[1])) > 1 - 1e-9, 'tangent match out of the run');
-  // A straight run has curvature exactly 0 everywhere along it, so BOTH of
+  // A straight run has curvature exactly 0 everywhere along it, so both of
   // these vanishing is exactly the blend-meets-blend claim in the limit.
   assert.ok(Math.abs(curveGeometryAt(a.crv, 1, Z).kappa) < 1e-12 / R, 'curvature vanishes on the leaving side');
   assert.ok(Math.abs(curveGeometryAt(b.crv, 0, Z).kappa) < 1e-12 / R, 'curvature vanishes on the arriving side');
@@ -557,11 +534,9 @@ test('finiteness sweep: every control point and 33 sampled geometry readings are
   assert.equal(checked, 72);
 });
 
-// ===========================================================================
-// 9. CLOSED LOOPS AND AUTO-JOIN ("results auto-join")
-// ===========================================================================
+// 9. Closed loops and auto-join
 
-test('an IRREGULAR closed loop blends every corner including the wrap seam, and every seam is G2', () => {
+test('an irregular closed loop blends every corner including the wrap seam, and every seam is G2', () => {
   const R = 11;
   const res = blendPolyline(LOOP, R, { continuity: 2, closed: true });
   assert.equal(res.ok, true, res.reason);
@@ -582,11 +557,9 @@ test('an IRREGULAR closed loop blends every corner including the wrap seam, and 
   }
 });
 
-test('AUTO-JOIN: blendSegmentsToCurve composes the chain into ONE curve that is still G2 at every internal joint — measured on the COMPOSED curve, where the knot vector only reports C0', () => {
-  // This is the assertion the auto-join rule asks for ("results auto-join ... confirm
-  // it holds for the new paths"), and it is measured geometrically on
-  // purpose: joinCurvesC0 rescales each segment onto its own integer domain
-  // slot and stacks degree-multiplicity knots at each joint, so a PARAMETRIC
+test('auto-join: blendSegmentsToCurve composes the chain into one curve that is still G2 at every internal joint — measured on the composed curve, where the knot vector only reports C0', () => {
+  // Measured geometrically on purpose: joinCurvesC0 rescales each segment onto its own integer domain
+  // slot and stacks degree-multiplicity knots at each joint, so a parametric
   // check would report a discontinuity that is pure parametrization artifact.
   // Curvature is reparametrization-invariant, so it sees through that.
   const R = 12;
@@ -609,13 +582,13 @@ test('AUTO-JOIN: blendSegmentsToCurve composes the chain into ONE curve that is 
     worstDot = Math.min(worstDot, dot3(a.tangent, b.tangent));
   }
   assert.ok(worstDot > 1 - 1e-11, `composed G1: worst tangent dot ${worstDot}`);
-  // The residual is O(EPS * dkappa/ds), i.e. it is the curvature genuinely
-  // varying across the sampling offset, NOT a jump. Bounded here at 1e-4 of
+  // The residual is O(EPS * dkappa/ds), i.e. it is the curvature
+  // varying across the sampling offset, not a jump. Bounded here at 1e-4 of
   // the corner's own 1/R; the contrast below is four orders of magnitude
   // larger, which is what makes this bound meaningful.
   assert.ok(worstK < 1e-4 / R, `composed G2: worst curvature difference across a joint ${worstK} (1/R = ${1 / R})`);
 
-  // CONTRAST: compose the shipped G1 arc chain the same way and measure the
+  // Contrast: compose the G1 arc chain the same way and measure the
   // same thing. It jumps by essentially the full 1/R at every joint.
   const g1 = blendPolyline(RAIL, R, { continuity: 1 });
   const composedArc = blendSegmentsToCurve(g1.segments);
@@ -626,7 +599,7 @@ test('AUTO-JOIN: blendSegmentsToCurve composes the chain into ONE curve that is 
     const b = curveGeometryAt(composedArc, u + EPS, Z);
     arcWorst = Math.max(arcWorst, Math.abs(a.signedKappa - b.signedKappa));
   }
-  assert.ok(arcWorst > 0.99 / R, `CONTRAST: the arc chain's curvature jumps by ~1/R at each joint (measured ${arcWorst}, 1/R = ${1 / R})`);
+  assert.ok(arcWorst > 0.99 / R, `contrast: the arc chain's curvature jumps by ~1/R at each joint (measured ${arcWorst}, 1/R = ${1 / R})`);
 });
 
 test('blendSegmentsToCurve refuses an unknown segment type rather than silently dropping it', () => {
@@ -634,14 +607,12 @@ test('blendSegmentsToCurve refuses an unknown segment type rather than silently 
   assert.equal(blendSegmentsToCurve([]), null);
 });
 
-// ===========================================================================
-// 7. nearestCurveEndpoints — the default uA/uB picker a standalone Blend
-// COMMAND needs (blendCurves itself deliberately takes no position on this —
-// see its own header). Every claim here is checked against the real geometry
-// (curvePoint), never assumed from which candidate "looks" nearest.
-// ===========================================================================
+// 10. nearestCurveEndpoints — the default uA/uB picker a standalone Blend
+// command needs (blendCurves itself takes no position on this; see its
+// header). Every claim here is checked against curvePoint, never assumed
+// from which candidate looks nearest.
 
-test('nearestCurveEndpoints: picks the genuinely closest of the 4 end pairs — NEIGHBOR_A\'s END sits near NEIGHBOR_B\'s START, and is the correct answer among 4 real candidates, not a default guess', () => {
+test('nearestCurveEndpoints: picks the closest of the 4 end pairs — the end of NEIGHBOR_A sits near the start of NEIGHBOR_B, the correct answer among 4 candidates, not a default guess', () => {
   const pick = nearestCurveEndpoints(NEIGHBOR_A, NEIGHBOR_B);
   // Independently recompute all 4 real distances rather than trusting the
   // function's own internal candidate list.
@@ -652,7 +623,7 @@ test('nearestCurveEndpoints: picks the genuinely closest of the 4 end pairs — 
   const dStartStart = len3(sub3(aStart, bStart));
   const dStartEnd = len3(sub3(aStart, bEnd));
   const trueMin = Math.min(dEndStart, dEndEnd, dStartStart, dStartEnd);
-  assert.equal(dEndStart, trueMin, 'sanity: the A-end/B-start pair really is the closest of the 4 in this fixture');
+  assert.equal(dEndStart, trueMin, 'sanity: the A-end/B-start pair is the closest of the 4 in this fixture');
   assert.equal(pick.endA, 'end');
   assert.equal(pick.endB, 'start');
   assert.equal(pick.uA, 1);
@@ -660,9 +631,8 @@ test('nearestCurveEndpoints: picks the genuinely closest of the 4 end pairs — 
   assert.equal(pick.reverseA, false);
   assert.equal(pick.reverseB, false);
   assert.ok(Math.abs(pick.distance - dEndStart) < 1e-9, `reported distance ${pick.distance} should match the independently-measured ${dEndStart}`);
-  // This is exactly the (uA=1, uB=0) pair the existing manual blendCurves
-  // calls above already use — proof the picker reproduces the same, already
-  // camera-ready join a hand-chosen call would.
+  // This is the (uA=1, uB=0) pair the manual blendCurves calls above use, so
+  // the picker reproduces the join a hand-chosen call would.
   const manual = blendCurves(NEIGHBOR_A, 1, NEIGHBOR_B, 0, { continuity: 1 });
   const picked = blendCurves(NEIGHBOR_A, pick.uA, NEIGHBOR_B, pick.uB, { continuity: 1, reverseA: pick.reverseA, reverseB: pick.reverseB });
   assert.equal(picked.ok, true, picked.reason);
@@ -671,7 +641,7 @@ test('nearestCurveEndpoints: picks the genuinely closest of the 4 end pairs — 
   }
 });
 
-test('nearestCurveEndpoints: is symmetric under swapping which curve is "A" and which is "B" — the SAME physical pair is found, reverse flags mirrored', () => {
+test('nearestCurveEndpoints: is symmetric under swapping which curve is "A" and which is "B" — the same physical pair is found, reverse flags mirrored', () => {
   const ab = nearestCurveEndpoints(NEIGHBOR_A, NEIGHBOR_B);
   const ba = nearestCurveEndpoints(NEIGHBOR_B, NEIGHBOR_A);
   assert.equal(ba.endA, ab.endB);
@@ -679,26 +649,26 @@ test('nearestCurveEndpoints: is symmetric under swapping which curve is "A" and 
   assert.ok(Math.abs(ba.distance - ab.distance) < 1e-9);
 });
 
-test('nearestCurveEndpoints: the OTHER 3 end-pair combinations are exercised too, not just one lucky fixture — a curve whose START is nearest, and one whose far END is nearest', () => {
-  // A short curve placed so its own START is genuinely nearest NEIGHBOR_B's
+test('nearestCurveEndpoints: two more end-pair combinations are exercised — a curve whose start is nearest, and one whose far end is nearest', () => {
+  // A short curve placed so its own start is nearest NEIGHBOR_B's
   // start — deliberately laid out with its END far away.
   const nearAtStart = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[24, 6, 2, 1], [-400, -300, -200, 1]] };
   const pick1 = nearestCurveEndpoints(nearAtStart, NEIGHBOR_B);
   assert.equal(pick1.endA, 'start');
-  assert.equal(pick1.reverseA, true, 'a blend leaving from A\'s own START must travel backward to stay on A\'s live remainder');
+  assert.equal(pick1.reverseA, true, 'a blend leaving from A\'s own start must travel backward to stay on A\'s live remainder');
   assert.equal(pick1.endB, 'start');
   assert.equal(pick1.reverseB, false);
 
-  // A curve whose END is nearest NEIGHBOR_B's own far END.
+  // A curve whose end is nearest NEIGHBOR_B's own far end.
   const bFarEnd = curvePoint(NEIGHBOR_B, 1);
   const nearAtOtherEnd = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[900, 900, 900, 1], [bFarEnd[0] + 3, bFarEnd[1] - 2, bFarEnd[2] + 1, 1]] };
   const pick2 = nearestCurveEndpoints(nearAtOtherEnd, NEIGHBOR_B);
   assert.equal(pick2.endA, 'end');
   assert.equal(pick2.reverseA, false);
   assert.equal(pick2.endB, 'end');
-  assert.equal(pick2.reverseB, true, 'a blend arriving at B\'s own END must have come from the backward direction to stay on B\'s live remainder');
+  assert.equal(pick2.reverseB, true, 'a blend arriving at B\'s own end must have come from the backward direction to stay on B\'s live remainder');
 
-  // Both non-degenerate results actually blend, at every continuity order.
+  // Both non-degenerate results blend, at every continuity order.
   for (const [pick, crvA] of [[pick1, nearAtStart], [pick2, nearAtOtherEnd]]) {
     for (const k of [1, 2, 3]) {
       const r = blendCurves(crvA, pick.uA, NEIGHBOR_B, pick.uB, { continuity: k, reverseA: pick.reverseA, reverseB: pick.reverseB });
@@ -709,24 +679,21 @@ test('nearestCurveEndpoints: the OTHER 3 end-pair combinations are exercised too
 
 test('nearestCurveEndpoints: reports a real positive distance, never coincident by construction, for two ordinary separated curves', () => {
   const pick = nearestCurveEndpoints(TWIST_A, TWIST_B);
-  assert.ok(pick.distance > 1, `sanity: these two fixtures are genuinely apart (${pick.distance}), not touching`);
+  assert.ok(pick.distance > 1, `sanity: these two fixtures are apart (${pick.distance}), not touching`);
   assert.ok(Number.isFinite(pick.distance));
 });
 
-// ===========================================================================
-// 8. nearestEndpointToPoint — the per-curve, CLICK-DRIVEN sibling. Unlike
-// section 7 above (a JOINT search across two curves), this is a LOCAL
-// decision: one curve, one point, no visibility into any second curve at
-// all. Every test here uses NEIGHBOR_A — a genuinely CURVED (rational,
-// non-planar) fixture, never a straight line, so "picks the far end" is
-// proven against a real curve evaluation (curvePoint), not a coincidence
-// of linear interpolation.
-// ===========================================================================
+// 11. nearestEndpointToPoint — the per-curve, click-driven sibling. Unlike
+// section 10 (a joint search across two curves), this is a local decision:
+// one curve, one point, no visibility into any second curve. Every test here
+// uses NEIGHBOR_A — a curved (rational) fixture, never a straight line, so
+// "picks the far end" is checked against curvePoint, not a coincidence of
+// linear interpolation.
 
-test('nearestEndpointToPoint: on a real curved (rational) fixture, a click near the TRUE end (curvePoint at uMax) picks that end, with the exact analytic point and a genuinely small distance', () => {
+test('nearestEndpointToPoint: on a curved (rational) fixture, a click near the true end (curvePoint at uMax) picks that end, with the exact analytic point and a small distance', () => {
   const trueEnd = curvePoint(NEIGHBOR_A, 1);
-  // Click lands a few units off the exact curve point — proving this reads
-  // real curve geometry (curvePoint at u=0 and u=1), not just "whichever
+  // Click lands a few units off the exact curve point, so this checks that
+  // it reads curve geometry (curvePoint at u=0 and u=1), not just "whichever
   // control point index is smaller."
   const click = [trueEnd[0] + 2, trueEnd[1] - 1, trueEnd[2] + 1.5];
   const pick = nearestEndpointToPoint(NEIGHBOR_A, click);
@@ -736,7 +703,7 @@ test('nearestEndpointToPoint: on a real curved (rational) fixture, a click near 
   assert.ok(pick.distance < 5, `distance to a click a few units off the true end should stay small (${pick.distance})`);
 });
 
-test('nearestEndpointToPoint: a click near the TRUE start picks the start instead, on the SAME curved fixture — proving both ends are reachable, not a hardcoded bias', () => {
+test('nearestEndpointToPoint: a click near the true start picks the start instead, on the same curved fixture — proving both ends are reachable, not a hardcoded bias', () => {
   const trueStart = curvePoint(NEIGHBOR_A, 0);
   const click = [trueStart[0] - 3, trueStart[1] + 2, trueStart[2] - 0.5];
   const pick = nearestEndpointToPoint(NEIGHBOR_A, click);
@@ -745,43 +712,38 @@ test('nearestEndpointToPoint: a click near the TRUE start picks the start instea
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(pick.point[k] - trueStart[k]) < 1e-9);
 });
 
-test('THE ACTUAL DISCRIMINATING PROOF: nearestEndpointToPoint picks the FAR end when clicked there, even though that end is the globally-nearest-pair answer, and the OPPOSITE (locally correct) end when the click says so — nearestCurveEndpoints alone would always answer the FIRST way, never the second', () => {
-  // Confirm, independently, what nearestCurveEndpoints (the JOINT/global
-  // picker) says about this exact pair first: section 7's own test already
-  // established NEIGHBOR_A's END is the globally-closest-to-NEIGHBOR_B
-  // answer. Re-derive it here too, so this test does not depend on reading
-  // that one.
+test('nearestEndpointToPoint follows the click: the globally-nearest end when clicked there, and the opposite end when the click says so — nearestCurveEndpoints alone would always answer the first way, never the second', () => {
+  // First confirm what nearestCurveEndpoints (the joint/global picker) says
+  // about this pair: the end of NEIGHBOR_A is the one closest to NEIGHBOR_B.
+  // Re-derived here so this test stands alone.
   const joint = nearestCurveEndpoints(NEIGHBOR_A, NEIGHBOR_B);
-  assert.equal(joint.endA, 'end', 'sanity: the joint/global search really does prefer NEIGHBOR_A\'s END for this pair');
+  assert.equal(joint.endA, 'end', 'sanity: the joint/global search prefers the end of NEIGHBOR_A for this pair');
 
   const trueEnd = curvePoint(NEIGHBOR_A, 1);
   const trueStart = curvePoint(NEIGHBOR_A, 0);
 
-  // Direction 1: click lands near the END — genuinely far from
-  // NEIGHBOR_B too (NEIGHBOR_B's own nearest point to A sits near A's own
-  // END already, so a click there is unavoidably "near" that global
-  // answer as well) — the LOCAL and GLOBAL answers happen to agree here,
-  // which is exactly why direction 2 below is the real proof.
+  // Direction 1: a click near the end. NEIGHBOR_B's nearest point to A sits
+  // near A's end, so the local and global answers agree here; direction 2
+  // is the discriminating case.
   const clickNearEnd = [trueEnd[0] + 1, trueEnd[1] + 1, trueEnd[2]];
   const pickEnd = nearestEndpointToPoint(NEIGHBOR_A, clickNearEnd);
   assert.equal(pickEnd.end, 'end');
 
-  // Direction 2 — THE discriminating case: click lands near A's own START,
-  // which sits at (-60,-20,5), nowhere near NEIGHBOR_B at all (NEIGHBOR_B's
-  // own control points are all in the +30..+130 range) — a joint/global
-  // search would never choose this end for this pair (confirmed above:
-  // joint.endA === 'end', never 'start'), yet a click landing there must
-  // still resolve to 'start', because the decision is local to THIS click
-  // on THIS curve, with zero visibility into where NEIGHBOR_B is.
+  // Direction 2, the discriminating case: a click near A's own start, which
+  // sits at (-60,-20,5), far from NEIGHBOR_B (whose control points are all
+  // in the +30..+130 range). A joint/global search never chooses this end
+  // for this pair (joint.endA === 'end'), yet a click there must resolve to
+  // 'start', because the decision is local to this click on this curve,
+  // with no visibility into where NEIGHBOR_B is.
   const clickNearStart = [trueStart[0] - 2, trueStart[1] + 1, trueStart[2] + 1];
   const pickStart = nearestEndpointToPoint(NEIGHBOR_A, clickNearStart);
-  assert.equal(pickStart.end, 'start', 'a click near the curve\'s own START must win locally, even though the joint/global search never picks this end for this pair');
-  assert.notEqual(pickStart.end, joint.endA, 'the click-driven answer genuinely DIFFERS from the joint/global answer here — that difference is the whole point of this primitive');
+  assert.equal(pickStart.end, 'start', 'a click near the curve\'s own start must win locally, even though the joint/global search never picks this end for this pair');
+  assert.notEqual(pickStart.end, joint.endA, 'the click-driven answer differs from the joint/global answer here, which is the purpose of this primitive');
 
   // And the reverse-flag rule (documented on nearestCurveEndpoints, and
   // re-derived here per-end rather than per-pair) generalizes correctly to
   // an arbitrarily-chosen end: reverse iff the chosen end is this curve's
-  // own START — true regardless of which end a JOINT search would have
+  // own start, regardless of which end a joint search would have
   // preferred.
   const reverseForStart = pickStart.end === 'start';
   const reverseForEnd = pickEnd.end === 'start';

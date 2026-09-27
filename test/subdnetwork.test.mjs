@@ -7,7 +7,7 @@ import { makeLine, makeCircle } from '../kernel/primitives.mjs';
 import { globalCurveInterp } from '../kernel/interpolate.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
 
-// ── INVARIANTS, recomputed from raw {vertices, faces}. Never asked of
+// Invariants, recomputed from raw {vertices, faces}. Never asked of
 // buildTopology: a check that shares the code under test's own idea of what
 // an edge is cannot catch the two of them being wrong together.
 function undirectedEdgeCounts(cage) {
@@ -73,7 +73,7 @@ function assertWellFormed(cage, label) {
   return refined;
 }
 
-// ── FIXTURES. Rails are real curves throughout — makeLine builds a genuine
+// Fixtures. Rails are real curves throughout — makeLine builds a real
 // clamped degree-1 NurbsCrv, and at least one fixture below is a real
 // degree-2 interpolation so a whole class of parametrization bug cannot
 // pass unnoticed on straight lines alone.
@@ -85,9 +85,9 @@ function yJunction(len = 60) {
 function crossJunction(len = 60) {
   return [[1, 0], [0, 1], [-1, 0], [0, -1]].map(([x, y]) => makeLine([0, 0, 0], [len * x, len * y, 0]));
 }
-// A branch whose end lands NEAR (0.8mm off — well inside a 2.5mm weld
+// A branch whose end lands near (0.8mm off — well inside a 2.5mm weld
 // tolerance, well outside JOIN_TOLERANCE) the host's own interior. This is
-// the case a student can actually produce: this app has endpoint snapping
+// the case a user produces: this app has endpoint snapping
 // but no on-curve snap, so a T is never exact.
 function tJunction() {
   return [makeLine([-60, 0, 0], [60, 0, 0]), makeLine([5, 0.8, 0], [5, 60, 0])];
@@ -100,8 +100,7 @@ function awkwardJunction() {
   ];
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// DETECTION
+// Detection
 
 test('detectPipeJunctions: three rails sharing an endpoint are one 3-way junction in one component', () => {
   const rails = yJunction();
@@ -117,11 +116,11 @@ test('detectPipeJunctions: three rails sharing an endpoint are one 3-way junctio
   assert.equal(det.tolerance, R * 0.5);
 });
 
-test('detectPipeJunctions: a T SPLITS the host, and the split lands at the real projection', () => {
+test('detectPipeJunctions: a T splits the host, and the split lands at the real projection', () => {
   const [host, branch] = tJunction();
   const det = detectPipeJunctions([host, branch], { radius: R });
   assert.equal(det.ok, true);
-  // The host genuinely became two rails; the branch is untouched.
+  // The host became two rails; the branch is untouched.
   assert.equal(det.rails.length, 3);
   assert.equal(det.splits.length, 1);
   assert.equal(det.splits[0].rail, 0);
@@ -130,12 +129,12 @@ test('detectPipeJunctions: a T SPLITS the host, and the split lands at the real 
   // The touch point is the branch endpoint's own foot on the host: x = 5.
   const cut = curvePoint(host, det.splits[0].params[0]);
   assert.ok(Math.abs(cut[0] - 5) < 1e-6, `split at x=${cut[0]}, expected 5`);
-  // And the branch point is now a genuine 3-way meeting, not a 2-way plus a
+  // And the branch point is a real 3-way meeting, not a 2-way plus a
   // dangling end.
   assert.equal(det.junctions.length, 1);
   assert.equal(det.junctions[0].arity, 3);
   assert.equal(det.components.length, 1);
-  // The two host pieces really do cover the original, end to end.
+  // The two host pieces do cover the original, end to end.
   const ends = det.rails.slice(0, 2).map((c) => [curvePoint(c, c.knots[0]), curvePoint(c, c.knots[c.knots.length - 1])]);
   assert.ok(Math.abs(ends[0][0][0] - -60) < 1e-9);
   assert.ok(Math.abs(ends[0][1][0] - 5) < 1e-6);
@@ -148,7 +147,7 @@ test('detectPipeJunctions: D1 — splitting never touches the caller\'s own rail
   const before = JSON.stringify(rails);
   const det = detectPipeJunctions(rails, { radius: R });
   assert.equal(JSON.stringify(rails), before, 'input rails byte-identical after detection');
-  // and the returned rails are genuinely different objects, not aliases
+  // and the returned rails are different objects, not aliases
   assert.ok(det.rails.every((c) => c !== rails[0] && c !== rails[1]));
   subdPipeNetwork(rails, { radius: R, facets: 8, segments: 3 });
   assert.equal(JSON.stringify(rails), before, 'input rails byte-identical after assembly too');
@@ -168,10 +167,9 @@ test('detectPipeJunctions: two runs that never meet are two components', () => {
   assert.equal(det.junctions[0].arity, 2);
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// ASSEMBLY — structure
+// Assembly — structure
 
-test('subdPipeNetwork: a 3-way endpoint junction welds into ONE cage of the right shape', () => {
+test('subdPipeNetwork: a 3-way endpoint junction welds into one cage of the right shape', () => {
   const net = subdPipeNetwork(yJunction(), { radius: R, facets: 8, segments: 3 });
   assert.equal(net.ok, true);
   assert.equal(net.cages.length, 1);
@@ -189,7 +187,7 @@ test('subdPipeNetwork: a 3-way endpoint junction welds into ONE cage of the righ
   assert.equal(cage.junctions[0].arity, 3);
 });
 
-test('subdPipeNetwork: a T-junction welds into one cage, with the host genuinely split into two arms', () => {
+test('subdPipeNetwork: a T-junction welds into one cage, with the host split into two arms', () => {
   const net = subdPipeNetwork(tJunction(), { radius: R, facets: 8, segments: 3 });
   assert.equal(net.ok, true);
   assert.equal(net.cages.length, 1);
@@ -213,7 +211,7 @@ test('subdPipeNetwork: a 4-way coplanar cross welds into one cage with chi = 2 -
   assert.equal(cage.junctions[0].arity, 4);
 });
 
-test('subdPipeNetwork: a deliberately awkward junction — uneven angles, out-of-plane tilts, different lengths, one genuinely curved rail', () => {
+test('subdPipeNetwork: a deliberately awkward junction — uneven angles, out-of-plane tilts, different lengths, one curved rail', () => {
   const net = subdPipeNetwork(awkwardJunction(), { radius: R, facets: 10, segments: 4 });
   assert.equal(net.ok, true);
   assert.equal(net.cages.length, 1);
@@ -223,7 +221,7 @@ test('subdPipeNetwork: a deliberately awkward junction — uneven angles, out-of
   assert.equal(nakedEdgeCount(cage), 3 * 10);
 });
 
-test('subdPipeNetwork: capping every free end gives a genuinely CLOSED solid', () => {
+test('subdPipeNetwork: capping every free end gives a closed solid', () => {
   for (const cap of ['flat', 'round']) {
     const net = subdPipeNetwork(yJunction(), { radius: R, facets: 8, segments: 3, capStart: cap, capEnd: cap });
     assert.equal(net.ok, true, `${cap} cap`);
@@ -234,12 +232,12 @@ test('subdPipeNetwork: capping every free end gives a genuinely CLOSED solid', (
   }
 });
 
-test('subdPipeNetwork: a junction-facing end is built with cap NONE whatever the network cap style is', () => {
-  // A 'round' cap returns an EMPTY rim (correctly — the ring under a dome is
-  // interior), so a junction end that honoured the network's own style would
-  // have nothing to weld. This is the exact case that proves the per-END
-  // override is real: the SAME network builds and welds with round caps,
-  // and the round caps genuinely landed on the three FREE ends.
+test('subdPipeNetwork: a junction-facing end is built with cap none whatever the network cap style is', () => {
+  // A 'round' cap returns an empty rim (correctly — the ring under a dome is
+  // interior), so a junction end that honored the network's own style would
+  // have nothing to weld. This case shows the per-end override at work:
+  // the same network builds and welds with round caps,
+  // and the round caps landed on the three free ends.
   const net = subdPipeNetwork(yJunction(), { radius: R, facets: 8, segments: 3, capEnd: 'round', capStart: 'round' });
   assert.equal(net.ok, true);
   const cage = net.cages[0];
@@ -254,10 +252,9 @@ test('subdPipeNetwork: a junction-facing end is built with cap NONE whatever the
   assert.equal(apexes.size, 3, 'exactly one dome apex per free end');
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// ORDER INDEPENDENCE — a symmetric junction is where an exact tie lives.
+// Order independence — a symmetric junction is where an exact tie lives.
 
-test('subdPipeNetwork: a SYMMETRIC junction is order-independent — every input permutation gives the same cage', () => {
+test('subdPipeNetwork: a symmetric junction is order-independent — every input permutation gives the same cage', () => {
   const rails = yJunction();
   const sig = (n) => {
     const c = n.cages[0];
@@ -288,10 +285,9 @@ test('subdPipeNetwork: a symmetric 4-way cross is order-independent too', () => 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
 // D2 / D3
 
-test('subdPipeNetwork: D2 — two disconnected runs are TWO cages, not one', () => {
+test('subdPipeNetwork: D2 — two disconnected runs are two cages, not one', () => {
   const rails = [
     makeLine([0, 0, 0], [50, 0, 0]),
     makeLine([50, 0, 0], [50, 50, 0]),
@@ -302,7 +298,7 @@ test('subdPipeNetwork: D2 — two disconnected runs are TWO cages, not one', () 
   assert.equal(net.cages.length, 2);
   assert.deepEqual(net.cages[0].sourceRails, [0, 1]);
   assert.deepEqual(net.cages[1].sourceRails, [2]);
-  // The 2-way junction was CONCATENATED, not bridged: the first cage is ONE
+  // The 2-way junction was concatenated, not bridged: the first cage is one
   // continuous tube along one longer rail, so it has no hub at all.
   assert.equal(net.cages[0].railCount, 1);
   assert.equal(net.cages[0].junctions.length, 0);
@@ -314,7 +310,7 @@ test('subdPipeNetwork: D2 — two disconnected runs are TWO cages, not one', () 
   }
 });
 
-test('subdPipeNetwork: D3 — welding OFF gives N independent tubes and no junctions', () => {
+test('subdPipeNetwork: D3 — welding off gives N independent tubes and no junctions', () => {
   const rails = crossJunction();
   const net = subdPipeNetwork(rails, { radius: R, facets: 8, segments: 3, weld: false });
   assert.equal(net.ok, true);
@@ -329,7 +325,7 @@ test('subdPipeNetwork: D3 — welding OFF gives N independent tubes and no junct
     // An open cylinder: two boundary circles, chi = 0.
     assert.equal(eulerCharacteristic(cage), 0);
     // Byte-identical to a bare subdPipeCage of that same rail — welding off
-    // really does mean "nothing else happened".
+    // does mean "nothing else happened".
     const bare = subdPipeCage(rails[i], { radius: R, facets: 8, segments: 3, capStart: 'none', capEnd: 'none' });
     assert.equal(JSON.stringify(cage.vertices), JSON.stringify(bare.vertices));
     assert.equal(JSON.stringify(cage.faces), JSON.stringify(bare.faces));
@@ -352,14 +348,13 @@ test('subdPipeNetwork: the arity report names every junction, of every kind', ()
   assertWellFormed(net.cages[0], 'T plus elbow');
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// THE SHALLOW-ANGLE FINDING — measured, not assumed.
+// Shallow angles — measured, not assumed.
 
 test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried inside a neighboring tube', () => {
   // Two arms 60 degrees apart plus a third out of their way. At 60 degrees
   // two radius-5 cylinders interpenetrate out to 5/tan(30) = 8.66mm, so a
   // fixed 0.62*radius = 3.10mm pull-back leaves each rim deep inside the
-  // other tube. Measured directly: how far inside the OTHER arm's solid does
+  // other tube. Measured directly: how far inside the other arm's solid does
   // this arm's rim sit?
   const a = (60 * Math.PI) / 180;
   const dirs = [[1, 0, 0], [Math.cos(a), Math.sin(a), 0], [0, 0, -1]];
@@ -379,7 +374,7 @@ test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried
       if (Math.abs(along(v, dirs[i]) - inset) > 1e-6 || Math.abs(offAxis(v, dirs[i]) - R) > 1e-6) continue;
       for (let j = 0; j < 3; j++) {
         if (j === i) continue;
-        if (along(v, dirs[j]) < inset) continue; // only where arm j's tube genuinely exists
+        if (along(v, dirs[j]) < inset) continue; // only where arm j's tube exists
         worst = Math.max(worst, R - offAxis(v, dirs[j]));
       }
     }
@@ -388,20 +383,56 @@ test('subdPipeNetwork: the inset is angle-aware, so no arm\'s rim ends up buried
   assertWellFormed(cage, '60-degree junction');
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// REFUSALS — each by name, none producing a wrong result quietly.
+// Refusals — each by name, none producing a wrong result quietly.
 
-test('subdPipeNetwork: a genuinely three-dimensional junction is REFUSED by name, not mis-ordered', () => {
-  // The +X/-X/+Y/-Y/+Z frame corner: no single plane orders these arms, and
-  // this hub orders around one plane.
+test('subdPipeNetwork: a three-dimensional junction is built on the hull; the ring alone refuses it by name', () => {
+  // The +X/-X/+Y/-Y/+Z frame corner: no single plane orders these arms.
   const rails = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1]].map((d) => makeLine([0, 0, 0], d.map((v) => v * 60)));
+  const ring = subdPipeNetwork(rails, { radius: R, facets: 8, segments: 3, junction: 'ring' });
+  assert.equal(ring.ok, false);
+  assert.match(ring.reason, /three-dimensional/);
+  assert.ok(ring.planarityResidual > 0.25);
   const net = subdPipeNetwork(rails, { radius: R, facets: 8, segments: 3 });
-  assert.equal(net.ok, false);
-  assert.match(net.reason, /three-dimensional/);
-  assert.ok(net.planarityResidual > 0.25);
+  assert.equal(net.ok, true, net.reason);
+  assert.equal(net.cages.length, 1);
+  const cage = net.cages[0];
+  assert.equal(cage.junctions[0].spatial, true);
+  assertWellFormed(cage, 'frame corner on the hull');
+  // Open only at the five free ends: 5 rims of 8 edges.
+  assert.equal(nakedEdgeCount(cage), 5 * 8);
+  // A sphere with five holes: chi = 2 - 5.
+  assert.equal(eulerCharacteristic(cage), 2 - 5);
 });
 
-test('subdPipeNetwork: two arms leaving a junction at a very shallow angle are REFUSED by name', () => {
+test('subdPipeNetwork: a tetrahedral four and a Kelvin cell edge loop close on hull junctions', () => {
+  const t = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+  const rails = t.map((d) => makeLine([0, 0, 0], d.map((v) => v * 40)));
+  const net = subdPipeNetwork(rails, { radius: R, facets: 6, segments: 2 });
+  assert.equal(net.ok, true, net.reason);
+  assert.equal(net.cages[0].junctions[0].spatial, true);
+  assertWellFormed(net.cages[0], 'tetrahedral four');
+  assert.equal(eulerCharacteristic(net.cages[0]), 2 - 4);
+  // 'hull' at every junction: a planar Y too.
+  const y = [0, 1, 2].map((k) => makeLine([0, 0, 0], [60 * Math.cos(2 * Math.PI * k / 3), 60 * Math.sin(2 * Math.PI * k / 3), 0]));
+  const hy = subdPipeNetwork(y, { radius: R, facets: 6, segments: 2, junction: 'hull' });
+  assert.equal(hy.ok, true, hy.reason);
+  assert.equal(hy.cages[0].junctions[0].spatial, true);
+  assertWellFormed(hy.cages[0], 'planar Y on the hull');
+  // Two tetrahedral nodes joined: a closed junction pair with shared strut.
+  const a = [0, 0, 0], b = [40, 40, 40];
+  const two = [
+    makeLine(a, b),
+    ...[[1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map((d) => makeLine(a, d.map((v) => v * 40))),
+    ...[[-1, 1, 1], [1, -1, 1], [1, 1, -1]].map((d) => makeLine(b, b.map((v, i) => v + d[i] * 40))),
+  ];
+  const n2 = subdPipeNetwork(two, { radius: R, facets: 6, segments: 2 });
+  assert.equal(n2.ok, true, n2.reason);
+  assert.equal(n2.cages[0].junctions.length, 2);
+  assertWellFormed(n2.cages[0], 'two tetrahedral nodes');
+  assert.equal(eulerCharacteristic(n2.cages[0]), 2 - 6);
+});
+
+test('subdPipeNetwork: two arms leaving a junction at a very shallow angle are refused by name', () => {
   const rails = [
     makeLine([0, 0, 0], [60, 0, 0]),
     makeLine([0, 0, 0], [60, 6, 0]), // ~5.7 degrees away
@@ -413,7 +444,7 @@ test('subdPipeNetwork: two arms leaving a junction at a very shallow angle are R
   assert.ok(net.armAngle < (15 * Math.PI) / 180);
 });
 
-test('subdPipeNetwork: a rail shorter than the insets its own two junctions demand is REFUSED by name', () => {
+test('subdPipeNetwork: a rail shorter than the insets its own two junctions demand is refused by name', () => {
   const rails = [
     makeLine([0, 0, 0], [8, 0, 0]), // the short middle
     makeLine([0, 0, 0], [0, 40, 0]), makeLine([0, 0, 0], [0, -40, 0]),
@@ -424,7 +455,7 @@ test('subdPipeNetwork: a rail shorter than the insets its own two junctions dema
   assert.match(net.reason, /leaving no tube in the middle/);
 });
 
-test('subdPipeNetwork: a single rail that closes back on itself is REFUSED by name', () => {
+test('subdPipeNetwork: a single rail that closes back on itself is refused by name', () => {
   // A closed rail's own two rings land on top of each other, and nothing
   // here welds a tube to itself.
   const net = subdPipeNetwork([makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 40)], { radius: R, facets: 8, segments: 6 });
@@ -432,7 +463,7 @@ test('subdPipeNetwork: a single rail that closes back on itself is REFUSED by na
   assert.match(net.reason, /closes back on itself/);
 });
 
-test('subdPipeNetwork: several rails closing into a loop are REFUSED by name too', () => {
+test('subdPipeNetwork: several rails closing into a loop are refused by name too', () => {
   const loop = [
     makeLine([0, 0, 0], [60, 0, 0]),
     makeLine([60, 0, 0], [60, 60, 0]),
@@ -443,9 +474,9 @@ test('subdPipeNetwork: several rails closing into a loop are REFUSED by name too
   assert.match(net.reason, /closing a loop|closed loop|closes back on itself/);
 });
 
-test('detectPipeJunctions: a branch landing on a rail in two places at once is REFUSED, not guessed', () => {
+test('detectPipeJunctions: a branch landing on a rail in two places at once is refused, not guessed', () => {
   // A host that doubles back on itself, and a branch stopping between its
-  // two legs: the closest point is genuinely two different places at once,
+  // two legs: the closest point is two different places at once,
   // and neither is near an end of the host, so there is no single parameter
   // to split it at. Split arbitrarily and the network would weld to
   // whichever leg the search happened to settle on.
@@ -456,7 +487,6 @@ test('detectPipeJunctions: a branch landing on a rail in two places at once is R
   assert.match(det.reason, /two genuinely different places/);
 });
 
-// ─────────────────────────────────────────────────────────────────────────
 // The bend-radius clamp, reused rather than rebuilt.
 
 test('subdPipeNetwork: a rail tighter than the requested tube radius clamps it, and says so', () => {
@@ -477,8 +507,8 @@ test('subdPipeNetwork: a rail tighter than the requested tube radius clamps it, 
 
 test('subdPipeNetwork: the weld tolerance is a real dial — a gap welds or does not, by fraction', () => {
   // A branch stopping 3mm short of a host's end. At the default 0.5 fraction
-  // of a radius-5 tube that is inside the 2.5mm tolerance... it is not, so it
-  // stays two components; raising the fraction welds it.
+  // of a radius-5 tube the tolerance is 2.5mm, so the gap stays two
+  // components; raising the fraction welds it.
   const rails = [makeLine([0, 0, 0], [50, 0, 0]), makeLine([53, 0, 0], [53, 50, 0])];
   const apart = subdPipeNetwork(rails, { radius: R, facets: 8, segments: 3 });
   assert.equal(apart.ok, true);

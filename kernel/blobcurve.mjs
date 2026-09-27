@@ -1,25 +1,23 @@
-// A CLOSED OUTLINE FROM A HANDFUL OF DISCS.
+// A closed outline from a handful of discs.
 //
-// Draw two or three circles that overlap and the contour around them is a
+// Draw two or three overlapping circles and the contour around them is a
 // single soft shape — the crotch where they meet is rounded rather than
-// notched, and a small gap is bridged. It is the cheapest way to get an organic
-// closed outline, and this app wants one because Puff turns a closed outline
-// into a solid.
+// notched, and a small gap is bridged. It is the cheapest way to get an
+// organic closed outline, which Puff turns into a solid.
 //
-// ⚠⚠ THE BLEND IS THE FUSE'S, NOT A SECOND ONE. `solidwrap.mjs` already carries
-// this app's one smooth minimum, and its Blend row already makes a promise a
-// reader has learned: "two surfaces a gap g apart meet at Blend g". Inventing a
-// different 2D blend here — a metaball field summed to an iso level, which is
-// the usual way — would mean the same word meant two things in two panels, and
-// the sibling app it was copied from has to bisect an iso level per frame to
-// keep its own promise. Folding the same `smoothMinPoly` over 2D disc distances
-// keeps the promise by construction, and it was measured to hold: two r = 10
-// discs bridge at a gap of exactly 2.00, 5.00 and 10.00mm at Blend 2, 5 and 10.
+// The blend is the fuse's, not a second one. `solidwrap.mjs` carries this
+// app's one smooth minimum, and its Blend row promises "two surfaces a gap g
+// apart meet at Blend g". A different 2D blend here — a metaball field summed
+// to an iso level, the usual way — would give the same word two meanings, and
+// keeping that promise would need a per-frame bisection of the iso level.
+// Folding the same `smoothMinPoly` over 2D disc distances keeps the promise by
+// construction: two r = 10 discs bridge at a gap of exactly 2.00, 5.00 and
+// 10.00mm at Blend 2, 5 and 10.
 //
 // The contour is marching squares over a grid, then every vertex is pushed onto
 // the true zero set by Newton steps along the gradient — so the grid decides
-// where the contour is FOUND and not where it SITS, and its resolution stops
-// being visible in the result.
+// where the contour is found and not where it sits, and its resolution does
+// not show in the result.
 import { smoothMinPoly, fuseBlendRadius } from './solidwrap.mjs';
 
 /* The signed distance to a disc, and the fold that joins them. Exact outside
@@ -34,29 +32,28 @@ export function blobFieldAt(discs, k, x, y) {
   return acc;
 }
 
-/* ⚠⚠ A PER-BALL MELT, AND THE ORDER IS THE MECHANISM. Each ball may carry its
+/* A per-ball melt, and the fold order is the mechanism. Each ball may carry its
    own melt (element 3; null or absent means "follow the global"), and what two
-   balls should do where they meet is governed by the SOFTER of the two — a hard
-   ball stays hard against anything.
-   Folding in DECREASING melt makes that true for free: by the time ball i is
-   folded in, every ball already in the accumulator has a melt at least as large,
-   so the step's own k IS min(b_i, b_j) for every pair it stands for. Measured,
-   bridging then happens at min(b_i,b_j) equal to the gap to within 1.1e-3mm
-   across mixed settings.
-   Three spellings were measured and rejected. A per-ball MULTIPLIER misses the
-   bridge by +100% at 0.5 and +400% at 0.2. A running min(k) lets a hard ball
-   130mm away, merely listed between two others, pull them from one piece into
-   two. A partition-of-unity k breaks scale neutrality by 1.0937x.
-   ⚠ AND THE SORT IS CONDITIONAL. smoothMinPoly is not associative, so reordering
-   the balls moves the outline — measured at 1.46mm today. Sorting fixes that
-   (0.00mm), but applying it unconditionally would move every blob already saved
-   by up to 3.2mm. It runs only when the melts actually differ, which is exactly
-   when it changes anything, so an untouched document stays bit-identical. */
+   balls do where they meet is governed by the softer of the two — a hard ball
+   stays hard against anything.
+   Folding in decreasing melt makes that hold: by the time ball i is folded in,
+   every ball already in the accumulator has a melt at least as large, so the
+   step's k is min(b_i, b_j) for every pair it stands for. Bridging then
+   happens at min(b_i,b_j) equal to the gap to within 1.1e-3mm across mixed
+   settings.
+   Alternatives that fail: a per-ball multiplier misses the bridge by +100% at
+   0.5 and +400% at 0.2; a running min(k) lets a hard ball 130mm away, merely
+   listed between two others, pull them from one piece into two; a
+   partition-of-unity k breaks scale neutrality by 1.0937x.
+   The sort is conditional. smoothMinPoly is not associative, so reordering the
+   balls moves the outline, and sorting unconditionally would move saved blobs
+   by up to 3.2mm. It runs only when the melts differ, which is exactly when it
+   changes anything, so a blob with uniform melt is bit-identical. */
 export function blobFieldMixed(discs, k, ks, x, y) {
   let acc = Infinity;
   for (let i = 0; i < discs.length; i += 1) {
     const d = Math.hypot(x - discs[i][0], y - discs[i][1]) - discs[i][2];
-    // ks[i] IS the pairwise minimum, because the fold order guarantees every
+    // ks[i] is the pairwise minimum, because the fold order guarantees every
     // ball already in `acc` has a melt at least this large.
     acc = i === 0 ? d : smoothMinPoly(acc, d, ks[i]);
   }
@@ -64,7 +61,7 @@ export function blobFieldMixed(discs, k, ks, x, y) {
 }
 
 /* The per-ball melt each ball actually gets: its own if it has one, otherwise
-   the global — and never MORE than the global, because the minimum governs and a
+   the global — and never more than the global, because the minimum governs and a
    ball asking for more than the set allows would be a slider with a dead half.
    Returns the balls in fold order (softest first) with the blend radii to match. */
 export function blobMeltOrder(discs, blend) {
@@ -101,10 +98,10 @@ const AREA = (pts) => {
 /**
  * The outline of a set of discs, as closed rings in the plane.
  *
- * `discs` is [[x, y, r], ...] in millimetres. Returns every ring the field
- * produces, not only the biggest: separate pieces and holes are real answers —
- * two discs far apart ARE two pieces — and a caller that only received the
- * largest would silently drop what a reader drew.
+ * `discs` is [[x, y, r], ...] in millimeters. Returns every ring the field
+ * produces, not only the biggest: separate pieces and holes are answers — two
+ * discs far apart are two pieces — and returning only the largest would drop
+ * part of the drawing.
  */
 function blobOutlineOneCluster(discs, opts = {}) {
   if (!Array.isArray(discs) || discs.length === 0) {
@@ -128,16 +125,13 @@ function blobOutlineOneCluster(discs, opts = {}) {
 
   const blend = asked;
   const k = fuseBlendRadius(blend);
-  /* ⚠ THE GRID IS SIZED OFF THE SMALLEST DISC, not off the drawing. A fixed
-     count over the bounding box cannot see a disc much smaller than a cell, and
-     the failure is silent — the disc simply is not in the outline. Four cells
-     across the smallest radius is the floor; the clamp keeps a pathological
-     ratio from asking for a grid nobody can afford. */
-  /* ⚠ THE CELL IS TIED TO THE SMALLEST DISC, AND THE PAD IS PART OF THE BOX.
+  /* The cell is tied to the smallest disc, and the pad is part of the box.
      A count taken over the drawing alone cannot see a disc much smaller than a
-     cell, and the failure is silent — the disc is simply not in the outline. The
-     pad has to be counted too: Blend widens the domain, and sizing the grid
-     before adding it let a large Blend quietly coarsen every cell. */
+     cell, and the failure is silent — the disc is not in the outline. Four
+     cells across the smallest radius is the floor; the clamp keeps a
+     pathological ratio from asking for an unaffordable grid. The pad is
+     counted too: Blend widens the domain, and sizing the grid before adding
+     it would let a large Blend coarsen every cell. */
   const pad = blend + 0.05 * extent;
   lo = [lo[0] - pad, lo[1] - pad]; hi = [hi[0] + pad, hi[1] + pad];
   const boxed = Math.max(hi[0] - lo[0], hi[1] - lo[1]);
@@ -147,22 +141,20 @@ function blobOutlineOneCluster(discs, opts = {}) {
   const ny = Math.max(8, Math.round((cells * (hi[1] - lo[1])) / Math.max(hi[0] - lo[0], 1e-9)));
   const hx = (hi[0] - lo[0]) / nx, hy = (hi[1] - lo[1]) / ny;
 
-  /* ⚠⚠ A BLEND WITHIN A HAIR OF A GAP DRAWS A NECK THINNER THAN ONE CELL, and
-     no grid can draw that. The zero set stops being a curve and pinches; the
-     contour through the pinch is cut into sub-cell islands and fragments.
-     Measured on six circles with a 12mm gap: whole at 4439 and 4482mm2 either
-     side, and inside a band of about 0.015mm around Blend 12 it shatters into
-     22 contours totalling 2982 — a third of the drawing gone. Neither the
-     saddle rule nor the segment chaining is at fault; both were replaced and
-     measured, and neither moved the number by a millimetre.
-     The condition is a closed-form question about the discs and needs no grid
-     to ask: it is degenerate when Blend is within a cell of some pair's gap. It
-     is nudged to the JOINED side, by a fraction of one cell — far below the
-     document tolerance, and the direction the Blend row's own sentence already
-     promises: at Blend g, a gap of g is bridged. */
-  /* WHICH FIELD THIS BLOB USES. With one melt for every ball the original fold
-     is exact and is left alone byte for byte; only a blob whose balls disagree
-     pays for the sorted mixed fold. */
+  /* A Blend within a hair of a gap draws a neck thinner than one cell, which no
+     grid can draw. The zero set pinches, and the contour through the pinch is
+     cut into sub-cell islands (six circles with a 12mm gap: whole at 4439 and
+     4482mm2 either side, but inside a band of about 0.015mm around Blend 12 it
+     breaks into 22 contours totaling 2982). The saddle rule and the segment
+     chaining are not the cause.
+     The condition is a closed-form question about the discs: it is degenerate
+     when Blend is within a cell of some pair's gap. Blend is then nudged to the
+     joined side by a fraction of one cell — far below the document tolerance,
+     and the direction the Blend row promises: at Blend g, a gap of g is
+     bridged. */
+  /* Which field this blob uses. With one melt for every ball the plain fold is
+     exact and is used unchanged; only a blob whose balls disagree pays for the
+     sorted mixed fold. */
   const order = blobMeltOrder(discs, blend);
   const fieldAt = order.varied
     ? (dd, kk, x, y) => blobFieldMixed(order.discs, kk, order.ks, x, y)
@@ -189,8 +181,8 @@ function blobOutlineOneCluster(discs, opts = {}) {
   };
 
   /* Marching squares, emitting segments. The saddle case is resolved on the
-     cell's own centre value rather than by a fixed choice, so a neck that is
-     genuinely joined does not come apart at one cell. */
+     cell's center value rather than by a fixed choice, so a neck that is
+     joined does not come apart at one cell. */
   const segs = [];
   for (let j = 0; j < ny; j += 1) for (let i = 0; i < nx; i += 1) {
     const f0 = at(i, j), f1 = at(i + 1, j), f2 = at(i + 1, j + 1), f3 = at(i, j + 1);
@@ -238,19 +230,16 @@ function blobOutlineOneCluster(discs, opts = {}) {
   }
   const used = new Set();
   const rings = [];
-  /* ⚠ AT A SHARED VERTEX, TAKE THE TIGHTEST TURN. Set Blend to exactly the gap
-     between two circles and they touch at a POINT — four contour segments meet
-     at one vertex there. Taking whichever segment came first walks a
-     figure-eight through that vertex, consuming the segments of BOTH loops into
-     one traversal and discarding what is left: measured on six circles with a
-     12mm gap, four rings totalling 2982mm2 where either side of 12.0 measures
-     ~4400. Two whole rings simply vanished from a drawing at one slider value.
-     Whether two circles that touch at a point are one shape or two is genuinely
-     ambiguous at that measure-zero value, and no epsilon small enough to stay
-     invisible can settle it — the join is thinner than any grid this can afford
-     to sample. What is NOT ambiguous is that nothing may disappear. Turning as
-     tightly as possible keeps each loop walking its own side of the vertex, so
-     the pieces stay whole whichever way the count falls. */
+  /* At a shared vertex, take the tightest turn. With Blend exactly the gap
+     between two circles they touch at a point, and four contour segments meet
+     at one vertex. Taking whichever segment came first walks a figure-eight
+     through that vertex, consuming the segments of both loops into one
+     traversal and discarding the rest, so whole rings vanish. Whether two
+     circles touching at a point are one shape or two is ambiguous at that
+     measure-zero value, and no invisible epsilon can settle it — the join is
+     thinner than any affordable grid. What is not ambiguous is that nothing
+     may disappear. Turning as tightly as possible keeps each loop on its own
+     side of the vertex, so the pieces stay whole either way. */
   const dirOf = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1]; const L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
   for (const [a0, b0] of segs) {
     const id = `${key(a0)}>${key(b0)}`;
@@ -279,16 +268,15 @@ function blobOutlineOneCluster(discs, opts = {}) {
   }
   if (!rings.length) return { ok: false, reason: 'open', why: 'the contour did not close' };
 
-  /* THE GRID FINDS THE CONTOUR; NEWTON PUTS IT WHERE IT BELONGS — AND IT RUNS
-     LAST. Snapping BEFORE the stations are laid out fixes the wrong points: the
-     stations are then chords between snapped points, and on a 1.2m drawing they
-     sat 0.1mm off a contour whose own vertices were exact.
-     ⚠ It earns nothing on a lone disc — measured identical to five figures at
-     both 0.5mm and 10mm — because marching squares interpolates a linear field
-     exactly and a distance field is very nearly linear across one cell. What it
-     buys is where the field CURVES: 6x across a blend crease, 15x around an
-     annulus, and 160-226x on a wide scale spread. A gate for it therefore has to
-     use those shapes; a lone circle cannot tell whether this loop is here. */
+  /* The grid finds the contour; Newton puts it on the zero set, and it runs
+     last. Snapping before the stations are laid out fixes the wrong points:
+     the stations are then chords between snapped points (0.1mm off the contour
+     on a 1.2m drawing).
+     It gains nothing on a lone disc, because marching squares interpolates a
+     linear field exactly and a distance field is very nearly linear across one
+     cell. It matters where the field curves: 6x across a blend crease, 15x
+     around an annulus, and 160-226x on a wide scale spread. A test for it has
+     to use those shapes; a lone circle cannot detect it. */
   const hgrad = Math.max(extent * 1e-6, 1e-12);
   const snapTo = Math.max(tolerance * 0.05, extent * 1e-12);
   const snap = (pts) => pts.map(([x, y]) => {
@@ -309,7 +297,13 @@ function blobOutlineOneCluster(discs, opts = {}) {
      ways the sagitta is r(1 - cos(pi/n)), so n = pi*sqrt(r / (2*tol)). */
   const sag = Math.max(tolerance, 1e-6);
   const byTol = Math.ceil(Math.PI * Math.sqrt(Math.max(rMax, 1e-9) / (2 * sag)));
-  const n = Math.max(24, Math.min(256, Number.isFinite(byTol) ? byTol : 64));
+  /* The cap is 512 so the tolerance still governs large blobs: at r=200 and
+     above, a cap of 256 binds for tolerances of both 0.001 and 0.01, leaving
+     a fixed 1.48 degrees of turn per station whatever the size; 512 gives 0.70
+     degrees. It is still a cap, because these stations are the interpolated
+     curve's control points and a blob handed downstream to Puff or Trim has
+     to stay a workable curve. */
+  const n = Math.max(24, Math.min(512, Number.isFinite(byTol) ? byTol : 64));
   const resample = (pts) => {
     const cum = [0];
     for (let i = 1; i <= pts.length; i += 1) {
@@ -331,13 +325,13 @@ function blobOutlineOneCluster(discs, opts = {}) {
     return res;
   };
 
-  /* ⚠ OUTER OR HOLE IS DECIDED BY NESTING, NOT BY WINDING. Which way marching
-     squares emits a ring is a property of the case table, and reading it as the
-     answer made a lone disc report zero pieces. Counting how many other rings a
-     ring sits inside cannot be wrong that way: even depth is material, odd is a
-     hole, and separate pieces both come out at depth 0. Winding is then SET from
-     that answer — outer counter-clockwise, holes clockwise — so a consumer can
-     rely on it. */
+  /* Outer or hole is decided by nesting, not by winding. Which way marching
+     squares emits a ring is a property of the case table, and reading it as
+     the answer can make a lone disc report zero pieces. Counting how many
+     other rings a ring sits inside cannot be wrong that way: even depth is
+     material, odd is a hole, and separate pieces both come out at depth 0.
+     Winding is then set from that answer — outer counter-clockwise, holes
+     clockwise — so a consumer can rely on it. */
   const inside = (ring, x, y) => {
     let hit = false;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
@@ -346,16 +340,14 @@ function blobOutlineOneCluster(discs, opts = {}) {
     }
     return hit;
   };
-  /* ⚠ A RING SMALLER THAN A CELL IS THE INSTRUMENT, NOT THE DRAWING. Set Blend
-     to exactly the gap between two circles and the field grazes zero along the
-     whole neck instead of crossing it; marching squares then finds a shower of
-     specks there rather than one join. Measured: six circles with a 12mm gap
-     came out as 22 pieces at Blend 12, one piece either side of it. Blend is a
-     slider, so a reader drags THROUGH that value on the way to any other, and
-     the shatter is what they would see. A contour enclosing less than one cell
-     of area is below what this grid can resolve at all, so it is dropped —
-     which is the same argument the disc-too-small report already makes, applied
-     to the output instead of the input. */
+  /* A ring smaller than a cell is the instrument, not the drawing. With Blend
+     exactly the gap between two circles the field grazes zero along the whole
+     neck instead of crossing it, and marching squares finds a shower of specks
+     there rather than one join (six circles with a 12mm gap: 22 pieces at
+     Blend 12, one piece either side). Blend is a slider, so that value is
+     passed through on the way to any other. A contour enclosing less than one
+     cell of area is below what this grid can resolve, so it is dropped — the
+     disc-too-small argument applied to the output instead of the input. */
   const cellArea = hx * hy;
   const shaped = rings.map((r) => snap(resample(r)))
     .filter((r) => r.length >= 3 && Math.abs(AREA(r)) > cellArea);
@@ -371,11 +363,10 @@ function blobOutlineOneCluster(discs, opts = {}) {
   });
   out.sort((a, b) => b.area - a.area);
 
-  /* WHICH DISCS DID NOT MAKE IT. A disc far smaller than the rest is smaller
-     than the grid can resolve, and it then contributes nothing at all — the
-     honest thing is to name it rather than leave a reader wondering why their
-     circle did nothing. Asking whether its centre landed inside the material is
-     the test that catches it wherever it sits. */
+  /* Which discs did not make it. A disc far smaller than the rest can be
+     smaller than the grid resolves, and then contributes nothing; it is
+     reported by name. Asking whether its center landed inside the material
+     catches it wherever it sits. */
   const undrawn = [];
   for (let i = 0; i < discs.length; i += 1) {
     let d = 0;
@@ -389,22 +380,18 @@ function blobOutlineOneCluster(discs, opts = {}) {
   };
 }
 
-/* ⚠⚠ BALLS THAT CANNOT REACH EACH OTHER GET THEIR OWN GRID, and without this the
-   tool breaks the moment a reader drags one ball away.
+/* Balls that cannot reach each other get their own grid.
    The grid is sized to hold every ball, and its cell count is capped — so one
-   ball dragged far enough stretches the same lattice over the whole span and the
-   cell grows past the size of a ball. Measured, three 12mm balls with one moved
-   out: at 500mm and 2000mm everything is correct; at 9m the far ball is smaller
-   than a cell and VANISHES from the outline entirely; at 50m the whole blob
-   refuses and there is no shape at all. A reader dragging a ball would watch the
-   thing stop working with no way to know why.
-   Two balls can only ever affect one another within the reach of the melt, which
-   is a closed-form question about the discs: centres closer than r_i + r_j plus
-   the widest melt in play. Grouping on that and contouring each group over its
-   own tight box means a distant ball keeps its own resolution, the balls it left
-   behind keep theirs, and nothing is capped over a span nobody asked for. It is
-   also faster — several small grids instead of one enormous one. */
-function blobClusters(discs, reach) {
+   ball dragged far enough stretches the same lattice over the whole span and
+   the cell grows past the size of a ball (three 12mm balls with one moved out:
+   correct at 500mm and 2000mm; at 9m the far ball is smaller than a cell and
+   drops out of the outline; at 50m the whole blob refuses).
+   Two balls can only affect one another within the reach of the melt, which
+   is a closed-form question about the discs: centers closer than r_i + r_j
+   plus the widest melt in play. Grouping on that and contouring each group
+   over its own tight box keeps every group's resolution, and is faster —
+   several small grids instead of one enormous one. */
+export function blobClusters(discs, reach) {
   const parent = discs.map((_, i) => i);
   const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
   for (let i = 0; i < discs.length; i += 1) {
@@ -435,8 +422,8 @@ export function blobOutline(discs, opts = {}) {
     }
   }
   const blend = Math.max(0, opts.blend ?? 0);
-  // The widest melt anything might use, so the grouping can never separate two
-  // balls that would in fact have joined.
+  // The widest melt anything might use, so the grouping never separates two
+  // balls that would have joined.
   let reach = blend;
   for (const d of discs) if (d.length > 3 && d[3] != null && Number.isFinite(d[3])) reach = Math.max(reach, d[3]);
   const groups = blobClusters(discs, reach * 2 + 1e-9);
@@ -455,9 +442,9 @@ export function blobOutline(discs, opts = {}) {
     stations = Math.max(stations, res.stations);
     stationsWanted = Math.max(stationsWanted, res.stationsWanted);
   }
-  /* ⚠ A GROUP THAT REFUSES DOES NOT TAKE THE OTHERS WITH IT. The whole point of
-     separating them is that one unusable ball leaves the rest of the drawing
-     standing; only if EVERY group fails is there nothing to draw. */
+  /* A group that refuses does not take the others with it: one unusable ball
+     leaves the rest of the drawing standing; only if every group fails is
+     there nothing to draw. */
   if (!rings.length) return { ok: false, reason: 'empty', why: lastWhy || 'those discs enclose nothing to draw a curve around' };
   rings.sort((a, b) => b.area - a.area);
   const pieces = rings.filter((r) => r.outer).length;

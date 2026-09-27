@@ -5,37 +5,35 @@
 // & Clark, Stam, Loop & Schaefer, Halstead/Kass/DeRose, Sederberg & Parry,
 // Patrikalakis & Maekawa, Pharr/Jakob/Humphreys and the others each module
 // cites by name — with no code derived from another implementation. This
-// module, by contrast, is honest, attributed, vendored MIT infrastructure
+// module, by contrast, is attributed, vendored MIT infrastructure
 // (rhino3dm, McNeel), the same relationship vendor/three has to the app.
 //
 // Every function here takes a `rhino` instance as its first argument
 // (the awaited rhino3dm() module object) rather than importing rhino3dm
 // itself — this keeps the module isomorphic between a Node test environment
-// (rhino3dm installed as a real, non-shipped devDependency) and the app's own
+// (rhino3dm installed as a non-shipped devDependency) and the app's own
 // worker (the vendored vendor/rhino3dm/rhino3dm.module.js), with one
 // implementation, not two.
 //
-// Two empirically-verified conversion rules this whole module rests on
-// (rhino3dm's own .d.ts is confirmed incomplete/unreliable — see the header
-// comments below for what was actually proven, not assumed):
+// Two conversion rules this module rests on, verified against rhino3dm's
+// behavior (its .d.ts is incomplete; the comments below say what was
+// verified):
 //
-// 1. KNOT VECTOR LENGTH. Our own clamped knot vector has length n+p+1
-//    (n = control point count, p = degree) — the literal P&T convention.
-//    rhino3dm/OpenNURBS's own internal knot vector has length n+p-1: it
-//    drops the first and last entry of our own array (both of which, on a
-//    clamped curve, are always exact duplicates of their own neighbor
-//    anyway — no information is lost). EXPORT: `ourKnots.slice(1, -1)`.
-//    IMPORT: reconstruct by prepending the reduced array's own first
-//    element again and appending its own last element again.
+// 1. Knot vector length. Our clamped knot vector has length n+p+1
+//    (n = control point count, p = degree) — the P&T convention.
+//    rhino3dm/OpenNURBS's internal knot vector has length n+p-1: it drops
+//    the first and last entry of our array (both of which, on a clamped
+//    curve, are exact duplicates of their neighbor, so no information is
+//    lost). Export: `ourKnots.slice(1, -1)`. Import: prepend the reduced
+//    array's first element again and append its last element again.
 //
-// 2. CONTROL POINT WEIGHT CONVENTION. Our own ctrlPts[i] = [x,y,z,w] stores
-//    the EUCLIDEAN (dehomogenized) position plus a separate weight — proven
-//    by reading kernel/curve.mjs's curvePoint, which calls toHomogeneous()
-//    to CONVERT to the homogeneous form before ever evaluating, meaning the
-//    raw array is not already homogeneous. rhino3dm's own
+// 2. Control point weight convention. Our ctrlPts[i] = [x,y,z,w] stores the
+//    Euclidean (dehomogenized) position plus a separate weight:
+//    kernel/curve.mjs's curvePoint calls toHomogeneous() to convert to the
+//    homogeneous form before evaluating. rhino3dm's
 //    NurbsCurvePointList/NurbsSurfacePointList .get()/.set() instead use the
-//    PRE-MULTIPLIED homogeneous form (X,Y,Z,W) = (w*x, w*y, w*z, w).
-//    EXPORT: `[x*w, y*w, z*w, w]`. IMPORT: `[X/W, Y/W, Z/W, W]`.
+//    pre-multiplied homogeneous form (X,Y,Z,W) = (w*x, w*y, w*z, w).
+//    Export: `[x*w, y*w, z*w, w]`. Import: `[X/W, Y/W, Z/W, W]`.
 
 export function ourKnotsToRhino(knots) {
   return knots.slice(1, knots.length - 1);
@@ -45,7 +43,7 @@ export function rhinoKnotsToOurs(reduced) {
   return [reduced[0], ...reduced, reduced[reduced.length - 1]];
 }
 
-// ---- CURVE ----
+// Curve
 
 // Our curve: { degree, knots, ctrlPts: [[x,y,z,w], ...] }
 export function curveToRhino(rhino, crv) {
@@ -62,18 +60,18 @@ export function curveToRhino(rhino, crv) {
   return nc;
 }
 
-// OUR control point is EUCLIDEAN plus a weight, never the premultiplied
-// homogeneous form rhino3dm's point lists use (see the note at the top of this
-// file — getting the two confused is the single easiest way to write a file
-// that opens and is subtly the wrong shape). So a control point's position is
-// its first three components, with no division.
+// Our control point is Euclidean plus a weight, never the premultiplied
+// homogeneous form rhino3dm's point lists use (see rule 2 at the top of this
+// file; confusing the two writes a file that opens and is subtly the wrong
+// shape). So a control point's position is its first three components, with
+// no division.
 function euclideanCtrlPt(cp) {
   return [cp[0], cp[1], cp[2]];
 }
 
-// rhinoCrv: a real rhino.NurbsCurve (or any rhino.Curve exposing
-// .toNurbsCurve() — the caller is responsible for that cast, this function
-// only ever reads a genuine NurbsCurve's own knots()/points()).
+// rhinoCrv: a rhino.NurbsCurve (or any rhino.Curve exposing .toNurbsCurve() —
+// the caller is responsible for that cast; this function only reads a
+// NurbsCurve's knots()/points()).
 export function curveFromRhino(rhinoCrv) {
   const degree = rhinoCrv.degree;
   const knotList = rhinoCrv.knots();
@@ -89,50 +87,48 @@ export function curveFromRhino(rhinoCrv) {
   return { degree, knots, ctrlPts };
 }
 
-// ---- ANALYTIC CURVE KINDS ----
+// Analytic curve kinds
 //
 // A Circle, an Arc, a Line and a Polyline are four different objects in this
-// app, and every one of them used to leave as a plain NurbsCurve. The geometry
-// was exact either way; what was lost was the KIND — a circle came back with no
-// center and no radius anywhere, as a freeform curve that happens to close, and
-// Rhino read it the same way.
+// app. Written as a plain NurbsCurve the geometry is exact but the kind is
+// lost: a circle comes back with no center and no radius, as a freeform curve
+// that happens to close, and Rhino reads it the same way.
 //
-// WHAT OPENNURBS CAN AND CANNOT CARRY, measured against 8.17.0 rather than read
-// off the .d.ts (which is wrong in both directions here):
+// What OpenNURBS can and cannot carry, measured against rhino3dm 8.17.0 rather
+// than read off the .d.ts (which is wrong in both directions here):
 //   · ON_LineCurve and ON_PolylineCurve author directly and survive the file.
-//   · ON_ArcCurve carries a circle AND an arc — one class, the sweep is the
+//   · ON_ArcCurve carries a circle and an arc — one class, the sweep is the
 //     only difference, which is exactly how this app models the pair. Its
-//     factories `ArcCurve.createFromArc` / `createFromCircle` are REAL and are
+//     factories `ArcCurve.createFromArc` / `createFromCircle` exist and are
 //     absent from the .d.ts entirely; the only ArcCurve constructor the
 //     bindings expose is a copy constructor, so without those two statics an
-//     arc genuinely could not be authored.
-//   · `objects().addCircle` / `addArc` do NOT keep the kind — both convert to
+//     arc could not be authored.
+//   · `objects().addCircle` / `addArc` do not keep the kind — both convert to
 //     an ON_NurbsCurve on the way in, verified by reading the written bytes
-//     back. They are the obvious call and they are the wrong one; every
-//     analytic kind here is therefore built as geometry and added with
-//     `addCurve`, which is one route rather than two.
-//   · AN ELLIPSE CANNOT MAKE THIS TRIP. `addEllipse` exists, but the binding
+//     back. Every analytic kind here is therefore built as geometry and added
+//     with `addCurve`, which is one route rather than two.
+//   · An ellipse cannot make this trip. `addEllipse` exists, but the binding
 //     exposes `isEllipse()` and no tryGetEllipse at all, so an ellipse's own
 //     center and two radii cannot be recovered from a curve — ours or Rhino's.
 //     An Ellipse and a Squircle stay plain NURBS curves, and are reported as
 //     such (curveKind null) rather than being passed off as circles.
 //
-// ⚠ AN ARC IS A CIRCLE WITH A SWEEP, and getting that backwards writes closed
-// circles where arcs belong. The sweep is the ONLY test: a full turn is a
+// An arc is a circle with a sweep, and getting that backwards writes closed
+// circles where arcs belong. The sweep is the only test: a full turn is a
 // circle, anything else is an arc. It is asked of the angle domain the arc
 // itself declares, never of whether the two ends happen to meet — no tolerance
 // on the endpoints separates a small arc from a circle drawn imprecisely.
 const FULL_TURN_TOLERANCE = 1e-9; // radians; the same bound the app's own circleSweepIsFullTurn uses
 
-/* ⚠ NANOMETRES, NOT THE DOCUMENT TOLERANCE. The obvious tolerance to hand
-   OpenNURBS's own IsArc/IsCircle is the model tolerance, and it is the wrong
-   one: at 0.001 mm a hand-drawn curve that passes near a circle is REWRITTEN as
-   that circle, moving the geometry by up to the tolerance and handing the
-   modeler back a center and a radius nobody drew. A curve within 1e-9 mm of a
+/* A near-zero tolerance, not the document tolerance. The model tolerance is
+   the wrong one to hand OpenNURBS's IsArc/IsCircle: at 0.001 mm a hand-drawn
+   curve that passes near a circle is rewritten as that circle, moving the
+   geometry by up to the tolerance and handing the modeler back a center and
+   a radius nobody drew. A curve within 1e-9 mm of a
    circle is a circle for every purpose, and nothing reaches that by accident. */
 const ANALYTIC_TOLERANCE = 1e-9;
 
-// WHAT KIND OF CURVE IS THIS, ASKED OF OPENNURBS. Takes any rhino Curve
+// What kind of curve this is, asked of OpenNURBS. Takes any rhino Curve
 // (an ON_ArcCurve straight out of a Rhino file, or the NurbsCurve this module
 // built from our own control points — the answer is the same either way,
 // because it is a question about the geometry and not about the object class
@@ -195,15 +191,15 @@ function analyticCurveOf(crv, tolerance = ANALYTIC_TOLERANCE) {
   return null;
 }
 
-// The analytic kind as real OpenNURBS geometry, ready for objects().addCurve.
+// The analytic kind as OpenNURBS geometry, ready for objects().addCurve.
 // A circle, an arc and a polyline are built from the analytic object the
 // detector already holds rather than from its plain fields: rebuilding a plane
 // out of a center and two axes is exactly where a tilted frame turns into a
-// world-XY one. A line has no frame to lose — two endpoints ARE the line.
+// world-XY one. A line has no frame to lose — two endpoints are the line.
 function analyticCurveToRhino(rhino, analytic) {
   if (!analytic) return null;
   if (analytic.curveKind === 'circle' || analytic.curveKind === 'arc') {
-    // ONE call for both. A full-turn ON_Arc makes an ON_ArcCurve that reports
+    // One call for both. A full-turn ON_Arc makes an ON_ArcCurve that reports
     // isCompleteCircle, so the circle/arc distinction lives in the sweep and
     // nowhere else — the same single object the app models them as.
     return rhino.ArcCurve.createFromArc(analytic.arc);
@@ -217,8 +213,8 @@ function analyticCurveToRhino(rhino, analytic) {
   return null;
 }
 
-/* THE PARAMETERIZATION IS PART OF WHAT WAS SENT. Each analytic form has its own
-   natural domain — a line and an arc by arc LENGTH, a polyline by vertex index
+/* The parameterization is part of what was sent. Each analytic form has its own
+   natural domain — a line and an arc by arc length, a polyline by vertex index
    — so writing one re-bases the curve's knots even though its shape and its
    analytic parameters are untouched. That is a silent change to a field the
    caller can read back, so the source curve's own domain is restored: adding
@@ -231,7 +227,7 @@ function curveDomain(crv) {
   return Number.isFinite(u0) && Number.isFinite(u1) && u1 > u0 ? [u0, u1] : null;
 }
 
-// ---- SURFACE ----
+// Surface
 
 // Our surface: { degU, degV, knotsU, knotsV, ctrlNet: [i][j] = [x,y,z,w] }
 export function surfaceToRhino(rhino, srf) {
@@ -254,7 +250,7 @@ export function surfaceToRhino(rhino, srf) {
   return ns;
 }
 
-// rhinoSrf: a real rhino.NurbsSurface (or any rhino.Surface exposing a cast
+// rhinoSrf: a rhino.NurbsSurface (or any rhino.Surface exposing a cast
 // the caller has already performed — same convention as curveFromRhino).
 export function surfaceFromRhino(rhinoSrf) {
   const degU = rhinoSrf.orderU - 1;
@@ -282,28 +278,28 @@ export function surfaceFromRhino(rhinoSrf) {
   return { degU, degV, knotsU, knotsV, ctrlNet };
 }
 
-// ---- BREP TRIM BOUNDARIES ----
+// Brep trim boundaries
 
-// A face's trim loops, read out as 3-D POLYLINES rather than as (u,v) curves,
+// A face's trim loops, read out as 3-D polylines rather than as (u,v) curves,
 // because rhino3dm exposes no 2-D pcurve at all: BrepTrim carries only
 // edgeIndex/isReversed/startVertexIndex/endVertexIndex, and Brep has no
-// curves2D list (measured, and pinned by a test). What IS
+// curves2D list (measured, and pinned by a test). What is
 // exact is the 3-D edge behind each trim, so that is what comes out here.
 //
-// TURNING THOSE INTO (u,v) IS DELIBERATELY NOT DONE HERE. Inversion needs
+// Turning those into (u,v) is not done here. Inversion needs
 // closestPointOnSurface, which lives in the kernel — and this module runs
 // inside the I/O worker, whose module graph is precached by sw.js and contains
 // no kernel modules at all. Importing one would add an offline-breaking fetch
 // to satisfy a computation the main thread can already do, where the kernel is
 // inlined. So this stays what the rest of the file is: format reading.
 //
-// SAMPLING IS DRIVEN BY DEVIATION, NOT BY SPAN COUNT. The polyline this
+// Sampling is driven by deviation, not by span count. The polyline this
 // produces becomes the face's boundary, so its error is a permanent property
 // of the imported geometry — and a polyline inscribed in a curve always
-// UNDER-measures the region it bounds. A count derived from spans gets that
-// silently wrong: a full circle came back as 12 points, whose enclosed area is
-// exactly 75.0000 against the disc's 78.5398 — a 4.5% shortfall that looks
-// like a plausible boundary and reads as a working import.
+// under-measures the region it bounds. A count derived from spans gets that
+// silently wrong: a radius-5 circle sampled at 12 points encloses exactly
+// 75.0000 against the disc's 78.5398, a 4.5% shortfall that looks like a
+// plausible boundary.
 //
 // So each segment is bisected while its midpoint sits further from the chord
 // than the file's own model tolerance, which ties the error to the number the
@@ -336,11 +332,11 @@ function sampleRhinoEdge(edge, reversed, tolerance) {
     if (sag > tol && (b - a) > 1e-12) { stack.push([m, b], [a, m]); }
     else { pts.push(pb); }
   }
-  // Hitting the cap means the walk stopped BEFORE the edge's end, so the
+  // Hitting the cap means the walk stopped before the edge's end, so the
   // polyline does not reach the next trim's start and the loop it belongs to
   // would close across a gap — a boundary that is wrong rather than coarse.
   // Refuse the loop instead: the caller falls back to the untrimmed face and
-  // the app names it, which is the honest outcome for input this pathological.
+  // the app names it.
   if (stack.length) return null;
   return reversed ? pts.reverse() : pts;
 }
@@ -348,10 +344,10 @@ function sampleRhinoEdge(edge, reversed, tolerance) {
 // Every loop of one face, in the order Rhino stores them, each as a closed 3-D
 // polyline plus the loop's own kind. Returns null when the face has no
 // readable loop structure at all (an old rhino3dm build with no trim API is
-// exactly that case, and the caller falls back to the untrimmed panel it used
-// to produce, rather than throwing).
+// that case, and the caller falls back to the untrimmed panel rather than
+// throwing).
 //
-// `outer` is taken from Rhino's own loopType and NOT inferred from area:
+// `outer` is taken from Rhino's own loopType and not inferred from area:
 // a face whose outer loop is the full parametric rectangle and a face trimmed
 // down to a sliver are both legitimate, and area-ranking guesses wrong exactly
 // where a hole approaches the size of its face.
@@ -398,16 +394,15 @@ function samePoint3(a, b) {
   return Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(a[2] - b[2]) < 1e-9;
 }
 
-// ---- POINT ----
+// Point
 
-// WHAT KIND OF GEOMETRY IS THIS, ROBUSTLY. rhino3dm's objectType is an
-// embind ENUM VALUE — an opaque object, not a number — so `===` against
-// rhino.ObjectType.X is an identity comparison that only holds while both
-// sides come from the same module instance, and String()-ing one yields
-// the useless "[object Object]" that a skip report should never show a
-// student. The constructor name is carried by the instance itself and
-// survives both, so it is the primary test, with the enum identity kept
-// as a secondary that costs nothing when it does work.
+// What kind of geometry this is. rhino3dm's objectType is an embind enum value
+// — an opaque object, not a number — so `===` against rhino.ObjectType.X is an
+// identity comparison that only holds while both sides come from the same
+// module instance, and String()-ing one yields the useless "[object Object]"
+// that a skip report should never show. The constructor name is carried by the
+// instance itself and survives both, so it is the primary test, with the enum
+// identity kept as a secondary that costs nothing when it does work.
 export function describeRhinoGeometry(geo) {
   const ctor = geo && geo.constructor && geo.constructor.name;
   if (ctor && ctor !== 'Object') return ctor;
@@ -417,30 +412,27 @@ export function isRhinoSubD(rhino, geo) {
   if (describeRhinoGeometry(geo) === 'SubD') return true;
   return rhino.ObjectType && rhino.ObjectType.SubD !== undefined && geo.objectType === rhino.ObjectType.SubD;
 }
-// A Rhino SUBD ARRIVES AS ITS OWN CONTROL NET — the cage, which is the
-// object (a load-bearing distinction), never a refined mesh
-// standing in for it.
+// A Rhino SubD arrives as its own control net — the cage, which is the
+// object, never a refined mesh standing in for it.
 //
-// WHY VIA Mesh.createFromSubDControlNet AND NOT THE SubD ITSELF: the
+// Why via Mesh.createFromSubDControlNet and not the SubD itself: the
 // rhino3dm JS binding exposes SubD as an opaque handle — isSolid,
 // subdivide, clearEvaluationCache, updateAllTagsAndSectorCoefficients,
-// and nothing that reads a vertex, an edge or a face (checked directly
-// against 8.17.0 AND 8.32.0). This one static is the entire door: it hands back the
-// CONTROL NET as a mesh, which for our purposes is exactly the cage.
+// and nothing that reads a vertex, an edge or a face (checked against
+// rhino3dm 8.17.0 and 8.32.0). This one static hands back the control net as
+// a mesh, which for our purposes is exactly the cage.
 //
-// The second argument is load-bearing and its own .d.ts declares this
-// function taking none at all — confirmed empirically against a real
-// Rhino-authored file instead: FALSE returns the WELDED net (one vertex
-// per real cage vertex, which is what a cage means), TRUE returns an
-// unwelded per-face copy (4 vertices per quad — the same 108-face cage
-// read as 110 vertices welded and 432 unwelded). Welded is the only
-// correct reading; an unwelded net would import as a cage whose faces
-// share no vertices at all and therefore subdivides into confetti.
+// The second argument matters, though the .d.ts declares this function
+// taking none; verified against a Rhino-authored file: false returns the
+// welded net (one vertex per cage vertex, which is what a cage means), true
+// returns an unwelded per-face copy (4 vertices per quad — the same 108-face
+// cage read as 110 vertices welded and 432 unwelded). Welded is the only
+// correct reading; an unwelded net would import as a cage whose faces share
+// no vertices and therefore subdivide into disconnected pieces.
 //
-// HONEST LOSS, named not hidden: CREASES DO NOT SURVIVE. A mesh carries
-// no crease weights and the SubD handle exposes none, so a creased Rhino
-// SubD imports SMOOTH. That is reported through `creasesLost` rather than
-// left for the student to discover by eye.
+// Known limitation: creases do not survive. A mesh carries no crease weights
+// and the SubD handle exposes none, so a creased Rhino SubD imports smooth.
+// That is reported through `creasesLost`.
 export function subdCageFromRhino(rhino, subd) {
   const mesh = rhino.Mesh.createFromSubDControlNet(subd, false);
   if (!mesh) throw new Error('subdCageFromRhino: rhino3dm returned no control net for this SubD');
@@ -450,8 +442,8 @@ export function subdCageFromRhino(rhino, subd) {
   const faces = [];
   for (let i = 0; i < mf.count; i++) {
     const f = mf.get(i);
-    // A mesh face is [a,b,c,d]; a TRIANGLE is encoded with its last index
-    // repeated, which is a real, legal cage face only if collapsed to 3.
+    // A mesh face is [a,b,c,d]; a triangle is encoded with its last index
+    // repeated, which is a legal cage face only if collapsed to 3.
     const loop = f[2] === f[3] ? [f[0], f[1], f[2]] : [f[0], f[1], f[2], f[3]];
     faces.push(loop);
   }
@@ -467,40 +459,38 @@ export function pointFromRhino(p) {
   return [p[0], p[1], p[2]];
 }
 
-// ---- TRIMMED SURFACE -> ON_Brep ----
+// Trimmed surface -> ON_Brep
 
-// A trimmed face written as a real ON_Brep, using the Brep authoring bindings
+// A trimmed face written as an ON_Brep, using the Brep authoring bindings
 // this project adds to rhino3dm (see vendor/rhino3dm/brep_authoring.patch).
-// Before these existed a trimmed face could not be written at all, and the app
-// refused it by name rather than exporting the uncut base surface — which is
-// the right refusal and a poor deliverable.
+// Stock rhino3dm has no way to write a trimmed face.
 //
-// THE TRIM BOUNDARY GOES OUT AS A REAL CURVE WHEN ONE WAS FITTED, and as a
-// POLYLINE when none was. This kernel stores a trim loop as a (u,v) POLYLINE —
+// The trim boundary goes out as a curve when one was fitted, and as a
+// polyline when none was. This kernel stores a trim loop as a (u,v) polyline —
 // that is what marching produces and what trims, sews and tessellates — so a
 // polyline is what can always be written. `kernel/fitcurve.mjs` recovers the
 // exact form of such a boundary, but it lives in the kernel and this module
-// imports nothing at all, deliberately: it is reachable from the app and the
+// imports nothing at all: it is reachable from the app and the
 // I/O worker both, and the worker's precached module graph contains no kernel.
 //
-// So the FIT HAPPENS ABOVE, and arrives here as plain data alongside the
+// So the fit happens above, and arrives here as plain data alongside the
 // polyline it was fitted to (`fit: { pcurve, edge, tolerance }`). A caller
 // with no fitter still gets a valid trimmed Brep; a caller with one gets a
 // boundary Rhino re-reads as a curve rather than as facets. Neither path can
 // silently become the other, because the polyline is always carried too.
 //
-// ⚠ A FITTED PCURVE AND A FITTED EDGE ARE TWO INDEPENDENT APPROXIMATIONS of
-// one boundary, and they do NOT agree exactly: the surface image of the pcurve
+// A fitted pcurve and a fitted edge are two independent approximations of
+// one boundary, and they do not agree exactly: the surface image of the pcurve
 // is not the edge curve, for the same reason a NURBS surface's isocurve image
 // of an arbitrary parameter path is not itself a NURBS curve. That disagreement
-// is what an ON_Edge's TOLERANCE means, and it is passed in measured rather
-// than assumed — see the caller. This is ordinary B-rep practice, not a
-// compromise; every Brep Rhino writes carries the same pair.
+// is what an ON_Edge's tolerance means, and it is passed in measured rather
+// than assumed — see the caller. This is ordinary B-rep practice; every Brep
+// Rhino writes carries the same pair.
 //
-// ⚠ AND ON THE POLYLINE PATH THE 3-D EDGE IS EVALUATED THROUGH rhino3dm
-// ITSELF, not through our kernel: `NurbsSurface.pointAt` is right there, so the
-// edge curve and the pcurve describe the same points without this module
-// importing a surface evaluator it is not allowed to have.
+// On the polyline path the 3-D edge is evaluated through rhino3dm itself,
+// not through our kernel: `NurbsSurface.pointAt` is available, so the edge
+// curve and the pcurve describe the same points without this module
+// importing a surface evaluator.
 function polylineCurve(rhino, points) {
   const pl = new rhino.Polyline();
   for (const p of points) pl.add(p[0], p[1], p.length > 2 ? p[2] : 0);
@@ -510,20 +500,20 @@ function polylineCurve(rhino, points) {
   return pl.toPolylineCurve ? pl.toPolylineCurve() : new rhino.PolylineCurve(pl);
 }
 
-// ⚠⚠ A LOOP IS A CHAIN OF RUNS, NOT ONE CURVE, and that is forced by geometry
-// rather than chosen for tidiness. A single smooth curve CANNOT represent a
-// boundary with a corner in it: asked for a square at a 1e-3 bound the fitter
-// refuses, closest 3.1e-1 at its full control-point ceiling — correctly, since
-// no spline of any count rounds a right angle to within a thousandth. So a
-// fitted loop arrives split at its corners, one run per smooth stretch, which
-// is also the edge structure a B-rep is supposed to have; the single-curve
-// closed case is just the one-run degenerate of the same shape.
+// A loop is a chain of runs, not one curve, and that is forced by geometry. A
+// single smooth curve cannot represent a boundary with a corner in it: asked
+// for a square at a 1e-3 bound the fitter refuses, closest 3.1e-1 at its full
+// control-point ceiling — correctly, since no spline of any count rounds a
+// right angle to within a thousandth. So a fitted loop arrives split at its
+// corners, one run per smooth stretch, which is also the edge structure a B-rep
+// is supposed to have; the single-curve closed case is just the one-run
+// degenerate of the same shape.
 //
-// A fit is USED ONLY IF IT IS STRUCTURALLY COMPLETE. A half-supplied run — a
+// A fit is used only if it is structurally complete. A half-supplied run — a
 // pcurve with no edge curve — would build a Brep whose trim and edge describe
-// different boundaries, which OpenNURBS may well accept and Rhino would then
-// draw wrong. Falling back to the polyline is the honest answer, and it is
-// per-LOOP rather than per-face: a face whose outer boundary fitted and whose
+// different boundaries, which OpenNURBS may accept and Rhino would then draw
+// wrong. The fallback is the polyline, and it is per-loop rather than
+// per-face: a face whose outer boundary fitted and whose
 // hole did not still exports its outer boundary as curves.
 function usableFit(fit) {
   const curveOk = (c) => !!c && Array.isArray(c.knots) && Array.isArray(c.ctrlPts)
@@ -557,7 +547,7 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
     if (li < 0) return null;
 
     if (!loop.fit) {
-      // THE POLYLINE PATH, unchanged: one edge, one trim, one vertex used at
+      // The polyline path: one edge, one trim, one vertex used at
       // both ends — exactly the shape createTrimmedPlane produces for a closed
       // boundary. A polyline absorbs corners, so it needs no splitting.
       const pts3d = loop.uv.map(([u, v]) => {
@@ -574,13 +564,13 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
       continue;
     }
 
-    // ⚠ THE VERTICES COME FROM THE CURVES THAT WERE ACTUALLY WRITTEN, not from
+    // The vertices come from the curves that were actually written, not from
     // the polyline they were fitted to. A fitted run interpolates its own
     // endpoints exactly — the fitter is asked for that precisely so a boundary
     // still meets its neighbors at the corners topology already agreed on —
-    // so the two agree; reading it off the written curve is what makes that an
-    // invariant this code HOLDS rather than one it assumes holds elsewhere.
-    // One vertex per corner, SHARED by the run that ends there and the run that
+    // so the two agree; reading it off the written curve makes that an
+    // invariant this code holds rather than one it assumes holds elsewhere.
+    // One vertex per corner, shared by the run that ends there and the run that
     // starts there, so the loop is closed topologically and not merely
     // geometrically. A one-run loop shares its single vertex with itself, which
     // is the polyline path's shape reached by the same rule.
@@ -594,7 +584,7 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
       if (c3 < 0 || c2 < 0) return null;
       // The edge's own tolerance is how far the surface image of the pcurve can
       // sit from the edge curve — two independent approximations of one
-      // boundary. Supplied MEASURED by whoever made the fit, and never allowed
+      // boundary. Supplied measured by whoever made the fit, and never allowed
       // below the document tolerance, which is the floor everything else here
       // is written to.
       const edgeTol = Number.isFinite(run.tolerance) && run.tolerance > 0
@@ -609,7 +599,7 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
   brep.setEdgeTolerances(true);
   brep.setTrimTolerances(true);
   brep.compact();
-  // ⚠ ASK OPENNURBS, DO NOT ASSUME. A brep that assembled without a refused
+  // Ask OpenNURBS rather than assume. A brep that assembled without a refused
   // index can still be invalid, and writing an invalid one into a .3dm is how
   // a file opens wrong in Rhino with nothing to point at. An invalid result is
   // reported to the caller so the object can be named as skipped instead.
@@ -617,10 +607,10 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
   return valid ? { brep, log: '' } : { brep: null, log: String(log || 'invalid brep') };
 }
 
-// ---- A WHOLE SOLID AS ONE ON_Brep ----
+// A whole solid as one ON_Brep
 //
-// ⚠⚠ ON_Brep HAS NO JOIN, AND NEEDS NONE. A multi-face solid is not N breps
-// stuck together afterwards — it is ONE brep whose faces SHARE their edges,
+// ON_Brep has no join and needs none. A multi-face solid is not N breps
+// stuck together afterwards — it is one brep whose faces share their edges,
 // authored that way from the start. Exporting a boolean as N separate trimmed
 // faces produces a file that looks right and is a pile of loose surfaces:
 // Rhino reports it as open, `SelBadObjects` finds nothing to complain about,
@@ -631,11 +621,10 @@ export function trimmedSurfaceToRhinoBrep(rhino, obj, tolerance) {
 // half-edge solid that knows this topology is cyclic and cannot be carried.
 // Everything here is index-following.
 //
-// ⚠ A VERTEX IS MINTED PER DISTINCT POINT, not per edge end. Two edges meeting
-// at a corner must reference ONE vertex or the brep is not closed there —
-// which is the entire difference between a solid and a heap. Keyed by rounded
-// position because that is what "the same corner" means after two independent
-// fits have each landed on it.
+// A vertex is minted per distinct point, not per edge end. Two edges meeting
+// at a corner must reference one vertex or the brep is not closed there.
+// Matched by position within tolerance, because that is what "the same
+// corner" means after two independent fits have each landed on it.
 export function brepRecordToRhino(rhino, record, tolerance) {
   if (!record || !record.ok || !record.faces || !record.faces.length) return null;
   const tol = Number.isFinite(tolerance) && tolerance > 0 ? tolerance : 1e-3;
@@ -644,8 +633,8 @@ export function brepRecordToRhino(rhino, record, tolerance) {
   const surfaceIndex = record.surfaces.map((s) => brep.addSurface(surfaceToRhino(rhino, s)));
   if (surfaceIndex.some((i) => i < 0)) return { brep: null, log: 'a surface was refused' };
 
-  // ⚠⚠ WELDED BY TOLERANCE, NOT BY A ROUNDED KEY. Two edges meeting at one
-  // corner arrive from two INDEPENDENT fits, so their endpoints agree to about
+  // Welded by tolerance, not by a rounded key. Two edges meeting at one
+  // corner arrive from two independent fits, so their endpoints agree to about
   // the fit's accuracy and not to six decimals — and a rounded key then mints
   // two vertices at one point. A loop built across them is open, and OpenNURBS
   // says so in its own terms: "loop has trim vertex mismatch: m_T[75].m_vi[1] =
@@ -663,9 +652,7 @@ export function brepRecordToRhino(rhino, record, tolerance) {
     }
     const idx = brep.newVertex([p[0], p[1], p[2]], tol);
     if (idx !== vertexPoints.length) {
-      // The array index IS the brep vertex index by construction; if ON ever
-      // returns something else the mapping is wrong and silently welding to the
-      // wrong corner would be far worse than stopping.
+      // The array index is the brep vertex index by construction.
       vertexPoints.push([p[0], p[1], p[2]]);
       return idx;
     }
@@ -673,10 +660,10 @@ export function brepRecordToRhino(rhino, record, tolerance) {
     return idx;
   };
 
-  // Edges FIRST and ONCE each — this is the shared part, and fitting or adding
-  // it per adjacent face is exactly what pulls a solid apart into loose faces.
-  // The two vertices each edge runs BETWEEN are kept alongside it, because a
-  // loop is a directed walk and every trim's end vertex has to BE the next
+  // Edges first and once each — this is the shared part, and fitting or adding
+  // it per adjacent face pulls a solid apart into loose faces.
+  // The two vertices each edge runs between are kept alongside it, because a
+  // loop is a directed walk and every trim's end vertex has to be the next
   // trim's start vertex. A singular trim in particular has no edge to take one
   // from, so it must reuse whatever the previous trim ended at.
   const edgeVerts = [];
@@ -698,26 +685,26 @@ export function brepRecordToRhino(rhino, record, tolerance) {
       const li = brep.newLoop(fi, loop.loopType === 'inner' ? 2 : 1);
       if (li < 0) return { brep: null, log: 'a loop was refused' };
       let walkVertex = -1; // where the directed walk currently stands
-      // ⚠ TRIMS IN LOOP-TRAVERSAL ORDER, EACH WITH ITS OWN ORIENTATION. Emitting
-      // them in edge order, or without `reversed`, is what OpenNURBS rejected by
-      // name when this assembly was first written — the loop is a directed walk,
-      // and an edge shared by two faces is traversed one way by each of them.
+      // Trims in loop-traversal order, each with its own orientation. OpenNURBS
+      // rejects them in edge order or without `reversed`: the loop is a
+      // directed walk, and an edge shared by two faces is traversed one way by
+      // each of them.
       for (const t of loop.trims) {
-        // ⚠⚠ A SINGULAR TRIM IS A LOOP MEMBER WITH NO EDGE. It is how ON
-        // represents a POLE — a stretch of the parametric rectangle where the
+        // A singular trim is a loop member with no edge. It is how ON
+        // represents a pole — a stretch of the parametric rectangle where the
         // surface collapses to a single point, as a revolved disc does along
-        // its center. It has a real pcurve and no 3-D length, so it takes a
-        // VERTEX rather than an edge, and it closes a loop that would otherwise
+        // its center. It has a pcurve and no 3-D length, so it takes a
+        // vertex rather than an edge, and it closes a loop that would otherwise
         // have a hole where the sew could not carry it.
         if (t.singular) {
           const c2s = brep.addTrimCurve(curveToRhino(rhino, t.curve));
           if (c2s < 0) continue;
-          // ⚠⚠ THE VERTEX COMES FROM THE WALK, NOT FROM THE POLE'S COORDINATES.
-          // Minting one at the pole's own evaluated position looks equivalent
-          // and is not: the adjacent edge ENDS at that pole too, via a fitted
+          // The vertex comes from the walk, not from the pole's coordinates.
+          // Minting one at the pole's own evaluated position is not
+          // equivalent: the adjacent edge ends at that pole too, via a fitted
           // curve whose endpoint differs in the last decimals, so the two round
           // to different keys and become two vertices at one point. OpenNURBS
-          // reports it exactly — "loop has trim vertex mismatch: m_T[72].m_vi[1]
+          // reports it as "loop has trim vertex mismatch: m_T[72].m_vi[1]
           // = 25 != m_T[73].m_vi[0] = 24". Reusing the vertex the previous trim
           // ended at makes them the same by construction.
           const v = walkVertex >= 0 ? walkVertex : vertexFor(t.point);
@@ -743,25 +730,25 @@ export function brepRecordToRhino(rhino, record, tolerance) {
   brep.setEdgeTolerances(true);
   brep.setTrimTolerances(true);
   brep.compact();
-  // ASK OPENNURBS, DO NOT ASSUME — the same rule the single-face path follows,
-  // and the only independent judgment anywhere in this pipeline.
+  // Ask OpenNURBS rather than assume, as the single-face path does; its
+  // validator is the only independent check in this pipeline.
   const [valid, log] = brep.isValidWithLog;
   return valid
     ? { brep, log: '', counts: { faces: record.faces.length, edges: edgeIndex.filter((i) => i >= 0).length, vertices: vertexPoints.length, trims: trimCount } }
     : { brep: null, log: String(log || 'invalid brep') };
 }
 
-// ---- DOCUMENT EXPORT ----
+// Document export
 //
-// Builds a real, complete .3dm file from a plain-data payload — no live
-// document/THREE.js objects touch this module at all (worker.js's own job
-// is translating the app's real objectTable into this shape and back).
+// Builds a complete .3dm file from a plain-data payload — no live
+// document/THREE.js objects touch this module at all (worker.js translates
+// the app's objectTable into this shape and back).
 //
 // payload = {
 //   tolerance: number (mm),
-//   layers: [{id, name, color:{r,g,b}, parentId}],   // parent MUST already
+//   layers: [{id, name, color:{r,g,b}, parentId}],   // parent must
 //     appear earlier in the array than any child referencing it — true by
-//     construction for this app's own `layers` array (a child's parentId
+//     construction for this app's `layers` array (a child's parentId
 //     always names an already-existing layer at creation time).
 //   objects: [
 //     {kind:'point', layerId, name, point:[x,y,z]},
@@ -770,13 +757,11 @@ export function brepRecordToRhino(rhino, record, tolerance) {
 //   ],
 // }
 //
-// A RuledLoft/PolySurface/Split/MultiPipe container's own N panels are not
-// a special case here — the caller just emits N separate 'surface' entries
-// sharing a name prefix (e.g. "RuledLoft04 panel 1", "...panel 2"), exactly
-// per the "Breps (as untrimmed-face joins)" framing. History
-// never travels (an explicit rule) — every exported object is
-// a plain baked leaf, there is no HistoryRecord field anywhere in this
-// payload shape.
+// A RuledLoft/PolySurface/Split/MultiPipe container's N panels are not a
+// special case here — the caller emits N separate 'surface' entries sharing
+// a name prefix (e.g. "RuledLoft04 panel 1", "...panel 2"). History never
+// travels: every exported object is a plain baked leaf, and there is no
+// HistoryRecord field in this payload shape.
 export function exportDocument(rhino, payload) {
   const doc = new rhino.File3dm();
   doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
@@ -789,19 +774,15 @@ export function exportDocument(rhino, payload) {
   for (const layer of payload.layers || []) {
     const rlayer = new rhino.Layer();
     rlayer.name = layer.name;
-    /* ⚠⚠ ALPHA, OR THE LAYER IS INVISIBLE TO SHADING. rhino3dm's color setter
-       takes {r,g,b,a} and a missing `a` writes ZERO — a fully transparent layer
-       color. Reported from Rhino as "they are coming in on a layer that cannot
-       be shaded… so I have to put them on a new layer with shading". Checked
-       against a file Rhino itself wrote: its Default layer is 0,0,0,255, and
-       ours was 138,141,144,0. */
+    /* Alpha must be set, or Rhino cannot shade the layer. rhino3dm's color
+       setter takes {r,g,b,a} and a missing `a` writes zero — a fully
+       transparent layer color. A file Rhino itself writes has its Default
+       layer at 0,0,0,255. */
     const lc = layer.color || { r: 140, g: 141, b: 144 };
     rlayer.color = { r: lc.r, g: lc.g, b: lc.b, a: lc.a == null ? 255 : lc.a };
-    /* A HIDDEN LAYER STAYS HIDDEN, AND A LOCKED ONE STAYS LOCKED. Neither was
-       written, so a document whose construction layers were switched off opened
-       in Rhino with everything showing — the reader's own organisation silently
-       discarded by a file that reported success. Both default to the visible,
-       unlocked state a layer has when the caller says nothing. */
+    /* A hidden layer stays hidden, and a locked one stays locked. Both default
+       to the visible, unlocked state a layer has when the caller says
+       nothing. */
     if (layer.visible != null) rlayer.visible = !!layer.visible;
     if (layer.locked != null) rlayer.locked = !!layer.locked;
     if (layer.parentId != null && layerIdToGuid.has(layer.parentId)) {
@@ -819,11 +800,11 @@ export function exportDocument(rhino, payload) {
     if (obj.layerId != null && layerIdToIndex.has(obj.layerId)) {
       attrs.layerIndex = layerIdToIndex.get(obj.layerId);
     }
-    /* ⚠ AND THE COLOUR NEEDS ITS SOURCE SET, not just its value. An
+    /* The color needs its source set, not just its value. An
        ObjectAttributes carries both an objectColor and a colorSource saying
-       whether to USE it; writing the colour alone leaves the source at
-       "by layer" and Rhino draws the layer's colour, so the object's own
-       colour is present in the file and invisible in the viewport. */
+       whether to use it; writing the color alone leaves the source at
+       "by layer" and Rhino draws the layer's color, so the object's own
+       color is present in the file and invisible in the viewport. */
     if (obj.color) {
       const oc = obj.color;
       attrs.objectColor = { r: oc.r, g: oc.g, b: oc.b, a: oc.a == null ? 255 : oc.a };
@@ -835,7 +816,7 @@ export function exportDocument(rhino, payload) {
       doc.objects().addPoint(pointToRhino(obj.point), attrs);
     } else if (obj.kind === 'curve') {
       const nc = curveToRhino(rhino, obj);
-      /* THE KIND IS DERIVED FROM THE GEOMETRY, NOT DECLARED BY THE CALLER. A
+      /* The kind is derived from the geometry, not declared by the caller. A
          declared kind would have to be trusted, and a payload saying "circle"
          over control points that are not one writes a file whose analytic
          parameters and whose curve disagree. Asking OpenNURBS makes the two
@@ -858,16 +839,12 @@ export function exportDocument(rhino, payload) {
       if (built && built.brep) doc.objects().add(built.brep, attrs);
       else skipped.push({ name: obj.name || null, kind: `trimmed surface (OpenNURBS rejected it: ${built ? built.log.split('\n')[0] : 'could not be built'})` });
     } else if (obj.kind === 'brep') {
-      // A whole solid as ONE brep — and a refusal here MUST NOT COST THE OBJECT.
-      // The record is only an attempt at a better representation of geometry the
+      // A whole solid as one brep, and a refusal here must not cost the object.
+      // The record is an attempt at a better representation of geometry the
       // caller can also express as loose trimmed faces, so it sends those along
       // as `fallback` and a rejected join degrades to them: worse, named, and
-      // still every face in the file.
-      //
-      // ⚠ THIS IS NOT BELT-AND-BRACES. Without it a validator refusal deletes
-      // the object outright — the export reports one skip and writes NOTHING for
-      // it, which is the single worst outcome available here and exactly what
-      // happened before the fallback was wired.
+      // still every face in the file. Without the fallback a validator refusal
+      // would write nothing for the object.
       const built = brepRecordToRhino(rhino, obj.record, payload.tolerance);
       if (built && built.brep) {
         doc.objects().add(built.brep, attrs);
@@ -899,22 +876,19 @@ export function exportDocument(rhino, payload) {
   return { bytes, skipped };
 }
 
-// ---- DOCUMENT IMPORT ----
+// Document import
 //
-// Reads a real .3dm file back into the identical plain-data shape
-// exportDocument() consumes, plus a `skipped` array naming (never silently
-// dropping) anything genuinely out of this v1's scope: a Mesh, a SubD, or
-// any other object type this app has no honest mapping for yet. A Brep of
-// ANY face count now imports — a single-face Brep as one plain surface, a
-// multi-face Brep as one panel per face, each carrying its own trim loops
-// as 3-D polylines under `trimEdges3d`. Turning those into the (u,v) the
-// app stores is the caller's job and can fail; a panel whose boundary is
-// not recovered keeps the old behavior of arriving at its full untrimmed
-// extent, and the app says so rather than letting it pass for faithful.
-// Each panel's own "face N" name is unchanged. worker.js's own job is turning THESE plain
-// objects back into real table entries (a curve/surface imports as a plain
-// baked leaf, no history — matching Bake's own already-established
-// convention).
+// Reads a .3dm file back into the plain-data shape exportDocument()
+// consumes, plus a `skipped` array naming (never silently dropping) anything
+// this module has no mapping for, such as a Mesh. A Brep of any face count
+// imports — a single-face Brep as one plain surface, a multi-face Brep as one
+// panel per face, each carrying its own trim loops as 3-D polylines under
+// `trimEdges3d`. Turning those into the (u,v) the app stores is the caller's
+// job and can fail; a panel whose boundary is not recovered arrives at its
+// full untrimmed extent, and the app says so. Each panel is named with a
+// "face N" suffix. worker.js turns these plain objects back into table
+// entries (a curve/surface imports as a plain baked leaf, no history, the
+// same as Bake).
 export function importDocument(rhino, bytes) {
   const doc = rhino.File3dm.fromByteArray(bytes);
   const tolerance = doc.settings().modelAbsoluteTolerance;
@@ -932,7 +906,7 @@ export function importDocument(rhino, bytes) {
     const parentId = l.parentLayerId && l.parentLayerId !== NIL_GUID && layerGuidToId.has(l.parentLayerId)
       ? layerGuidToId.get(l.parentLayerId)
       : null;
-    // visible/locked ride back too — see the export side for why they matter.
+    // visible/locked ride back too.
     layers.push({ id: i, name: l.name || `Layer${i}`, color: l.color, parentId,
       visible: l.visible !== false, locked: !!l.locked });
   }
@@ -946,11 +920,11 @@ export function importDocument(rhino, bytes) {
     const o = robjs.get(i);
     const attrs = o.attributes();
     // attrs.layerIndex is already a plain index into rlayers, and `layers`
-    // above was built in that exact same index order — so the index IS the
-    // id, no GUID lookup needed here (layerGuidToId above is only for
-    // resolving PARENT relationships between layers, a different question).
+    // above was built in that same index order — so the index is the id, no
+    // GUID lookup needed here (layerGuidToId above is only for resolving
+    // parent relationships between layers).
     const layerId = attrs.layerIndex >= 0 && attrs.layerIndex < layers.length ? attrs.layerIndex : (layers.length ? 0 : null);
-    /* The object's OWN colour, and only when the file says to use it. An
+    /* The object's own color, and only when the file says to use it. An
        ObjectAttributes always carries an objectColor; what decides whether it
        means anything is colorSource, so reporting the value unconditionally
        would hand every by-layer object a spurious black. */
@@ -963,12 +937,9 @@ export function importDocument(rhino, bytes) {
       if (!fromObject) return null;
       return { r: c.r, g: c.g, b: c.b, a: c.a == null ? 255 : c.a };
     })();
-    /* ⚠⚠ AN EXTRUSION IS A BREP RHINO HAS NOT BOTHERED TO EXPAND. ON_Extrusion is
-       the lightweight form Rhino stores a great many ordinary solids in — most
-       of what a box, a boss or a rib actually is — and it fell to the skip list
-       by name, so those solids arrived as nothing at all. Counted across the 105
-       models that ship with the Rhino Level 1 and Level 2 training manuals: ONE
-       HUNDRED extrusion objects, every one dropped.
+    /* An extrusion is a brep Rhino has not expanded. ON_Extrusion is the
+       lightweight form Rhino stores many ordinary solids in — most of what a
+       box, a boss or a rib is — so it is converted rather than skipped.
        `toBrep` is OpenNURBS's own conversion, so the result takes the ordinary
        Brep path below and a converted extrusion imports exactly as the same
        shape saved as a Brep would. */
@@ -983,11 +954,11 @@ export function importDocument(rhino, bytes) {
       objects.push({ kind: 'point', layerId, name, color: objColor, point: pointFromRhino(geo.location) });
     } else if (geo.objectType === rhino.ObjectType.Curve) {
       const nc = geo.toNurbsCurve();
-      /* A CURVE ARRIVES WITH ITS KIND, and the plain NURBS form arrives with
+      /* A curve arrives with its kind, and the plain NURBS form arrives with
          it — `kind` stays 'curve' for all four, so a caller that reads only
          degree/knots/ctrlPts keeps working unchanged and one that reads
          `curveKind` rebuilds the Circle, Arc, Line or Polyline it was.
-         Reported for EVERY curve, explicitly null for a freeform one: an
+         Reported for every curve, explicitly null for a freeform one: an
          absent field cannot be told apart from a build that does not report
          kinds at all. */
       const analytic = analyticCurveOf(geo);
@@ -998,23 +969,16 @@ export function importDocument(rhino, bytes) {
       const ns = geo.toNurbsSurface();
       objects.push({ kind: 'surface', layerId, name, color: objColor, ...surfaceFromRhino(ns) });
     } else if (geo.objectType === rhino.ObjectType.Brep) {
-      // A single-face Brep with trivial trimming IS its own untrimmed
-      // surface — imports as one plain editable surface, no naming
-      // suffix needed (matches the pre-existing single-face behavior
-      // exactly, byte-for-byte).
+      // A single-face Brep with trivial trimming is its own untrimmed
+      // surface, and imports as one plain editable surface with no naming
+      // suffix.
       //
-      // A genuinely MULTI-face Brep (any real mechanical part — a
-      // fillet, a counterbore, an arm) is real, honest v1 scope, not a
-      // silent skip anymore: each face's own UNTRIMMED underlying
-      // surface comes in as an independent panel, mirroring this app's
-      // own EXPORT-side "Brep (as untrimmed-face joins)" convention
-      // exactly, just run in reverse. A trimmed face's true visible
-      // BOUNDARY is real information genuinely lost here — a fillet
-      // trimmed to a narrow band, or a small counterbore trimmed out of
-      // a bigger planar sheet, both come back at their FULL untrimmed
-      // extent, which can be larger than the real part ever showed at
-      // that spot. Named honestly, not silently perfect: each panel's
-      // name gets its own "face N" suffix.
+      // A multi-face Brep (a mechanical part — a fillet, a counterbore, an
+      // arm) brings each face's untrimmed underlying surface in as a panel,
+      // with its trim loops as 3-D polylines under `trimEdges3d` for the
+      // caller to recover. A face whose boundary is not recovered comes back
+      // at its full untrimmed extent, which can be larger than the part
+      // showed at that spot. Each panel's name gets a "face N" suffix.
       const faces = geo.faces();
       const faceCount = faces.count;
       if (faceCount === 1 && geo.isSurface) {
@@ -1022,17 +986,13 @@ export function importDocument(rhino, bytes) {
         const ns = face.underlyingSurface().toNurbsSurface();
         objects.push({ kind: 'surface', layerId, name, color: objColor, ...surfaceFromRhino(ns) });
       } else {
-        /* ⚠ A MULTI-FACE BREP IS ONE OBJECT, AND IT CAME IN AS N LOOSE ONES.
-           Every face was pushed as its own surface with nothing saying they
-           belonged together, so a solid arrived as a pile of sheets with no
-           topology — no faces list, no edges, and therefore nothing any command
-           that needs a solid could act on. A real Rhino solid of seven faces
-           imported as seven surfaces and could not be filleted, joined, shelled
-           or booleaned. The faces still convert one at a time; they now carry
-           the index of the brep they came from, and the caller assembles them
-           back into the one object they were. `isSolid` travels too, because
-           whether a thing is closed is a fact the file already knows and this
-           app would otherwise have to re-derive. */
+        /* A multi-face brep is one object. The faces convert one at a time,
+           each carrying the index of the brep it came from (`brepGroup`), and
+           the caller assembles them back into the one object they were;
+           without that grouping a solid would arrive as loose sheets with no
+           topology for a command that needs a solid to act on. `isSolid`
+           travels too, because whether a thing is closed is a fact the file
+           already knows. */
         let anyFaceFailed = false;
         const brepGroup = brepGroupSeq++;
         for (let f = 0; f < faceCount; f++) {
@@ -1050,11 +1010,10 @@ export function importDocument(rhino, bytes) {
         if (anyFaceFailed) skipped.push({ name, objectType: 'Brep (one or more faces failed to convert)' });
       }
     } else if (isRhinoSubD(rhino, geo)) {
-      // A REAL Rhino SubD arrives as a real SuperB cage — see
-      // subdCageFromRhino. Refuses by name rather than degrading to a
-      // mesh if the control net can't be read: a mesh that looks right
-      // and edits wrong is the one outcome the SubD design rules out
-      // before anything else.
+      // A Rhino SubD arrives as a SuperB cage — see subdCageFromRhino.
+      // Refuses by name rather than degrading to a mesh if the control net
+      // cannot be read: a mesh that looks right and edits wrong is the one
+      // outcome the SubD design rules out.
       try {
         const { cage, creasesLost } = subdCageFromRhino(rhino, geo);
         objects.push({ kind: 'subd', layerId, name, color: objColor, cage, creasesLost });
@@ -1062,29 +1021,25 @@ export function importDocument(rhino, bytes) {
         skipped.push({ name, objectType: `SubD (${err && err.message ? err.message : 'control net unreadable'})` });
       }
     } else {
-      // A genuinely multi-face or trimmed Brep, a Mesh, an
-      // Extrusion, etc. — real, stated v1 scope cut: this app can't yet
-      // author/edit a trimmed surface, so degrading one to a display-only
-      // mesh (the fuller ask) is real, separate follow-up work,
-      // not attempted here. Named honestly, never silently dropped.
+      // Anything else — a Mesh, an extrusion that did not convert, other
+      // object types — is skipped by name, never silently dropped.
       skipped.push({ name, objectType: describeRhinoGeometry(geo) });
     }
   }
 
-  /* ⚠ AND WHAT UNITS THE FILE CLAIMS. Only the tolerance was read, so a file
-     authored in inches arrived as raw numbers in a millimetre-only app — a
-     silent 25.4x mis-scale with nothing in the result to notice it by. The name
-     is reported rather than acted on: converting behind the caller's back would
-     be the same class of mistake in the other direction. */
+  /* The units the file claims. A file authored in inches carries raw numbers
+     25.4x off in a millimeter-only app. The name is reported rather than
+     acted on: converting behind the caller's back would be the same class of
+     mistake in the other direction. */
   const units = (() => {
     const us = doc.settings().modelUnitSystem;
     const table = rhino.UnitSystem;
     if (us == null || !table) return null;
-    /* ⚠ rhino3dm's enums are emscripten OBJECTS, not numbers — `UnitSystem` is a
+    /* rhino3dm's enums are emscripten objects, not numbers — `UnitSystem` is a
        function whose properties are singleton instances carrying a `.value`.
-       A `typeof v === 'number'` match therefore never fires, which is how this
-       first shipped returning null for every file. Identity works because the
-       binding hands back the same singleton; `.value` is the fallback. */
+       A `typeof v === 'number'` match therefore never fires. Identity works
+       because the binding hands back the same singleton; `.value` is the
+       fallback. */
     for (const k of Object.keys(table)) {
       if (k === 'values') continue;
       const v = table[k];

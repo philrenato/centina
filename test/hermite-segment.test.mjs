@@ -22,7 +22,7 @@ test('cubicHermiteSegment: passes through both endpoints exactly', () => {
   }
 });
 
-test('cubicHermiteSegment: matches the requested tangent EXACTLY at both ends (analytic)', () => {
+test('cubicHermiteSegment: matches the requested tangent exactly at both ends (analytic)', () => {
   const p0 = [0, 0, 0], p1 = [40, 20, -10];
   const m0 = [10, 0, 0], m1 = [5, -8, 4];
   const crv = cubicHermiteSegment(p0, p1, m0, m1);
@@ -34,7 +34,7 @@ test('cubicHermiteSegment: matches the requested tangent EXACTLY at both ends (a
   }
 });
 
-test('cubicHermiteSegment: the analytic derivative is cross-checked against an INDEPENDENT finite-difference derivative', () => {
+test('cubicHermiteSegment: the analytic derivative is cross-checked against an independent finite-difference derivative', () => {
   const p0 = [0, 0, 0], p1 = [30, -15, 5];
   const m0 = [12, 8, -2], m1 = [-6, 4, 9];
   const crv = cubicHermiteSegment(p0, p1, m0, m1);
@@ -45,7 +45,7 @@ test('cubicHermiteSegment: the analytic derivative is cross-checked against an I
   }
 });
 
-test('cubicHermiteSegment: a zero tangent at both ends degenerates to the classic smoothstep ease curve, NOT a straight chord (real, checkable boundary case — a zero-tangent cubic Bezier has double points at each end, which is the well-known 3t²-2t³ curve, verified by hand here)', () => {
+test('cubicHermiteSegment: a zero tangent at both ends degenerates to the classic smoothstep ease curve, not a straight chord (real, checkable boundary case — a zero-tangent cubic Bezier has double points at each end, which is the well-known 3t²-2t³ curve, verified by hand here)', () => {
   const p0 = [0, 0, 0], p1 = [10, 0, 0];
   const crv = cubicHermiteSegment(p0, p1, [0, 0, 0], [0, 0, 0]);
   for (let t = 0; t <= 1; t += 0.25) {
@@ -54,7 +54,7 @@ test('cubicHermiteSegment: a zero tangent at both ends degenerates to the classi
     assert.ok(Math.abs(x - expectedX) < 1e-9 && Math.abs(y) < 1e-9 && Math.abs(z) < 1e-9, `t=${t}: got [${x},${y},${z}] want x=${expectedX}`);
   }
   // Still monotonic start-to-end and still exact at both endpoints — a
-  // genuine, well-formed curve, just not a linear one.
+  // real, well-formed curve, just not a linear one.
   const c0 = curvePoint(crv, 0), c1 = curvePoint(crv, 1);
   assert.ok(Math.abs(c0[0]) < 1e-9 && Math.abs(c1[0] - 10) < 1e-9, 'endpoints still exact');
 });
@@ -79,13 +79,12 @@ test('catmullRomTangent: zero for a symmetric (collinear-and-centered) neighbor 
 });
 
 test('cubicHermiteSegment + catmullRomTangent together: a 3-point Catmull-Rom-tangent chain is G1-continuous at the shared interior joint by construction', () => {
-  // Three points, an interior tangent computed once and fed as BOTH the
+  // Three points, an interior tangent computed once and fed as both the
   // end derivative of segment A and the start derivative of segment B —
-  // exactly the G1-continuity-by-shared-value mechanism the app-layer
-  // "internal B handles" feature (unbuilt at the app layer) would rely
-  // on. Proven directly: segment A's own end derivative and segment B's
+  // exactly the G1-continuity-by-shared-value mechanism an app-layer
+  // "internal B handles" feature would rely on. Proven directly: segment A's own end derivative and segment B's
   // own start derivative, read independently off each curve, must match
-  // the SAME requested tangent exactly.
+  // the same requested tangent exactly.
   const pA = [0, 0, 0], pMid = [20, 15, 0], pB = [45, 10, 0];
   const mMid = catmullRomTangent(pA, pB);
   const segA = cubicHermiteSegment(pA, pMid, [15, 0, 0], mMid);

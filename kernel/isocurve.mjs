@@ -1,34 +1,31 @@
-// ExtractIsocurve — Piegl & Tiller's own defining property of a NURBS
-// surface's isoparametric curves: holding ONE parameter fixed collapses the
-// surface's tensor-product sum into an ordinary NURBS CURVE running along
-// the OTHER parameter, of that direction's own degree/knots exactly — not
-// a resampled polyline approximation of one.
+// ExtractIsocurve — Piegl & Tiller's defining property of a NURBS surface's
+// isoparametric curves: holding one parameter fixed collapses the surface's
+// tensor-product sum into an ordinary NURBS curve running along the other
+// parameter, of that direction's degree/knots exactly — not a resampled
+// polyline approximation of one.
 //
 //   S(u0, v) = sum_j  [ sum_i N_i,p(u0) * Pw[i][j] ]  * N_j,q(v)
 //                       \_________________________/
 //                       the isocurve's own j-th homogeneous control point
 //
-// This is the SAME basis-function machinery surfacePoint (surface.mjs)
-// already runs for a single point, and the SAME machinery the Wireframe
-// isocurve overlay already uses to SAMPLE points along an isocurve for
-// display — the one genuinely new piece here is contracting the FULL
-// control net along one direction (every row/column, not just the p+1 or
-// q+1 nonzero terms near one sample) to get a real, independent curve
-// OBJECT (degree + knots + control points) rather than a stream of sampled
-// points with no curve identity of their own.
+// This is the basis-function machinery surfacePoint (surface.mjs) runs for a
+// single point, and that the Wireframe isocurve overlay uses to sample points
+// along an isocurve for display. What is added here is contracting the full
+// control net along one direction (every row/column, not just the p+1 or q+1
+// nonzero terms near one sample) to get an independent curve object (degree +
+// knots + control points) rather than a stream of sampled points.
 //
-// A NurbsCrv here, matching curve.mjs/interpolate.mjs's own convention, is
-// { degree, knots, ctrlPts } with ctrlPts = [x, y, z, w] (real point + its
-// weight, not premultiplied) — this app's SketchCurve representation, so
-// an extracted isocurve slots directly into the document as an ordinary,
-// fully-editable/joinable/extrudable curve object.
+// A NurbsCrv here, as in curve.mjs/interpolate.mjs, is
+// { degree, knots, ctrlPts } with ctrlPts = [x, y, z, w] (point + its weight,
+// not premultiplied) — the SketchCurve representation, so an extracted
+// isocurve is an ordinary editable/joinable/extrudable curve object.
 
 import { findSpan, basisFuns } from './basis.mjs';
 import { surfaceClosure } from './surface.mjs';
 import { grevilleAbscissae } from './curve.mjs';
 
-// Fix U at `u`, return the real NurbsCrv running along the surface's own V
-// direction (degree degV, knots knotsV).
+// Fix U at `u`, return the NurbsCrv running along the surface's V direction
+// (degree degV, knots knotsV).
 export function extractIsocurveU(srf, u) {
   const { degU: p, knotsU: U, degV: q, knotsV: V, ctrlNet } = srf;
   const n = ctrlNet.length - 1;
@@ -50,8 +47,8 @@ export function extractIsocurveU(srf, u) {
   return { degree: q, knots: V.slice(), ctrlPts };
 }
 
-// Fix V at `v`, return the real NurbsCrv running along the surface's own U
-// direction (degree degU, knots knotsU) — the symmetric twin of the above.
+// Fix V at `v`, return the NurbsCrv running along the surface's U direction
+// (degree degU, knots knotsU) — the symmetric twin of the above.
 export function extractIsocurveV(srf, v) {
   const { degU: p, knotsU: U, degV: q, knotsV: V, ctrlNet } = srf;
   const n = ctrlNet.length - 1;
@@ -73,26 +70,18 @@ export function extractIsocurveV(srf, v) {
   return { degree: p, knots: U.slice(), ctrlPts };
 }
 
-// ExtractBorder — a surface's own 4 parametric-domain edges (u=uMin,
-// u=uMax, v=vMin, v=vMax), each just extractIsocurveU/V called AT a
-// domain boundary rather than an interior parameter — genuinely zero new
-// evaluation math beyond the two functions just above. The one real
-// design decision this needed: which of the 4 are actually NAKED
-// (free) edges, since a surface that WRAPS in a direction (surfaceClosure,
-// already built for the INSPECT/WHAT "Open Edges" report) has its own
-// u=uMin/u=uMax boundary curves COINCIDE exactly (same control ROW,
-// literally the same curve) — extracting both would silently return a
-// duplicate. Real Rhino's own DupBorder/ExtractWireframe border case
-// has the identical convention: a closed surface's own seam is internal,
-// not a border. Filtering BY CONSTRUCTION here (never emitting the
-// closed direction's pair at all) means there is no seam-duplicate case
-// to dedupe after the fact — the same class of cosmetic gap Divide/
-// DivideSrf both left open for their own closed-curve/closed-surface
-// case doesn't arise for ExtractBorder at all, by design, not by luck.
-// A surface closed in BOTH directions (e.g. a full torus, buildable via
-// Revolve of a closed profile through a full sweep) correctly returns
-// an EMPTY array — a genuinely valid answer (nakedEdgeCount(srf) === 0
-// for the identical reason), not a bug to special-case away.
+// ExtractBorder — a surface's 4 parametric-domain edges (u=uMin, u=uMax,
+// v=vMin, v=vMax), each extractIsocurveU/V called at a domain boundary. The
+// design decision is which of the 4 are naked (free) edges: a surface that
+// wraps in a direction (surfaceClosure, as used by the "Open Edges" report)
+// has its u=uMin/u=uMax boundary curves coincide exactly (the same control
+// row), so extracting both would return a duplicate. Rhino's
+// DupBorder/ExtractWireframe border case has the same convention: a closed
+// surface's seam is internal, not a border. The closed direction's pair is
+// never emitted, so there is no seam duplicate to remove afterwards.
+// A surface closed in both directions (e.g. a full torus, from Revolve of a
+// closed profile through a full sweep) returns an empty array — a valid
+// answer (nakedEdgeCount(srf) === 0 for the same reason).
 export function extractBorderCurves(srf, tol = 1e-6) {
   const { closedU, closedV } = surfaceClosure(srf, tol);
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
@@ -109,43 +98,29 @@ export function extractBorderCurves(srf, tol = 1e-6) {
   return borders;
 }
 
-// ExtractWireframe — the spec: "All isocurves at the
-// object's current ISOCURVEDENSITY setting become real, independent curve
-// objects at once (batch EXTRACTISOCURVE)." There is no real, adjustable
-// per-object ISOCURVEDENSITY setting anywhere in this app yet (grep-
-// confirmed before writing this — only ISOCURVE_SAMPLE_COUNT exists, the
-// unrelated RENDER-tessellation density of a single already-extracted
-// curve's own display polyline, not a count of HOW MANY isocurves to
-// extract). So v1 reuses the ONE density convention this app already has
-// and already ships live: the WIREFRAME status-row overlay's own Greville-
-// abscissae placement (the app's `isocurveParams`/
-// `buildIsocurveOverlay` — one isocurve per control-point ROW in each
-// direction, by construction always including both domain edges for a
-// clamped knot vector, since a curve's first/last Greville values land
-// exactly on its own boundary). Reused verbatim rather than inventing a
-// second, different density rule for what is otherwise the identical
-// visual promise ("show me the surface's own isocurve structure").
+// ExtractWireframe — every isocurve at the object's isocurve density becomes
+// an independent curve object at once (a batch ExtractIsocurve). There is no
+// adjustable per-object isocurve-density setting in this app
+// (ISOCURVE_SAMPLE_COUNT is the render-tessellation density of one curve's
+// display polyline, not a count of isocurves), so this uses the density
+// convention of the Wireframe overlay: Greville-abscissae placement (the
+// app's `isocurveParams`/`buildIsocurveOverlay` — one isocurve per
+// control-point row in each direction, always including both domain edges for
+// a clamped knot vector, since a curve's first/last Greville values land
+// exactly on its boundary).
 //
-// Genuinely ZERO new evaluation math: grevilleAbscissae (curve.mjs,
-// already proven for Sweep1's own frame placement AND the Wireframe
-// overlay) picks the fixed parameter values; extractIsocurveU/V (this
-// file, already proven for ExtractIsocurve/ExtractBorder) turn each one
-// into a REAL, exact curve — a fixed-U row (running along V) always uses
-// extractIsocurveU; a fixed-V row (running along U) always uses
-// extractIsocurveV, the identical pairing buildIsocurveOverlay itself uses
-// for its own uVals/vVals loops.
+// No new evaluation math: grevilleAbscissae (curve.mjs) picks the fixed
+// parameter values and extractIsocurveU/V turn each one into an exact curve —
+// a fixed-U row (running along V) uses extractIsocurveU; a fixed-V row
+// (running along U) uses extractIsocurveV, the same pairing
+// buildIsocurveOverlay uses for its uVals/vVals loops.
 //
-// SEAM DUPLICATION on a surface closed in one direction is DELIBERATELY
-// NOT filtered out here — unlike extractBorderCurves' own closed-direction
-// filter just above, this function matches the WIREFRAME OVERLAY's own
-// exact convention (which never filters by closure either): a closed
-// cylinder's own seam row appears twice (once as the first Greville value,
-// once as the last). This is the SAME already-accepted cosmetic gap
-// Divide/DivideSrf's own closed-curve/closed-surface case already has (see
-// extractBorderCurves' own comment for that established precedent) — a
-// real, named parallel to an existing accepted quirk, not a new bug, and
-// not silently different from the very overlay this command claims to
-// batch-extract.
+// Seam duplication on a surface closed in one direction is not filtered here,
+// unlike extractBorderCurves: this function matches the Wireframe overlay,
+// which does not filter by closure either, so a closed cylinder's seam row
+// appears twice (once as the first Greville value, once as the last). This is
+// the same known limitation Divide/DivideSrf have for closed curves and
+// surfaces.
 export function extractWireframeCurves(srf) {
   const uVals = grevilleAbscissae({ degree: srf.degU, knots: srf.knotsU, ctrlPts: new Array(srf.ctrlNet.length) });
   const vVals = grevilleAbscissae({ degree: srf.degV, knots: srf.knotsV, ctrlPts: new Array(srf.ctrlNet[0].length) });

@@ -1,4 +1,4 @@
-// THE AgX DISPLAY TRANSFORM (Troy Sobotka), AS THE PRESENT SHADER APPLIES IT.
+// The AgX display transform (Troy Sobotka), as the present shader applies it.
 //
 // A path tracer produces open-domain radiance and a display takes [0,1]. AgX
 // gets from one to the other by rotating into a slightly desaturated working
@@ -13,22 +13,16 @@
 // JS — a thumbnail, a color swatch, a regression fixture — gets the identical
 // answer rather than a second, drifting implementation.
 //
-// ⚠⚠⚠ THE MATRICES ARE COLUMNS, AND ONE OF THEM WAS ONCE WRITTEN AS ROWS.
-// `Minv` was transposed, so `M * Minv` was not the identity: a neutral gray came
-// back as (1.091, 0.956, 0.953) — red up 9%, green and blue down about 4.5%.
-// That is a warm-pink cast on every pixel the renderer had ever produced, and
-// because the error is MULTIPLICATIVE, brightening a surface made it worse
-// rather than whiter, which is why a white backdrop could not be made to look
-// white and why the search went to lighting for a long time. A transpose of a
-// near-identity matrix breaks no invariant a reader would notice: the numbers
-// look right, the rows sum to about one either way, and the output stays
-// plausible. Only pushing a neutral through and demanding a neutral back can
-// see it.
+// The matrices are columns. A transposed `Minv` leaves `M * Minv` short of the
+// identity — a neutral gray comes back as (1.091, 0.956, 0.953), a warm cast
+// that is multiplicative, so brightening a surface makes it worse rather than
+// whiter. A transpose of a near-identity matrix looks plausible (the rows sum
+// to about one either way); only pushing a neutral through and demanding a
+// neutral back detects it.
 //
-// ⚠ SO THESE NUMBERS ARE COPIED, NOT TYPED. They come from the shader source
-// verbatim, in the shader's own column order and to the shader's own digit
-// count. Retyping them, reflowing them into rows "for readability", or
-// shortening them is how the transpose happened the first time.
+// These numbers are copied verbatim from the shader source, in the shader's own
+// column order and to its own digit count. Do not retype, reflow into rows, or
+// shorten them.
 
 /* Column-major, exactly as WGSL's mat3x3f(c0, c1, c2) stores it: entry
    [c*3 + r] is row r of column c, and `M * v` is c0*v.x + c1*v.y + c2*v.z. */
@@ -80,7 +74,7 @@ function mul3(m, x, y, z, out) {
  * `out` may be any 3-element array-like, including a view into a pixel buffer;
  * omitted, a fresh 3-array comes back.
  *
- * ⚠ THE INPUT IS FLOORED AT 1e-10 BEFORE THE LOG, not clamped afterwards. A
+ * The input is floored at 1e-10 before the log, not clamped afterwards. A
  * channel of exactly zero is a legitimate result of a path tracer and log2(0)
  * is -Infinity, which the window clamp would turn into the correct answer on
  * most hardware and NaN on the rest.
@@ -101,7 +95,7 @@ export function agx(rgb, out = [0, 0, 0]) {
 /**
  * Exposure then AgX, which is the order the present pass uses.
  *
- * Exposure is applied in LINEAR light, before the transform — applying it after
+ * Exposure is applied in linear light, before the transform — applying it after
  * would scale display-encoded values and crush the highlight rolloff the
  * transform exists to provide.
  */

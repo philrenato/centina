@@ -1,25 +1,19 @@
-// SURFACE FAIR — the second stage of the surface modifier
-// chain (Rebuild -> Fair -> Point Edits). A
-// real, well-known, honestly-scoped Laplacian CONTROL-NET relaxation —
-// NOT Rhino's own energy-functional Fair (which minimizes a real
-// curvature-based cost under G0/G1/G2 constraints), and it genuinely
-// shrinks the net slightly toward the local average, a real side effect
-// students should be able to see, not a claim of exact shape
-// preservation the way refitSurfaceUV's own Rebuild can honestly make.
+// Surface fair — the second stage of the surface modifier
+// chain (Rebuild -> Fair -> Point Edits). A Laplacian control-net
+// relaxation, not an energy-functional fair (which minimizes a
+// curvature-based cost under G0/G1/G2 constraints). It shrinks the net
+// slightly toward the local average, so unlike Rebuild it does not
+// preserve shape exactly.
 //
-// A SINGLE discoverable "Smoothness" knob (`amount`, 0..1) is the whole
-// public surface.
-// A review finding: two coupled Laplacian parameters (iteration
-// count, per-step blend weight) is a bad classroom experience for a
-// design student. `fairParamsFromAmount` is the one place that maps the
-// single knob to the two real internal numbers, so tuning that mapping
-// later never touches call sites.
+// One "Smoothness" knob (`amount`, 0..1) is the whole public surface.
+// `fairParamsFromAmount` is the one place that maps it to the two
+// internal Laplacian parameters (iteration count, per-step blend weight),
+// so tuning that mapping never touches call sites.
 
 // amount=0 maps to 0 iterations (a byte-identical passthrough, matching
-// Rebuild's own `srfRebuild:null`-is-inert convention exactly); amount=1
-// maps to 20 iterations at a fixed, real 0.5 per-step blend weight —
-// tuned to visibly, monotonically smooth a real control net without
-// needing per-surface retuning.
+// Rebuild's `srfRebuild:null`-is-inert convention); amount=1 maps to 20
+// iterations at a fixed 0.5 per-step blend weight, which smooths a
+// control net monotonically without per-surface retuning.
 const FAIR_MAX_ITERATIONS = 20;
 const FAIR_LAMBDA = 0.5;
 export function fairParamsFromAmount(amount) {
@@ -27,20 +21,18 @@ export function fairParamsFromAmount(amount) {
   return { iterations: Math.round(a * FAIR_MAX_ITERATIONS), lambda: FAIR_LAMBDA };
 }
 
-// fairControlNet(srf, amount) — relaxes every INTERIOR control point
+// fairControlNet(srf, amount) — relaxes every interior control point
 // (never the U=0/U=max/V=0/V=max boundary row/column, which stay pinned
-// exactly so the surface's own edges/corners never drift) toward the
-// plain arithmetic average of its 4 grid neighbors, blended by `lambda`
-// per iteration, repeated `iterations` times. Operates on CARTESIAN
-// position only (indices 0/1/2) — a control point's own rational WEIGHT
-// (index 3) is never touched, since weight expresses "pull," not a
-// spatial position to smooth; a rational surface's own shape character
-// (where its weights are non-uniform) survives fairing exactly as far as
-// weight is concerned, only positions relax.
+// so the surface's edges and corners never drift) toward the
+// arithmetic average of its 4 grid neighbors, blended by `lambda`
+// per iteration, repeated `iterations` times. Operates on Cartesian
+// position only (indices 0/1/2); a control point's rational weight
+// (index 3) is never touched, since weight expresses pull, not a
+// spatial position to smooth.
 export function fairControlNet(srf, amount) {
   const { iterations, lambda } = fairParamsFromAmount(amount);
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
-  if (iterations <= 0 || nu < 3 || nv < 3) return srf; // no genuine interior point exists to relax at nu/nv<3 — an honest no-op, not a crash
+  if (iterations <= 0 || nu < 3 || nv < 3) return srf; // no interior point exists at nu/nv<3
   let net = srf.ctrlNet.map((row) => row.map((cp) => [...cp]));
   for (let iter = 0; iter < iterations; iter++) {
     const next = net.map((row) => row.map((cp) => [...cp]));

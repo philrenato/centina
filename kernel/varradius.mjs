@@ -1,28 +1,27 @@
-/* VARIABLE-RADIUS EDGE BLENDING — a radius that changes along the edge, and the
+/* Variable-radius edge blending — a radius that changes along the edge, and the
    conditions under which the surface it asks for exists.
-   ==================================================================
 
-   PRIOR ART:
+   Prior art:
 
      · Peternell, M. & Pottmann, H., "Computing Rational Parametrizations of
        Canal Surfaces." Journal of Symbolic Computation 23(2-3), pp. 255-266,
        1997. DOI 10.1006/jsco.1996.0087. Two things are taken from here: the
        existence condition |m'|^2 - r'^2 >= 0, which `variableRadiusFeasible` in
-       fillet.mjs already encodes and which this module ENFORCES; and the
+       fillet.mjs encodes and which this module enforces; and the
        characteristic circle of the sphere family, which is what a section of a
-       variable-radius blend actually is.
+       variable-radius blend is.
      · Fritsch, F. N. & Carlson, R. E., "Monotone Piecewise Cubic
        Interpolation." SIAM Journal on Numerical Analysis 17(2), pp. 238-246,
        1980. DOI 10.1137/0717021. The shape-preserving cubic used for the radius
        profile, and the reason it is used rather than a smoother spline.
      · Lukacs, G., "Differential geometry of G1 variable radius rolling ball
        blend surfaces." Computer Aided Geometric Design 15(6), pp. 585-613,
-       1998. DOI 10.1016/S0167-8396(98)00006-5. Names the REGRESSIVE points a
-       variable-radius blend develops. NOT implemented here — see the scope note
+       1998. DOI 10.1016/S0167-8396(98)00006-5. Names the regressive points a
+       variable-radius blend develops. Not implemented here — see the scope note
        at the bottom of this header.
 
-   THE ONE THING A VARIABLE RADIUS CHANGES ABOUT THE SECTION, and it is not
-   obvious: THE CONTACT CIRCLE IS NO LONGER A GREAT CIRCLE OF THE BALL.
+   What a variable radius changes about the section: the contact circle is
+   not a great circle of the ball.
 
    A ball of radius r(t) centered at m(t) touches the finished surface along its
    characteristic circle, the set of points where the neighboring balls of the
@@ -31,26 +30,26 @@
        (p - m) . m' + r r' = 0,
 
    so every contact point p = m + r n satisfies n . T = -r'/|m'| =: tilt, with T
-   the unit spine tangent. The contact points therefore lie on a SMALL circle:
-   its center is m + r*tilt*T, offset from the ball center ALONG the spine, and
+   the unit spine tangent. The contact points therefore lie on a small circle:
+   its center is m + r*tilt*T, offset from the ball center along the spine, and
    its radius is r*sqrt(1 - tilt^2), shrunk. Both reduce to the ball center and r
    when r' = 0, which is why a constant radius never exposes this.
 
    Skinning great-circle arcs instead — which is what a constant-radius section
    builder does — puts the mid-arc a fixed fraction of r off the true envelope,
    on the order of 8% of r at |dr/ds| = 0.2 on a right-angled edge, and that
-   error is STRUCTURAL: it does not fall with section count, because every
+   error is structural: it does not fall with section count, because every
    section is individually in the wrong plane. It is also invisible to any
-   instrument that only asks "is this point r from the ball center", since a
-   great-circle arc lies exactly on the ball. What it is not invisible to is the
-   signed canal measure below, which asks the stronger question: is this point on
-   the boundary of the union of balls, or inside it.
+   check that only asks "is this point r from the ball center", since a
+   great-circle arc lies exactly on the ball. The signed canal measure below
+   sees it, because it asks whether the point is on the boundary of the union
+   of balls or inside it.
 
-   WHAT THIS MODULE DOES NOT DO. It does not detect REGRESSIVE points (Lukacs
+   Not covered: this module does not detect regressive points (Lukacs
    1998) — the cusps and local self-intersections a variable-radius blend can
    develop where the tube folds back on itself even though the existence
    condition holds pointwise. The feasibility test here is the Peternell &
-   Pottmann inequality, which is NECESSARY and not sufficient, and every field
+   Pottmann inequality, which is necessary and not sufficient, and every field
    name says so.
 
    Plain data throughout: a point is [x, y, z]. Nothing here imports a vector
@@ -71,41 +70,38 @@ function norm(a) {
   return [a[0] / L, a[1] / L, a[2] / L];
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE RADIUS PROFILE
-   ───────────────────────────────────────────────────────────────────────── */
+// The radius profile
 
 /**
- * A RADIUS PROFILE: an ordered set of STOPS, each a parameter t in [0,1] with a
+ * A radius profile: an ordered set of stops, each a parameter t in [0,1] with a
  * radius, evaluated to a smooth radius function r(t).
  *
- * ⚠ SHAPE-PRESERVING, NOT SMOOTHEST. The interpolant is the monotone piecewise
- * cubic Hermite of Fritsch & Carlson 1980, and the choice is load-bearing rather
- * than a matter of taste:
+ * Shape-preserving, not smoothest. The interpolant is the monotone piecewise
+ * cubic Hermite in the Fritsch–Butland / Brodlie harmonic-mean form (after
+ * Fritsch & Carlson 1980; MATLAB's pchip), for these reasons:
  *
- *   · A NATURAL or Catmull-Rom cubic is C2 and OVERSHOOTS. Overshoot in a radius
- *     profile is not cosmetic — it is a fillet that grows larger than any radius
- *     the user asked for, and on a profile that drops steeply it dips BELOW
- *     ZERO, which is a ball of negative radius and a blend inverted through its
- *     own spine. The overshoot also invents |r'| that the stops never contained,
- *     so a profile whose stops are comfortably feasible can be refused because
- *     of a bulge nobody asked for.
- *   · A LINEAR profile has no overshoot but is only C0, so r' jumps at every
+ *   · A natural cubic (C2) or a Catmull-Rom cubic (C1) overshoots. Overshoot in a radius
+ *     profile is a fillet that grows larger than any radius the user asked
+ *     for, and on a profile that drops steeply it dips below zero, which is a
+ *     ball of negative radius and a blend inverted through its own spine. The
+ *     overshoot also invents |r'| that the stops never contained, so a profile
+ *     whose stops are feasible can be refused because of the overshoot.
+ *   · A linear profile has no overshoot but is only C0, so r' jumps at every
  *     stop. r' sets the tilt of every section (see `variableRadiusSection`), so
  *     a jump in r' is a visible crease in the finished blend at each stop.
  *   · Fritsch & Carlson is C1 and shape-preserving: on every segment the
  *     interpolant is monotone between its two stops, so the whole function is
  *     bounded by min and max of the stop radii — positive stops give a positive
- *     radius everywhere, with no test needed to hope for it — and at an interior
+ *     radius everywhere without a separate test — and at an interior
  *     stop that is a local extremum of the data the slope is set to zero, so the
  *     waist of a thick-thin-thick profile lands exactly on its stop.
  *
- * WHAT IS GIVEN UP: C1 and not C2, so the blend's curvature steps at each stop.
+ * What is given up: C1 and not C2, so the blend's curvature steps at each stop.
  * Curvature continuity would need the overshoot back, or more stops.
  *
- * TWO STOPS ARE A STRAIGHT TAPER, exactly and by construction: with no interior
+ * Two stops are a straight taper, exactly and by construction: with no interior
  * stop the end slopes are both the single segment slope, and the Hermite cubic
- * through two points with equal end slopes IS the straight line. "Starts at X,
+ * through two points with equal end slopes is the straight line. "Starts at X,
  * ends at Y" is therefore a closed form, not an approximation of one.
  *
  * Stops are `[t, radius]` pairs or `{ t, radius }` records. The first must sit
@@ -128,7 +124,7 @@ export function radiusProfile(stops) {
     if (!(ri > 0)) return { ok: false, reason: `stop ${i} asks for radius ${ri}; a rolling ball has a positive radius` };
     if (ti < 0 || ti > 1) return { ok: false, reason: `stop ${i} sits at t = ${ti}, outside the edge's own [0,1]` };
     if (i > 0 && !(ti > t[i - 1])) {
-      // Equal parameters are the trap here, not reversed ones: two stops at the
+      // Equal parameters are the hazard here, not reversed ones: two stops at the
       // same t divide by a zero segment length and would emit Infinity slopes
       // rather than refusing.
       return { ok: false, reason: `stops must be strictly ordered along the edge; stop ${i} is at t = ${ti} and stop ${i - 1} is at t = ${t[i - 1]}` };
@@ -147,13 +143,13 @@ export function radiusProfile(stops) {
   const d = new Array(n).fill(0);
   for (let i = 1; i + 1 < n; i++) {
     // A sign change in the data means an interior extremum: the slope is zeroed
-    // so the interpolant's extremum lands ON the stop rather than past it.
+    // so the interpolant's extremum lands on the stop rather than past it.
     if (del[i - 1] * del[i] <= 0) { d[i] = 0; continue; }
     const w1 = 2 * h[i] + h[i - 1], w2 = h[i] + 2 * h[i - 1];
     d[i] = (w1 + w2) / (w1 / del[i - 1] + w2 / del[i]);
   }
   const endSlope = (h1, h2, d1, d2) => {
-    if (h2 === undefined) return d1; // two stops: the segment slope, so the cubic IS the line
+    if (h2 === undefined) return d1; // two stops: the segment slope, so the cubic is the line
     let s = ((2 * h1 + h2) * d1 - h1 * d2) / (h1 + h2);
     if (s * d1 <= 0) s = 0;
     else if (d1 * d2 <= 0 && Math.abs(s) > Math.abs(3 * d1)) s = 3 * d1;
@@ -196,11 +192,11 @@ export function radiusProfile(stops) {
 }
 
 /**
- * THE STATED DEFAULT FOR A CHAIN: thick at both ends, thin in the middle.
+ * The default for a chain: thick at both ends, thin in the middle.
  *
  * Three stops, the two ends equal, the middle smaller. Named rather than left to
  * the caller to assemble because it is the shape the app offers by default, and
- * because the shape-preserving interpolant gives it a property worth relying on:
+ * because the shape-preserving interpolant guarantees:
  * the waist sits exactly at `at` with exactly `waist`, with zero slope there, and
  * the radius never exceeds `ends` anywhere.
  *
@@ -213,9 +209,8 @@ export function thickThinThickProfile({ ends, waist, waistFraction, at = 0.5 } =
   if (w == null && Number.isFinite(waistFraction)) w = ends * waistFraction;
   if (!(w > 0)) return { ok: false, reason: `the waist radius must be positive; got ${w}` };
   if (!(w < ends)) {
-    // A waist equal to the ends is a constant profile wearing this function's
-    // name. Refused rather than silently built, so a caller cannot believe it
-    // asked for a waist and get none.
+    // A waist equal to the ends is a constant profile. Refused rather than
+    // built, so a caller asking for a waist does not get none.
     return { ok: false, reason: `a waist of ${w} is not thinner than the ends at ${ends} — that is a constant radius, and radiusProfile builds it` };
   }
   if (!(at > 0) || !(at < 1)) return { ok: false, reason: `the waist must sit strictly inside the edge; got t = ${at}` };
@@ -224,24 +219,22 @@ export function thickThinThickProfile({ ends, waist, waistFraction, at = 0.5 } =
   return { ...p, shape: 'thick-thin-thick', ends, waist: w, waistAt: at };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE SECTION
-   ───────────────────────────────────────────────────────────────────────── */
+// The section
 
 /**
- * ONE CROSS-SECTION OF A VARIABLE-RADIUS BLEND — the characteristic circle of
+ * One cross-section of a variable-radius blend — the characteristic circle of
  * the sphere family, not a great circle of the ball.
  *
- * `radiusRate` is dr/ds: how fast the radius changes per unit of SPINE ARC
- * LENGTH, which is the scale-free form of the Peternell & Pottmann condition —
+ * `radiusRate` is dr/ds: how fast the radius changes per unit of spine arc
+ * length, which is the scale-free form of the Peternell & Pottmann condition —
  * |m'|^2 >= r'^2 is exactly |dr/ds| <= 1. It is refused at 1 and above, where
  * the contact circle has shrunk to a point and there is no section left.
  *
- * ⚠ THE TILT IS AN INVARIANT OF THE INPUT, NOT A FREE PARAMETER, and checking it
+ * The tilt is an invariant of the input, not a free parameter, and checking it
  * is the only way this function can tell whether the caller's spine, radius and
- * normals describe a ball that is really rolling. For ANY ball kept tangent to a
+ * normals describe a rolling ball. For any ball kept tangent to a
  * fixed surface, differentiating m = p - r n with n . p' = 0 and n . n' = 0
- * gives n . m' = -r' identically. So both touch directions must have the SAME
+ * gives n . m' = -r' identically. So both touch directions must have the same
  * component along the spine tangent, equal to -dr/ds. A caller who supplies a
  * spine that does not keep the ball in contact violates that, and the residual
  * is the size of the violation.
@@ -279,15 +272,15 @@ export function variableRadiusSection({ centre, radius, toTouchA, toTouchB, spin
   if (cosBetween < -1 + 1e-12) return { ok: false, reason: 'the faces are opposed — a ball cannot touch both' };
   const tangencyA = add(centre, mul(nA, radius));
   const tangencyB = add(centre, mul(nB, radius));
-  /* THE ONE PLACE EXACTNESS AT tilt = 0 IS DELIBERATE. A constant profile must
-     reproduce the constant-radius blend BIT FOR BIT, not to within a rounding —
-     that is the closed form this construction is checked against. Adding
+  /* Exactness at tilt = 0. A constant profile must reproduce the
+     constant-radius blend bit for bit, not to within a rounding — that is the
+     closed form this construction is checked against. Adding
      `radius * 0 * T` component-wise would be exact for every finite coordinate
      but turns a -0 into a +0, so the branch is taken explicitly. */
   const offset = radius * tilt;
   const contactCentre = offset === 0 ? centre.slice() : add(centre, mul(T, offset));
   const contactRadius = tilt === 0 ? radius : radius * Math.sqrt(1 - tilt * tilt);
-  // The sweep is measured at the CONTACT circle's center, and a tilt opens it:
+  // The sweep is measured at the contact circle's center, and a tilt opens it:
   // cos(sweep) = (nA.nB - tilt^2) / (1 - tilt^2), which exceeds a right angle
   // wherever the tilt is large and the faces are already near-tangent.
   const cosSweep = Math.max(-1, Math.min(1, (cosBetween - tilt * tilt) / (1 - tilt * tilt)));
@@ -300,7 +293,7 @@ export function variableRadiusSection({ centre, radius, toTouchA, toTouchB, spin
     centre, radius,
     tangencyA, tangencyB,
     spineTangent: T,
-    // The circle the ball actually touches along, offset along the spine and
+    // The circle the ball touches along, offset along the spine and
     // shrunk. Equal to (centre, radius) exactly when the radius is not changing.
     contactCentre, contactRadius,
     tilt, radiusRate, tiltMismatch, sweep,
@@ -308,7 +301,7 @@ export function variableRadiusSection({ centre, radius, toTouchA, toTouchB, spin
 }
 
 /**
- * The same exact rational quadratic `sectionArc` builds, taken about the CONTACT
+ * The same exact rational quadratic `sectionArc` builds, taken about the contact
  * circle rather than about the ball center. Feeding it the ball center instead
  * is the great-circle error described in this module's header: the arc still
  * passes through both tangency points and still measures `radius` from the ball
@@ -319,20 +312,18 @@ export function variableRadiusSectionArc(section) {
   return sectionArc({ ok: true, centre: section.contactCentre, tangencyA: section.tangencyA, tangencyB: section.tangencyB });
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE SPINE FRAME
-   ───────────────────────────────────────────────────────────────────────── */
+// The spine frame
 
 /**
- * THE SPINE TANGENT AND dr/ds AT ONE PARAMETER.
+ * The spine tangent and dr/ds at one parameter.
  *
- * ⚠ THE SPINE IS NOT AN INPUT — IT DEPENDS ON THE RADIUS. A ball of radius r in
+ * The spine is not an input — it depends on the radius. A ball of radius r in
  * a right-angled corner sits at (r, r); change r and the center moves. So the
  * center path is m(t) = c(t, r(t)) and its derivative is
  *
  *     dm/dt = dc/dt + r'(t) * dc/dr,
  *
- * with both partials taken of a SMOOTH function of two arguments. Differencing
+ * with both partials taken of a smooth function of two arguments. Differencing
  * the composed path directly instead would be differencing across the profile's
  * own C1-but-not-C2 joints, where a central difference degrades from second
  * order to first and lands right on the stops a user is most likely to place a
@@ -352,8 +343,8 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
   let dcdt = b.dCentreDt, dcdr = b.dCentreDr;
   if (!dcdt) {
     // Second-order everywhere: central inside, three-point one-sided at the ends
-    // rather than a first-order forward difference that would quietly halve the
-    // accuracy of the two sections most exposed to it.
+    // rather than a first-order forward difference that would lose an order
+    // of accuracy at the two end sections.
     const at = (x) => { const q = ballAt(x, radius); return q && q.centre; };
     if (t - hT >= 0 && t + hT <= 1) {
       const p1 = at(t + hT), m1 = at(t - hT);
@@ -389,29 +380,27 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   FEASIBILITY, ENFORCED
-   ───────────────────────────────────────────────────────────────────────── */
+// Feasibility, enforced
 
 /**
- * WHETHER THIS PROFILE CAN BE BUILT ON THIS EDGE AT ALL, AND WHERE IT CANNOT.
+ * Whether this profile can be built on this edge at all, and where it cannot.
  *
  * The verdict comes from `variableRadiusFeasible` in fillet.mjs — the module of
  * record for the Peternell & Pottmann condition — sampled along the spine the
- * profile actually produces. What is added here is the part a refusal needs to
- * be usable: WHERE along the edge it fails and BY HOW MUCH.
+ * profile produces. What is added here is the part a refusal needs to be
+ * usable: where along the edge it fails and by how much.
  *
- * ⚠ THE MARGIN AND THE RATE DISAGREE ABOUT "WORST", AND THE RATE IS THE ONE TO
- * QUOTE. The margin ds^2 - dr^2 is an area and scales with how fast the spine
- * happens to be sampled, so on a uniform t-sampling of a non-uniform spine the
- * smallest margin drifts towards wherever the spine is SLOW rather than towards
+ * The margin and the rate disagree about "worst", and the rate is the one to
+ * quote. The margin ds^2 - dr^2 is an area and scales with how fast the spine
+ * is sampled, so on a uniform t-sampling of a non-uniform spine the
+ * smallest margin drifts toward wherever the spine is slow rather than toward
  * wherever the radius is out of control. |dr|/ds is scale-free, converges to the
  * true |dr/ds| as the sampling refines, and crosses 1 at exactly the same place
  * the margin crosses 0 — so the two never disagree about the verdict, only about
  * which span to name.
  *
- * ⚠⚠ WHERE THIS REFUSAL IS ACTUALLY REACHABLE, because it is not where it looks.
- * For a ball genuinely rolling in CONTACT with fixed faces, n . m' = -r' is an
+ * Where this refusal is reachable. For a ball rolling in contact with fixed
+ * faces, n . m' = -r' is an
  * identity (see `variableRadiusSection`), so |r'| = |n . m'| <= |m'| always: the
  * condition cannot be violated, whatever profile is asked for, because the
  * contact constraint drags the spine along at least as fast as the radius grows.
@@ -419,14 +408,14 @@ export function spineFrame(ballAt, profile, t, opts = {}) {
  * normal directions at once, capping the rate at 1/sqrt(2) no matter how steep
  * the taper.
  *
- * What violates it is a PRESCRIBED spine: a center path that does not move when
+ * What violates it is a prescribed spine: a center path that does not move when
  * the radius does. That is a variable-radius pipe, and it is also what an app
  * produces the moment it takes the spine from an offset of the edge curve, or
  * reuses a spine sampled from an earlier constant-radius build, and then applies
  * a profile to it. Those are the inputs this refuses, and they are common enough
  * that "the fillet cannot violate it" is not a reason to skip the check.
  *
- * NECESSARY, NOT SUFFICIENT. A profile that passes here can still fold back on
+ * Necessary, not sufficient. A profile that passes here can still fold back on
  * itself at a regressive point (Lukacs 1998), which this does not look for.
  */
 export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
@@ -476,22 +465,20 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   MEASURING WHAT WAS BUILT
-   ───────────────────────────────────────────────────────────────────────── */
+// Measuring what was built
 
 /**
- * HOW FAR A VARIABLE-RADIUS SURFACE STRAYS FROM THE BALLS THAT DEFINED IT.
+ * How far a variable-radius surface strays from the balls that defined it.
  *
- * ⚠ THE CONSTANT-RADIUS TEST DOES NOT GENERALIZE, and the way it fails is
- * silent. "Every point is r from the spine" becomes "every point is r(t) from
- * m(t) for SOME t", and taking the unsigned min of | |p - m(t)| - r(t) | over t
+ * The constant-radius test does not generalize, and it fails silently.
+ * "Every point is r from the spine" becomes "every point is r(t) from
+ * m(t) for some t", and taking the unsigned min of | |p - m(t)| - r(t) | over t
  * gives zero for any point lying on any sphere of the family — including every
  * point of a great-circle arc built in the wrong plane. That measure reports a
  * perfect blend for the one error a variable radius introduces.
  *
- * What the envelope actually is: the boundary of the union of the balls. So the
- * quantity is the SIGNED
+ * The envelope is the boundary of the union of the balls. So the quantity is
+ * the signed
  *
  *     g(p) = min over t of ( |p - m(t)| - r(t) ),
  *
@@ -500,22 +487,21 @@ export function profileFeasibility({ ballAt, profile, samples = 257 } = {}) {
  * standing off the balls entirely. Its sign is returned as well as its size,
  * because those two failures need opposite fixes.
  *
- * ⚠ AND THE RULER MEASURES ITSELF. g has a stationary minimum at the contact
- * parameter, so a SAMPLED minimum is second order in the sample spacing and
- * always overstates g — a coarse sample reports a better surface than exists,
- * and by far more than the surface error being judged: at 257 spine samples the
- * sampled minimum on a fixture whose true worst is 4.0e-6 reads 6.6e-3, three
- * orders too kind. Sampling alone is therefore not an instrument at this scale
- * at any density anyone would pay for.
+ * The sampling error of the measure itself. g has a stationary minimum at the
+ * contact parameter, so a sampled minimum is second order in the sample
+ * spacing and always overstates g, by far more than the surface error being
+ * judged: at 257 spine samples a sampled minimum can read three orders of
+ * magnitude above a true worst of 4.0e-6. Sampling alone is therefore not a
+ * usable measure at this scale at any affordable density.
  *
- * So each sampled minimum is REFINED by golden section against the caller's own
+ * So each sampled minimum is refined by golden section against the caller's own
  * continuous `at`, which removes the sampling error rather than shrinking it:
- * the same surface measures 4.033441e-6 from 33 samples and from 1025.
+ * the result is independent of the sample count.
  * `sampleFloor` is how far the refinement had to move the answer at the point
  * that set `worst` — the error the unrefined ruler would have reported there —
  * and `refinedBracket` is the parameter width the search closed to, which is
  * what `instrumentBound` is read from. A caller that turns refinement off gets
- * the sampled number and the honest flag that goes with it.
+ * the sampled number and the flag that goes with it.
  */
 export function canalDeviation(srf, at, evalSrf, opts = {}) {
   const spineSamples = Math.max(9, opts.spineSamples || 257);
@@ -565,7 +551,7 @@ export function canalDeviation(srf, at, evalSrf, opts = {}) {
       }
       if (Math.abs(val) > worst) {
         worst = Math.abs(val); worstSigned = val; worstAt = { u, v };
-        // Both recorded AT THE WORST POINT, not as maxima over the grid: a
+        // Both recorded at the worst point, not as maxima over the grid: a
         // correction the ruler made somewhere the surface is fine says nothing
         // about the number being reported.
         floor = moved; bracket = width;
@@ -586,25 +572,23 @@ export function canalDeviation(srf, at, evalSrf, opts = {}) {
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE BLEND
-   ───────────────────────────────────────────────────────────────────────── */
+// The blend
 
 /**
- * A VARIABLE-RADIUS BLEND, BUILT TO A TOLERANCE AND REFUSED WHEN IT CANNOT
- * EXIST.
+ * A variable-radius blend, built to a tolerance and refused when it cannot
+ * exist.
  *
  * The section count is not chosen here: it is handed to `blendSurfaceToTolerance`
- * in fillet.mjs, which aims, MEASURES, and corrects. What this supplies are the
+ * in fillet.mjs, which aims, measures, and corrects. What this supplies are the
  * two things that builder cannot know for a varying radius — how to build a
  * tilted section, and how to measure a surface that has no single radius to be
  * measured against.
  *
- * REFUSES BEFORE IT BUILDS. `profileFeasibility` runs first and a failure comes
+ * Refuses before it builds. `profileFeasibility` runs first and a failure comes
  * back as a refusal naming the parameter and the rate, not as a number attached
  * to a surface. A second, independent net sits inside `variableRadiusSection`,
  * which refuses the same condition pointwise at whatever parameters the section
- * count actually lands on.
+ * count lands on.
  *
  * `ballAt(t, radius)` is the caller's geometry: where a ball of that radius sits
  * at that parameter and which way it touches each face.
@@ -656,7 +640,7 @@ export function variableRadiusBlend({ ballAt, profile, tolerance = 0.01, evalSrf
     ...built,
     profile: { kind: profile.kind, stops: profile.stops, minRadius: profile.minRadius, maxRadius: profile.maxRadius },
     feasibility: feas,
-    // The deviation above is a SIGNED envelope distance, not a distance from one
+    // The deviation above is a signed envelope distance, not a distance from one
     // radius, and a caller quoting it should say which.
     deviationMeasure: 'signed distance to the boundary of the union of balls',
   };

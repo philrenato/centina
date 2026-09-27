@@ -1,38 +1,26 @@
-// SPLIT — the first, narrowly-scoped piece of the trimmed-surface work:
-// the recommended "no new tessellation machinery" next
-// step: cut a surface into two independent pieces along one of its own
-// ISOCURVES (a fixed u or v parameter), rather than an arbitrary hand-
-// picked trim curve. This deliberately sidesteps the hard, still-unbuilt
-// general trimmed-surface tessellation problem
-// ("a real, separate, serious robustness project") — each resulting piece
-// still tessellates over its own ordinary RECTANGULAR parameter sub-
-// domain, exactly like every other Surface this kernel already produces;
-// no boundary-conforming triangulation is needed at all.
+// Split — cut a surface into two independent pieces along one of its own
+// isocurves (a fixed u or v parameter), rather than along an arbitrary trim
+// curve. Each resulting piece tessellates over its own rectangular parameter
+// sub-domain, like every other Surface this kernel produces, so no
+// boundary-conforming triangulation is needed.
 //
-// Reuses loft.mjs's networkCorrectionSurface wholesale (the SAME "dense
-// grid of explicit (param, point) samples -> one global-interpolation
-// solve" technique Gordon/loft already established) rather than real
-// knot-insertion/refinement (P&T A5.1/A5.3 — still genuinely unbuilt in
-// this kernel, named as deferred since the very first Circle-rebuild
-// round). Each resulting half is therefore an HONEST re-derivation, not
-// a literal knot-inserted sub-piece of the original control net — exact
-// AT every one of its own dense sample stations (the same guarantee
-// loft()/gordonNetworkSurface() already prove and rely on), not
-// necessarily bit-identical to what real knot insertion would produce
-// between samples. Stated plainly, not silently assumed.
+// Uses loft.mjs's networkCorrectionSurface (the "dense grid of explicit
+// (param, point) samples -> one global-interpolation solve" technique of
+// Gordon/loft) rather than knot insertion (P&T A5.1/A5.3, in knots.mjs). Each
+// half is therefore a re-derivation, not a literal knot-inserted sub-piece of
+// the original control net: exact at every one of its dense sample stations
+// (the guarantee loft()/gordonNetworkSurface() give), not necessarily
+// identical to what knot insertion would produce between samples.
 //
-// THE SHARED-BOUNDARY EXACTNESS PROOF (the one property specific to
-// splitting, not inherited for free from Gordon/loft): both halves are
-// built from the IDENTICAL cross-direction params/degree/knots array and
-// the IDENTICAL boundary grid row (both evaluated via surfacePoint(srf,
-// ...splitParam...) at the SAME cross samples). networkCorrectionSurface's
-// own cross-direction interpolation is a deterministic linear solve
-// purely of (data, degree, params, knots), and a clamped B-spline's own
-// END control points/rows coincide exactly with their own end DATA points
-// (the standard clamped-knot-vector property this kernel already relies
-// on throughout) — so both halves' shared boundary control-point ROW is
-// byte-identical by construction, a real "no gap" guarantee, not just
-// "looks close." Verified directly in test/split.test.mjs.
+// Shared-boundary exactness (the property specific to splitting): both halves
+// are built from the identical cross-direction params/degree/knots array and
+// the identical boundary grid row (both evaluated via surfacePoint(srf,
+// ...splitParam...) at the same cross samples). networkCorrectionSurface's
+// cross-direction interpolation is a deterministic linear solve of (data,
+// degree, params, knots), and a clamped B-spline's end control points/rows
+// coincide exactly with its end data points — so both halves' shared boundary
+// control-point row is byte-identical by construction: no gap. Tested in
+// test/split.test.mjs.
 import { surfacePoint, surfaceClosure } from './surface.mjs';
 import { networkCorrectionSurface } from './loft.mjs';
 import { extractSubCurve } from './knots.mjs';
@@ -44,55 +32,40 @@ function linspace(a, b, n) {
   return out;
 }
 
-// A REAL, PREVIOUSLY-LATENT PRECONDITION, found while building this
-// function, not previously documented anywhere: `interpolate.mjs`'s
-// `averagingKnotVector` hardcodes its own CLAMPED boundary knots to the
-// literal values 0 and 1 (P&T Eq 9.8's own textbook formula, which is
-// only ever correct when the fed `ubar` array is ALREADY normalized to
-// [0,1] — true of every existing caller in this kernel: globalCurveInterp/
-// loft's own chordLengthParams always returns [0,1]; gordonNetworkSurface's
-// own uStations/vStations are explicitly built as "relative fractions" in
-// [0,1]). This function is the FIRST caller to want a surface's own REAL,
-// non-[0,1] native domain (e.g. a revolve's V-direction spans [0, narcs],
-// arc-span count, not radians and not a fraction) — passing that directly
-// into networkCorrectionSurface/interpAtParams silently produced a knot
-// vector whose own end knots (hardcoded to 1) didn't match the actual
-// data parameters (which can run well past 1), corrupting `findSpan`'s
-// span lookup and producing a singular linear system (NaN control points)
-// at higher sample counts — reproduced and root-caused directly (isolated
-// down to `interpAtParams`+`averagingKnotVector` alone, confirmed the SAME
-// point data with [0,1]-domain params solves cleanly at any sample count
-// tested). Not a bug in interpolate.mjs itself (its own real callers never
-// violate this precondition) — fixed here instead: normalize every params
-// array to [0,1] before calling networkCorrectionSurface, then AFFINELY
-// RESCALE the returned knot vector's numeric values back into the real
-// domain afterward (a B-spline's shape is invariant under an affine
-// reparametrization of its own knot vector — only the numbers labeling
-// each parameter change, never the control points/geometry), so the
-// resulting piece's own domain still means the same real thing the
-// original surface's did, matching this app's general expectation that a
-// Surface's stored knots reflect meaningful, pickable parameter values
-// (ExtractIsocurve, ghost-preview stationing, etc. all read real domain
-// values directly).
+// Precondition: `interpolate.mjs`'s `averagingKnotVector` hardcodes its
+// clamped boundary knots to the values 0 and 1 (P&T Eq 9.8, correct only when
+// the `ubar` array is normalized to [0,1] — true of its other callers:
+// chordLengthParams returns [0,1], and gordonNetworkSurface's
+// uStations/vStations are fractions in [0,1]). This function works in a
+// surface's native domain, which need not be [0,1] (e.g. a revolve's
+// V-direction spans [0, narcs], an arc-span count). Passing that directly to
+// networkCorrectionSurface/interpAtParams gives a knot vector whose end knots
+// (1) do not match the data parameters (which can run past 1), corrupting
+// `findSpan` and producing a singular system (NaN control points) at higher
+// sample counts. So every params array is normalized to [0,1] before calling
+// networkCorrectionSurface, and the returned knot vector is affinely rescaled
+// back into the native domain afterward (a B-spline's shape is invariant under
+// an affine reparametrization of its knot vector). The piece's domain then
+// means what the original surface's did, which consumers that read domain
+// values directly (ExtractIsocurve, ghost-preview stationing) rely on.
 function rescaleKnots(knots, oldMin, oldMax, newMin, newMax) {
   const span = oldMax - oldMin;
   return knots.map((k) => newMin + ((k - oldMin) / span) * (newMax - newMin));
 }
 
-// direction: 'u' or 'v'. splitParam: the parameter VALUE (in the
-// surface's own domain, not a 0-1 fraction) to cut at — must be strictly
-// interior, not at or beyond either end (a split exactly at an existing
-// boundary is a no-op, refused honestly rather than silently returning a
-// degenerate zero-extent piece). A direction that's CLOSED (a seam, per
-// surfaceClosure) is also refused honestly — cutting a closed loop at one
-// parameter unrolls it into one open piece, not two; a real, separate,
-// not-yet-built case, needing two split parameters.
+// direction: 'u' or 'v'. splitParam: the parameter value (in the surface's
+// own domain, not a 0-1 fraction) to cut at — must be strictly interior (a
+// split at an existing boundary is a no-op, refused rather than returning a
+// zero-extent piece). A closed direction (a seam, per surfaceClosure) is also
+// refused — cutting a closed loop at one parameter unrolls it into one open
+// piece, not two; that case needs two split parameters and is not
+// implemented.
 //
-// opts.sampleCount: dense samples PER PIECE along the split direction
-// (default 12). opts.crossSampleCount: dense samples along the OTHER
-// (unsplit) direction (default 16, matching Gordon/loft's own defaults)
-// — shared, unchanged, between both resulting pieces, which is exactly
-// what the shared-boundary exactness proof above depends on.
+// opts.sampleCount: dense samples per piece along the split direction
+// (default 12). opts.crossSampleCount: dense samples along the other
+// (unsplit) direction (default 16, as in Gordon/loft) — shared, unchanged,
+// between both resulting pieces, which the shared-boundary exactness above
+// depends on.
 export function splitSurface(srf, direction, splitParam, opts = {}) {
   if (direction !== 'u' && direction !== 'v') throw new Error(`splitSurface: direction must be 'u' or 'v', got ${direction}`);
   const knots = direction === 'u' ? srf.knotsU : srf.knotsV;
@@ -119,23 +92,20 @@ export function splitSurface(srf, direction, splitParam, opts = {}) {
   // between both halves (same reasoning as crossParams itself).
   const crossParamsNorm = crossParams.map((c) => (c - crossMin) / (crossMax - crossMin));
 
-  // Builds one half by sampling the ORIGINAL surface over [loParam,
+  // Builds one half by sampling the original surface over [loParam,
   // hiParam] in the split direction, calling networkCorrectionSurface
   // with its (uParams,vParams) argument order matched to this surface's
-  // OWN real U/V roles directly — no post-hoc transpose needed, since
+  // U/V roles directly — no transpose needed, since
   // networkCorrectionSurface's returned {degU,knotsU,degV,knotsV,ctrlNet}
-  // is keyed exactly by whichever params array was passed as uParams/
-  // vParams, in that same order. Both the split-direction and cross-
-  // direction params are normalized to [0,1] before the solve (see
-  // rescaleKnots above), then the returned knot vectors are rescaled back
-  // into this piece's own real domain afterward.
-  // `stations` on each returned half is the real domain (u,v) grid this
-  // piece is EXACT at, by construction — the same "exact at the true
-  // stations, an honest smooth approximation in between" limitation
-  // loft()/gordonNetworkSurface() already state and test for; exposed
-  // here (mirroring their own `stations`/`ubar` exposure) so a caller —
-  // or a verify script — never has to guess the internal sample grid to
-  // check exactness correctly.
+  // is keyed by whichever params array was passed as uParams/vParams, in
+  // that order. Both the split-direction and cross-direction params are
+  // normalized to [0,1] before the solve (see rescaleKnots above), then the
+  // returned knot vectors are rescaled back into this piece's domain.
+  // `stations` on each returned half is the domain (u,v) grid this piece is
+  // exact at, by construction — the same "exact at the stations, a smooth
+  // approximation in between" limitation loft()/gordonNetworkSurface()
+  // state and test; exposed (as their `stations`/`ubar` are) so a caller can
+  // check exactness without guessing the internal sample grid.
   function buildHalf(loParam, hiParam) {
     const splitParams = linspace(loParam, hiParam, sampleCount);
     const splitParamsNorm = splitParams.map((s) => (s - loParam) / (hiParam - loParam));
@@ -163,38 +133,36 @@ export function splitSurface(srf, direction, splitParam, opts = {}) {
   return { first, second, direction, splitParam, crossParams };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SPLITTING AT A CREASE THE SURFACE ALREADY HAS.
+/* Splitting at a crease the surface already has.
 
-   Everything above re-derives each half by sampling and re-fitting, which is
-   the honest answer for an arbitrary isoparametric cut. It is the WRONG answer
-   for the cut this section makes, and it also refuses the case that needs it.
+   Everything above re-derives each half by sampling and re-fitting, which
+   suits an arbitrary isoparametric cut. It is the wrong answer for the cut
+   this section makes, and splitSurface refuses the case that needs it.
 
    A knot whose multiplicity reaches the degree is a C0 line: the surface is
    only positionally continuous across it, the control net already carries a
-   full row of coincident points there, and the two sides are genuinely separate
-   patches that happen to be stored in one array. Cutting there needs no fitting
-   at all — knot insertion to degree+1 isolates the sub-range EXACTLY (see
-   extractSubCurve's own note on why that step is exact for clamped input), so
-   each piece is a literal sub-net of the original rather than a re-derivation.
+   full row of coincident points there, and the two sides are separate patches
+   stored in one array. Cutting there needs no fitting — knot insertion to
+   degree+1 isolates the sub-range exactly (see extractSubCurve's note on why
+   that step is exact for clamped input), so each piece is a literal sub-net of
+   the original rather than a re-derivation.
 
-   It also handles the case splitSurface above refuses outright. An extruded
-   closed profile is CLOSED in u, and cutting a closed direction at ONE
-   parameter would unroll it into a single open piece rather than two. Cutting
-   it at ALL of its creases is a different operation with a well-defined answer:
-   N creases give N open pieces, none of which is closed.
+   It also handles the case splitSurface refuses. An extruded closed profile is
+   closed in u, and cutting a closed direction at one parameter would unroll it
+   into a single open piece rather than two. Cutting it at all of its creases
+   is a different operation with a well-defined answer: N creases give N open
+   pieces, none of which is closed.
 
-   Why this exists: an extrude produces ONE side surface wrapping the whole
-   profile, so a hexagonal prism's six vertical edges are creases INSIDE a
-   single face. Nothing downstream that reasons about a pair of faces — a
-   dihedral angle, a rolling-ball fillet, an edge classification — can see them
-   at all. Splitting here is what turns them into edges.
-   ───────────────────────────────────────────────────────────────────────────── */
+   Purpose: an extrude produces one side surface wrapping the whole profile, so
+   a hexagonal prism's six vertical edges are creases inside a single face.
+   Nothing downstream that reasons about a pair of faces — a dihedral angle, a
+   rolling-ball fillet, an edge classification — can see them. Splitting here
+   turns them into edges. */
 
 /** The interior knot values whose multiplicity reaches `degree` — the creases.
  *  A knot at multiplicity below the degree is a smooth (C1 or better) join and
- *  is deliberately NOT reported: splitting there would manufacture an edge
- *  where the surface has none. */
+ *  is not reported: splitting there would manufacture an edge where the
+ *  surface has none. */
 export function c0KnotParams(knots, degree, tol = 1e-9) {
   const out = [];
   const last = knots.length - degree - 1;
@@ -209,18 +177,18 @@ export function c0KnotParams(knots, degree, tol = 1e-9) {
   return out;
 }
 
-/** ⚠ FULL MULTIPLICITY IS A CANDIDATE, NOT A CREASE. A knot at multiplicity ==
- *  degree makes the BASIS only C0 there; whether the SURFACE actually kinks
- *  depends on the control net. The standard NURBS circle is the counterexample
- *  that matters: degree 2 with knots at multiplicity 2 at every quarter point,
- *  and perfectly smooth across all of them, because the control legs meeting at
- *  each junction are collinear. Trusting multiplicity alone shatters every
- *  cylinder into four faces and invents eight edges that do not exist.
+/** Full multiplicity is a candidate, not a crease. A knot at multiplicity ==
+ *  degree makes the basis only C0 there; whether the surface kinks depends on
+ *  the control net. The standard NURBS circle is the counterexample: degree 2
+ *  with knots at multiplicity 2 at every quarter point, and smooth across all
+ *  of them, because the control legs meeting at each junction are collinear.
+ *  Trusting multiplicity alone would split every cylinder into four faces with
+ *  eight edges that do not exist.
  *
- *  So the combinatorial candidates are filtered by MEASURING the tangent break,
- *  at several stations across the surface — a crease can be sharp at one end of
- *  an edge and fade to nothing at the other, and one sample in the middle would
- *  miss exactly that case. */
+ *  So the combinatorial candidates are filtered by measuring the tangent break
+ *  at several stations across the surface — a crease can be sharp at one end
+ *  of an edge and fade to nothing at the other, which one sample in the middle
+ *  would miss. */
 export function surfaceCreaseParams(srf, direction, opts = {}) {
   const alongU = direction === 'u';
   const deg = alongU ? srf.degU : srf.degV;
@@ -252,16 +220,16 @@ export function surfaceCreaseParams(srf, direction, opts = {}) {
       const dIn = [before[0] - beforeIn[0], before[1] - beforeIn[1], before[2] - beforeIn[2]];
       const dOut = [afterOut[0] - after[0], afterOut[1] - after[1], afterOut[2] - after[2]];
       const lIn = Math.hypot(dIn[0], dIn[1], dIn[2]), lOut = Math.hypot(dOut[0], dOut[1], dOut[2]);
-      /* ⚠ A POLE MAKES NOISE LOOK LIKE A TANGENT, and `> 0` does not catch it.
-         A flat circular cap collapses a whole control row to its center, so the
-         one-sided differences there are not a direction at all. Built at the
-         ORIGIN they come out exactly 0 and a `> 0` test skips them; built at
+      /* A pole makes noise look like a tangent, and `> 0` does not catch it.
+         A flat circular cap collapses a whole control row to its center, so
+         the one-sided differences there are not a direction. Built at the
+         origin they come out exactly 0 and a `> 0` test skips them; built at
          x = 400 the same degenerate row differs by float noise at that
-         magnitude, the test passes, and the angle between two noise vectors is
-         uniformly random — so every cap sprouted three creases and a cylinder
-         reported 24 edges instead of 2, depending only on WHERE it was built.
-         A real tangent step is ~scale*1e-6 here and noise is ~scale*1e-16, so
-         a floor three decades above the noise separates them cleanly. */
+         magnitude, the test passes, and the angle between two noise vectors
+         is random — spurious creases that depend only on where the surface
+         was built. A tangent step is ~scale*1e-6 here and noise is
+         ~scale*1e-16, so a floor three decades above the noise separates
+         them. */
       if (!(lIn > floor) || !(lOut > floor)) continue;
       const cosA = (dIn[0] * dOut[0] + dIn[1] * dOut[1] + dIn[2] * dOut[2]) / (lIn * lOut);
       if (Math.acos(Math.max(-1, Math.min(1, cosA))) > angleTol) broke = true;
@@ -285,12 +253,11 @@ export function splitSurfaceAtC0Lines(srf, direction, opts = {}) {
   if (!params.length) return [srf];
   const cuts = [knots[0], ...params, knots[knots.length - 1]];
 
-  // Each control-net LINE running along the split direction is an ordinary
+  // Each control-net line running along the split direction is an ordinary
   // curve over the same knot vector, so the surface is cut by cutting every one
   // of them over the same sub-range. They all receive the identical sequence of
-  // insertions, so they come back sharing one knot vector — asserted rather
-  // than assumed, because a silent disagreement here would build a net whose
-  // rows mean different things.
+  // insertions, so they come back sharing one knot vector — asserted, because a
+  // disagreement here would build a net whose rows mean different things.
   const net = srf.ctrlNet;
   const nCross = alongU ? net[0].length : net.length;
   const lineAt = (c) => (alongU ? net.map((row) => row[c]) : net[c].slice());

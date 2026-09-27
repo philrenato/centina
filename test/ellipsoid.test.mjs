@@ -48,7 +48,7 @@ test('makeEllipsoidProfile: a true half-ellipse arc, both endpoints exactly on t
   assert.ok(Math.abs(sub(apex, center)[2]) < 1e-9, 'apex on the equatorial plane');
 });
 
-// The REAL proof: revolve the profile and check the true ellipsoid equation at
+// Revolve the profile and check the ellipsoid equation at
 // many (u,v), including at both poles (u/v = domain min/max where the pole rows are).
 function checkEllipsoidExact(center, eAxis, pAxis, eR, pR, minSeg) {
   const prof = makeEllipsoidProfile(center, eAxis, pAxis, eR, pR, minSeg);
@@ -88,11 +88,11 @@ test('revolved ellipsoid satisfies the true equation exactly at every (u,v), pol
   ]) {
     const { worst, worstPole } = checkEllipsoidExact(c, ea, pa, eR, pR, seg);
     assert.ok(worst < 1e-8, `${name}: worst ellipsoid residual ${worst}`);
-    assert.ok(worstPole < 1e-8, `${name}: worst POLE residual ${worstPole}`);
+    assert.ok(worstPole < 1e-8, `${name}: worst pole residual ${worstPole}`);
   }
 });
 
-test('makeEllipsoidProfile: sphere case (eR === pR) is a genuine circular arc; no NaN/Inf', () => {
+test('makeEllipsoidProfile: sphere case (eR === pR) is a circular arc; no NaN/Inf', () => {
   for (const seg of [2, 3, 4]) {
     const prof = makeEllipsoidProfile([0, 0, 0], [1, 0, 0], [0, 0, 1], 20, 20, seg);
     for (const cp of prof.ctrlPts) for (const v of cp) assert.ok(Number.isFinite(v));

@@ -1,7 +1,7 @@
 // kernel/text.mjs — glyph coverage raster -> closed NURBS outlines.
 //
-// The fixtures are SYNTHETIC coverage rasters rather than real font glyphs,
-// deliberately: a node test cannot rasterise a typeface, and a shape whose
+// The fixtures are synthetic coverage rasters rather than real font glyphs,
+// deliberately: a node test cannot rasterize a typeface, and a shape whose
 // exact answer is known by hand (a square annulus, an antialiased disc) is a
 // stronger oracle than a letter whose "right" outline nobody can write down.
 import assert from 'node:assert/strict';
@@ -11,8 +11,10 @@ import {
   polylineCurve, buildTextCurves,
 } from '../kernel/text.mjs';
 
-let passed = 0;
-function test(name, fn) { fn(); passed++; console.log('  ok  ' + name); }
+// A failing case throws with its name, which fails this file under node --test.
+function test(name, fn) {
+  try { fn(); } catch (err) { err.message = `${name}: ${err.message}`; throw err; }
+}
 
 const W = 140, H = 140;
 function raster(fn) {
@@ -140,5 +142,3 @@ test('the polyline fallback is a well-formed closed degree-1 curve', () => {
   assert.equal(crv.knots.length, crv.ctrlPts.length + 2);
   assert.deepEqual(crv.ctrlPts[0], crv.ctrlPts[3]);
 });
-
-console.log(`\n${passed}/${passed} kernel/text.mjs tests passed.`);

@@ -1,16 +1,16 @@
-// A CURVE THAT LIVES IN A SURFACE'S PARAMETER SPACE, so it can be re-evaluated
+// A curve that lives in a surface's parameter space, so it can be re-evaluated
 // whenever the surface changes and follow it. The curve is stored as (u, v)
 // stations, never as 3-D points: 3-D points would have to be re-projected after
 // every host edit, and a projection is a search with its own failure modes,
 // while an evaluation is exact and cannot land off the surface.
 //
-// ⚠ THE UNWRAPPED PATH IS THE WHOLE TRICK, and it is what makes "pencil on a
-// sphere" work. Between two stations either side of a seam the naive route is
+// The path is unwrapped before interpolation, which is what lets a stroke
+// drawn on a sphere cross its seam. Between two stations either side of a seam the naive route is
 // the long way around the entire surface, because 0.95 -> 0.05 reads as a
-// journey of -0.9 rather than +0.1. Interpolating in RAW parameters therefore
+// journey of -0.9 rather than +0.1. Interpolating in raw parameters therefore
 // draws a stroke that crosses the whole model to reach a point two millimeters
 // away. So consecutive stations are unwrapped first — each step takes the
-// SHORTER of the two ways round a closed direction, accumulating into a
+// shorter of the two ways round a closed direction, accumulating into a
 // continuous coordinate that may run outside the domain — and only the final
 // sample is wrapped back for evaluation. A direction the surface is not closed
 // in is clamped instead, since there is no other side to reach.
@@ -54,7 +54,7 @@ export function unwrapStations(srf, uvPoints, opts = {}) {
   return out;
 }
 
-// Catmull-Rom through the stations, in UNWRAPPED space. A spline is what makes
+// Catmull-Rom through the stations, in unwrapped space. A spline is what makes
 // a drawn stroke read as a curve rather than a chain of straight hops, and
 // doing it here rather than in 3-D is what keeps every sample exactly on the
 // surface — a 3-D spline through on-surface points leaves the surface between
@@ -98,7 +98,7 @@ export function curveOnSurfaceUV(srf, uvPoints, opts = {}) {
   return { ok: true, uv };
 }
 
-// The drawn stroke as 3-D points on THIS surface. Called again with the same
+// The drawn stroke as 3-D points on this surface. Called again with the same
 // stations after the host changes — that call is the whole reflow.
 export function curveOnSurfacePoints(srf, uvPoints, opts = {}) {
   const res = curveOnSurfaceUV(srf, uvPoints, opts);
@@ -110,12 +110,11 @@ export function curveOnSurfacePoints(srf, uvPoints, opts = {}) {
   return { ok: true, points, uv: res.uv };
 }
 
-// How far the drawn polyline strays from the surface BETWEEN its samples. The
+// How far the drawn polyline strays from the surface between its samples. The
 // samples themselves are on the surface by construction, so measuring them
-// proves nothing; the honest question is whether the chords between them are
+// proves nothing; what matters is whether the chords between them are
 // close enough that the stroke reads as lying on the surface rather than
-// cutting corners across it. This is what "adds points automatically to stay
-// parallel" is measured by, and what a caller raises samplesPerSpan against.
+// cutting corners across it. A caller raises samplesPerSpan against this.
 export function chordDeviation(srf, uvSamples) {
   let worst = 0;
   for (let i = 0; i < uvSamples.length - 1; i++) {

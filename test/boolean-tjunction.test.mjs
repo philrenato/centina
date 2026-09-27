@@ -7,17 +7,14 @@ import { intersectSurfacesComplete } from '../kernel/ssi.mjs';
 import { projectPointsToSurfaceUV, trivialTrimLoop } from '../kernel/trim.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE: a 5-pointed STAR PRISM cut by a horizontal slab that passes
-// clean through it. Chosen deliberately over another box-on-box pair — a star
-// is genuinely non-convex, its ten side faces meet the slab's caps along ten
-// separate cut curves, and each cap is split by all ten at once. That is what
-// produces the T-junction this file exists for: a face is paved at ITS OWN
-// crossings, so the cap can carry a vertex partway along a cut edge that the
-// side face has no reason to place, and the two sides then disagree about how
-// that shared edge is subdivided even though every vertex they DO share
-// matches to machine precision.
-// ---------------------------------------------------------------------------
+// The fixture: a five-pointed star prism cut by a horizontal slab that passes
+// clean through it. A star is non-convex, its ten side faces meet the slab's
+// caps along ten separate cut curves, and each cap is split by all ten at
+// once. That is what produces the T-junction this file exists for: a face is
+// paved at its own crossings, so the cap can carry a vertex partway along a
+// cut edge that the side face has no reason to place, and the two sides then
+// disagree about how that shared edge is subdivided even though every vertex
+// they do share matches to machine precision.
 
 function quadSurface(p00, p10, p11, p01) {
   const w = (p) => [p[0], p[1], p[2], 1];
@@ -67,7 +64,7 @@ function tessellate(faces, res) {
   return tris;
 }
 
-// The curves are found by a REAL face-pair SSI sweep, not hand-derived — this
+// The curves are found by a face-pair SSI sweep, not hand-derived — this
 // fixture exists to exercise what the marcher's own discretization does to the
 // sew, so hand-writing the curves would test the wrong thing.
 function buildFixture() {
@@ -124,10 +121,9 @@ test('a vertex at an edge endpoint is not an interior split', () => {
 });
 
 test('a vertex off the edge is left alone', () => {
-  // Every point of the second loop is deliberately clear of ALL THREE edges of
-  // the first, closing edge included — an earlier draft put (8,4,0) exactly on
-  // the closing edge's own line (y = x/2) by accident and read as a bug in the
-  // pass rather than in the fixture.
+  // Every point of the second loop is clear of all three edges of the first,
+  // closing edge included — a point such as (8,4,0) would sit exactly on the
+  // closing edge's own line (y = x/2).
   const loops = [
     [[0, 0, 0], [10, 0, 0], [10, 5, 0]],
     [[4, 1, 0], [8, 1, 0], [8, 2, 0]],
@@ -136,7 +132,7 @@ test('a vertex off the edge is left alone', () => {
   assert.deepEqual(out, loops, 'a nearby vertex is not on the edge and must not be pulled onto it');
 });
 
-test('a vertex from an unrelated face MERELY PASSING NEAR an edge is not spliced into it', () => {
+test('a vertex from an unrelated face merely passing near an edge is not spliced into it', () => {
   // The off-edge test is not the weld test, and this is the case that
   // separates them. The stray vertex sits half a weld tolerance off the
   // edge — close enough that reusing the weld tolerance here would splice
@@ -153,26 +149,25 @@ test('a vertex from an unrelated face MERELY PASSING NEAR an edge is not spliced
   assert.deepEqual(out[1], loops[1]);
 });
 
-test('a genuine T-junction is still inserted at real marched precision', () => {
-  // The other side of the same threshold: an offset at the scale a real
-  // marcher actually leaves (~1e-14) must still be recognized, or the
-  // tightened tolerance would have bought correctness by breaking the
-  // feature it guards.
+test('a T-junction is still inserted at marched precision', () => {
+  // The other side of the same threshold: an offset at the scale a marcher
+  // leaves (~1e-14) must still be recognized, or the tight tolerance would
+  // break the feature it guards.
   const loops = [
     [[0, 0, 0], [10, 0, 0], [10, 5, 0]],
     [[0, 0, 0], [4, 1.4e-14, 0], [10, 0, 0], [10, -5, 0]],
   ];
   const out = insertTJunctionVertices(loops, 1e-4);
-  assert.equal(out[0].length, 4, 'the real T-junction is still inserted');
+  assert.equal(out[0].length, 4, 'the T-junction is still inserted');
   assert.deepEqual(out[0][1], [4, 1.4e-14, 0], 'and it is the far side\'s own coordinate');
 });
 
 test('a subdivision point off the chord is spliced in when the far side corroborates it', () => {
   // The curved-shared-edge case. The far side subdivides the edge at a point
-  // that is genuinely on the shared curve and therefore OFF this straight
-  // chord — here by 0.4% of its length, the same order as the sagitta a real
+  // that is on the shared curve and therefore off this straight
+  // chord — here by 0.4% of its length, the same order as the sagitta a
   // marched circle leaves between samples, and six orders past the absolute
-  // floor. It is accepted because the far side already carries BOTH (a,p) and
+  // floor. It is accepted because the far side already carries both (a,p) and
   // (p,b), not because it is close.
   const loops = [
     [[0, 0, 0], [10, 0, 0], [10, 5, 0]],
@@ -184,9 +179,9 @@ test('a subdivision point off the chord is spliced in when the far side corrobor
   assert.deepEqual(out[1], loops[1], 'the loop that already had it is untouched');
 });
 
-test('the same off-chord point is REFUSED without corroboration', () => {
-  // The negative control for the route above, and the one that makes it a
-  // real test: identical geometry, identical distances, but the point now
+test('the same off-chord point is refused without corroboration', () => {
+  // The negative control for the route above: identical geometry, identical
+  // distances, but the point now
   // belongs to a face that shares neither endpoint of the edge. Nothing about
   // proximity changed, so if this were still inserted the corroboration would
   // be decorative.
@@ -200,8 +195,8 @@ test('the same off-chord point is REFUSED without corroboration', () => {
 
 test('a corroborated point far off the chord is still refused', () => {
   // A sliver face sharing both endpoints is the one shape that can corroborate
-  // falsely, so the relative bound stays a real gate: at 10% of the edge's own
-  // length this is a genuine third corner, not a subdivision of the edge.
+  // falsely, so the relative bound stays a gate: at 10% of the edge's own
+  // length this is a third corner, not a subdivision of the edge.
   const loops = [
     [[0, 0, 0], [10, 0, 0], [10, 5, 0]],
     [[0, 0, 0], [5, 1, 0], [10, 0, 0], [10, -5, 0]],
@@ -224,7 +219,7 @@ test('a chain of two corroborated points is followed the whole way', () => {
   assert.deepEqual(out[0][2], [7, 0.02, 0], 'and in order along the edge');
 });
 
-test('a star prism cut by a slab INTERSECTS into one closed solid', () => {
+test('a star prism cut by a slab intersects into one closed solid', () => {
   const { star, slab, curves } = buildFixture();
   assert.equal(curves.length, 20, 'ten side faces, each crossing both slab caps');
 
@@ -234,14 +229,14 @@ test('a star prism cut by a slab INTERSECTS into one closed solid', () => {
   assert.equal(res.stats.chi, 2, 'a sphere, topologically');
   assert.equal(res.stats.shellCount, 1);
   assert.equal(res.stats.F, 12, 'ten side fragments plus the two cap fragments');
-  // The weld had real work to do and did not need to strain: the surviving
+  // The weld had work to do and did not need to strain: the surviving
   // gap is the marcher's own residual, orders below the tolerance.
   assert.ok(res.worstSharedGap < 1e-9, `worst weld gap ${res.worstSharedGap}`);
 });
 
-test('the same pair UNIONS into one closed solid — the holed-cap case', () => {
+test('the same pair unions into one closed solid — the holed-cap case', () => {
   // The operation that needs the annulus split. Union keeps the slab's own
-  // CAP fragments, and a cap is a square with a star-shaped hole where the
+  // cap fragments, and a cap is a square with a star-shaped hole where the
   // prism passes through it — a face with a hole, which a keyhole bridge
   // cannot express as a B-rep face without repeating a corner.
   const { star, slab, curves } = buildFixture();
@@ -254,7 +249,7 @@ test('the same pair UNIONS into one closed solid — the holed-cap case', () => 
   assert.ok(res.stats.F > 12, `the split adds faces, got F=${res.stats.F}`);
 });
 
-test('the same pair DIFFERENCES into two genuinely separate shells', () => {
+test('the same pair differences into two separate shells', () => {
   const { star, slab, curves } = buildFixture();
   const res = booleanSolids(star, slab, curves, 'difference');
   assert.ok(res.ok, res.reason || res.verdict);
@@ -266,7 +261,7 @@ test('the same pair DIFFERENCES into two genuinely separate shells', () => {
 });
 
 test('without the T-junction pass the same fixture leaves 30 naked edges', () => {
-  // The negative control, and it runs on the REAL fragment loops rather than a
+  // The negative control, and it runs on the actual fragment loops rather than a
   // stand-in: count the edges a plain weld would leave with exactly one
   // incident face, before and after the pass. Without this the test above
   // could be passing for some other reason entirely.
@@ -306,6 +301,6 @@ test('without the T-junction pass the same fixture leaves 30 naked edges', () =>
     return [...seen.values()].filter((n) => n === 1).length;
   };
 
-  assert.equal(nakedCount(loops), 30, 'the raw fragment loops genuinely do not close');
+  assert.equal(nakedCount(loops), 30, 'the raw fragment loops do not close');
   assert.equal(nakedCount(insertTJunctionVertices(loops, TOL)), 0, 'and the pass is what closes them');
 });

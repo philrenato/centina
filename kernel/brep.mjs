@@ -1,41 +1,32 @@
-// HALF-EDGE B-REP TOPOLOGY + EULER OPERATORS + VALIDITY CHECKING
-// ================================================================
-// PHASE 1 of the B-rep work: topology layer + Euler operators + validity
-// checking, kernel-only, with its own test suite.
-// KERNEL ONLY: no THREE.js, no app-layer object, no UI, no
-// tessellation policy — pure topology-in, topology-out, exactly like every
-// other kernel/*.mjs module here.
+// Half-edge B-rep topology, Euler operators and validity checking.
+// No THREE.js, no app-layer object, no UI, no tessellation policy — pure
+// topology-in, topology-out, like every other kernel/*.mjs module.
 //
-// WHY HALF-EDGE (a choice the spec left open, resolved here and
-// re-confirmed against the actual code before writing any):
-//   - kernel/subd.mjs's own buildTopology is NEITHER half-edge NOR
+// Why half-edge:
+//   - kernel/subd.mjs's own buildTopology is neither half-edge nor
 //     winged-edge — it is a plain unordered edge-adjacency map
 //     (`edgeKey -> {v0, v1, faces[]}`) with no per-edge-use orientation and
-//     no next/twin pointers. There is therefore no in-project convention to
-//     inherit either way; the consideration drops out entirely and the
-//     choice is made on the merits.
+//     no next/twin pointers, so there is no in-project convention to inherit.
 //   - Mäntylä's own GWB kernel — this module's primary citation — is
 //     implemented with half-edges, so the citation and the code match.
 //   - Winged-edge traversal needs per-step case analysis on edge
 //     orientation (the classic critique). Half-edge's next/twin invariants
-//     remove that case analysis entirely, which matters most in a
-//     hand-rolled, student-legible kernel.
-//   - Decisively for THIS kernel: a trimmed face's loop is naturally a
-//     CYCLE OF HALF-EDGES, and each half-edge is exactly where a per-side
+//     remove that case analysis.
+//   - A trimmed face's loop is naturally a
+//     cycle of half-edges, and each half-edge is exactly where a per-side
 //     pcurve lives (ACIS calls it a "coedge", Parasolid a "fin"; Weiler
 //     1985 is the standard reference for extending an edge-based structure
 //     to curved-surface B-reps). kernel/trim.mjs already reserves the dual
-//     `{ uv, edge3d, tolerance }` slots per loop "from day one" — those map
-//     ONE-TO-ONE onto a half-edge (its own pcurve) and the shared edge (its
+//     `{ uv, edge3d, tolerance }` slots per loop — those map
+//     one-to-one onto a half-edge (its own pcurve) and the shared edge (its
 //     own 3D curve + tolerance). Winged-edge has no equally clean home for
 //     a per-side pcurve.
 //
-// PRIOR ART (cited before this code landed, per this project's own
-// citation-discipline rule — read for TECHNIQUE, never transcribed):
+// Prior art (read for technique, not transcribed):
 //   - Baumgart, "A Polyhedron Representation for Computer Vision" (1975) —
 //     the original winged-edge structure this whole family descends from.
 //   - Braid, Hillyard & Stroud, "Stepwise Construction of Polyhedra in
-//     Geometric Modeling" (1978) — the original Euler operators.
+//     Geometric Modeling" (1980) — the original Euler operators.
 //   - Mäntylä, "An Introduction to Solid Modeling" (1988) — the canonical
 //     half-edge B-rep + Euler-operator reference; MVFS / MEV / MEF / KEMR /
 //     KFMRH and their inverses, and the Euler-Poincaré invariant in the
@@ -48,69 +39,63 @@
 //     why a per-half-edge pcurve is the right home for a trimmed face's own
 //     2D boundary.
 //
-// THE EULER-POINCARÉ INVARIANT, in the exact form this module checks:
+// The Euler-Poincaré invariant, in the exact form this module checks:
 //
 //     V - E + F - R = 2 * (S - G)
 //
 //   V vertices, E edges, F faces, R "rings" (inner loops — every loop
 //   beyond the one outer loop each face carries, so R = L - F), S shells,
 //   G genus (through-holes/handles). Every operator below preserves it, and
-//   `eulerCharacteristic()` recomputes both sides from live counts so a
-//   test can assert it rather than trust a comment.
+//   `eulerCharacteristic()` recomputes both sides from live counts.
 //
-//   HONEST NOTE ON GENUS, stated rather than glossed: G is not derivable
-//   from V/E/F/L/S alone (that would make the check circular). It is
-//   TRACKED on the solid, incremented by KFMRH and decremented by MFKRH —
-//   the standard GWB approach. The invariant check is therefore a real
-//   cross-check that every operator's own V/E/F/L bookkeeping agrees with
-//   the tracked genus/shell count: an operator that changed counts without
-//   the matching genus update fails it immediately. It is NOT an
+//   Genus: G is not derivable from V/E/F/L/S alone (that would make the
+//   check circular). It is tracked on the solid, incremented by KFMRH and
+//   decremented by MFKRH — the standard GWB approach. The invariant check is
+//   therefore a cross-check that every operator's own V/E/F/L bookkeeping
+//   agrees with the tracked genus/shell count: an operator that changed
+//   counts without the matching genus update fails it. It is not an
 //   independent measurement of genus from the mesh.
 //
-// PHASE 1 SCOPE — what this module deliberately does NOT do, named rather
-// than silently missing:
-//   - No booleans, no surface-surface intersection, no face splitting
-//     (Phase 2/3). This module never computes geometry; it only carries it.
+// Scope — what this module does not do:
+//   - No booleans, no surface-surface intersection, no face splitting.
+//     This module never computes geometry; it only carries it.
 //   - No void shells. Every solid built through these operators has exactly
-//     one shell (S = 1). The S term in the invariant is therefore correct
-//     but only ever exercised at S = 1 by the operator set itself —
-//     `mergeSolidShells()` (below, explicitly NOT an Euler operator) exists
-//     so a multi-shell configuration can still be built and checked.
+//     one shell (S = 1). The S term in the invariant is correct but only
+//     exercised at S = 1 by the operator set itself — `mergeSolidShells()`
+//     (below, not an Euler operator) exists so a multi-shell configuration
+//     can still be built and checked.
 //   - No geometric validity: self-intersection, pcurve-vs-3D-curve
-//     agreement, face-normal orientation against real geometry. That was
-//     resolved deliberately — validity is TWO layers,
-//     and this module is the COMBINATORIAL one (cited math). The geometric
-//     layer is engineering on top of this app's own existing tolerance
-//     model (JOIN_TOLERANCE and siblings) and is not attempted here.
+//     agreement, face-normal orientation against real geometry. Validity is
+//     two layers, and this module is the combinatorial one. The geometric
+//     layer sits on the app's tolerance model (JOIN_TOLERANCE and siblings)
+//     and is not attempted here.
 //   - No non-manifold modeling. An edge with more than two half-edges is
-//     REPORTED as an error by validateBrep, not supported.
+//     reported as an error by validateBrep, not supported.
 
 import { trimLoopsValid } from './trim.mjs';
 
-// ---------------------------------------------------------------------
-// ENTITIES
-// ---------------------------------------------------------------------
+// Entities
 // Every entity carries an integer `id` (unique within its own solid), a
 // `kind` tag, and a `solid` back-pointer. The back-pointer is redundant
 // with the ownership chain (halfEdge -> loop -> face -> shell -> solid) and
 // that redundancy is deliberate: validateBrep cross-checks the two against
-// each other, which is exactly how an orphaned or mis-parented entity gets
-// caught instead of quietly participating in a traversal.
+// each other, so an orphaned or mis-parented entity is caught instead of
+// participating in a traversal.
 //
 //   Vertex   { id, point:[x,y,z]|null, halfEdge }         one outgoing half-edge
 //   Edge     { id, halfEdges:[he,he], curve3d, tolerance } exactly 2 when manifold
 //   HalfEdge { id, vertex, edge, twin, next, prev, loop, pcurve }
-//              `vertex` is the ORIGIN. The destination is `next.vertex`.
-//              `pcurve` is this side's own 2D boundary in the OWNING FACE's
+//              `vertex` is the origin. The destination is `next.vertex`.
+//              `pcurve` is this side's own 2D boundary in the owning face's
 //              surface parameter space — Weiler's coedge slot, and the
 //              direct counterpart of kernel/trim.mjs's own per-loop `uv`.
 //   Loop     { id, face, halfEdge }                        one half-edge on the cycle
 //   Face     { id, shell, loops:[outer, ...rings], surface }
-//              loops[0] is ALWAYS the outer loop; every later entry is a
+//              loops[0] is always the outer loop; every later entry is a
 //              ring (an inner boundary — a hole in this face).
-//              `surface` is a nullable NurbsSrf slot (see the TRIMMED
-//              SURFACE BRIDGE section at the bottom).
-//   Shell    { id, solid, faces:[], kind }                 kind reserved, null in Phase 1
+//              `surface` is a nullable NurbsSrf slot (see the trimmed
+//              surface bridge section at the bottom).
+//   Shell    { id, solid, faces:[], kind }                 kind reserved, always null
 //   Solid    { id, vertices, edges, shells, genus, nextId }
 
 function newId(solid) { return solid.nextId++; }
@@ -126,11 +111,11 @@ function makeVertex(solid, point) {
 }
 
 // Both half-edges of an edge are created together, always — an edge with
-// one half-edge is not a state this module can be in. A DANGLING edge (a
+// one half-edge is not a state this module can be in. A dangling edge (a
 // spur, produced by MEV) is represented by both of its half-edges sitting
-// in the SAME loop, not by a missing twin; that is what keeps the "every
-// edge has exactly two half-edges" invariant true at every intermediate
-// step of a construction, not just at the end.
+// in the same loop, not by a missing twin; that keeps the "every edge has
+// exactly two half-edges" invariant true at every intermediate step of a
+// construction, not just at the end.
 function makeEdgePair(solid, v1, v2) {
   const edge = { id: newId(solid), kind: 'edge', solid, halfEdges: [], curve3d: null, tolerance: null };
   const h1 = { id: newId(solid), kind: 'halfedge', solid, vertex: v1, edge, twin: null, next: null, prev: null, loop: null, pcurve: null };
@@ -155,8 +140,8 @@ function makeFace(solid, shell) {
 }
 
 function makeShell(solid) {
-  // `shellKind` ('outer' | 'void') is a reserved slot — Phase 1 never
-  // classifies shells, and says so rather than storing a guess.
+  // `shellKind` ('outer' | 'void') is a reserved slot; shells are never
+  // classified here.
   const shell = { id: newId(solid), kind: 'shell', solid, faces: [], shellKind: null };
   solid.shells.push(shell);
   return shell;
@@ -169,15 +154,13 @@ function removeFrom(arr, item) {
   return true;
 }
 
-// ---------------------------------------------------------------------
-// TRAVERSAL
-// ---------------------------------------------------------------------
+// Traversal
 
 // Walk a loop's cycle. Throws on a broken cycle — operators rely on this
-// being an invariant, so a failure here is a real internal bug, not user
-// input. validateBrep uses walkLoopSafe() instead, which REPORTS the same
-// conditions rather than throwing (a validator that throws on the very
-// corruption it exists to find is not a validator).
+// being an invariant, so a failure here is an internal bug, not user
+// input. validateBrep uses walkLoopSafe() instead, which reports the same
+// conditions rather than throwing, since it must survive the corruption it
+// exists to find.
 export function loopHalfEdges(loop) {
   const res = walkLoopSafe(loop);
   if (!res.ok) throw new Error(`brep: loop ${loop.id} is not a closed cycle — ${res.reason}`);
@@ -220,10 +203,9 @@ export function allLoops(solid) {
 // go stale independently of the cycle.
 export function destinationOf(he) { return he.next ? he.next.vertex : null; }
 
-// Every half-edge in `loop` whose ORIGIN is `vertex`. More than one is
-// entirely legal mid-construction (a vertex that already has a spur hanging
-// off it appears twice in the same loop), which is exactly why the
-// operators take an explicit disambiguating half-edge when it happens.
+// Every half-edge in `loop` whose origin is `vertex`. More than one is
+// legal mid-construction (a vertex that already has a spur hanging off it
+// appears twice in the same loop), which is why the operators take an explicit disambiguating half-edge when it happens.
 export function halfEdgesInLoopFrom(loop, vertex) {
   return loopHalfEdges(loop).filter((he) => he.vertex === vertex);
 }
@@ -237,9 +219,7 @@ function uniqueHalfEdgeInLoopFrom(loop, vertex, opName) {
   return cands[0];
 }
 
-// ---------------------------------------------------------------------
-// EULER-POINCARÉ
-// ---------------------------------------------------------------------
+// Euler-Poincaré
 
 export function eulerCharacteristic(solid) {
   const V = solid.vertices.length;
@@ -257,8 +237,8 @@ export function eulerCharacteristic(solid) {
 }
 
 // Throwing form, for use inside a construction sequence so an operator that
-// silently broke the invariant is caught at the exact step that broke it
-// rather than at the end of a 28-step build.
+// broke the invariant is caught at the step that broke it rather than at
+// the end of the build.
 export function assertEulerPoincare(solid, whereLabel = '') {
   const e = eulerCharacteristic(solid);
   if (!e.ok) {
@@ -271,26 +251,16 @@ export function assertEulerPoincare(solid, whereLabel = '') {
   return e;
 }
 
-// ---------------------------------------------------------------------
-// EULER OPERATORS
-// ---------------------------------------------------------------------
+// Euler operators
 // The canonical Mäntylä set, five forward operators and their five
 // inverses. Each one's own comment states the delta it applies to
-// (V, E, F, R, S, G) and shows the invariant arithmetic explicitly — that
-// arithmetic is what the tests assert, not a claim.
+// (V, E, F, R, S, G) and shows the invariant arithmetic explicitly.
 //
-// A NOTE ON THE OPERATOR LIST THIS WAS SPECIFIED FROM, corrected rather
-// than silently worked around. That list
-// names "mve, mev, mef, kemh, etc." — "mve" and "mev" are the same operator
-// under two spellings (MEV, Make Edge and Vertex, is the standard name),
-// and "kemh" does not correspond to any operator in the standard set. The
-// two operators it is closest to, and the two actually needed to build a
-// face with a ring and a solid with a handle, are KEMR (Kill Edge, Make
-// Ring) and KFMRH (Kill Face, Make Ring and Hole). Both are implemented
-// below under their real names.
+// A face with a ring and a solid with a handle are built by KEMR (Kill
+// Edge, Make Ring) and KFMRH (Kill Face, Make Ring and Hole).
 
 // MVFS — Make Vertex, Face, Solid. The seed: a solid consisting of one
-// vertex, one face whose single loop is EMPTY, one shell.
+// vertex, one face whose single loop is empty, one shell.
 //   V+1, F+1, S+1  ->  lhs +2 ; rhs 2*(+1 - 0) = +2   OK
 export function mvfs(point, opts = {}) {
   const solid = { id: 0, kind: 'solid', nextId: 0, vertices: [], edges: [], shells: [], genus: 0, name: opts.name ?? null };
@@ -321,13 +291,13 @@ export function kvfs(solid) {
 // `vertex` by a new edge, both of whose half-edges sit in `loop` (a spur).
 //   V+1, E+1  ->  lhs +1 -1 = 0 ; rhs unchanged   OK
 //
-// Two cases, both real:
-//   (a) SEED — `loop` is still empty (straight out of MVFS). The two new
+// Two cases:
+//   (a) Seed — `loop` is still empty (straight out of MVFS). The two new
 //       half-edges become the whole cycle.
-//   (b) INSERT — `loop` already has a cycle. The spur is spliced in
-//       immediately BEFORE the half-edge leaving `vertex`. When `vertex`
+//   (b) Insert — `loop` already has a cycle. The spur is spliced in
+//       immediately before the half-edge leaving `vertex`. When `vertex`
 //       occurs more than once in the loop the caller must say which
-//       occurrence via `opts.before`; guessing there would silently pick a
+//       occurrence via `opts.before`; guessing there would pick a
 //       different sector and produce a different (still valid) solid.
 export function mev(loop, vertex, point, opts = {}) {
   const solid = loop.solid;
@@ -360,9 +330,9 @@ export function mev(loop, vertex, point, opts = {}) {
 }
 
 // KEV — Kill Edge and Vertex, the exact inverse of MEV. `he` must be the
-// half-edge running OUT to the doomed vertex, and its own `next` must be
+// half-edge running out to the doomed vertex, and its own `next` must be
 // its twin — i.e. the far end has valence 1 and nothing else hangs off it.
-// That single condition is what makes this a true inverse rather than a
+// That condition makes this a true inverse rather than a
 // general edge-collapse (which is not an Euler operator and is not offered).
 export function kev(he) {
   const solid = he.solid;
@@ -392,8 +362,7 @@ export function kev(he) {
 // new face in the same shell.
 //   E+1, F+1, L+1 (so R unchanged)  ->  lhs -1 +1 -0 = 0 ; rhs unchanged  OK
 //
-// The NEW face is the side containing `he1` (documented, not incidental —
-// the inverse depends on it).
+// The new face is the side containing `he1`; the inverse depends on it.
 export function mef(he1, he2) {
   const solid = he1.solid;
   const loop = he1.loop;
@@ -404,10 +373,10 @@ export function mef(he1, he2) {
   const p1 = he1.prev, p2 = he2.prev;
   const { edge, h1: heA, h2: heB } = makeEdgePair(solid, v1, v2); // heA: v1 -> v2, heB: v2 -> v1
 
-  // The ORIGINAL loop keeps he2 ... p1, closed by heA (v1 -> v2).
+  // The original loop keeps he2 ... p1, closed by heA (v1 -> v2).
   p1.next = heA; heA.prev = p1;
   heA.next = he2; he2.prev = heA;
-  // The NEW loop takes he1 ... p2, closed by heB (v2 -> v1).
+  // The new loop takes he1 ... p2, closed by heB (v2 -> v1).
   p2.next = heB; heB.prev = p2;
   heB.next = he1; he1.prev = heB;
 
@@ -426,9 +395,8 @@ export function mef(he1, he2) {
 // merges the two faces it separates. `he`'s own face survives; the twin's
 // face is killed.
 //
-// Refuses honestly (rather than guessing) when the doomed face carries
-// rings of its own: re-homing those rings is a real decision, not an
-// implementation detail, and no caller in Phase 1 needs it.
+// Refuses when the doomed face carries rings of its own: re-homing those
+// rings is a decision this operator does not make, and no caller needs it.
 export function kef(he) {
   const solid = he.solid;
   const t = he.twin;
@@ -455,12 +423,12 @@ export function kef(he) {
 }
 
 // KEMR — Kill Edge, Make Ring. Removes a bridge edge whose two half-edges
-// both lie in ONE loop, splitting that loop into two loops on the SAME
-// face; the new one is a RING (an inner boundary).
-//   E-1, L+1 (R+1)  ->  lhs +1 -1 = 0 ... careful: lhs = V-E+F-R, so
+// both lie in one loop, splitting that loop into two loops on the same
+// face; the new one is a ring (an inner boundary).
+//   E-1, L+1 (R+1)  ->  lhs = V-E+F-R, so
 //   -(-1) - (+1) = +1 - 1 = 0 ; rhs unchanged   OK
 //
-// The cycle reachable by following `he.next` becomes the new RING; the
+// The cycle reachable by following `he.next` becomes the new ring; the
 // face's existing loop keeps the other cycle. That direction is the
 // caller's to choose by which half-edge it hands in, and is documented
 // because the inverse (MEKR) depends on it.
@@ -487,16 +455,15 @@ export function kemr(he) {
   removeFrom(solid.edges, he.edge);
   repointVertexHalfEdges(solid);
   // `keepHalfEdge`/`ringHalfEdge` are exactly the two arguments MEKR needs to
-  // undo this call (see MEKR's own splice): handing them back is what makes
-  // the inverse mechanical rather than a re-derivation by the caller.
+  // undo this call (see MEKR's own splice), so the inverse is mechanical
+  // rather than a re-derivation by the caller.
   //
-  // `killedHalfEdge`/`killedTwin` are handed back for a subtler reason, found
-  // the hard way while driving a full reverse teardown: KEMR is the one
-  // forward operator that DESTROYS an edge some EARLIER operator created
-  // (typically an MEV spur). MEKR re-creates that edge as a NEW object, so
+  // `killedHalfEdge`/`killedTwin` are handed back because KEMR is the one
+  // forward operator that destroys an edge some earlier operator created
+  // (typically an MEV spur). MEKR re-creates that edge as a new object, so
   // any handle a caller recorded when the spur was first made goes stale the
   // moment KEMR runs. A caller replaying a construction backwards has to
-  // re-bind those handles, and these two fields are what it re-binds FROM.
+  // re-bind those handles, and these two fields are what it re-binds from.
   return { solid, ring, loop, keepHalfEdge: c2Start, ringHalfEdge: c1Start, killedHalfEdge: he, killedTwin: t };
 }
 
@@ -528,14 +495,13 @@ export function mekr(heA, heB) {
 }
 
 // KFMRH — Kill Face, Make Ring and Hole. The genus-raising operator: the
-// doomed face's outer loop becomes a RING of `face`, and the solid gains a
-// through-hole. Combinatorially this is what "punches the tunnel through".
+// doomed face's outer loop becomes a ring of `face`, and the solid gains a
+// through-hole.
 //   F-1, L unchanged (so R+1), G+1
 //   ->  lhs: -(F 1) - (R +1) = -1 -1 = -2 ; rhs: 2*(0 - 1) = -2   OK
 //
-// Geometric sanity (the loops actually coinciding in space) is NOT checked
-// here — that is the geometric half of validity, deliberately out of Phase
-// 1 scope, and stated so rather than implied.
+// Geometric sanity (the loops actually coinciding in space) is not checked
+// here — that is the geometric half of validity, out of this module's scope.
 export function kfmrh(face, deadFace) {
   const solid = face.solid;
   if (face === deadFace) throw new Error('brep kfmrh: face and deadFace must be different');
@@ -584,7 +550,7 @@ function repointVertexHalfEdges(solid) {
   }
 }
 
-// NOT AN EULER OPERATOR — plain bookkeeping, labeled as such. Moves every
+// Not an Euler operator — plain bookkeeping. Moves every
 // shell of `donor` into `host`, so a solid with an internal void (or two
 // disjoint lumps) can be represented and checked. The invariant survives by
 // plain addition and nothing else:
@@ -607,15 +573,9 @@ export function mergeSolidShells(host, donor) {
   return host;
 }
 
-// ---------------------------------------------------------------------
-// VALIDITY
-// ---------------------------------------------------------------------
-// Every error carries a stable `code` so a test can assert a specific
-// failure mode BY NAME rather than by substring-matching prose. The codes
-// map onto the failure classes this project has actually hit in its own
-// topology work before now (see kernel/subdedit.mjs's own review history:
-// repeated-vertex faces and 3+-face edges are both real, shipped-and-caught
-// bugs there, not hypotheticals).
+// Validity
+// Every error carries a stable `code` so a caller can match a specific
+// failure mode by name rather than by substring-matching prose.
 //
 //   'unclosed-loop'          a loop's next/prev cycle does not close
 //   'empty-loop'             a loop with no half-edges (legal only mid-build)
@@ -636,7 +596,7 @@ export function mergeSolidShells(host, donor) {
 //   'euler-poincare'         the invariant does not hold
 //
 // `allowIntermediate: true` suppresses exactly the three codes that are
-// legitimate DURING a construction and only wrong at the end —
+// legitimate during a construction and only wrong at the end —
 // 'empty-loop', 'dangling-edge', and the 'repeated-vertex-in-loop' that a
 // dangling edge necessarily causes. Everything else is checked either way.
 export function validateBrep(solid, opts = {}) {
@@ -652,7 +612,7 @@ export function validateBrep(solid, opts = {}) {
   const vertexSet = new Set(solid.vertices);
   const edgeSet = new Set(solid.edges);
 
-  // --- edges + half-edge pairing -------------------------------------
+  // Edges + half-edge pairing
   const registeredHalfEdges = new Set();
   for (const edge of solid.edges) {
     if (edge.solid !== solid) err('broken-ownership', `edge ${edge.id} points at a different solid`, { edgeId: edge.id });
@@ -672,7 +632,7 @@ export function validateBrep(solid, opts = {}) {
     }
   }
 
-  // --- loops -----------------------------------------------------------
+  // Loops
   const seenInLoops = new Set();
   for (const face of faces) {
     if (face.solid !== solid) err('broken-ownership', `face ${face.id} points at a different solid`, { faceId: face.id });
@@ -701,7 +661,7 @@ export function validateBrep(solid, opts = {}) {
         if (!he.edge || !edgeSet.has(he.edge)) err('orphan-halfedge', `half-edge ${he.id} is in a loop but its edge is not registered on the solid`, { halfEdgeId: he.id, loopId: loop.id });
         if (he.vertex) vertexCounts.set(he.vertex, (vertexCounts.get(he.vertex) ?? 0) + 1);
         // Orientation: the twin must start where this half-edge ends. This is
-        // exactly the combinatorial statement of "adjacent faces are wound
+        // the combinatorial statement of "adjacent faces are wound
         // consistently" — each edge traversed once in each direction.
         const dest = destinationOf(he);
         if (he.twin && dest && he.twin.vertex !== dest) {
@@ -716,7 +676,7 @@ export function validateBrep(solid, opts = {}) {
     }
   }
 
-  // --- reachability both directions -----------------------------------
+  // Reachability both directions
   for (const he of registeredHalfEdges) {
     if (!seenInLoops.has(he)) err('orphan-halfedge', `half-edge ${he.id} (edge ${he.edge ? he.edge.id : '?'}) is not reachable from any loop`, { halfEdgeId: he.id });
   }
@@ -728,7 +688,7 @@ export function validateBrep(solid, opts = {}) {
     if (!inAnyLoop) err('orphan-edge', `edge ${edge.id} has no half-edge in any loop`, { edgeId: edge.id });
   }
 
-  // --- dangling edges (spurs) ------------------------------------------
+  // Dangling edges (spurs)
   if (!allowIntermediate) {
     for (const edge of solid.edges) {
       const [a, b] = edge.halfEdges || [];
@@ -738,7 +698,7 @@ export function validateBrep(solid, opts = {}) {
     }
   }
 
-  // --- vertices ---------------------------------------------------------
+  // Vertices
   const originOf = new Map();
   for (const he of registeredHalfEdges) {
     if (!he.vertex) continue;
@@ -759,7 +719,7 @@ export function validateBrep(solid, opts = {}) {
     }
   }
 
-  // --- the invariant ----------------------------------------------------
+  // The invariant
   const e = eulerCharacteristic(solid);
   if (!e.ok) {
     err('euler-poincare', `V-E+F-R = ${e.lhs} but 2(S-G) = ${e.rhs} (V=${e.V} E=${e.E} F=${e.F} L=${e.L} R=${e.R} S=${e.S} G=${e.G})`, { euler: e });
@@ -772,24 +732,19 @@ export function hasErrorCode(result, code) {
   return result.errors.some((x) => x.code === code);
 }
 
-// ---------------------------------------------------------------------
-// STRUCTURAL FINGERPRINT
-// ---------------------------------------------------------------------
-// A canonical, ID-FREE description of a solid's topology, used to prove
-// that an operator's inverse genuinely restored the prior structure.
+// Structural fingerprint
+// A canonical, id-free description of a solid's topology, for checking
+// that an operator's inverse restored the prior structure.
 //
-// WHY ID-FREE, stated rather than quietly assumed: three of the five
-// inverses (MEKR, MFKRH, and MEV's own re-creation of an edge) necessarily
-// CREATE an entity where the forward operator destroyed one, so the
-// restored entity is a new object with a fresh id. Structure is restored;
-// object identity is not, and cannot be without an id-recycling scheme this
-// module deliberately does not have. Comparing canonical structure is the
-// honest strong claim; the tests additionally assert exact id-set equality
-// for the pairs where it IS achievable (MEV/KEV, MEF/KEF, MVFS/KVFS).
+// Id-free because three of the five inverses (MEKR, MFKRH, and MEV's own
+// re-creation of an edge) necessarily create an entity where the forward
+// operator destroyed one, so the restored entity is a new object with a
+// fresh id. Structure is restored; object identity is not, and cannot be
+// without an id-recycling scheme this module does not have. Exact id-set
+// equality holds only for MEV/KEV, MEF/KEF and MVFS/KVFS.
 //
-// Canonicalisation keys vertices by their 3D point, so it requires distinct
-// vertex positions — true of every fixture here, and asserted rather than
-// assumed (throws otherwise instead of returning a silently ambiguous key).
+// Canonicalization keys vertices by their 3D point, so it requires distinct
+// vertex positions; it throws otherwise instead of returning an ambiguous key.
 export function brepFingerprint(solid) {
   const key = (v) => (v.point ? v.point.map((c) => (Object.is(c, -0) ? 0 : c).toFixed(9)).join(',') : `#${v.id}`);
   const seen = new Map();
@@ -825,18 +780,15 @@ export function brepFingerprint(solid) {
   return `V${e.V}E${e.E}F${e.F}L${e.L}S${e.S}G${e.G};shells(${shellWords});${faceWords.join(';')}`;
 }
 
-// ---------------------------------------------------------------------
-// TRIMMED SURFACE BRIDGE
-// ---------------------------------------------------------------------
-// Faces REFERENCE the surface model this kernel already has; nothing here
-// re-invents it. A face carries a plain NurbsSrf in `face.surface` (the
+// Trimmed surface bridge
+// Faces reference the surface model this kernel already has. A face carries a plain NurbsSrf in `face.surface` (the
 // same shape kernel/surface.mjs evaluates and kernel/trimtess.mjs
-// tessellates), and its trim loops are DERIVED from the half-edge cycles'
-// own pcurves rather than stored a second time — so the topology and the
-// trim boundary cannot drift apart, which is the whole reason Weiler's
-// coedge lives on the half-edge in the first place.
+// tessellates), and its trim loops are derived from the half-edge cycles'
+// own pcurves rather than stored a second time, so the topology and the
+// trim boundary cannot drift apart — the reason Weiler's coedge lives on
+// the half-edge.
 //
-// The derived shape is exactly `{ srf, trimLoop, trimHoles }` — the shape
+// The derived shape is `{ srf, trimLoop, trimHoles }` — the shape
 // kernel/trimtess.mjs's own tessellateTrimmedSurface(srf, loop, uRes, vRes,
 // holes) already takes, and the same field names the app's existing
 // Trim/Split containers already use.
@@ -850,7 +802,7 @@ export function attachSurface(face, srf) {
 // half-edge's pcurve runs from its own origin to its own destination and
 // shares its last point with the next half-edge's first, so the joint point
 // is dropped once per half-edge (the loop is implicitly closed, matching
-// kernel/trim.mjs's own convention exactly).
+// kernel/trim.mjs's own convention).
 export function loopUVPolyline(loop) {
   const hes = loopHalfEdges(loop);
   const out = [];
@@ -872,10 +824,9 @@ export function faceTrimmedSurface(face) {
   };
 }
 
-// Run the EXISTING trim-loop validity gate (kernel/trim.mjs) against a
-// face's derived loops — outer/hole winding, self-intersection. This is the
-// geometric half of validity for a single face, reusing what is already
-// built and tested rather than a second implementation.
+// Run the trim-loop validity check (kernel/trim.mjs) against a face's
+// derived loops — outer/hole winding, self-intersection. This is the
+// geometric half of validity for a single face.
 export function faceTrimValidity(face) {
   const { trimLoop, trimHoles } = faceTrimmedSurface(face);
   return trimLoopsValid([trimLoop, ...trimHoles]);
@@ -884,10 +835,9 @@ export function faceTrimValidity(face) {
 // Convenience for the common planar case: derive every half-edge's pcurve
 // in a face from its endpoints via a caller-supplied 3D->UV map. Exact for
 // a face whose surface parametrization is affine in the face's own plane
-// (every planar B-rep face this app produces); NOT a general projection,
-// and deliberately not pretending to be one — a curved face's pcurve is a
-// real curve, not a two-point segment, and belongs to whichever operation
-// actually produced that edge (Phase 2's intersection curves, via
+// (every planar B-rep face this app produces); not a general projection —
+// a curved face's pcurve is a curve, not a two-point segment, and belongs
+// to whichever operation produced that edge (intersection curves, via
 // `pcurvesFromSSISamples` below).
 export function assignPlanarPcurves(face, pointToUV) {
   for (const loop of face.loops) {
@@ -901,10 +851,10 @@ export function assignPlanarPcurves(face, pointToUV) {
 
 // Adapter for kernel/ssi.mjs's own documented return shape. `intersectSurfaces`
 // yields samples of `{ u1, v1, u2, v2, point }` — one shared 3D curve plus
-// its two pcurves, one per surface. That is EXACTLY the data an Edge and
-// its two half-edges need: `curve3d` on the edge, `pcurve` on each side.
-// Pure and shape-only — this does not itself run an intersection, and Phase
-// 2 owns everything about when and whether an intersection is trustworthy.
+// its two pcurves, one per surface. That is the data an Edge and its two
+// half-edges need: `curve3d` on the edge, `pcurve` on each side.
+// Pure and shape-only — this does not itself run an intersection or judge
+// whether one is trustworthy.
 export function pcurvesFromSSISamples(samples) {
   if (!Array.isArray(samples) || samples.length < 2) {
     throw new Error('brep pcurvesFromSSISamples: need at least 2 SSI samples');
@@ -916,17 +866,13 @@ export function pcurvesFromSSISamples(samples) {
   };
 }
 
-// ---------------------------------------------------------------------
-// COMPOSITE CONSTRUCTIONS
-// ---------------------------------------------------------------------
-// Built ENTIRELY out of the Euler operators above — no direct pointer
-// surgery — so they double as proof that the operator set is complete
-// enough to reach real solids.
+// Composite constructions
+// Built entirely out of the Euler operators above, with no direct pointer
+// surgery.
 
 // `opts.onStep(label, solid, result)` — called after every operator these
 // composites apply, with that operator's own return value, so a caller can
-// journal the sequence and drive an exact reverse teardown (which is what
-// test/brep.test.mjs does to prove the inverses).
+// journal the sequence and drive an exact reverse teardown.
 //
 // Sweep every vertex of `loop` to a new position and wall the result in:
 // MEV per vertex, then MEF per wall. This is the standard Euler-operator
@@ -971,8 +917,8 @@ export function cutRing(loop, fromVertex, points, opts = {}) {
     verts.push(r.vertex);
     cur = r.vertex;
   }
-  // Close the ring: he1 leaves the FIRST ring vertex outward along the
-  // traced path, he2 leaves the LAST one back along it.
+  // Close the ring: he1 leaves the first ring vertex outward along the
+  // traced path, he2 leaves the last one back along it.
   const he1 = halfEdgesInLoopFrom(loop, verts[0]).find((h) => destinationOf(h) === verts[1]);
   const he2 = halfEdgesInLoopFrom(loop, verts[verts.length - 1]).find((h) => destinationOf(h) === verts[verts.length - 2]);
   if (!he1 || !he2) throw new Error('brep cutRing: could not locate the traced ring path');

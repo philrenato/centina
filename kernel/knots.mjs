@@ -1,22 +1,18 @@
 // Knot insertion (P&T Ch.5, Algorithm A5.1, CurveKnotIns) + degree
-// elevation (Ch.5, Algorithm A5.9's own well-known Bezier-decomposition
-// equivalent) — the real, general kernel machinery two long-standing gaps
-// needed: a closed SketchCurve's own
-// padded-domain curve (kernel/interpolate.mjs's closedCurveInterp) is not
-// a valid standalone profile on its own (its true shape only exists over
-// a SUB-RANGE of its raw knot domain), and a mixed-degree PolyCurve (a
-// filleted Polygon's Line+Arc chain, or a planar-arrangement smooth-segment
-// output) has no way to become ONE curve at all when its segments don't
-// already share a degree. Both need this same real P&T Ch.5 machinery —
-// built once here, consumed by the app's own two profile refusal sites.
+// elevation (Ch.5, via the Bezier-decomposition equivalent of Algorithm
+// A5.9). Two consumers need them: a closed SketchCurve's padded-domain
+// curve (kernel/interpolate.mjs's closedCurveInterp) is not a valid
+// standalone profile (its shape exists only over a sub-range of its knot
+// domain), and a mixed-degree PolyCurve (a filleted Polygon's Line+Arc chain,
+// or a planar-arrangement smooth-segment output) cannot become one curve
+// until its segments share a degree.
 //
-// Every function here operates on the SAME NurbsCrv shape the rest of
-// this kernel already uses ({degree, knots, ctrlPts}, ctrlPts an array of
-// [x,y,z,w] — the real point plus its weight, never pre-multiplied) —
-// insertion/elevation both do their real work in HOMOGENEOUS space
-// internally (the same toHomogeneous trick curve.mjs's own evaluation
-// already relies on), so a RATIONAL curve (an Arc/Circle-derived fillet
-// segment) elevates/inserts exactly, not just an approximation.
+// Every function here operates on the NurbsCrv shape the rest of this kernel
+// uses ({degree, knots, ctrlPts}, ctrlPts an array of [x,y,z,w] — the point
+// plus its weight, never pre-multiplied). Insertion and elevation work in
+// homogeneous space internally (the toHomogeneous form curve.mjs's evaluation
+// uses), so a rational curve (an Arc/Circle-derived fillet segment) elevates
+// and inserts exactly.
 
 import { findSpan } from './basis.mjs';
 
@@ -33,10 +29,10 @@ function knotMultiplicity(knots, u, tol = 1e-9) {
   return s;
 }
 
-// A5.1, r=1 — Boehm's single-knot-insertion formula. Exact and shape-
-// preserving by construction (a knot insertion NEVER changes a curve's
-// geometry, only its own control-point/knot REPRESENTATION of it) —
-// verified directly in test/knots.test.mjs by sampling before/after.
+// A5.1, r=1 — Boehm's single-knot-insertion formula. Shape-preserving by
+// construction: a knot insertion changes only the curve's control-point/knot
+// representation, never its geometry. test/knots.test.mjs samples
+// before/after.
 export function insertKnotOnce(crv, u) {
   const { degree: p, knots: U } = crv;
   const Pw = toHomogeneousPts(crv.ctrlPts);
@@ -57,10 +53,9 @@ export function insertKnotOnce(crv, u) {
   return { degree: p, knots: UQ, ctrlPts: fromHomogeneousPts(Qw) };
 }
 
-// r repeated single insertions of the SAME knot value — algebraically
-// identical to P&T's own multi-insertion A5.1 (r>1), just built from the
-// already-proven r=1 case rather than transcribing the denser bezalfs-
-// style multi-insertion indexing a second, riskier way.
+// r repeated single insertions of the same knot value — algebraically
+// identical to P&T's multi-insertion A5.1 (r>1), built from the r=1 case
+// rather than transcribing A5.1's multi-insertion indexing.
 export function insertKnot(crv, u, r = 1) {
   let c = crv;
   for (let i = 0; i < r; i++) c = insertKnotOnce(c, u);
@@ -72,18 +67,16 @@ function knotValueAt(knots, u, tol = 1e-9) {
   for (const k of knots) if (Math.abs(k - u) < tol) return k;
   return u;
 }
-/* ⚠⚠ SNAP TO THE KNOT THAT IS ALREADY THERE, then insert copies of THAT value.
+/* Snap to the knot that is already there, then insert copies of that value.
    `knotMultiplicity` counts within `tol`, so a `u` a floating-point hair away
-   from an existing knot is counted as already present at that knot's
-   multiplicity — and the copies were then inserted at `u` itself, leaving a span
-   of width 1e-16 between the two values. That span's control points are
-   coincident: speed 0, curvature 7e+25, and every consumer downstream reads it
-   (a comb draws a quill to infinity, tessellation divides by it, Extrude and
-   Revolve carry it into a surface).
-   Measured on `extractSubCurve` slicing a closed 40-point interpolation, whose
-   own [uStart,uEnd] lands 1.1e-16 from a knot: the sliced curve deviated 0.686mm
-   from a circle its unsliced self tracked to 0.009mm. Counting and inserting now
-   agree about which knot they mean, which is the whole defect. */
+   from an existing knot is counted at that knot's multiplicity; inserting the
+   copies at `u` itself would leave a span of width ~1e-16 between the two
+   values. That span's control points are coincident: speed 0, curvature
+   ~7e+25, which every downstream consumer reads (a comb draws a quill to
+   infinity, tessellation divides by it, Extrude and Revolve carry it into a
+   surface). `extractSubCurve` on a closed interpolation hits this, since its
+   [uStart,uEnd] can land ~1e-16 from a knot. Counting and inserting must agree
+   about which knot they mean. */
 function insertKnotToMultiplicity(crv, u, targetMult, tol = 1e-9) {
   let c = crv;
   const at = knotValueAt(c.knots, u, tol);
@@ -101,13 +94,12 @@ function distinctInteriorKnotValues(knots, uMin, uMax, tol = 1e-9) {
   return out.sort((a, b) => a - b);
 }
 
-// DecomposeCurve (A5.6's own real target) — insert every interior knot
-// value up to full multiplicity `degree` (NOT degree+1 — an INTERIOR
-// Bezier breakpoint stays part of the same curve, sharing its one
-// boundary control point with its neighbor; only the curve's own two true
-// ENDS are ever p+1/clamped). Returns an ordered array of Bezier pieces,
-// each { ctrlPts: [degree+1 real [x,y,z,w] points], u0, u1 }. A curve with
-// zero interior knots (already a single Bezier span — a Line, or one
+// DecomposeCurve (the target of A5.6) — insert every interior knot value up
+// to full multiplicity `degree` (not degree+1: an interior Bezier breakpoint
+// stays part of the same curve, sharing its one boundary control point with
+// its neighbor; only the curve's two ends are p+1/clamped). Returns an ordered
+// array of Bezier pieces, each { ctrlPts: [degree+1 [x,y,z,w] points], u0, u1 }.
+// A curve with zero interior knots (a single Bezier span — a Line, or one
 // smooth SketchCurve span) returns exactly one piece, unchanged.
 export function decomposeToBezier(crv) {
   const p = crv.degree;
@@ -124,11 +116,10 @@ export function decomposeToBezier(crv) {
   return pieces;
 }
 
-// Standard Bezier degree-elevation-by-1 (Farin/P&T's own well-known
-// closed-form: Q_i = (i/(p+1))*P_{i-1} + (1-i/(p+1))*P_i, boundary terms
-// dropped rather than indexed out of range) — run in homogeneous space so
-// a rational Bezier (an Arc/Circle segment) elevates exactly, matching
-// every other rational-aware routine in this kernel.
+// Bezier degree elevation by 1 (Farin; P&T closed form:
+// Q_i = (i/(p+1))*P_{i-1} + (1-i/(p+1))*P_i, boundary terms dropped rather
+// than indexed out of range) — run in homogeneous space so a rational Bezier
+// (an Arc/Circle segment) elevates exactly.
 function elevateBezierOnce(ctrlPts) {
   const p = ctrlPts.length - 1;
   const Pw = toHomogeneousPts(ctrlPts);
@@ -142,9 +133,9 @@ function elevateBezierOnce(ctrlPts) {
   return fromHomogeneousPts(out);
 }
 
-// Reassembles an ordered chain of ALREADY-SAME-DEGREE Bezier pieces
-// (contiguous domains, piece[i].u1 === piece[i+1].u0) into one combined
-// clamped NurbsCrv — the shared inverse of decomposeToBezier above.
+// Reassembles an ordered chain of same-degree Bezier pieces (contiguous
+// domains, piece[i].u1 === piece[i+1].u0) into one clamped NurbsCrv — the
+// inverse of decomposeToBezier above.
 export function assembleBezierChain(pieces, degree) {
   const p = degree;
   const knots = [];
@@ -158,25 +149,19 @@ export function assembleBezierChain(pieces, degree) {
   return { degree: p, knots, ctrlPts };
 }
 
-// Degree elevation (A5.9's own real target, reached via the well-known
-// simpler equivalent construction rather than transcribing A5.9's own
-// dense bezalfs-table pseudocode a second, riskier way from memory):
-// decompose to Bezier, elevate every piece by the same amount, reassemble
-// at FULL multiplicity everywhere. This is exact (both decomposition and
-// per-Bezier elevation are individually shape-preserving) but honestly
-// NOT minimal — an interior knot that started below full multiplicity
-// (a smooth SketchCurve span's own simple knots) comes back at full
-// multiplicity `targetDegree` rather than the theoretically-minimal
-// s_orig+t, i.e. the elevated curve reports less smoothness in its own
-// knot vector than its real, sampled geometry actually has. This never
-// changes the curve's real SHAPE (verified directly in test/knots.test.mjs
-// by sampling before/after at many parameters, derivatives included) —
-// only its representational minimality — and it's the exact case this
-// kernel's own actual callers need: a Line/Polyline segment (degree 1,
-// ALREADY at full multiplicity everywhere by construction — see
-// getProfileCrv's own Polyline branch) is the only thing ever elevated
-// by joinCurvesC0 below, so the "non-minimal" cost never actually bites
-// in practice, only the guaranteed-exact shape matters.
+// Degree elevation (the target of A5.9, reached via the equivalent
+// construction rather than A5.9's bezalfs-table pseudocode): decompose to
+// Bezier, elevate every piece by the same amount, reassemble at full
+// multiplicity everywhere. This is exact (decomposition and per-Bezier
+// elevation are each shape-preserving) but not minimal: an interior knot that
+// started below full multiplicity (a smooth SketchCurve span's simple knots)
+// comes back at full multiplicity `targetDegree` rather than the minimal
+// s_orig+t, so the knot vector reports less smoothness than the geometry has.
+// The shape is unchanged (test/knots.test.mjs samples before/after at many
+// parameters, derivatives included). The only input joinCurvesC0 below
+// elevates is a Line/Polyline segment (degree 1, already at full
+// multiplicity everywhere — see getProfileCrv's Polyline branch), for which
+// the result is minimal anyway.
 export function degreeElevateCurve(crv, targetDegree) {
   const p = crv.degree;
   if (targetDegree === p) return { degree: p, knots: crv.knots.slice(), ctrlPts: crv.ctrlPts.map((c) => c.slice()) };
@@ -190,10 +175,9 @@ export function degreeElevateCurve(crv, targetDegree) {
   return assembleBezierChain(pieces, targetDegree);
 }
 
-// Pure affine reparametrization of a curve's own knot VALUES (control
-// points untouched) — shape-preserving by construction (a B-spline's
-// geometry depends only on the RELATIVE spacing of its knot vector, never
-// the absolute numbers labeling each parameter).
+// Affine reparametrization of a curve's knot values (control points
+// untouched) — shape-preserving, because a B-spline's geometry depends only on
+// the relative spacing of its knot vector.
 export function rescaleCurveDomain(crv, newMin, newMax) {
   const oldMin = crv.knots[0], oldMax = crv.knots[crv.knots.length - 1];
   const span = oldMax - oldMin;
@@ -203,18 +187,16 @@ export function rescaleCurveDomain(crv, newMin, newMax) {
   return { degree: crv.degree, knots, ctrlPts: crv.ctrlPts.map((p) => p.slice()) };
 }
 
-// EXTRACT SUB-CURVE — the real fix for a closed SketchCurve's own padded
-// domain (closedCurveInterp's [uStart,uEnd] sub-range is not itself a
-// valid curve until the domain is actually TRIMMED down to it): insert
-// BOTH boundary parameters up to full clamped multiplicity (degree+1,
-// same as any curve's real endpoint — NOT decomposeToBezier's own
-// interior-multiplicity=degree, since these become genuine new ends, not
-// an internal C0 breakpoint), then slice the now-isolated index range.
-// Exact by construction (knot insertion never changes the curve's real
-// shape; slicing off a fully-clamped, non-overlapping index range simply
-// discards the surrounding padding without touching the kept part at
-// all) — verified directly against the SAME curve's own sampled points
-// over [uStart,uEnd], before vs. after extraction.
+// Extract sub-curve — trims a closed SketchCurve's padded domain
+// (closedCurveInterp's [uStart,uEnd] sub-range is not a valid curve until the
+// domain is trimmed to it): insert both boundary parameters up to full clamped
+// multiplicity (degree+1, as at any curve endpoint — not decomposeToBezier's
+// interior multiplicity=degree, since these become new ends, not an internal
+// C0 breakpoint), then slice the isolated index range. Exact by construction:
+// knot insertion does not change the shape, and slicing off a fully clamped,
+// non-overlapping index range discards the padding without touching the kept
+// part. Tested against the same curve's sampled points over [uStart,uEnd],
+// before vs. after extraction.
 function firstIndexOfValue(arr, v, tol = 1e-9) {
   for (let i = 0; i < arr.length; i++) if (Math.abs(arr[i] - v) < tol) return i;
   return -1;
@@ -234,33 +216,29 @@ export function extractSubCurve(crv, uStart, uEnd) {
   return { degree: p, knots, ctrlPts };
 }
 
-// A NOTE FOR ANYONE CLAMPING AN UNCLAMPED CURVE WITH THESE FUNCTIONS: don't.
-// insertKnotOnce implements P&T A5.1, whose own precondition is that the knot
-// being inserted stays within multiplicity <= degree. extractSubCurve below
-// deliberately goes one further (to degree+1) to isolate a sub-range, and that
-// is exact for the CLAMPED curves it was written for — at multiplicity p the
-// control point being duplicated genuinely lies ON the curve, so duplicating it
-// splits the curve without moving it. On an UNCLAMPED curve that point is not
-// on the curve, the same step silently duplicates it anyway with no blend, and
-// the result is a DIFFERENT curve (measured: 0.37 units on a plain uniform
-// cubic, against a curve spanning ~3). decomposeToBezier assumes clamped input
-// too, and returns NaN pieces for an unclamped one.
-// The exact conversion for the one unclamped shape this kernel actually
-// produces — a uniform bicubic patch — lives in subdlimit.mjs next to the
-// construction it undoes, where the knot vector it assumes is defined.
+// Do not clamp an unclamped curve with these functions. insertKnotOnce
+// implements P&T A5.1, whose precondition is that the inserted knot stays
+// within multiplicity <= degree. extractSubCurve goes one further (to degree+1)
+// to isolate a sub-range, which is exact for the clamped curves it is written
+// for — at multiplicity p the control point being duplicated lies on the
+// curve, so duplicating it splits the curve without moving it. On an unclamped
+// curve that point is not on the curve, the step duplicates it anyway with no
+// blend, and the result is a different curve (0.37 units on a plain uniform
+// cubic spanning ~3). decomposeToBezier assumes clamped input too, and returns
+// NaN pieces for an unclamped one.
+// The exact conversion for the one unclamped shape this kernel produces — a
+// uniform bicubic patch — lives in subdlimit.mjs next to the construction it
+// undoes, where the knot vector it assumes is defined.
 
-// C0-only concatenation of two ALREADY-SAME-DEGREE clamped curves whose
-// domains are adjacent (A's own end === B's own start) — drops exactly
-// ONE of A's own (degree+1) trailing end-knot copies (leaving `degree`
-// copies, the standard interior-joint multiplicity for a positional-only,
-// non-smooth seam) and skips ALL of B's own (degree+1) leading copies
-// outright (redundant once A's own trailing copies already supply the
-// needed multiplicity), plus drops B's own first control point (the
-// shared joint, geometrically coincident with A's own last one — Join's
-// own JOIN_TOLERANCE match is what already guarantees that coincidence
-// upstream). Each curve's own INTERNAL knot structure — and therefore its
-// own internal continuity class — is left completely untouched; only the
-// one shared boundary knot's multiplicity is affected.
+// C0-only concatenation of two same-degree clamped curves whose domains are
+// adjacent (A's end === B's start) — drops one of A's (degree+1) trailing
+// end-knot copies (leaving `degree` copies, the interior-joint multiplicity
+// for a positional-only seam) and skips all of B's (degree+1) leading copies,
+// plus drops B's first control point (the shared joint, coincident with A's
+// last one — Join's JOIN_TOLERANCE match guarantees that coincidence
+// upstream). Each curve's internal knot structure, and therefore its internal
+// continuity class, is untouched; only the shared boundary knot's
+// multiplicity is affected.
 export function concatTwoC0(A, B, degree) {
   const p = degree;
   const knots = A.knots.slice(0, A.knots.length - 1).concat(B.knots.slice(p + 1));
@@ -268,18 +246,15 @@ export function concatTwoC0(A, B, degree) {
   return { degree: p, knots, ctrlPts };
 }
 
-// JOIN CURVES AT C0 — the real fix for a mixed-degree PolyCurve (a
-// filleted Polygon's Line+Arc chain, or any future mixed-segment chain):
-// every segment is degree-ELEVATED (above) up to the highest degree
-// present, each rescaled onto its own sequential integer domain slot
-// [i,i+1] (rescaleCurveDomain — an arbitrary but simple, consistent
-// convention; extrude()/revolve() only ever need a well-formed curve,
-// never care what its real parameter values mean), then chained via
-// concatTwoC0 into ONE combined curve. A degree-1 chain (every segment
-// already the same degree) hits zero elevation calls and reduces to pure
-// concatenation — algebraically the exact same knot/control-point shape
-// getProfileCrv's own pre-existing degree-1-only fast path already
-// produced (checked directly in test/knots.test.mjs, not just assumed).
+// Join curves at C0 — turns a mixed-degree PolyCurve (a filleted Polygon's
+// Line+Arc chain) into one curve: every segment is degree-elevated (above) to
+// the highest degree present, each rescaled onto its own sequential integer
+// domain slot [i,i+1] (rescaleCurveDomain — a simple consistent convention;
+// extrude()/revolve() need a well-formed curve, not particular parameter
+// values), then chained via concatTwoC0 into one curve. A degree-1 chain
+// needs no elevation and reduces to pure concatenation — the same
+// knot/control-point shape as getProfileCrv's degree-1 fast path (checked in
+// test/knots.test.mjs).
 export function joinCurvesC0(curves) {
   if (!curves.length) throw new Error('joinCurvesC0: need at least one curve');
   const targetDegree = Math.max(...curves.map((c) => c.degree));

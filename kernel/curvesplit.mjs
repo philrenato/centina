@@ -1,64 +1,55 @@
-// CURVE-CURVE SPLIT AND TRIM — where two curves in SPACE cut each other, and
-// what is left when a piece is thrown away.
+// Curve-curve split and trim — where two curves in space cut each other, and
+// what is left when a piece is removed.
 //
-// WHAT THIS ADDS TO kernel/curvecurve.mjs, AND WHY IT IS NOT A SECOND
-// INTERSECTOR. `intersectCurves2D` already solves the hard half exactly:
-// Bezier decomposition, a convex-hull rejection that is a PROOF, exact
-// homogeneous de Casteljau subdivision, and a 2x2 Newton that lands on the
-// true curves. It is deliberately planar — its own header says "two general
-// curves in 3D generically do not meet at all, so a 3D version would answer a
-// question nobody is asking." That header is right about the MATH and it is
-// the reason this module exists rather than a rewrite: the question a SPLIT
-// tool asks is not "do these meet" but "where does the modeller intend them to
-// meet", and that is a different question with a stated, checkable rule.
+// Relation to kernel/curvecurve.mjs: `intersectCurves2D` solves the hard half
+// exactly — Bezier decomposition, a convex-hull rejection that is a proof,
+// exact homogeneous de Casteljau subdivision, and a 2x2 Newton that lands on
+// the curves themselves. It is planar, because two general curves in 3D
+// generically do not meet. A split tool asks a different question — where the
+// modeler intends two curves to meet — which has a stated, checkable rule.
 //
-// THE ONE IDEA THAT MAKES THE 3D CASE EXACT RATHER THAN SAMPLED: a NURBS curve
-// is AFFINE-INVARIANT, so an orthographic projection of the curve is exactly
-// the curve of the projected control points — same knots, same weights, same
-// parameterisation. Projecting into a plane and calling `intersectCurves2D` is
-// therefore not an approximation of the 3D problem; it is the exact solution of
-// the projected problem, and the projected parameters uA/uB are the SAME
-// parameters on the original 3D curves. Nothing is resampled and no polyline
-// stands in for a curve anywhere in this file.
+// What makes the 3D case exact rather than sampled: a NURBS curve is
+// affine-invariant, so an orthographic projection of the curve is exactly the
+// curve of the projected control points — same knots, same weights, same
+// parameterization. Projecting into a plane and calling `intersectCurves2D` is
+// therefore the exact solution of the projected problem, and the projected
+// parameters uA/uB are the same parameters on the original 3D curves. Nothing
+// is resampled and no polyline stands in for a curve anywhere in this file.
 //
-// THE TWO KINDS OF INTERSECTION, NAMED — this is the whole design, and the
-// caller is expected to say which one it used out loud:
+// Two kinds of intersection, and the caller is expected to report which one it
+// used:
 //
-//   TRUE      the two curves pass within `tolerance` of each other in 3D at
+//   true      the two curves pass within `tolerance` of each other in 3D at
 //             that parameter pair. `gap <= tolerance`. Direction-independent:
-//             a real 3D crossing shows up under EVERY non-degenerate
-//             projection, so the projection direction cannot invent or destroy
-//             one. This is the only kind that survives without inference.
+//             a 3D crossing shows up under every non-degenerate projection, so
+//             the projection direction cannot invent or destroy one.
 //
-//   APPARENT  the two curves cross when LOOKED ALONG the projection direction
-//             but miss each other in space. `gap > tolerance`. This is
-//             Rhino's own apparent intersection and it is view-dependent by
-//             construction — change the direction you look from and you get
-//             different apparent crossings, which is correct and is exactly
-//             why the direction is reported back rather than assumed.
+//   apparent  the two curves cross when viewed along the projection direction
+//             but miss each other in space. `gap > tolerance`. This is Rhino's
+//             apparent intersection and it is view-dependent by construction —
+//             a different view direction gives different apparent crossings,
+//             which is why the direction is reported back rather than assumed.
 //
-// A caller that will not accept inference passes `infer:false` and gets TRUE
+// A caller that will not accept inference passes `infer:false` and gets true
 // events only, plus — on a refusal — the measured closest approach, so the
-// refusal can name a number instead of saying nothing happened.
+// refusal can quote a number.
 //
-// TANGENTIAL CONTACT IS FOUND, NOT REFUSED. `intersectCurves2D` refuses a
-// tangency by name because at a tangency its Jacobian is singular and no
-// TRANSVERSAL crossing is defined there — correct for what it promises. But a
-// line touching a circle really does split that line, so this module runs a
-// second, independent search for LOCAL MINIMA OF THE 3D DISTANCE between the
-// two curves (grid seeds, then a damped 2x2 Newton on the squared distance,
-// whose Hessian is well conditioned exactly where the intersector's is not).
-// A minimum at or below tolerance is a real touch and becomes an event; a
-// minimum above it is the number the refusal quotes. One search, two uses.
+// Tangential contact is found, not refused. `intersectCurves2D` refuses a
+// tangency because its Jacobian is singular there and no transversal crossing
+// is defined. But a line touching a circle does split that line, so this
+// module runs a second, independent search for local minima of the 3D distance
+// between the two curves (grid seeds, then a damped 2x2 Newton on the squared
+// distance, whose Hessian is well conditioned exactly where the intersector's
+// is not). A minimum at or below tolerance is a touch and becomes an event; a
+// minimum above it is the number the refusal quotes.
 //
-// WHAT TRIM REMOVES, AND WHAT IT LEAVES WHOLE. Rhino's Trim deletes the
-// clicked section and leaves the REST OF THE CURVE INTACT — it does not
-// silently split the remainder at every other crossing on the way past. So
-// `trimCurveAtParam` returns the complement as MAXIMAL RUNS: at most two
-// pieces from an open curve, exactly one from a closed one. Split is the
-// other disposition of the same intersection set, which is the Rhino Level 1
-// teaching point these two share ("trim deletes the picked portion, split
-// keeps everything").
+// What Trim removes, and what it leaves whole. Rhino's Trim deletes the
+// clicked section and leaves the rest of the curve intact — it does not split
+// the remainder at every other crossing. So `trimCurveAtParam` returns the
+// complement as maximal runs: at most two pieces from an open curve, exactly
+// one from a closed one. Split is the other disposition of the same
+// intersection set ("trim deletes the picked portion, split keeps
+// everything").
 
 import { curvePoint, curveDomain, rationalCurveDerivs, isCurveClosed } from './curve.mjs';
 import { extractSubCurve, joinCurvesC0 } from './knots.mjs';
@@ -66,30 +57,23 @@ import { intersectCurves2D } from './curvecurve.mjs';
 import { bestFitPlane } from './selfintersect.mjs';
 import { sub, cross, dot, normalize, length, anyPerpendicular } from './vec3.mjs';
 
-// The document-tolerance default this kernel documents elsewhere (01_KERNEL).
-// Absolute, not relative: "did the modeller mean these to meet" is a question
-// about model units, and a relative answer would silently mean something
-// different on a 1mm curve than on a 1000mm one — which is the opposite of
-// what a coincidence tolerance is for.
+// The kernel's default document tolerance. Absolute, not relative: whether the
+// modeler meant two curves to meet is a question about model units, and a
+// relative tolerance would mean something different on a 1mm curve than on a
+// 1000mm one.
 export const CURVE_SPLIT_DEFAULT_TOLERANCE = 0.001;
 
-// How far a parameter pair may move under the distance-minimising Newton
+// How far a parameter pair may move under the distance-minimizing Newton
 // before two seeds are considered to have landed on the same minimum.
 const MIN_MERGE_PARAM_FRAC = 1e-7;
 const NEWTON_MIN_STEPS = 40;
 
-function domainSpan(crv) {
-  const [a, b] = curveDomain(crv);
-  return b - a;
-}
-
-// ⚠ THE FOURTH SLOT IS A WEIGHT, NOT A HOMOGENEOUS DIVISOR. This kernel stores
-// a control point as EUCLIDEAN x,y,z plus w (see toHomogeneous in curve.mjs,
-// which is what multiplies through when a homogeneous form is wanted). Dividing
-// by w here is the error that silently deforms every RATIONAL curve — measured:
-// it pulled a circle's 90-degree span control points in by their own 0.707
-// weight, and the projected "circle" then crossed a chord at four places
-// instead of two, with two of them reported at a 1.01 gap.
+// The fourth slot is a weight, not a homogeneous divisor. This kernel stores a
+// control point as euclidean x,y,z plus w (see toHomogeneous in curve.mjs,
+// which multiplies through when a homogeneous form is wanted). Dividing by w
+// here would deform every rational curve — a circle's 90-degree span control
+// points pulled in by their 0.707 weight, and the projected circle crossing a
+// chord at four places instead of two.
 function euclidCtrlPts(crv) {
   return crv.ctrlPts.map((p) => [p[0], p[1], p[2]]);
 }
@@ -107,9 +91,9 @@ function ctrlDiagonal(crvs) {
 /**
  * The exact orthographic projection of a NURBS curve into the plane spanned by
  * e1/e2. Exact because a NURBS curve is affine-invariant: the projected curve
- * IS the curve of the projected control points, with the knots, the weights
- * and — the part that matters here — the PARAMETERISATION all unchanged, so a
- * parameter found in the projection names the same point on the 3D curve.
+ * is the curve of the projected control points, with the knots, the weights
+ * and the parameterization all unchanged, so a parameter found in the
+ * projection names the same point on the 3D curve.
  */
 export function projectCurveToFrame(crv, e1, e2) {
   return {
@@ -122,9 +106,8 @@ export function projectCurveToFrame(crv, e1, e2) {
 }
 
 // An orthonormal pair perpendicular to `dir`, so that (e1, e2, dir) is a
-// right-handed frame. `anyPerpendicular` is the kernel's own existing choice
-// of first axis, reused rather than re-derived so every projected frame in
-// this app is built the same way.
+// right-handed frame. Uses the kernel's `anyPerpendicular` for the first axis,
+// so every projected frame is built the same way.
 function frameFor(dir) {
   const d = normalize(dir);
   const e1 = normalize(anyPerpendicular(d));
@@ -135,16 +118,16 @@ function frameFor(dir) {
 /**
  * Is this pair of curves planar, and if so what is the plane's normal?
  *
- * Measured on the CONTROL POINTS, not on samples: a curve lies in a plane if
- * and only if its control points do (the basis functions are a partition of
- * unity, so every curve point is a convex-ish combination of them and cannot
- * leave their affine hull). That makes this an exact test rather than a
- * sampling one, and it costs one pass over the nets.
+ * Measured on the control points, not on samples: a curve lies in a plane if
+ * its control points do (the rational basis is non-negative and sums to one,
+ * so every curve point is a convex combination of them and cannot leave their
+ * affine hull). That makes this an exact test, at the cost of one pass over
+ * the nets.
  *
- * `planarTolerance` is RELATIVE to the pair's own size, unlike the coincidence
- * tolerance: "are these two curves in a plane" is a question about shape, and
- * a 1000mm layout drawn 0.5mm out of plane is planar in every sense the
- * modeller means, while the same 0.5mm on a 2mm curve is not.
+ * `planarTolerance` is relative to the pair's size, unlike the coincidence
+ * tolerance: whether two curves lie in a plane is a question about shape, and
+ * a 1000mm layout drawn 0.5mm out of plane is planar in every practical sense,
+ * while the same 0.5mm on a 2mm curve is not.
  */
 export function coplanarNormal(crvA, crvB, planarFrac = 1e-4) {
   const pts = [...euclidCtrlPts(crvA), ...euclidCtrlPts(crvB)];
@@ -156,17 +139,15 @@ export function coplanarNormal(crvA, crvB, planarFrac = 1e-4) {
   return plane.normal;
 }
 
-// ---------------------------------------------------------------------------
-// CLOSEST APPROACH — the second, independent search.
+// Closest approach — the second, independent search.
 //
 // Seeds come from a coarse parameter grid; every local minimum of the grid
-// (strictly less than all 8 neighbours, boundary-aware) is refined by a damped
+// (strictly less than all 8 neighbors, boundary-aware) is refined by a damped
 // Newton on g(u,v) = |A(u) - B(v)|^2, whose gradient and Hessian are written
-// out in full below from the curves' own analytic derivatives. Where the
-// transversal intersector's Jacobian goes singular — a tangency — this
-// Hessian is at its BEST conditioned, which is why the two searches together
-// cover cases neither covers alone.
-// ---------------------------------------------------------------------------
+// out below from the curves' analytic derivatives. Where the transversal
+// intersector's Jacobian goes singular — a tangency — this Hessian is best
+// conditioned, so the two searches together cover cases neither covers
+// alone.
 
 function gridResolution(crv) {
   // Enough seeds that no local minimum between two control points is stepped
@@ -229,8 +210,8 @@ function refineClosestApproach(crvA, crvB, u0, v0, domA, domB) {
  * Every local minimum of the 3D distance between two curves, refined.
  *
  * Returns [{ uA, uB, gap }] sorted by gap. Used for two different jobs: it
- * finds TANGENTIAL contact, which the transversal intersector correctly
- * refuses, and its smallest entry is the "closest approach" a refusal quotes.
+ * finds tangential contact, which the transversal intersector refuses, and
+ * its smallest entry is the closest approach a refusal quotes.
  */
 export function closestApproaches(crvA, crvB) {
   const domA = curveDomain(crvA), domB = curveDomain(crvB);
@@ -271,28 +252,26 @@ export function closestApproaches(crvA, crvB) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// THE INTERSECTION ITSELF
-// ---------------------------------------------------------------------------
+// The intersection
 
 /**
  * Where two 3D curves cut each other, with the rule that was applied named in
  * the result rather than left for the caller to guess.
  *
  * opts:
- *   tolerance   absolute 3D distance at or below which a crossing is REAL.
+ *   tolerance   absolute 3D distance at or below which a crossing is true.
  *   infer       accept apparent (projected-only) crossings as well. When
- *               false, only TRUE events come back and `nearest` carries the
+ *               false, only true events come back and `nearest` carries the
  *               measured closest approach so a refusal can quote it.
- *   direction   the direction to look along for apparent crossings. Omit and
- *               the pair's own best-fit-plane normal is used, which is exact
- *               for a coplanar pair and a defensible generic direction
- *               otherwise — but a caller with a real viewport should pass the
- *               view direction, because apparent means "apparent from here".
+ *   direction   the direction to look along for apparent crossings. Omitted,
+ *               the pair's best-fit-plane normal is used, which is exact for
+ *               a coplanar pair and a reasonable generic direction otherwise;
+ *               a caller with a viewport should pass the view direction,
+ *               because apparent means apparent from that view.
  *
  * Returns { ok, events, coplanar, direction, directionSource, nearest, reason }.
- * `ok:true` with `events:[]` is a real answer — these curves do not meet — and
- * `nearest` says by how much they miss.
+ * `ok:true` with `events:[]` means the curves do not meet, and `nearest` says
+ * by how much they miss.
  */
 export function curveCurveEvents(crvA, crvB, opts = {}) {
   const tolerance = opts.tolerance ?? CURVE_SPLIT_DEFAULT_TOLERANCE;
@@ -303,24 +282,21 @@ export function curveCurveEvents(crvA, crvB, opts = {}) {
   if (opts.direction && length(opts.direction) > 0) { dir = opts.direction; dirSource = 'given'; }
   else if (normal) { dir = normal; dirSource = 'plane normal'; }
   else {
-    // A pair with no plane at all (two collinear nets, or genuinely skew
-    // nets whose best fit is not a plane) still has to be looked at from
-    // somewhere. The pair's own diagonal is a direction that is guaranteed
-    // non-degenerate for at least one of them.
+    // A pair with no plane (two collinear nets, or skew nets whose best fit
+    // is not a plane) still has to be viewed from somewhere. The pair's
+    // diagonal is non-degenerate for at least one of them.
     const b = bestFitPlane([...euclidCtrlPts(crvA), ...euclidCtrlPts(crvB)]);
     dir = b ? b.normal : [0, 0, 1];
     dirSource = b ? 'best-fit normal' : 'world Z';
   }
-  /* ⚠ A PROJECTION CAN DEGENERATE, AND THE FIX IS TO LOOK FROM SOMEWHERE ELSE.
-     Looked at exactly end-on, a curve projects to a point or a segment, and the
-     2D search then reports the pair as OVERLAPPING — true of the projection and
-     false of the curves. A caller passing a real view direction hits this the
-     moment the modeller looks straight down a line. TRUE intersections are
-     direction-independent, so any other direction answers the same question:
-     the pair's own best-fit normal is tried next, then a direction
-     perpendicular to the first. Only if all three degenerate is the overlap
-     reported, which by then is evidence about the curves rather than the
-     viewpoint. */
+  /* A projection can degenerate. Viewed exactly end-on, a curve projects to a
+     point or a segment, and the 2D search then reports the pair as
+     overlapping — true of the projection and false of the curves. A caller
+     passing a view direction hits this whenever the view looks straight down
+     a line. True intersections are direction-independent, so any other
+     direction answers the same question: the pair's best-fit normal is tried
+     next, then a direction perpendicular to the first. Only if all three
+     degenerate is the overlap reported. */
   const tryDirs = [dir];
   if (normal) tryDirs.push(normal);
   tryDirs.push(frameFor(dir).e1);
@@ -333,17 +309,15 @@ export function curveCurveEvents(crvA, crvB, opts = {}) {
     if (!r.overlapping) break; // a tangency is a real answer, not a degenerate view
   }
   if (usedFallback) dirSource = `${dirSource} (the first direction looked straight down a curve, so another was used)`;
-  const { e1, e2, d } = chosen;
-  const pa = projectCurveToFrame(crvA, e1, e2);
-  const pb = projectCurveToFrame(crvB, e1, e2);
+  const { d } = chosen;
 
   const events = [];
   const push = (uA, uB, kind) => {
     const A = curvePoint(crvA, uA), B = curvePoint(crvB, uB);
     const gap = length(sub(A, B));
-    // Dedupe on the 3D POINT, not the parameters: a closed curve reaches the
-    // same place from two very different parameters at its own seam, and the
-    // two searches below routinely both find the same event.
+    // Dedupe on the 3D point, not the parameters: a closed curve reaches the
+    // same place from two different parameters at its seam, and the two
+    // searches often find the same event.
     const merge = Math.max(tolerance, ctrlDiagonal([crvA, crvB]) * 1e-7);
     if (events.some((e) => length(sub(e.pointA, A)) <= merge && length(sub(e.pointB, B)) <= merge)) return;
     events.push({ uA, uB, pointA: A, pointB: B, gap, kind: gap <= tolerance ? 'true' : kind });
@@ -351,17 +325,16 @@ export function curveCurveEvents(crvA, crvB, opts = {}) {
 
   if (flat.ok) for (const p of flat.points) push(p.uA, p.uB, 'apparent');
 
-  // TANGENTIAL CONTACT and the refusal's own number, from the independent
-  // distance search. Only minima at or under tolerance become events —
-  // a distant local minimum is not a crossing, it is just the nearest miss.
+  // Tangential contact, and the refusal's number, from the independent
+  // distance search. Only minima at or under tolerance become events — a
+  // distant local minimum is the nearest miss, not a crossing.
   const mins = closestApproaches(crvA, crvB);
-  /* ⚠⚠ AN OVERLAP MUST NOT BE HARVESTED AS A THOUSAND TOUCHES. Where two curves
-     lie ON TOP of each other, every local minimum of the distance between them
-     is zero, so the tangency search would return one "intersection" per grid
-     seed — measured: two coincident lines inside a set of four turned a split
-     into 133 pieces, for a question that has no defined answer at all. The 2D
-     search has already proved the overlap (every leaf survives subdivision);
-     that verdict stands, and the minima are discarded rather than believed. */
+  /* An overlap must not be harvested as many touches. Where two curves lie on
+     top of each other, every local minimum of the distance between them is
+     zero, so the tangency search would return one intersection per grid seed
+     for a question that has no defined answer. The 2D search has already
+     established the overlap (every leaf survives subdivision); that verdict
+     stands, and the minima are discarded. */
   const overlapping = !flat.ok && !!flat.overlapping;
   if (!overlapping) for (const m of mins) if (m.gap <= tolerance) push(m.uA, m.uB, 'true');
 
@@ -389,17 +362,15 @@ export function curveCurveEvents(crvA, crvB, opts = {}) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// SPLITTING
-// ---------------------------------------------------------------------------
+// Splitting
 
 /**
- * The parameters at which a curve really can be cut, given raw event
+ * The parameters at which a curve can be cut, given raw event
  * parameters on it.
  *
- * Two filters, both GEOMETRIC rather than parametric, because a parametric
+ * Two filters, both geometric rather than parametric, because a parametric
  * epsilon means different distances on different curves:
- *   · a crossing at a curve END is not a cut — there is nothing on one side of
+ *   · a crossing at a curve end is not a cut — there is nothing on one side of
  *     it — so it is dropped rather than producing a zero-length piece;
  *   · two crossings closer together than the tolerance are one crossing.
  */
@@ -411,8 +382,8 @@ export function cuttableParams(crv, params, tolerance = CURVE_SPLIT_DEFAULT_TOLE
   const out = [];
   for (const u of sorted) {
     const p = curvePoint(crv, u);
-    // On a CLOSED curve the seam is an ordinary point, so a crossing there is
-    // a real cut and must be kept; on an open one it is an end.
+    // On a closed curve the seam is an ordinary point, so a crossing there is
+    // a cut and is kept; on an open one it is an end.
     if (!closed && (length(sub(p, pStart)) <= tolerance || length(sub(p, pEnd)) <= tolerance)) continue;
     if (out.length && length(sub(curvePoint(crv, out[out.length - 1]), p)) <= tolerance) continue;
     out.push(u);
@@ -423,12 +394,12 @@ export function cuttableParams(crv, params, tolerance = CURVE_SPLIT_DEFAULT_TOLE
 /**
  * Cut a curve at every given parameter.
  *
- * OPEN curve, k cuts -> k+1 pieces, in order.
- * CLOSED curve, k cuts -> k pieces, because the seam is NOT a cut: the last
+ * Open curve, k cuts -> k+1 pieces, in order.
+ * Closed curve, k cuts -> k pieces, because the seam is not a cut: the last
  * piece runs from the last cut, through the seam, round to the first. That
  * wrap piece is built by extracting both halves and joining them C0 — exact,
- * not refitted. A single cut on a closed curve therefore yields ONE piece: the
- * curve opened at that point, which is what Rhino does too.
+ * not refitted. A single cut on a closed curve therefore yields one piece: the
+ * curve opened at that point, as in Rhino.
  */
 export function splitCurveAtParams(crv, params, opts = {}) {
   const tolerance = opts.tolerance ?? CURVE_SPLIT_DEFAULT_TOLERANCE;
@@ -443,7 +414,7 @@ export function splitCurveAtParams(crv, params, opts = {}) {
   } else {
     for (let i = 0; i + 1 < cuts.length; i++) pieces.push(extractSubCurve(crv, cuts[i], cuts[i + 1]));
     // The wrap piece. Either half can be empty when a cut lands exactly on the
-    // seam, in which case the other half alone IS the piece.
+    // seam, in which case the other half alone is the piece.
     const tailReal = (u1 - cuts[cuts.length - 1]) > (u1 - u0) * 1e-12;
     const headReal = (cuts[0] - u0) > (u1 - u0) * 1e-12;
     const tail = tailReal ? extractSubCurve(crv, cuts[cuts.length - 1], u1) : null;
@@ -456,14 +427,13 @@ export function splitCurveAtParams(crv, params, opts = {}) {
 }
 
 /**
- * MUTUAL split of N curves: every curve is cut wherever it meets EVERY other
- * curve in the set, in one pass. Not N one-against-one splits — the whole
- * point of selecting four curves and pressing Split once.
+ * Mutual split of N curves: every curve is cut wherever it meets every other
+ * curve in the set, in one pass, rather than N one-against-one splits.
  *
  * Returns { ok, results, pairs, reason }, where `results[i]` is
- * { index, cuts, pieces, eventCount } for every curve that was actually cut,
- * and `pairs` records what each pair produced (including the pairs that
- * produced nothing, and why) so the caller can report honestly.
+ * { index, cuts, pieces, eventCount } for every curve that was cut, and
+ * `pairs` records what each pair produced (including the pairs that produced
+ * nothing, and why) so the caller can report it.
  */
 export function splitCurveNetwork(curves, opts = {}) {
   const tolerance = opts.tolerance ?? CURVE_SPLIT_DEFAULT_TOLERANCE;
@@ -486,7 +456,7 @@ export function splitCurveNetwork(curves, opts = {}) {
   }
   if (!anyEvent) {
     const nearest = pairs.reduce((m, p) => (p.nearest !== null && p.nearest !== undefined && (m === null || p.nearest < m) ? p.nearest : m), null);
-    // An overlap is a DIFFERENT refusal from a miss, and quoting a closest
+    // An overlap is a different refusal from a miss; quoting a closest
     // approach of 0 for it would read as "they touch but nothing happened".
     const overlaps = pairs.filter((p) => p.overlapping).length;
     return {
@@ -503,10 +473,9 @@ export function splitCurveNetwork(curves, opts = {}) {
     if (!perCurve[i].length) continue;
     const s = splitCurveAtParams(curves[i], perCurve[i], { tolerance });
     if (!s.ok || s.pieces.length < 2) {
-      // One cut on an OPEN curve at its own end, or a closed curve cut once,
-      // can legitimately produce fewer than two pieces. A closed curve opened
-      // at one point IS a change and is kept; an open curve that did not
-      // actually gain a piece is not.
+      // One cut on an open curve at its own end, or a closed curve cut once,
+      // can produce fewer than two pieces. A closed curve opened at one point
+      // is a change and is kept; an open curve that gained no piece is not.
       if (s.ok && s.closed && s.pieces.length === 1) { results.push({ index: i, cuts: s.cuts, pieces: s.pieces, opened: true }); continue; }
       continue;
     }
@@ -518,9 +487,7 @@ export function splitCurveNetwork(curves, opts = {}) {
   return { ok: true, results, pairs, sawApparent };
 }
 
-// ---------------------------------------------------------------------------
-// TRIMMING
-// ---------------------------------------------------------------------------
+// Trimming
 
 /**
  * Which section of a curve a click landed in, given the parameters that bound
@@ -548,17 +515,16 @@ export function sectionAtParam(crv, params, uClick, opts = {}) {
 }
 
 /**
- * Remove the section containing `uClick` and keep the rest — as MAXIMAL RUNS,
+ * Remove the section containing `uClick` and keep the rest — as maximal runs,
  * not as every section separately.
  *
- * This is the difference between Trim and Split, and it is deliberate: a line
- * crossed by two cutters, trimmed at its left end, comes back as ONE curve
- * running from the first cutter to the far end, with the second crossing left
- * uncut. Rhino behaves exactly this way and it is what makes Trim usable as a
- * cleanup tool rather than a shredder.
+ * This is the difference between Trim and Split: a line crossed by two
+ * cutters, trimmed at its left end, comes back as one curve running from the
+ * first cutter to the far end, with the second crossing left uncut. Rhino
+ * behaves this way, and it makes Trim a cleanup tool rather than a shredder.
  *
  * Returns { ok, pieces, removed:{a,b}, reason }. `pieces` is empty when the
- * whole curve was the clicked section — a legitimate outcome (the curve is
+ * whole curve was the clicked section — a valid outcome (the curve is
  * deleted), reported as `wholeCurve:true` rather than as a failure.
  */
 export function trimCurveAtParam(crv, params, uClick, opts = {}) {
@@ -577,14 +543,14 @@ export function trimCurveAtParam(crv, params, uClick, opts = {}) {
     return { ok: true, pieces, removed: { a: sec.a, b: sec.b } };
   }
   if (sec.wraps) {
-    // The removed section is [a, u1] + [u0, b] with a > b, so the KEPT run is
-    // the single interior stretch from b up to a — no seam crossing involved
-    // at all, and no join needed.
+    // The removed section is [a, u1] + [u0, b] with a > b, so the kept run is
+    // the single interior stretch from b up to a — no seam crossing and no
+    // join.
     if (sec.a - sec.b > eps) pieces.push(extractSubCurve(crv, sec.b, sec.a));
   } else {
-    // Kept run goes from the section's own end, through the seam, round to its
+    // Kept run goes from the section's end, through the seam, round to its
     // start. Both halves are exact sub-curves; the join is C0 at the seam,
-    // which is where the closed curve's own continuity already lived.
+    // where the closed curve's own continuity already was.
     const tail = (u1 - sec.b > eps) ? extractSubCurve(crv, sec.b, u1) : null;
     const head = (sec.a - u0 > eps) ? extractSubCurve(crv, u0, sec.a) : null;
     if (tail && head) pieces.push(joinCurvesC0([tail, head]));

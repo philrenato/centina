@@ -1,27 +1,25 @@
-// CLASSIFICATION — Phase 7 of the boolean pipeline, and the
-// phase where booleans usually die. For every fragment the
+// Classification — Phase 7 of the boolean pipeline. For every fragment the
 // face split produced: is it inside the other solid, outside it, or on its
 // boundary. Requicha & Voelcker 1985's boundary evaluation and merging is the
-// reference for the STRATEGY; the test itself is written fresh here — that
-// source is a REFERENCE, never a source of transcribed code.
+// reference for the strategy; the test itself is written fresh here, with no
+// code transcribed from it.
 //
-// THREE STATES, NOT TWO. 'boundary' is a real answer and is checked FIRST,
-// before any ray is cast — a fragment lying ON the other solid's surface is
+// Three states, not two. 'boundary' is a real answer and is checked first,
+// before any ray is cast — a fragment lying on the other solid's surface is
 // exactly the case a two-state test has to guess about, and guessing there is
 // how a boolean produces a shell with a hole in it. This mirrors
 // kernel/trim.mjs's own pointInUVPolygon, which reports 'boundary' separately
 // for the same reason one dimension down.
 //
-// A MAJORITY OF CLEAN RAYS, NOT ONE RAY WITH A RETRY. The obvious approach is
+// Agreement of clean rays, not one ray with a retry. The obvious approach is
 // retrying with a fresh direction when a degenerate hit is detected. That is
 // necessary but not sufficient: a single clean-looking cast against a mesh
 // that is subtly open answers confidently and wrongly. So several independent
-// directions are cast, every DEGENERATE cast is discarded outright (never
-// fudged), and the surviving clean casts must AGREE. Disagreement means the
+// directions are cast, every degenerate cast is discarded outright (never
+// fudged), and the surviving clean casts must agree. Disagreement means the
 // mesh is not the closed manifold this test assumes, and that refuses by name
-// rather than returning the more popular answer — the wrong answer here is
-// silent, and a silent wrong answer three phases from the user is precisely
-// what this whole plan exists to avoid.
+// rather than returning the more popular answer, because a wrong answer here
+// surfaces only as a wrong solid three phases later.
 //
 // Degeneracy is detected, not tolerated: a ray passing within `baryEps` of a
 // triangle's edge or vertex has hit a shared boundary between two triangles,
@@ -32,14 +30,13 @@ import { add, sub, scale, dot, cross, length, normalize } from './vec3.mjs';
 import { surfacePoint } from './surface.mjs';
 import { representativeInteriorPoint } from './facesplit.mjs';
 
-// Twice a triangle's area, divided by the square of its own longest edge —
-// a scale-free measure of how collapsed it is. Normalizing against the
-// LONGEST edge is what makes this hold for both ways a triangle degenerates:
-// two edges turning parallel, and a single edge shrinking to nothing. An
-// earlier form of this test divided by |e1||e2| and silently missed the
-// second case, because a vanishing edge shrinks the divisor at the same
-// rate as the area. Deliberately generous — a real triangle in any
-// tessellation this app produces clears it by six orders of magnitude,
+// Twice a triangle's area, divided by the square of its own longest edge — a
+// scale-free measure of how collapsed it is. Normalizing against the longest
+// edge is what makes this hold for both ways a triangle degenerates: two edges
+// turning parallel, and a single edge shrinking to nothing. Dividing by
+// |e1||e2| instead would miss the second case, because a vanishing edge
+// shrinks the divisor at the same rate as the area. Generous — a real triangle
+// in any tessellation this app produces clears it by six orders of magnitude,
 // while a revolve's own pole sliver sits at ~1e-15. See castRay.
 export const DEGENERATE_TRIANGLE_AREA_RATIO = 1e-9;
 
@@ -60,29 +57,28 @@ export function spiralDirections(count) {
   return out;
 }
 
-/* ── TRIANGLE-MESH ACCELERATION for classification ────────────────────────
-   Classifying a point by scanning EVERY triangle once for the boundary
-   check and once per ray is O(rays × triangles) per fragment. On a real
-   student file (two SubD-derived polysurfaces, 359,424 classification
-   triangles each, ~660 fragments and faces to classify) that is ~63 SECONDS
-   of the boolean's own time. A mid-split AABB tree over the triangles turns
-   both scans into log-time queries — the identical per-triangle mathematics
+/* Triangle-mesh acceleration for classification.
+   Classifying a point by scanning every triangle once for the boundary
+   check and once per ray is O(rays × triangles) per fragment, and a boolean
+   of two SubD-derived polysurfaces classifies hundreds of fragments against
+   hundreds of thousands of triangles. A mid-split AABB tree over the
+   triangles turns both scans into log-time queries — the identical per-triangle mathematics
    runs on the triangles that survive the box tests, so the answers do not
    change, only the time.
 
-   Built once per triangle ARRAY and cached by identity (WeakMap): one
+   Built once per triangle array and cached by identity (WeakMap): one
    boolean run reuses one operand's triangle array across every face and
    fragment it classifies against that operand, which is exactly when the
    build pays for itself. The cache keeps nothing alive — when the run drops
    the array, the tree goes with it.
 
-   ⚠ ONE DELIBERATE SEMANTIC REFINEMENT, stated rather than hidden: an
-   exhaustive castRay declares a cast degenerate when the ray lies in ANY
-   triangle's plane — including a triangle nowhere near the ray's path,
-   whose parity contribution is provably zero. The tree only visits
+   One semantic difference from an exhaustive scan: an exhaustive castRay
+   would declare a cast degenerate when the ray lies in any triangle's
+   plane — including a triangle nowhere near the ray's path, whose parity
+   contribution is provably zero. The tree only visits
    triangles whose (padded) box the ray's forward half-line crosses, so a
    far-away coplanar triangle does not poison the whole cast. Every
-   triangle the ray could genuinely hit or graze is still visited and still
+   triangle the ray could hit or graze is still visited and still
    gets the full degeneracy treatment, so the votes that remain are cast by
    the identical test — this can only turn a discarded vote into a correct
    one, never the reverse. */
@@ -142,7 +138,7 @@ function buildTriAccel(triangles) {
     return self;
   };
   if (n) buildRange(0, n);
-  // The root box diagonal IS the old meshScale — same points, same measure.
+  // The root box diagonal is the mesh's scale length.
   const d = n ? Math.hypot(nodes[0].hi[0] - nodes[0].lo[0], nodes[0].hi[1] - nodes[0].lo[1], nodes[0].hi[2] - nodes[0].lo[2]) : 0;
   return { nodes, order, scaleLen: Number.isFinite(d) && d > 0 ? d : 1 };
 }
@@ -175,7 +171,7 @@ function closestPtOnTri(a, b, c, p) {
 }
 
 // Exact nearest point on the soup — branch-and-bound over the tree, never a
-// cutoff, so it returns byte-for-byte what the linear scan returned.
+// cutoff, so it returns exactly what a linear scan would.
 function nearestOnTriangleMesh(triangles, accel, p) {
   const { nodes, order } = accel;
   if (!nodes.length) return null;
@@ -224,7 +220,7 @@ function castRay(triangles, origin, dir, scaleLen, accel) {
   const tEps = 1e-9 * scaleLen;
   // Boxes are padded so a hit that grazes a leaf's own wall (the very case
   // the baryEps test must see) still visits that leaf. Padding only ever
-  // ADDS visited triangles, and the per-triangle test below is unchanged.
+  // adds visited triangles, and the per-triangle test below is the same.
   const boxEps = 1e-7 * scaleLen;
   const { nodes, order } = accel;
   let crossings = 0;
@@ -254,18 +250,17 @@ function castRay(triangles, origin, dir, scaleLen, accel) {
       const e1 = sub(b, a), e2 = sub(c, a);
       const n = cross(e1, e2);
       const nLen = length(n);
-      // A COLLAPSED TRIANGLE IS SKIPPED, NOT TREATED AS A DEGENERATE RAY.
+      // A collapsed triangle is skipped, not treated as a degenerate ray.
       // `nLen` is twice the area, so this is a scale-free test on the
       // triangle's own shape: below the threshold it encloses no area a ray
-      // could cross, and — the part that actually bites — its normal
-      // DIRECTION is pure roundoff. Any ray is "parallel" to a normal made of
-      // noise, so such a triangle would otherwise satisfy the in-plane test
-      // below for essentially every direction at once and report the whole
-      // cast untrustworthy. A revolve collapses its entire pole row into
-      // exactly this, so ONE of them anywhere in a mesh was enough to make
-      // every direction refuse, leaving no point classifiable against any
-      // solid of revolution at all. Skipping is safe for the same reason the
-      // exactly-zero case was already skipped: a genuine crossing of a
+      // could cross, and its normal direction is pure roundoff. Any ray is
+      // "parallel" to a normal made of noise, so such a triangle would
+      // otherwise satisfy the in-plane test below for essentially every
+      // direction at once and report the whole cast untrustworthy. A revolve
+      // collapses its entire pole row into exactly this, so one of them
+      // anywhere in a mesh would make every direction refuse, leaving no point
+      // classifiable against any solid of revolution. Skipping is safe for the
+      // same reason the exactly-zero case is skipped: a crossing of a
       // zero-area region is measure-zero, and in a closed mesh the neighbors
       // sharing its edges still register the real crossing.
       const maxEdge = Math.max(length(e1), length(e2), length(sub(c, b)));
@@ -276,7 +271,7 @@ function castRay(triangles, origin, dir, scaleLen, accel) {
       const qv = cross(tv, e1);
       if (Math.abs(det) < parallelEps) {
         // Parallel to this triangle's plane. Harmless unless the ray actually
-        // lies IN that plane and passes through the triangle, which parity
+        // lies in that plane and passes through the triangle, which parity
         // cannot count. Detected via the ray's distance from the plane. The
         // normal is trustworthy here — a collapsed triangle already left.
         if (Math.abs(dot(tv, n)) / nLen < tEps) {
@@ -316,13 +311,13 @@ export function classifyPointInSolid(triangles, point, opts = {}) {
     return { region: null, reason: 'the solid has no boundary geometry to classify against' };
   }
   const accel = triAccelFor(triangles);
-  // The tree's root box diagonal — the same measure meshScale took, cached
-  // with the tree so 660 fragments do not each rescan 359k triangles for it.
+  // The tree's root box diagonal, cached with the tree so each fragment does
+  // not rescan every triangle for it.
   const scaleLen = accel.scaleLen;
   // Relative by default, so this behaves the same on a 1mm part and a 1m one.
   const boundaryTol = opts.boundaryTolerance ?? scaleLen * 1e-7;
 
-  // BOUNDARY FIRST. A point on the other solid's surface has no honest
+  // Boundary first. A point on the other solid's surface has no
   // inside/outside answer, and every ray cast from it would be grazing.
   const near = nearestOnTriangleMesh(triangles, accel, point);
   if (near && near.distance <= boundaryTol) {
@@ -337,9 +332,9 @@ export function classifyPointInSolid(triangles, point, opts = {}) {
     if (r.degenerate) { degenerate.push(r.why); continue; }
     votes.push(r.crossings % 2 === 1 ? 'inside' : 'outside');
   }
-  // EVERY direction is cast, deliberately — stopping as soon as two agreed
+  // Every direction is cast — stopping as soon as two agreed
   // would defeat the disagreement check below, which is the only thing that
-  // catches an open mesh. For a genuinely closed mesh unanimity holds by
+  // catches an open mesh. For a closed mesh unanimity holds by
   // construction, so this costs time and never a false refusal.
   if (!votes.length) {
     return {
@@ -357,7 +352,7 @@ export function classifyPointInSolid(triangles, point, opts = {}) {
 }
 
 /**
- * Classify one FRAGMENT of a split face against the other solid — the shape
+ * Classify one fragment of a split face against the other solid — the shape
  * Phase 8 actually consumes, since a boolean keeps or drops whole fragments,
  * never individual points.
  *
@@ -365,13 +360,12 @@ export function classifyPointInSolid(triangles, point, opts = {}) {
  * in this surface's own (u,v) knot domain (kernel/trim.mjs's own trim-loop
  * convention — real domain values, not normalized fractions, per
  * trivialTrimLoop). The probe point is the fragment's own representative
- * INTERIOR point, not a centroid: a centroid can sit outside a non-convex
- * fragment entirely, or inside one of its holes, and a boolean that classifies
- * one fragment by a point belonging to a different region is exactly the
- * silent wrong answer this whole phase exists to avoid.
+ * interior point, not a centroid: a centroid can sit outside a non-convex
+ * fragment entirely, or inside one of its holes, and would classify the
+ * fragment by a point belonging to a different region.
  *
- * ONE point decides the whole fragment, and that is sound only because the
- * split already ran: every intersection curve is a fragment BOUNDARY by
+ * One point decides the whole fragment, and that is sound only because the
+ * split already ran: every intersection curve is a fragment boundary by
  * construction, so no fragment straddles the other solid's surface — its
  * interior is entirely inside or entirely outside. If that precondition is
  * ever broken (a missed intersection curve), this returns a confident wrong
@@ -392,7 +386,7 @@ export function classifyFragment(srf, fragment, otherTriangles, opts = {}) {
 
 /**
  * Turn a triangle soup into a single closed-solid predicate the keep-rules of
- * Phase 8 can be written against. Union/Difference/Intersect differ ONLY in
+ * Phase 8 can be written against. Union/Difference/Intersect differ only in
  * which regions they keep, so they all consume exactly this.
  */
 export function keepRuleFor(operation) {

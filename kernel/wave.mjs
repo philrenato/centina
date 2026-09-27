@@ -1,21 +1,18 @@
-// SURFACE WAVE — the
+// Surface wave — the
 // surface modifier chain's 6th member, joining
 // Rebuild -> Fair -> Point-Edits -> Cage -> Noise -> Wave. Same operand
 // as Noise (the control net, interior points only, boundary rows/
 // columns and every rational weight left exactly untouched, amplitude 0
-// = exact identity), but a genuinely different displacement law: Noise
+// = exact identity), but a different displacement law: Noise
 // is seeded pseudo-random texture; Wave is a smooth, fully deterministic
-// PERIODIC ripple along one chosen grid axis, carrying an explicit
-// PHASE parameter — the doc's own instruction was to cut Wave's stated
-// hard dependency on the not-yet-built Animation Toolset ("the (future)
-// Animator drives phase, same as it would drive any other numeric
-// param — no special coupling needed"), so phase is just an ordinary
-// param here, ready for that later wiring without needing it now.
+// periodic ripple along one chosen grid axis, carrying an explicit
+// phase parameter. Phase is an ordinary numeric param, so an animator
+// can drive it like any other with no special coupling.
 //
 // Reuses noise.mjs's own generic (non-noise-specific) helpers directly
 // rather than re-deriving them a second time: grevilleFromKnots (a
 // control point's own parameter of maximum influence, for normal-frame
-// direction), surfaceNormalAtParam (the honest pole-degenerate-safe
+// direction), surfaceNormalAtParam (the pole-degenerate-safe
 // local normal), and refineSurface (knot-insertion density boost before
 // displacement, shape-preserving by construction).
 
@@ -36,8 +33,7 @@ export function normalizeWaveParams(params) {
     phase: Number.isFinite(p.phase) ? p.phase : 0,
     direction: WAVE_DIRECTIONS.includes(p.direction) ? p.direction : 'normal',
     refine: Number.isFinite(p.refine) ? Math.max(0, Math.round(p.refine)) : 0,
-    // 0 keeps the displacement at full strength to the boundary, which is what
-    // this did before falloff existed — so the default is byte-identical.
+    // 0 keeps the displacement at full strength to the boundary.
     falloff: Number.isFinite(p.falloff) ? Math.max(0, Math.min(1, p.falloff)) : 0,
   };
 }
@@ -64,10 +60,10 @@ function waveScalarGrid(p, nu, nv) {
 // noiseControlNet's own (srf, params) -> new srf shape exactly.
 export function waveControlNet(srf, params) {
   const p = normalizeWaveParams(params);
-  if (p.amplitude === 0) return srf; // EXACT identity, same amplitude=0 tween baseline as Noise/Fair
+  if (p.amplitude === 0) return srf; // exact identity, same amplitude=0 tween baseline as Noise/Fair
   let s = p.refine > 0 ? refineSurface(srf, p.refine) : srf;
   const nu = s.ctrlNet.length, nv = s.ctrlNet[0].length;
-  if (nu < 3 || nv < 3) return srf; // no genuine interior control point to displace
+  if (nu < 3 || nv < 3) return srf; // no interior control point to displace
   const grid = waveScalarGrid(p, nu, nv);
   const fade = boundaryFalloffGrid(nu, nv, p.falloff);
   const useNormal = p.direction === 'normal';
@@ -75,7 +71,7 @@ export function waveControlNet(srf, params) {
   const gU = useNormal ? grevilleFromKnots(s.knotsU, s.degU, nu) : null;
   const gV = useNormal ? grevilleFromKnots(s.knotsV, s.degV, nv) : null;
 
-  // PHASE 1 — the UNIT (amplitude=1) displacement field, cached so phase 3
+  // Phase 1 — the unit (amplitude=1) displacement field, cached so phase 3
   // never re-derives a pole's own normal a second time. Same shape as
   // noise.mjs's own noiseControlNet — see its header comment for the full
   // reasoning behind this two-phase split.
@@ -89,13 +85,13 @@ export function waveControlNet(srf, params) {
     }
   }
 
-  // PHASE 2 — the SELF-INTERSECTION-SAFE CLAMP, reusing noise.mjs's own
+  // Phase 2 — the self-intersection-safe clamp, reusing noise.mjs's own
   // shared primitive directly (the same math applies unchanged: Wave's own
   // amplitude is also floored non-negative by normalizeWaveParams above).
   const safeMax = maxSafeDisplacementScale(s.ctrlNet, unitDisp);
   const appliedAmplitude = Math.min(p.amplitude, safeMax);
 
-  // PHASE 3 — apply the (possibly clamped) amplitude to the cached unit field.
+  // Phase 3 — apply the (possibly clamped) amplitude to the cached unit field.
   const net = s.ctrlNet.map((row) => row.map((cp) => [...cp]));
   for (let i = 1; i < nu - 1; i++) {
     for (let j = 1; j < nv - 1; j++) {

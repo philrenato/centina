@@ -1,7 +1,7 @@
-// FITTING A TRIMMED FACE'S BOUNDARY — the (u,v) polyline a trim loop is stored
-// as, turned into the runs of real curves a B-rep trim loop is made of.
+// Fitting a trimmed face's boundary — the (u,v) polyline a trim loop is stored
+// as, turned into the runs of curves a B-rep trim loop is made of.
 //
-// The property under test throughout is that a REFUSAL IS A REAL OUTCOME: this
+// The property under test throughout is that a refusal is a valid outcome: this
 // module never returns a boundary that missed its bound, so every "ok" here is
 // also a claim about accuracy, and the corner cases are asserted to refuse or
 // to split rather than to quietly return something plausible.
@@ -20,7 +20,7 @@ const PLANE = {
   ctrlNet: [[[-10, -10, 0, 1], [-10, 10, 0, 1]], [[10, -10, 0, 1], [10, 10, 0, 1]]],
 };
 
-// A genuinely CURVED surface, so the pcurve/edge consistency measurement has
+// A curved surface, so the pcurve/edge consistency measurement has
 // something to measure: a bicubic saddle over the same domain. A flat plane
 // would make the two agree trivially and prove nothing about the pairing.
 const SADDLE = (() => {
@@ -74,11 +74,10 @@ function stadium(r, len, perEnd) {
   return out;
 }
 
-test('THE PREMISE: one smooth curve genuinely CANNOT fit a loop with corners', () => {
-  // This is why splitLoopAtCorners exists at all, so it is asserted rather
-  // than assumed. If this ever starts passing, the splitter is not load-bearing
-  // any more and this whole module should be reconsidered — it would not be a
-  // test to delete quietly.
+test('premise: one smooth curve cannot fit a loop with corners', () => {
+  // This is why splitLoopAtCorners exists, so it is asserted rather than
+  // assumed. If this starts passing, the splitter is not load-bearing and the
+  // module's design should be reconsidered.
   const loop = square(5, 10);
   const whole = fitCurveToPoints([...loop, loop[0]].map(([u, v]) => [u, v, 0]), {
     tolerance: 1e-3, closed: false, exactEndpoints: true,
@@ -88,7 +87,7 @@ test('THE PREMISE: one smooth curve genuinely CANNOT fit a loop with corners', (
     `and it must miss by a LOT, not marginally — got ${whole.bestDeviation}`);
 });
 
-test('A SQUARE SPLITS INTO ITS FOUR SIDES, and every one is an exact line', () => {
+test('a square splits into its four sides, and every one is an exact line', () => {
   const res = fitTrimLoop(PLANE, square(5, 10), { tolerance: 1e-3 });
   assert.ok(res.ok, res.reason);
   assert.equal(res.runs.length, 4);
@@ -99,13 +98,13 @@ test('A SQUARE SPLITS INTO ITS FOUR SIDES, and every one is an exact line', () =
   }
 });
 
-test('...INCLUDING THE SIDES THAT RUN BACKWARDS — the direction must not decide the answer', () => {
+test('...including the sides that run backwards — the direction must not decide the answer', () => {
   // fitLine canonicalizes its direction so near-identical input cannot flicker
   // between opposite ones, which means a run traveling in -x comes back with
   // its endpoints swapped. Rejecting that would discard an exact answer over a
-  // convention, and it silently did: two of these four sides fitted as
-  // six-control-point splines. Both traversal directions are asserted so the
-  // recognition cannot become orientation-dependent again.
+  // convention, and two of these four sides would fit as six-control-point
+  // splines. Both traversal directions are asserted so the recognition stays
+  // independent of orientation.
   const forward = fitTrimLoop(PLANE, square(5, 10), { tolerance: 1e-3 });
   const reversed = fitTrimLoop(PLANE, square(5, 10).slice().reverse(), { tolerance: 1e-3 });
   assert.ok(forward.ok && reversed.ok);
@@ -113,7 +112,7 @@ test('...INCLUDING THE SIDES THAT RUN BACKWARDS — the direction must not decid
   assert.equal(reversed.stats.exactRuns, 4, 'reversing the loop must not cost a single exact line');
 });
 
-test('A CIRCULAR BOUNDARY IS ONE RUN, and far fewer control points than samples', () => {
+test('a circular boundary is one run, and far fewer control points than samples', () => {
   const loop = ring(5, 64);
   const res = fitTrimLoop(PLANE, loop, { tolerance: 1e-3 });
   assert.ok(res.ok, res.reason);
@@ -123,7 +122,7 @@ test('A CIRCULAR BOUNDARY IS ONE RUN, and far fewer control points than samples'
   assert.ok(res.stats.worstPcurveDeviation <= 1e-3);
 });
 
-test('A TANGENT-CONTINUOUS JOIN IS NOT A CORNER — a stadium stays one run', () => {
+test('a tangent-continuous join is not a corner — a stadium stays one run', () => {
   // The straight-to-arc joins here are smooth, so there is no vertex for a
   // B-rep to have and inventing one would be a topology claim this module has
   // no basis for.
@@ -133,10 +132,10 @@ test('A TANGENT-CONTINUOUS JOIN IS NOT A CORNER — a stadium stays one run', ()
   assert.equal(res.runs.length, 1);
 });
 
-test('ADJACENT RUNS MEET EXACTLY — the loop closes, it does not nearly close', () => {
+test('adjacent runs meet exactly — the loop closes, it does not nearly close', () => {
   // A gap at a shared corner is a naked edge, so "within tolerance" is not the
   // bar here; the runs share their meeting point and the fitted curves
-  // interpolate their own endpoints, so the join must be EXACT.
+  // interpolate their own endpoints, so the join must be exact.
   const res = fitTrimLoop(PLANE, square(5, 7), { tolerance: 1e-3 });
   assert.ok(res.ok, res.reason);
   for (let i = 0; i < res.runs.length; i++) {
@@ -148,14 +147,14 @@ test('ADJACENT RUNS MEET EXACTLY — the loop closes, it does not nearly close',
   }
 });
 
-test('ON A CURVED SURFACE THE PCURVE AND THE EDGE DISAGREE, and the disagreement is measured', () => {
+test('on a curved surface the pcurve and the edge disagree, and the disagreement is measured', () => {
   // The pair cannot agree exactly — the surface image of a NURBS curve is not
-  // a NURBS curve — so the honest deliverable is the number, not a claim of
-  // equality. What must hold is that it is REAL (a curved surface makes it
-  // nonzero) and that the tolerance handed on is never tighter than it.
+  // a NURBS curve — so the deliverable is the number, not a claim of
+  // equality. What must hold is that it is nonzero on a curved surface and
+  // that the tolerance handed on is never tighter than it.
   const res = fitTrimLoop(SADDLE, ring(5, 48), { tolerance: 1e-3 });
   assert.ok(res.ok, res.reason);
-  assert.ok(res.stats.worstConsistency > 0, 'a curved surface must produce a real disagreement');
+  assert.ok(res.stats.worstConsistency > 0, 'a curved surface must produce a nonzero disagreement');
   for (const run of res.runs) {
     assert.ok(run.tolerance >= run.consistency,
       `an edge tolerance (${run.tolerance}) must not claim to be tighter than the measured disagreement (${run.consistency})`);
@@ -163,7 +162,7 @@ test('ON A CURVED SURFACE THE PCURVE AND THE EDGE DISAGREE, and the disagreement
   }
 });
 
-test('THE FITTED PCURVE REALLY DOES TRACE THE BOUNDARY ON THE SURFACE', () => {
+test('the fitted pcurve traces the boundary on the surface', () => {
   // The end-to-end property a trimmed export depends on, asserted in 3-D
   // rather than in parameters: walk the fitted pcurve, push each point through
   // the surface, and it must land on the boundary the loop described.
@@ -187,7 +186,7 @@ test('THE FITTED PCURVE REALLY DOES TRACE THE BOUNDARY ON THE SURFACE', () => {
   assert.ok(worst < 0.05, `the imaged pcurve strayed ${worst} from the boundary it describes`);
 });
 
-test('A DEGENERATE LOOP REFUSES BY NAME rather than returning something plausible', () => {
+test('a degenerate loop refuses by name rather than returning something plausible', () => {
   assert.equal(fitTrimLoop(PLANE, [[0, 0], [1, 1]], { tolerance: 1e-3 }).ok, false);
   assert.equal(fitTrimLoop(null, ring(5, 16), { tolerance: 1e-3 }).ok, false);
   const badTol = fitTrimLoop(PLANE, ring(5, 16), { tolerance: 0 });
@@ -197,8 +196,8 @@ test('A DEGENERATE LOOP REFUSES BY NAME rather than returning something plausibl
 
 test('splitLoopAtCorners: a single corner is not a split, but it does set the seam', () => {
   // One corner cannot divide a loop into two runs, and pretending otherwise
-  // would emit a second trim with no vertex to hang it on. It IS the right
-  // place to start the single run, which is where a closed run wants its seam.
+  // would emit a second trim with no vertex to hang it on. It is the right
+  // place to start the single run, which is where a closed run puts its seam.
   const loop = [...ring(5, 24)];
   loop.splice(6, 0, [0, 0]); // a spike: one unambiguous corner
   const { runs, cornerIndices } = splitLoopAtCorners(loop);

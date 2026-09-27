@@ -1,10 +1,10 @@
-// A FLAT BACK IS WHAT LETS A DRAWN FORM SIT ON A SURFACE.
+// A flat back is what lets a drawn form sit on a surface.
 //
-// The asked-for case is a computer mouse: a domed top over a planar base. The
-// interesting part is not the projection, which is one line, but the CREASE it
-// needs — left smooth, Catmull-Clark rolls the base under at the rim, the
-// underside stops being planar exactly where it meets the ground, and the form
-// rocks. That failure is invisible from above and obvious on a table.
+// The reference case is a computer mouse: a domed top over a planar base. The
+// projection is one line; the crease it needs is the substance — left smooth,
+// Catmull-Clark rolls the base under at the rim, the underside stops being
+// planar exactly where it meets the ground, and the form rocks. That failure
+// is invisible from above.
 import { strict as assert } from 'node:assert';
 import { puffCage } from '../kernel/puff.mjs';
 import { subdivideCatmullClark } from '../kernel/subd.mjs';
@@ -31,11 +31,11 @@ for (const [name, poly] of shapes) {
     if (Math.abs(v[2]) < 1e-6) onPlane += 1;
   }
 
-  /* ⚠ THE LIMIT SURFACE, NOT THE CAGE. Projecting cage vertices onto the plane
-     is trivial; keeping the SMOOTH surface they define on it is the claim, and
+  /* The limit surface, not the cage. Projecting cage vertices onto the plane
+     is trivial; keeping the smooth surface they define on it is the claim, and
      it is the one a crease is needed for. Without the crease the limit rolls
      under and this is negative. */
-  assert.ok(below === 0, `${name}: ${below} points of the limit surface sit BELOW the plane it is meant to rest on (min ${zmin.toFixed(4)})`);
+  assert.ok(below === 0, `${name}: ${below} points of the limit surface sit below the plane it is meant to rest on (min ${zmin.toFixed(4)})`);
   assert.ok(onPlane > 20, `${name}: only ${onPlane} points actually lie on the plane — that is a rounded base, not a flat one`);
 
   // It must still be a form, not a pancake: the top has to dome.
@@ -53,16 +53,14 @@ for (const [name, poly] of shapes) {
     const a = f[k], b = f[(k + 1) % 4];
     E.add(a < b ? `${a}_${b}` : `${b}_${a}`);
   }
-  assert.equal(flat.cage.vertices.length - E.size + flat.cage.faces.length, 2, `${name}: no longer closed`);
+  assert.equal(flat.cage.vertices.length - E.size + flat.cage.faces.length, 2, `${name}: not closed`);
 
   // And it still converts — a crease makes the faces beside it irregular.
   const out = subdToPatches(flat.cage, {});
   assert.ok(out.uncoveredFraction < 0.05, `${name}: NURBS coverage ${(out.uncoveredFraction * 100).toFixed(2)}% uncovered`);
-
-  console.log(`  ${name.padEnd(6)} ${String(flat.quads).padStart(3)} quads  ${creased} creased  z ${zmin.toFixed(3)}..${zmax.toFixed(3)}  ${onPlane} points on the plane  ${(out.uncoveredFraction * 100).toFixed(2)}% uncovered`);
 }
 
-/* THE CONTROL. A domed puff must have points below the plane — otherwise the
+/* The control. A domed puff must have points below the plane — otherwise the
    flat-back assertion above would pass on both and prove nothing. */
 {
   const dome = puffCage(ring(96, () => 1), { subdivide: subdivideCatmullClark, flatBack: 0 });
@@ -70,6 +68,4 @@ for (const [name, poly] of shapes) {
   for (let k = 0; k < 3; k += 1) c = subdivideCatmullClark(c);
   const below = c.vertices.filter((v) => v[2] < -1e-4).length;
   assert.ok(below > 50, `the control failed: a domed puff should hang below the plane, ${below} points do`);
-  console.log(`  control: a domed puff puts ${below} points below the plane, so the flat-back check can fail`);
 }
-console.log('puff-flatback: ok');

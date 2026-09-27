@@ -1,4 +1,4 @@
-// N-SIDED TANGENT PATCH — filling a closed loop of N boundary curves with one
+// N-sided tangent patch — filling a closed loop of N boundary curves with one
 // surface that leaves each boundary in the tangent plane of whatever lies
 // outside it. This is the classical n-sided hole problem behind the
 // Gregory/Charrot-Gregory patches (Charrot & Gregory, "A pentagonal surface
@@ -7,101 +7,97 @@
 //
 // The three-sided case is Nielson's side-vertex interpolant with (b_j b_k)^2
 // weights and a cubic Hermite ray per side (`sideVertexPatch`, cornerblend.mjs).
-// THIS MODULE IS THAT SCHEME, GENERALIZED, and it reduces to it identically at
+// This module is that scheme, generalized, and it reduces to it identically at
 // N = 3 rather than approximating it — see the reduction argument on
 // `nSidedTangentPatch`.
 //
-// ═══ WHAT WAS CHOSEN, AND AGAINST WHAT ═════════════════════════════════════
+// Design choice
 //
-// PARAMETERISATION: a regular N-gon domain carrying GENERALIZED BARYCENTRIC
-// COORDINATES (mean value, Floater, "Mean value coordinates", CAGD 20(1),
+// Parameterization: a regular N-gon domain carrying generalized barycentric
+// coordinates (mean value, Floater, "Mean value coordinates", CAGD 20(1),
 // 2003). A point of the patch is addressed by N coordinates lambda_0..lambda_N-1
 // that sum to one; the whole interpolant is written in them, exactly as the
 // triangular one is written in (b0, b1, b2).
 //
 // The two alternatives, and why not:
-//   · A MIDPOINT SPLIT into N quadrilateral sub-patches (the Catmull-Clark-like
-//     route) introduces an EXTRAORDINARY POINT at the center where N quads
-//     meet. That point is a genuine parametric singularity: the sub-patch
+//   · A midpoint split into N quadrilateral sub-patches (the Catmull-Clark-like
+//     route) introduces an extraordinary point at the center where N quads
+//     meet. That point is a parametric singularity: the sub-patch
 //     partials there do not agree, so the normal is a limit rather than a
 //     value, and every downstream consumer that differentiates the surface —
 //     closest-point Newton, offsetting, curvature shading — meets it. It also
 //     turns one patch into N, so trimming and tessellation inherit N internal
 //     seams that have to be kept watertight by hand.
-//   · CHARROT-GREGORY blends N CORNER interpolants rather than N side ones.
-//     It is the more famous construction and it does not reduce to the
-//     side-vertex scheme already in this kernel at N = 3, so adopting it would
-//     leave two unrelated schemes meeting along the same fillet chain, each
-//     with its own fold behavior and its own tuning. Agreeing with the
-//     three-sided patch that already ships is worth more here than matching
-//     the literature's most-cited form.
+//   · Charrot-Gregory blends N corner interpolants rather than N side ones.
+//     It does not reduce to the side-vertex scheme in this kernel at N = 3, so
+//     adopting it would leave two unrelated schemes meeting along the same
+//     fillet chain, each with its own fold behavior and its own tuning.
 //
-// The cost of the choice: the domain is a REGULAR N-gon, so a hole whose sides
-// differ wildly in length gets a distorted isoparametric spacing. That is a
-// parameterisation quality, not a geometric one — the boundary is still exact
-// and the tangency still holds — and a chord-length-proportional domain is a
-// deliberate scope cut, not an oversight.
+// The cost of the choice: the domain is a regular N-gon, so a hole whose sides
+// differ widely in length gets a distorted isoparametric spacing. That is a
+// parameterization quality, not a geometric one — the boundary is still exact
+// and the tangency still holds. A chord-length-proportional domain is not
+// built.
 //
-// ═══ DEGENERACIES, NAMED UP FRONT ══════════════════════════════════════════
+// Degeneracies
 //
-// ⚠ THE N CORNERS ARE 0/0 AND ARE RETURNED OUTRIGHT. Every side's weight
+// The N corners are 0/0 and are returned outright. Every side's weight
 // carries a factor that vanishes at every corner of the domain (at corner m,
 // lambda_m = 1 and all others are 0, so (lambda_i lambda_i+1)^2 = 0 for every
 // side), so the blend is undefined there and float noise would decide it. The
-// value is known exactly — it is the corner — so it is named rather than
+// value is known exactly — it is the corner — so it is returned rather than
 // approached.
 //
-// ⚠ THERE IS NO CENTRAL POLE, AND THAT IS A PROPERTY OF THE CHOICE ABOVE.
+// There is no central pole, a property of the choice above.
 // Inside a convex domain every mean value coordinate is strictly positive, so
 // every side weight is strictly positive and their sum never vanishes. Nothing
 // in the interior is a limit.
 //
-// ⚠ THE ONE 0/0 THE CONSTRUCTION WOULD OTHERWISE HAVE IS REMOVED ALGEBRAICALLY
-// RATHER THAN GUARDED. The three-sided scheme runs a Hermite from the boundary
-// point out to the OPPOSITE VERTEX; N sides have no opposite vertex, and the
+// The one 0/0 the construction would otherwise have is removed algebraically
+// rather than guarded. The three-sided scheme runs a Hermite from the boundary
+// point out to the opposite vertex; N sides have no opposite vertex, and the
 // generalization is the far point F_i = (sum of lambda_m V_m over m not in
 // {i, i+1}) / rho_i, with rho_i that same sum of coordinates. F_i is 0/0 on
 // side i itself. But F_i only ever enters multiplied by Hermite terms that
 // carry a factor of rho_i, so the division cancels before it is taken:
 //     R_i = (rho^3 - 2 rho^2 + 1) Q_i + (rho^3 - 2 rho^2 + rho) m0_i
 //           + rho (2 - rho) G_i,     G_i = sum of lambda_m V_m over the far m.
-// G_i is LINEAR in the coordinates, so R_i is smooth everywhere in the domain,
+// G_i is linear in the coordinates, so R_i is smooth everywhere in the domain,
 // including on the boundary where the unsimplified form is undefined. A guard
-// with an epsilon would have left a thin band where the answer was decided by
+// with an epsilon would leave a thin band where the answer was decided by
 // the guard rather than by the geometry.
 //
-// ═══ WHERE IT IS G1 AND WHERE IT IS NOT ════════════════════════════════════
+// Where it is G1 and where it is not
 //
-// G1 ALONG THE OPEN BOUNDARIES. On side i every other side's weight vanishes,
-// so the patch IS R_i there and reproduces the boundary exactly. Approaching
-// side i, the rival weights fall as the SQUARE of the distance (side i-1 and
+// G1 along the open boundaries. On side i every other side's weight vanishes,
+// so the patch is R_i there and reproduces the boundary exactly. Approaching
+// side i, the rival weights fall as the square of the distance (side i-1 and
 // side i+1 each carry one coordinate that is O(eps), squared; the rest carry
 // two), so the patch agrees with R_i to first order and its tangent plane is
 // spanned by the boundary tangent and the supplied cross-boundary tangent.
 //
-// AT THE CORNERS IT IS G1 WHEN THE INPUT IS, AND G0 WHEN THE INPUT IS NOT —
-// which is a weaker claim than "G1 everywhere" and a stronger one than the
-// twist obstruction is usually said to allow, so it is MEASURED rather than
-// asserted (`cornerNormalSpread`).
+// At the corners it is G1 when the input is, and G0 when the input is not —
+// weaker than "G1 everywhere" and stronger than the twist obstruction is
+// usually said to allow, so it is measured (`cornerNormalSpread`).
 //
-// Position at a corner is exact. The normal there is a LIMIT, since every
+// Position at a corner is exact. The normal there is a limit, since every
 // weight vanishes. Sweeping the approach radius r on a fan of directions into
 // one corner:
 //   · corner-compatible input (the two meeting sides' cross-tangents imply the
-//     SAME tangent plane there): the spread of limit normals falls linearly
+//     same tangent plane there): the spread of limit normals falls linearly
 //     with r — 0.27, 0.027, 0.0027 degrees at r = 1e-2, 1e-3, 1e-4. The limit
 //     exists and is unique, so the patch is G1 at the corner too.
-//   · corner-INCOMPATIBLE input (one side's cross-tangent tilted out of the
+//   · corner-incompatible input (one side's cross-tangent tilted out of the
 //     neighbor's plane near that corner): the spread sits between 45 and 49
 //     degrees at every radius down to 1e-5. There is no limit; it is G0 there.
-// The patch reproduces the input's crease; it does not repair one. Which is why
-// corner compatibility is CHECKED at build time rather than discovered later.
+// The patch reproduces the input's crease; it does not repair one, so corner
+// compatibility is checked at build time.
 //
-// ⚠ WHAT IS GENUINELY DISCONTINUOUS AT A CORNER IS THE TWIST — the mixed second
-// derivative, which each of the two meeting sides implies differently and which
-// no single polynomial patch can honour both of. Leaving it direction-dependent
-// is exactly Gregory's device, and it is what buys G1 at the corner; the price
-// is that the patch is not curvature-continuous there and never will be.
+// What is discontinuous at a corner is the twist — the mixed second
+// derivative, which each of the two meeting sides implies differently and
+// which no single polynomial patch can honor both of. Leaving it
+// direction-dependent is Gregory's device, and it is what gives G1 at the
+// corner; the cost is that the patch is not curvature-continuous there.
 
 const EPS = 1e-12;
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -111,7 +107,7 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 function norm(a) { const L = len(a); return L > EPS ? [a[0] / L, a[1] / L, a[2] / L] : null; }
 const isVec3 = (p) => Array.isArray(p) && p.length >= 3 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]);
 
-/** The domain the patch is parameterised over: a regular N-gon of circumradius
+/** The domain the patch is parameterized over: a regular N-gon of circumradius
  *  1, counter-clockwise, with vertex i at the patch's corner i and edge i (from
  *  vertex i to vertex i+1) carrying boundary curve i.
  *
@@ -131,16 +127,15 @@ export function regularDomain(n) {
 
 /** Mean value coordinates of a 2-D point inside a convex polygon.
  *
- *  Reduces EXACTLY to ordinary barycentric coordinates on a triangle: mean
+ *  Reduces exactly to ordinary barycentric coordinates on a triangle: mean
  *  value coordinates reproduce linear functions and sum to one, and on a
  *  triangle those two conditions have a unique solution.
  *
- *  ⚠ THE BOUNDARY CASES ARE ANSWERED, NOT APPROACHED. At a vertex the weight
+ *  The boundary cases are answered, not approached. At a vertex the weight
  *  formula divides by a zero radius, and on an edge the half-angle tangent of
  *  an angle at pi is infinite. Both have exact answers — the Lagrange value at
- *  a vertex, linear interpolation on an edge — and both are returned as such,
- *  because the alternative is a coordinate vector made of infinities whose
- *  normalized value happens to look plausible.
+ *  a vertex, linear interpolation on an edge — and both are returned as such
+ *  rather than normalized from a vector of infinities.
  */
 export function meanValueCoords(vertices, x, y, tol = 1e-12) {
   const n = vertices.length;
@@ -158,7 +153,7 @@ export function meanValueCoords(vertices, x, y, tol = 1e-12) {
     const s = u[i][0] * u[j][1] - u[i][1] * u[j][0];   // sin of the angle at (x, y)
     const c = u[i][0] * u[j][0] + u[i][1] * u[j][1];   // its cosine
     if (Math.abs(s) <= tol) {
-      if (c < 0) {                                     // the point lies ON edge i
+      if (c < 0) {                                     // the point lies on edge i
         const l = new Array(n).fill(0);
         l[i] = r[j] / (r[i] + r[j]); l[j] = r[i] / (r[i] + r[j]);
         return l;
@@ -180,12 +175,11 @@ export function meanValueCoords(vertices, x, y, tol = 1e-12) {
   return w;
 }
 
-/* ⚠ THE CROSS-TANGENT MAGNITUDE IS A QUARTER OF THE RAY, and it is the same
-   number the three-sided patch uses so that the two agree at N = 3. It sets how
-   far the Hermite reaches before the far end takes over, so it controls
-   INTERIOR SHAPE and not the tangent plane — tangency is exact at every value.
-   What it does control is FOLDING, which is why the validator below exists and
-   why it is run by default. */
+/* The cross-tangent magnitude is a quarter of the ray, the same number the
+   three-sided patch uses so that the two agree at N = 3. It sets how far the
+   Hermite reaches before the far end takes over, so it controls interior shape
+   and not the tangent plane — tangency is exact at every value. It does affect
+   folding, which the validator below checks by default. */
 const TANGENT_SCALE = 0.25;
 
 /** An N-sided patch through N boundary curves, tangent to a supplied
@@ -196,8 +190,8 @@ const TANGENT_SCALE = 0.25;
  *  over, because a patch built on an open loop is exact on a boundary that is
  *  not the hole's.
  *
- *  `tangent[i](s)` supplies the direction the ADJACENT SURFACE leaves boundary
- *  i at parameter s. It only has to LIE in that surface's tangent plane and
+ *  `tangent[i](s)` supplies the direction the adjacent surface leaves boundary
+ *  i at parameter s. It only has to lie in that surface's tangent plane and
  *  point inward: its magnitude and any component along the boundary change the
  *  interior shape, not the tangent plane. Omit it entirely for a G0 fill.
  *
@@ -205,7 +199,7 @@ const TANGENT_SCALE = 0.25;
  *  an array of N non-negative numbers summing to one, or `evaluateXY(x, y)` for
  *  a point of the regular N-gon domain.
  *
- *  ═══ THE REDUCTION TO THE THREE-SIDED PATCH ═══
+ *  Reduction to the three-sided patch.
  *  At N = 3, side i runs from V_i to V_i+1 and its far set is the single
  *  vertex V_i+2, so G_i = lambda_i+2 V_i+2 and rho_i = lambda_i+2. The Hermite
  *  above becomes exactly the cubic from Q_i to V_i+2 that `sideVertexPatch`
@@ -219,6 +213,10 @@ export function nSidedTangentPatch(opts = {}) {
   const {
     boundary, tangent = null, corners = null,
     tangentScale = TANGENT_SCALE,
+    // true: every tangent field already points into the hole, so no side's
+    // orientation is put to the vote (which splits where the far corners lie
+    // level with a side, e.g. a free edge on the ground under an arch).
+    oriented = false,
     loopTolerance = 1e-9,
     cornerAngleToleranceDeg = 1,
     validate = true,
@@ -235,11 +233,10 @@ export function nSidedTangentPatch(opts = {}) {
   if (!Number.isFinite(tangentScale) || tangentScale < 0) {
     return { ok: false, reason: `the cross-tangent scale must be a non-negative number; got ${tangentScale}` };
   }
-  /* ⚠ A MALFORMED TANGENT ARRAY IS REFUSED, NOT SILENTLY DEMOTED TO G0. A
-     caller that supplies N-1 tangent fields, or an array with one null in it,
-     has a bug; quietly building the positional-only patch hands them a creased
-     fillet that looks like a geometry problem. Absent is a request; wrong is a
-     defect. */
+  /* A malformed tangent array is refused, not demoted to G0. N-1 tangent
+     fields, or an array with one null in it, is a caller error; building the
+     positional-only patch would return a creased fill. An omitted array is a
+     request for G0. */
   let hasTangent = false;
   if (tangent != null) {
     if (!Array.isArray(tangent) || tangent.length !== n || !tangent.every((t) => typeof t === 'function')) {
@@ -276,10 +273,10 @@ export function nSidedTangentPatch(opts = {}) {
     }
   }
 
-  /* The far centroid of side i: the mean of the corners that are NOT its own
+  /* The far centroid of side i: the mean of the corners that are not its own
      two. At N = 3 that is the single opposite vertex, which is what makes the
      Hermite magnitude and the orientation poll below reduce exactly. It is used
-     only as a LENGTH SCALE and as a direction to poll against — the far end of
+     only as a length scale and as a direction to poll against — the far end of
      the Hermite itself is the coordinate-weighted G_i, not this. */
   const farCentre = [];
   for (let i = 0; i < n; i++) {
@@ -292,19 +289,19 @@ export function nSidedTangentPatch(opts = {}) {
     farCentre.push([c[0] / k, c[1] / k, c[2] / k]);
   }
 
-  /* ⚠⚠ THE CROSS-TANGENT'S ORIENTATION IS DECIDED ONCE PER SIDE, BY MAJORITY,
-     NOT ONCE PER SAMPLE. The field is already smooth — it is the neighboring
+  /* The cross-tangent's orientation is decided once per side, by majority,
+     not once per sample. The field is already smooth — it is the neighboring
      surface's normal crossed with the boundary tangent, and both vary smoothly
      — so a per-sample sign test injects a discontinuity the field never had:
      the chord to the far center swings past perpendicular partway along an
      asymmetric side, the test changes its mind there, and the ray family
      reverses mid-boundary. One decision per side, polled across it.
 
-     A SPLIT VOTE IS NOT ITSELF A REFUSAL: the chord genuinely swings past
+     A split vote is not itself a refusal: the chord can swing past
      perpendicular on asymmetric input without the resulting patch being wrong.
-     Whether it is sound is the fold validator's question and is asked there. */
+     Soundness is left to the fold validator. */
   const sideSign = new Array(n).fill(1);
-  if (hasTangent) {
+  if (hasTangent && !oriented) {
     const bad = [];
     for (let i = 0; i < n; i++) {
       let plus = 0, minus = 0;
@@ -324,18 +321,16 @@ export function nSidedTangentPatch(opts = {}) {
     }
     if (bad.length) return { ok: false, reason: `side(s) ${bad.join(', ')}: no usable cross-tangent anywhere along them` };
 
-    /* ⚠⚠ AT A CORNER THE TWO MEETING SIDES MUST NAME THE SAME TANGENT PLANE, or
-       no patch is G1 there and this one will faithfully reproduce the input's
-       crease while its caller believes it built a smooth fill. Measured: the
-       limit normal's spread over approach directions is 0.27 degrees at r=1e-2
-       and falls linearly to 0.0027 at r=1e-4 when the corner data agrees, and
-       stands still between 45 and 49 degrees at EVERY radius when one side's
-       cross-tangent is tilted out of its neighbor's plane. The second case has no limit normal
-       at all, so it is refused by name at build time.
+    /* At a corner the two meeting sides must name the same tangent plane, or
+       no patch is G1 there and this one would reproduce the input's crease.
+       The limit normal's spread over approach directions is 0.27 degrees at
+       r=1e-2 and falls linearly to 0.0027 at r=1e-4 when the corner data
+       agrees, and stays between 45 and 49 degrees at every radius when one
+       side's cross-tangent is tilted out of its neighbor's plane. The second
+       case has no limit normal, so it is refused at build time.
 
-       A hole that genuinely has a crease running into a corner is a real thing
-       to want; raise the tolerance deliberately rather than have the default
-       be silent about the ordinary case. */
+       For a hole that has a crease running into a corner, raise
+       cornerAngleToleranceDeg. */
     const gate = Math.cos(Math.max(0, Math.min(180, cornerAngleToleranceDeg)) * Math.PI / 180);
     const hs = 1e-6;
     const cornerNormal = (side, atEnd) => {
@@ -367,11 +362,9 @@ export function nSidedTangentPatch(opts = {}) {
     for (let i = 0; i < n; i++) {
       const l = lambda[i];
       if (!Number.isFinite(l)) return null;
-      /* ⚠ OFF-DOMAIN INPUT MUST NOT GET A CONFIDENT ANSWER. A negative
-         coordinate puts the Hermite outside the curve it was built from, and a
-         set that does not sum to one is not a point of the domain at all.
-         Float drift of a few ulps from a caller's own arithmetic is fine;
-         gross denormalization is that caller's bug. */
+      /* Off-domain input returns null. A negative coordinate puts the Hermite
+         outside the curve it was built from, and a set that does not sum to one
+         is not a point of the domain. Float drift of a few ulps is accepted. */
       if (l < -1e-9) return null;
       sum += l;
     }
@@ -389,7 +382,7 @@ export function nSidedTangentPatch(opts = {}) {
       const s = b / den;
       const Q = boundary[i](s);
       if (!isVec3(Q)) return null;
-      // G_i and rho_i from the SAME sum, so they cannot drift apart when a
+      // G_i and rho_i from the same sum, so they cannot drift apart when a
       // caller's coordinates sum to one only to within float.
       let G = [0, 0, 0], rho = 0;
       for (let m = 0; m < n; m++) {
@@ -442,12 +435,10 @@ export function nSidedTangentPatch(opts = {}) {
     evaluate, evaluateXY,
   };
 
-  /* ⚠ THE VALIDATOR'S VERDICT IS HONOURED, NOT REPORTED. A folded n-sided fill
-     is a self-intersecting surface that no watertight check will accept, and a
-     scheme with no closed-form fold criterion cannot promise otherwise. The
-     sweep costs a few thousand evaluations once, which is the cost of a
-     modeling operation and not of a frame; a caller who has already judged the
-     input can pass validate: false knowingly. */
+  /* A fold refuses the patch rather than being reported alongside it. A folded
+     n-sided fill is a self-intersecting surface that no watertight check will
+     accept, and the scheme has no closed-form fold criterion. The sweep costs a
+     few thousand evaluations once per build; pass validate: false to skip it. */
   if (validate) {
     const v = nSidedPatchFolds(patch, foldOptions || {});
     if (!v.ok) return { ok: false, reason: v.reason || 'the patch could not be validated', fold: v };
@@ -458,35 +449,30 @@ export function nSidedTangentPatch(opts = {}) {
 /** Does this n-sided patch fold or crease? Sampled, because the scheme has no
  *  closed-form answer.
  *
- *  A fold is a LOCAL reversal of the surface normal, so it is found by
- *  comparing ADJACENT samples. An n-sided fill legitimately sweeps its normal
- *  through ninety degrees or more — it wraps a hole — and comparing everything
- *  to one reference calls that a failure.
+ *  A fold is a local reversal of the surface normal, so it is found by
+ *  comparing adjacent samples. An n-sided fill legitimately sweeps its normal
+ *  through ninety degrees or more — it wraps a hole — so comparing everything
+ *  to one reference would report that as a failure.
  *
- *  ⚠⚠ A UNIFORM GRID IS BLIND WHERE THE FOLDS ARE. The interpolant is exact on
- *  the boundary and blends hardest just INSIDE it, so folds live in a thin band
- *  at small distance from a side — past the first row of any grid coarse enough
- *  to run. The sweep is therefore a coarse interior grid PLUS a dense ribbon
- *  hugging each side, down to the guard the finite difference itself imposes.
- *  Measured over 220 randomised holes at N = 3..8: the ribbon was the DECIDING
- *  sampler on 3 of them, finding 2 to 12 normal reversals in patches the
- *  interior grid alone called clean.
+ *  A uniform grid misses where the folds are. The interpolant is exact on the
+ *  boundary and blends hardest just inside it, so folds live in a thin band at
+ *  small distance from a side — past the first row of any grid coarse enough
+ *  to run. The sweep is therefore a coarse interior grid plus a dense ribbon
+ *  hugging each side, down to the guard the finite difference imposes. Over
+ *  220 randomized holes at N = 3..8 the ribbon alone found 2 to 12 normal
+ *  reversals in 3 patches the interior grid called clean.
  *
- *  ⚠ A SAMPLED CRITERION IS NOT A PROOF, and near the fold onset the verdict is
+ *  A sampled criterion is not a proof, and near the fold onset the verdict is
  *  resolution-dependent. Against a control ten times denser in both the grid
- *  and the ribbon, the shipped settings agreed on 217 of those 220 — one patch
- *  the control called folded and two it did not. Raising the density does not
- *  close the gap; it moves which borderline patches fall on which side. The
- *  number to carry is that this refuses folded patches, not that no folded
- *  patch can pass.
+ *  and the ribbon, the default settings agree on 217 of those 220 — one patch
+ *  the control calls folded and two it does not. Raising the density moves
+ *  which borderline patches fall on which side rather than closing the gap.
+ *  This refuses folded patches; it does not guarantee no folded patch passes.
  *
- *  ⚠ A SMALL DISC AROUND EACH CORNER IS EXCLUDED. The normal there is a limit
+ *  A small disc around each corner is excluded. The normal there is a limit
  *  rather than a value — every weight vanishes — and an input whose two sides
- *  crease against each other at a corner is refused at build time, where the
- *  cause can be named, rather than turning up here as a swing this detector
- *  would have to attribute to the patch. On every input exercised the exclusion
- *  moved no verdict; it is a guard on the one place the criterion does not
- *  apply, not a tolerance.
+ *  crease against each other at a corner is refused at build time instead. On
+ *  every input tested the exclusion changed no verdict.
  */
 export function nSidedPatchFolds(patch, opts = {}) {
   if (!patch || typeof patch.evaluateXY !== 'function' || !patch.domain || !Array.isArray(patch.domain.vertices)) {
@@ -542,11 +528,11 @@ export function nSidedPatchFolds(patch, opts = {}) {
       put(-1 + (2 * i) / G, -1 + (2 * j) / G, `g${i},${j}`);
     }
   }
-  /* The grid and ribbon densities are swept, not picked: at grid 16 / ribbon 48
-     the sweep disagreed with a tenfold-denser control on six of 220 randomised
-     holes, and at grid 32 / ribbon 64 on three, for about 24 ms per patch.
-     Beyond that the disagreement stops falling — it is the fold onset moving
-     between samplers, not the sweep being too coarse. */
+  /* Grid and ribbon densities: at grid 16 / ribbon 48 the sweep disagrees with
+     a tenfold-denser control on six of 220 randomized holes, and at grid 32 /
+     ribbon 64 on three, for about 24 ms per patch. Beyond that the
+     disagreement stops falling — it is the fold onset moving between samplers,
+     not the sweep being too coarse. */
   const RIB = opts.ribbon ?? 64;
   const depths = opts.depths ?? [guard * 1.5, 2e-4, 6e-4, 2e-3, 6e-3, 0.015, 0.03, 0.06, 0.1, 0.16];
   for (let i = 0; i < n; i++) {
@@ -578,9 +564,8 @@ export function nSidedPatchFolds(patch, opts = {}) {
   if (grid.size < 20) {
     return { ok: false, folds: false, reversals, worstAdjacentDeg: worstDeg, samples: grid.size, reason: `only ${grid.size} of the patch could be sampled — it cannot be judged, so it is not passed` };
   }
-  /* ⚠ A SIGN FLIP IS NOT THE ONLY WAY TO FAIL. A patch creased at eighty-nine
-     degrees between neighboring samples has not technically reversed and is
-     not a surface anyone wants. */
+  /* A crease also fails: a patch turning eighty-nine degrees between
+     neighboring samples has not reversed but is not a smooth fill. */
   const folds = reversals > 0 || worstDeg > creaseLimit;
   return {
     ok: !folds, folds, reversals, worstAdjacentDeg: worstDeg, samples: grid.size,
@@ -593,15 +578,15 @@ export function nSidedPatchFolds(patch, opts = {}) {
 }
 
 /** How far apart are the normals as a corner is approached from different
- *  directions? This is the twist question, measured rather than assumed.
+ *  directions? This measures the twist compatibility at a corner.
  *
  *  The corner position is exact and shared, so the patch is at least G0 there.
  *  Whether it is more than that depends on the input's own twist agreement, and
  *  the answer is a number: the largest angle between limit normals taken along
  *  a fan of domain directions into corner `index`, at a stated radius.
  *
- *  ⚠ THE NUMBER IS RADIUS-DEPENDENT AND MUST BE READ AS A LIMIT. A genuine
- *  twist mismatch keeps a spread as the radius shrinks; a merely CURVED corner
+ *  The number is radius-dependent and must be read as a limit. A twist
+ *  mismatch keeps a spread as the radius shrinks; a merely curved corner
  *  region has its spread fall with the radius. Sweep the radius rather than
  *  quoting one value.
  */

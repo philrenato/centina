@@ -1,23 +1,22 @@
-// KNOT SURGERY IN ONE DIRECTION OF A SURFACE, and the harmonisation Match Edge
+// Knot surgery in one direction of a surface, and the harmonization Match Edge
 // needs before a control-row edit means anything.
 //
-// A control point exists at a specific PARAMETER. Matching one surface's
+// A control point exists at a specific parameter. Matching one surface's
 // boundary row to another's is only meaningful if both edges agree on where
 // those parameters fall — otherwise row k of one and row k of the other are
 // simply different places, and an edit that looks tidy in the net produces a
 // surface nobody asked for. So before any match: bring both to a common domain,
-// a common degree, and the UNION of their knots along the seam.
+// a common degree, and the union of their knots along the seam.
 //
-// EVERY OPERATION HERE IS SHAPE-PRESERVING BY CONSTRUCTION. Knot insertion
+// Every operation here is shape-preserving by construction. Knot insertion
 // (Boehm) and degree elevation both add control points without moving the
-// surface, so harmonising is free in geometry and only costs description size.
-// That is what the tests assert — not that the numbers look reasonable, but
-// that the surface evaluates identically afterwards.
+// surface, so harmonizing is free in geometry and only costs description size:
+// the surface evaluates identically afterwards.
 //
 // A surface direction is just a family of curves: the v direction is the rows
 // of the control net, the u direction its columns. So this file is mostly the
-// bookkeeping of turning a net into curves and back, and the real work stays in
-// knots.mjs where it is already tested.
+// bookkeeping of turning a net into curves and back; the knot operations
+// themselves live in knots.mjs.
 import { insertKnot, degreeElevateCurve, rescaleCurveDomain } from './knots.mjs';
 
 const KNOT_TOL = 1e-9;
@@ -26,8 +25,8 @@ const KNOT_TOL = 1e-9;
 // Exported under qualified names (`surfaceDirCurves`/`surfaceFromDirCurves`)
 // below, because flipseam.mjs runs a per-direction curve operation over a
 // surface exactly the way surfaceInsertKnot does and re-deriving this
-// bookkeeping there would be a second, independently-drifting copy of the one
-// net<->curves conversion the whole kernel already agrees on.
+// bookkeeping there would be a second copy of the net<->curves conversion
+// that could drift from this one.
 function asCurves(srf, dir) {
   if (dir === 'v') {
     return srf.ctrlNet.map((row) => ({ degree: srf.degV, knots: srf.knotsV.slice(), ctrlPts: row.map((p) => p.slice()) }));
@@ -82,11 +81,11 @@ export function interiorKnotMultiplicities(knots, degree) {
   return out;
 }
 
-// Bring two surfaces to a common description ALONG ONE DIRECTION each: same
+// Bring two surfaces to a common description along one direction each: same
 // domain, same degree, same knots — and therefore the same control count, which
-// is the thing Match Edge actually needs.
+// is what Match Edge needs.
 //
-// ⚠ THE DOMAINS ARE RECONCILED FIRST, and that is not a formality. A revolve's
+// The domains are reconciled first. A revolve's
 // sweep direction runs 0..4 while a hand-built patch runs 0..1; taking the
 // union of two knot vectors that do not live on the same interval produces a
 // vector that is not a superset of either, and every insertion after it lands
@@ -94,7 +93,7 @@ export function interiorKnotMultiplicities(knots, degree) {
 // point on the surface.
 export function harmonizeDirections(a, dirA, b, dirB, opts = {}) {
   const degA = degreeIn(a, dirA), degB = degreeIn(b, dirB);
-  const kA = knotsIn(a, dirA), kB = knotsIn(b, dirB);
+  const kA = knotsIn(a, dirA);
   const domain = [kA[0], kA[kA.length - 1]];
   if (!(domain[1] > domain[0])) return { ok: false, reason: 'the seam direction has an empty parameter domain', a: null, b: null };
 
@@ -106,7 +105,7 @@ export function harmonizeDirections(a, dirA, b, dirB, opts = {}) {
   if (degB < deg) B = surfaceElevateDegree(B, dirB, deg);
 
   // Union of interior knots, by multiplicity. Elevation rewrites them, so this
-  // has to be read AFTER it rather than before.
+  // has to be read after it rather than before.
   const mA = interiorKnotMultiplicities(knotsIn(A, dirA), deg);
   const mB = interiorKnotMultiplicities(knotsIn(B, dirB), deg);
   const values = [];
@@ -124,18 +123,14 @@ export function harmonizeDirections(a, dirA, b, dirB, opts = {}) {
   }
 
   if (countIn(A, dirA) !== countIn(B, dirB)) {
-    // THE UNION HAS DONE WHAT IT CAN AND THE TWO STILL DISAGREE. Refusing here
-    // is honest but it is also the end of the road for the student, who is
-    // looking at two edges that plainly ought to meet and being told about
-    // control counts.
+    // The union has done what it can and the two still disagree.
     //
-    // ADDING CONTROL POINTS IS FREE, in the only sense that matters: knot
-    // insertion is EXACT. It rewrites a surface's description and moves no
-    // point of the surface at all, so bringing the coarser side up to the
+    // Knot insertion is exact: it rewrites a surface's description and moves
+    // no point of the surface, so bringing the coarser side up to the
     // finer one costs nothing but a denser net — which a match was going to
-    // rewrite anyway. That is what `force` does, and it is offered rather
-    // than assumed, because a denser net IS a real change to what the student
-    // will be dragging afterwards.
+    // rewrite anyway. That is what `force` does. It is opt-in rather than
+    // assumed, because a denser net changes what the user will be dragging
+    // afterwards.
     if (!opts.force) {
       return {
         ok: false,
@@ -154,8 +149,8 @@ export function harmonizeDirections(a, dirA, b, dirB, opts = {}) {
 }
 
 // Insert knots into one direction until it carries `target` control points,
-// always splitting the WIDEST remaining span. Widest-first keeps the resulting
-// net as even as it can be, and an even net is what a student expects to drag;
+// always splitting the widest remaining span. Widest-first keeps the resulting
+// net as even as it can be;
 // splitting arbitrarily would pile new points into one corner of the seam.
 //
 // Every insertion is exact — this changes the surface's description and not the
@@ -178,10 +173,10 @@ export function refineToCount(srf, dir, target) {
   return out;
 }
 
-// Which direction runs ALONG a given edge — the one that has to be harmonised.
+// Which direction runs along a given edge — the one that has to be harmonized.
 // An edge at constant u is traversed by varying v, and vice versa; getting this
-// backwards harmonises the direction that crosses the seam instead of the one
-// that follows it, which changes the wrong control count and still looks busy.
+// backwards harmonizes the direction that crosses the seam instead of the one
+// that follows it, which changes the wrong control count.
 export function seamDirectionFor(edge) {
   if (edge === 'u0' || edge === 'u1') return 'v';
   if (edge === 'v0' || edge === 'v1') return 'u';

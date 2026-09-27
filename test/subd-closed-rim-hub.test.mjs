@@ -1,14 +1,14 @@
-// N-WAY CLOSED-RIM HUB — N >= 3 tube ends welded into one junction.
+// N-way closed-rim hub — N >= 3 tube ends welded into one junction.
 //
-// The fixtures are REAL subdPipeCage tubes, not hand-typed loops: a rim built
+// The fixtures are real subdPipeCage tubes, not hand-typed loops: a rim built
 // by the thing that will actually call this carries whatever ring orientation,
-// winding and vertex ordering that construction genuinely produces, and a
+// winding and vertex ordering that construction produces, and a
 // toy loop typed to be convenient carries whatever the author assumed.
 //
 // Every structural claim is recomputed here from the raw { vertices, faces }
 // rather than asked of buildTopology, so a shared mistake between this file
 // and the code under test cannot agree its way to a pass. The one place
-// buildTopology IS used is to read the INPUT cage's naked edges, which is a
+// buildTopology is used is to read the input cage's naked edges, which is a
 // statement about the fixture, not about the result.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ import { subdPipeCage } from '../kernel/subdpipe.mjs';
 import { subdivideCatmullClark, buildTopology, edgeKey } from '../kernel/subd.mjs';
 import { makeLine } from '../kernel/primitives.mjs';
 
-// ── structural invariants, recomputed from raw arrays ────────────────────
+// Structural invariants, recomputed from raw arrays
 function edgeFaceCounts(cage) {
   const counts = new Map();
   for (const f of cage.faces) {
@@ -59,13 +59,13 @@ function nakedEdges(cage) {
   return [...edgeFaceCounts(cage)].filter(([, n]) => n === 1).map(([k]) => k);
 }
 
-// ── fixtures: real tubes ─────────────────────────────────────────────────
+// Fixtures: real tubes
 function rotZ(p, a) {
   const c = Math.cos(a), s = Math.sin(a);
   return [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]];
 }
-// One arm: a genuine subdPipeCage tube running OUTWARD from `inner` to
-// `outer` along `dir`, capped flat at the far end so the ONLY naked edges in
+// One arm: a subdPipeCage tube running outward from `inner` to
+// `outer` along `dir`, capped flat at the far end so the only naked edges in
 // the assembled fixture are the hub rims — which makes "is the junction
 // closed" a question the raw edge counts can answer.
 function arm(dir, { radius = 5, facets = 8, segments = 2, inner = 12, outer = 40 } = {}) {
@@ -87,17 +87,15 @@ function mergeParts(parts) {
   }
   return { cage: { vertices, faces, creases: {} }, rims };
 }
-// SYMMETRIC — every arm is the SAME tube rigidly rotated, so the arms are
+// Symmetric — every arm is the same tube rigidly rotated, so the arms are
 // exact images of one another and every "which one is nearer" decision inside
-// the hub is a genuine tie rather than merely a close call. This is the
-// fixture class that exposed two real order-dependence bugs in the run hub;
-// a tilted, unevenly spaced one is robust before and after such a bug and so
-// proves nothing about it.
+// the hub is an exact tie rather than merely a close call. Exact ties expose
+// order-dependence bugs; a tilted, unevenly spaced fixture does not reach them.
 function symmetricJunction(n, opts = {}) {
   const base = arm([1, 0, 0], opts);
   return mergeParts(Array.from({ length: n }, (_, k) => transform(base, (p) => rotZ(p, (k / n) * Math.PI * 2))));
 }
-// AWKWARD — uneven angles, every arm tilted out of the junction plane by a
+// Awkward — uneven angles, every arm tilted out of the junction plane by a
 // different amount, different radii and different lengths. Nothing here is
 // symmetric, so nothing can pass by canceling.
 function awkwardJunction() {
@@ -109,15 +107,15 @@ function awkwardJunction() {
   return mergeParts(specs.map((s) => arm(s.dir, { ...s, facets: 8 })));
 }
 
-// ── the core claim ───────────────────────────────────────────────────────
-test('bridgeClosedRimsHub: three tube rims weld into one CLOSED solid — every edge used by exactly 2 faces', () => {
+// The core claim
+test('bridgeClosedRimsHub: three tube rims weld into one closed solid — every edge used by exactly 2 faces', () => {
   const { cage, rims } = symmetricJunction(3);
   assert.equal(nakedEdges(cage).length, 3 * 8, 'the fixture opens exactly the three hub rims and nothing else');
   const out = bridgeClosedRimsHub(cage, rims);
   assertValidCage(out.cage, 'three-way junction');
   assert.equal(nakedEdges(out.cage).length, 0, 'the junction closes every remaining opening');
   // A Y of three capped tubes is a sphere, so its Euler characteristic is 2 —
-  // a genuine topological identity, not a count that happens to match.
+  // a topological identity, not a count that happens to match.
   assert.equal(eulerCharacteristic(out.cage), 2, 'the welded result is a genus-0 closed surface');
   assert.equal(out.armCount, 3);
 });
@@ -139,7 +137,7 @@ test('bridgeClosedRimsHub: the hub adds exactly two poles and 4N faces, for ever
   }
 });
 
-test('bridgeClosedRimsHub: the two poles are the only new vertices, and each caps a genuinely different side', () => {
+test('bridgeClosedRimsHub: the two poles are the only new vertices, and each caps a different side', () => {
   const { cage, rims } = symmetricJunction(4, { facets: 8, inner: 14 });
   const out = bridgeClosedRimsHub(cage, rims);
   const [xi, yi] = out.poleIndices;
@@ -166,23 +164,21 @@ test('bridgeClosedRimsHub: every rim edge stops being naked and becomes a real i
     for (let k = 0; k < m; k++) {
       const a = rim[k], b = rim[(k + 1) % m];
       const key = a < b ? `${a}_${b}` : `${b}_${a}`;
-      assert.equal(counts.get(key), 2, `rim edge ${key} — including the CLOSING one — is now shared by two faces`);
+      assert.equal(counts.get(key), 2, `rim edge ${key} — including the closing one — is now shared by two faces`);
     }
   }
 });
 
-// ── the crotch pairing: a check winding cannot make ──────────────────────
-test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between neighboring arms, which no winding check could tell', () => {
-  // BOTH neighbor pairings close a valid, consistently wound ring, so
+// The crotch pairing: a check winding cannot make
+test('bridgeClosedRimsHub: each crotch edge is a near-contact between neighboring arms, which no winding check could tell', () => {
+  // Both neighbor pairings close a valid, consistently wound ring, so
   // directedEdgeReuse cannot discriminate them at all: pairing each arm's
-  // next-facing vertex with the WRONG side of its neighbor passes every
+  // next-facing vertex with the wrong side of its neighbor passes every
   // structural check in this file while flinging each crotch edge right
-  // across an arm's own body. Confirmed the hard way — an earlier version of
-  // this test only asserted that the two arms joined are ANGULARLY ADJACENT,
-  // and the deliberately-inverted pairing passed it 16/16, because it does
-  // still join adjacent arms, just at their far sides.
+  // across an arm's own body. Angular adjacency does not separate them
+  // either: the inverted pairing still joins adjacent arms, at their far sides.
   //
-  // What actually settles it is LENGTH: a crotch edge is the near contact
+  // Length settles it: a crotch edge is the near contact
   // between two arms, so it must be shorter than the gap between those two
   // arms' own centers. The inverted pairing measures ~23 against a 16mm
   // center gap on this fixture; the correct one measures ~9.
@@ -201,7 +197,7 @@ test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between ne
     assert.equal(ends.length, 2, 'a crotch triangle is two rim vertices and one pole');
     const a = rimOf.get(ends[0]), b = rimOf.get(ends[1]);
     assert.ok(a !== undefined && b !== undefined, 'both ends are real rim vertices');
-    assert.notEqual(a, b, 'a crotch spans two DIFFERENT arms');
+    assert.notEqual(a, b, 'a crotch spans two different arms');
     assert.equal(Math.min((a - b + n) % n, (b - a + n) % n), 1, `arms ${a} and ${b} are neighbors in the fixture's own angular order`);
     const gap = Math.hypot(...centres[a].map((c, k) => c - centres[b][k]));
     const span = Math.hypot(...out.cage.vertices[ends[0]].map((c, k) => c - out.cage.vertices[ends[1]][k]));
@@ -210,11 +206,11 @@ test('bridgeClosedRimsHub: each crotch edge is a genuine near-contact between ne
     checked++;
   }
   assert.equal(checked, 2 * n);
-  assert.ok(worst < 0.75, `every crotch edge is a genuine near contact, not merely under the bound (worst ratio ${worst.toFixed(3)})`);
+  assert.ok(worst < 0.75, `every crotch edge is a near contact, not merely under the bound (worst ratio ${worst.toFixed(3)})`);
 });
 
-// ── it has to subdivide ──────────────────────────────────────────────────
-test('bridgeClosedRimsHub: the result refines through the REAL Catmull-Clark kernel, twice', () => {
+// It has to subdivide
+test('bridgeClosedRimsHub: the result refines through the real Catmull-Clark kernel, twice', () => {
   const { cage, rims } = symmetricJunction(3, { facets: 6, inner: 14 });
   const out = bridgeClosedRimsHub(cage, rims);
   let refined = out.cage;
@@ -244,15 +240,14 @@ test('bridgeClosedRimsHub: an awkward junction — uneven angles, tilts, radii a
   assertValidCage(refined, 'awkward junction refined');
 });
 
-// ── ORDER INDEPENDENCE ───────────────────────────────────────────────────
-// The rims arrive as an unordered SET, each one a CYCLE with no privileged
+// Order independence
+// The rims arrive as an unordered set, each one a cycle with no privileged
 // start and no privileged direction. Three separate accidents are therefore
 // available to depend on: which rim is listed first, which way round each rim
 // runs, and where each rim's list happens to begin. All three are exercised
 // here, on the symmetric fixture, because a symmetric junction is where every
 // "which is nearer" comparison becomes an exact tie — the condition that
-// produced two real bugs in this file's own sibling hub, and the one a tilted
-// fixture never reaches.
+// exposes order-dependence bugs, and the one a tilted fixture never reaches.
 function permutations(a) {
   return a.length <= 1 ? [a] : a.flatMap((x, i) => permutations([...a.slice(0, i), ...a.slice(i + 1)]).map((p) => [x, ...p]));
 }
@@ -261,7 +256,7 @@ function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f
 
 for (const n of [3, 4]) {
   for (const facets of [6, 7]) {
-    test(`bridgeClosedRimsHub: a symmetric ${n}-arm junction of ${facets}-sided rims survives EVERY rim order and direction`, () => {
+    test(`bridgeClosedRimsHub: a symmetric ${n}-arm junction of ${facets}-sided rims survives every rim order and direction`, () => {
       const { cage, rims } = symmetricJunction(n, { facets, inner: 15, radius: 4 });
       const reference = bridgeClosedRimsHub(cage, rims);
       let tried = 0;
@@ -294,12 +289,12 @@ for (const n of [3, 4]) {
           );
         }
       }
-      assert.equal(tried, factorial(n) * (1 << n), `all ${tried} order/direction variants were genuinely exercised`);
+      assert.equal(tried, factorial(n) * (1 << n), `all ${tried} order/direction variants were exercised`);
     });
   }
 }
 
-// ── creases ──────────────────────────────────────────────────────────────
+// Creases
 test('bridgeClosedRimsHub: creaseWeight creases exactly the rims, closing edge included, and 0 writes no key at all', () => {
   const { cage, rims } = symmetricJunction(3, { facets: 6, inner: 14 });
   const plain = bridgeClosedRimsHub(cage, rims);
@@ -314,11 +309,11 @@ test('bridgeClosedRimsHub: creaseWeight creases exactly the rims, closing edge i
   const a = subdivideCatmullClark(subdivideCatmullClark(plain.cage));
   const b = subdivideCatmullClark(subdivideCatmullClark(creased.cage));
   const moved = a.vertices.reduce((mx, p, i) => Math.max(mx, Math.hypot(p[0] - b.vertices[i][0], p[1] - b.vertices[i][1], p[2] - b.vertices[i][2])), 0);
-  assert.ok(moved > 1e-6, `the crease genuinely changes the refined surface (max move ${moved})`);
+  assert.ok(moved > 1e-6, `the crease changes the refined surface (max move ${moved})`);
 });
 
-// ── refusals ─────────────────────────────────────────────────────────────
-test('bridgeClosedRimsHub: refuses honestly, by name, for every case it cannot do', () => {
+// Refusals
+test('bridgeClosedRimsHub: refuses by name for every case it cannot do', () => {
   const { cage, rims } = symmetricJunction(3, { facets: 6, inner: 14 });
   assert.throws(() => bridgeClosedRimsHub(cage, rims.slice(0, 2)), /at least 3 closed rims/);
   assert.throws(() => bridgeClosedRimsHub(cage, 'not an array'), /must be an array/);
@@ -329,34 +324,34 @@ test('bridgeClosedRimsHub: refuses honestly, by name, for every case it cannot d
   const capped = symmetricJunction(3, { facets: 6, inner: 14 });
   capped.cage.faces.push([...capped.rims[0]]);
   assert.throws(() => bridgeClosedRimsHub(capped.cage, capped.rims), /not a naked \(open\) edge/);
-  // An OPEN run handed over as a rim: its closing edge simply is not there.
+  // An open run handed over as a rim: its closing edge simply is not there.
   const open = rims[0].slice(0, 5);
   assert.throws(() => bridgeClosedRimsHub(cage, [open, rims[1].slice(0, 5), rims[2].slice(0, 5)]), /not a closed ring/);
 });
 
 test('bridgeClosedRimsHub: refuses three coincident rims — no junction plane to order them around', () => {
-  // Every arm starting at the SAME point puts all three rim centroids on top
+  // Every arm starting at the same point puts all three rim centroids on top
   // of one another, so there is no spread to take a plane from.
   const { cage, rims } = mergeParts([[1, 0, 0], [-0.5, 0.866, 0], [-0.5, -0.866, 0]].map((d) => arm(d, { facets: 6, inner: 0, outer: 40, radius: 5 })));
-  assert.throws(() => bridgeClosedRimsHub(cage, rims), /collinear about their own center|sits on the junction axis/);
+  assert.throws(() => bridgeClosedRimsHub(cage, rims), /in a line|sits on the junction axis/);
 });
 
-test('bridgeClosedRimsHub: refuses a genuinely three-dimensional junction by name rather than guessing at one', () => {
+test('bridgeClosedRimsHub: refuses a three-dimensional junction by name rather than guessing at one', () => {
   // Six arms along +/-X, +/-Y, +/-Z. No single plane orders these, and the
-  // pair the plane is taken from leaves one opposed pair lying flat IN it —
+  // pair the plane is taken from leaves one opposed pair lying flat in it —
   // those two arms have no side above or below to divide between the poles.
-  // A different construction is needed, and saying so is the honest answer.
+  // A different construction is needed, so this refuses by name.
   const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   const { cage, rims } = mergeParts(dirs.map((d) => arm(d, { facets: 6, inner: 14, outer: 40, radius: 4 })));
   assert.throws(() => bridgeClosedRimsHub(cage, rims), /lies flat IN the junction plane/);
 });
 
-test('bridgeClosedRimsHub: an arm merely LEANING out of the junction plane still builds a valid solid — the refusal above is for the flat case only', () => {
+test('bridgeClosedRimsHub: an arm merely leaning out of the junction plane still builds a valid solid — the refusal above is for the flat case only', () => {
   // Four coplanar arms plus a riser along +Z. The best-fit plane tilts enough
   // that the riser's own rim keeps a real side above and below it, so this
-  // does NOT hit the refusal — and what it produces is a genuine closed
-  // genus-0 manifold. Only the GEOMETRY is a best effort here (the riser's
-  // rim is divided between two poles that are not really its own), which is
+  // does not hit the refusal — and what it produces is a closed
+  // genus-0 manifold. Only the geometry is a best effort here (the riser's
+  // rim is divided between two poles that are not its own), which is
   // why nothing beyond structure is claimed.
   const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1]];
   const { cage, rims } = mergeParts(dirs.map((d) => arm(d, { facets: 6, inner: 14, outer: 40, radius: 4 })));
@@ -367,18 +362,18 @@ test('bridgeClosedRimsHub: an arm merely LEANING out of the junction plane still
   assert.ok(subdivideCatmullClark(out.cage).vertices.every((p) => p.every(Number.isFinite)));
 });
 
-// ── the gap this closes: the existing bridges used to take a rim silently ─
-test('the existing open-run bridges now REFUSE a closed rim instead of silently slitting it', () => {
+// Closed rims are refused by the open-run bridges
+test('the open-run bridges refuse a closed rim instead of silently slitting it', () => {
   const { cage, rims } = symmetricJunction(3, { facets: 6, inner: 14 });
-  // Before this guard: accepted, consistently wound, no repeated-vertex face,
-  // and each rim's own closing edge left unattached — 18 naked edges before,
-  // 9 after, where a genuine closed-rim junction leaves none.
+  // Accepting a closed rim here would give a consistently wound result with
+  // no repeated-vertex face and each rim's own closing edge left unattached —
+  // 18 naked edges before, 9 after, where a closed-rim junction leaves none.
   assert.throws(() => bridgeEdgeRunsHub(cage, rims, 1), /is a CLOSED rim, not an open run/);
   assert.throws(() => bridgeEdgeRuns(cage, rims[0], rims[1], 1), /is a CLOSED rim, not an open run/);
   // The wrapped spelling of the same mistake, refused for its own reason.
   assert.throws(() => bridgeEdgeRunsHub(cage, rims.map((r) => [...r, r[0]]), 1), /repeats a vertex/);
-  // And the case that is genuinely open is untouched: dropping ONE edge of a
-  // rim makes a real run again, and the run hub takes it exactly as before.
+  // A rim that is open is untouched: dropping one edge of a
+  // rim makes a run again, and the run hub takes it.
   const runs = rims.map((r) => r.slice(0, 5));
   const out = bridgeEdgeRunsHub(cage, runs, 1);
   assert.equal(out.armCount, 3);

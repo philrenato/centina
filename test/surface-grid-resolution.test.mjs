@@ -1,4 +1,4 @@
-// ARC-LENGTH GRID RESOLUTION — see kernel/surface.mjs's own
+// Arc-length grid resolution — see kernel/surface.mjs's own
 // `tessellationGridResolution` header for the full derivation. Short version:
 // a declared `uRes x vRes` is a count and says nothing about the shape it
 // counts across, so the same grid that is well proportioned on a sphere puts
@@ -49,7 +49,7 @@ test('a straight ruling collapses and the curved direction is untouched', () => 
 });
 
 test('a flat patch keeps the resolution it was declared with', () => {
-  // A plane in a modelling application is resolved for the shape it is about
+  // A plane in a modeling application is resolved for the shape it is about
   // to be deformed into, not the flat one it starts as, so a function that
   // can only see the current shape must decline rather than collapse it.
   const r = tessellationGridResolution(flatPlane, 40, 40);
@@ -100,12 +100,12 @@ test('the solved grid meets the declared grid\'s own worst chord deviation', () 
   }
 });
 
-// THE V-SAMPLE FLOOR MUST NOT MANUFACTURE SLIVERS. `tessellationVSamples`
+// The v-sample floor must not manufacture slivers. `tessellationVSamples`
 // merges a per-span density floor into the uniform list through a `Set`, which
-// dedupes on exact equality only — so before the separation guard, a span one
-// sample short of the floor got 47 uniform samples at k/48 and 48 forced ones
-// at k/49, and the pairs at the span ends survived a millionth of a span apart.
-// That is the widest-aspect triangle in the whole mesh on every closed revolve.
+// dedupes on exact equality only — so without a separation guard, a span one
+// sample short of the floor gets 47 uniform samples at k/48 and 48 forced ones
+// at k/49, and the pairs at the span ends survive a millionth of a span apart:
+// the widest-aspect triangle in the whole mesh on every closed revolve.
 test('the per-span density floor never lands two samples on top of each other', () => {
   const circle = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 30, 4); // four full-multiplicity arc spans
   const revolved = revolve(makeLine([30, 0, 0], [30, 0, 60]), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
@@ -141,15 +141,14 @@ test('the density floor still guarantees its per-span sample count', () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// RELATIVE TOLERANCE — the mode the trimmed path needs.
+// Relative tolerance — the mode the trimmed path needs.
 //
 // The default target is the DECLARED grid's own worst chord deviation, which
 // makes this function a pure redistribution: it can never call a grid finer
 // than it needs to be. That is right when the declared grid carries intent, and
 // useless when it is a constant. The trimmed path hands every piece a flat
-// 64x64, so a 5mm fillet band on a 90mm box edge solved straight back to 64x64
-// and spent 8192 triangles where its arc needed about fifteen.
+// 64x64, so a 5mm fillet band on a 90mm box edge solves straight back to 64x64
+// and spends 8192 triangles where its arc needs about fifteen.
 //
 // `relTolerance` sets the target as a fraction of arc length PER DIRECTION,
 // which is the part that matters: a band's bounding box is dominated by the
@@ -167,10 +166,10 @@ const filletBand = (r, L) => {
   };
 };
 
-test('without relTolerance the solved grid is exactly what it always was', () => {
+test('a null relTolerance solves exactly the same grid as no options', () => {
   // The pin that keeps this an opt-in: the untrimmed path passes no options and
-  // must not move. A default that silently changed would be a re-tessellation
-  // of every surface in the app disguised as a new feature.
+  // must not move. A default that silently changed would re-tessellate every
+  // surface in the app.
   for (const srf of [discWall, flatPlane, cone, sphere, filletBand(5, 90)]) {
     for (const [u, v] of [[96, 48], [64, 64], [192, 96]]) {
       const bare = tessellationGridResolution(srf, u, v);

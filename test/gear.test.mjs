@@ -1,21 +1,17 @@
-// GEAR (Spur) + RACK — involute-tooth mechanical primitives.
+// Spur gear and rack — involute-tooth mechanical primitives.
 //
-// SCOPE (reconciled): Spur gear + Rack are
-// built and verified here. Explicitly DEFERRED, not attempted (named honestly):
-//   - HELICAL gear    — needs a Helix curve primitive as its rail, which does
-//                       not exist anywhere in this app yet (Helix is
-//                       named in the primitives bank as still-unbuilt).
-//   - INTERNAL-RING   — needs a profile-with-a-hole extruded as a solid,
-//     (annulus) gear    a separate Extrude/Trim investigation.
-//   - BEVEL           — a spherical-involute-on-a-cone problem (v2).
-//   - WORM + WHEEL     — needs an envelope-of-motion computation (doc: v2).
+// Scope: spur gear and rack. Not covered by these primitives:
+//   - helical gear    — needs a helix curve as its rail.
+//   - internal ring   — needs a profile with a hole extruded as a solid.
+//     (annulus) gear
+//   - bevel           — a spherical involute on a cone.
+//   - worm and wheel  — needs an envelope-of-motion computation.
 //
-// The math is verified numerically here (not eyeballed): the two checkable
-// involute identities at raw sample points; the fitted-flank NURBS staying
-// within a stated tolerance of the true analytic involute; correct tooth
-// count / closure / finiteness of the whole gear outline; and that a rack's
-// flanks are genuinely the straight-line limit of the involute at the
-// pressure angle.
+// Verified numerically: the two checkable involute identities at raw sample
+// points; the fitted-flank NURBS staying within a stated tolerance of the
+// analytic involute; tooth count, closure and finiteness of the whole gear
+// outline; and that a rack's flanks are the straight-line limit of the
+// involute at the pressure angle.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { involutePoint, makeInvoluteFlank, gearMetrics, buildSpurGearProfile, buildRackProfile } from '../kernel/primitives.mjs';
@@ -48,7 +44,7 @@ test('involute: exact identities at raw sample points (radius and taut-string no
           const rExpected = rb * Math.sqrt(1 + t * t);
           assert.ok(Math.abs(Math.hypot(P[0], P[1]) - rExpected) < 1e-9, `radius identity rb=${rb} t=${t}: ${Math.hypot(P[0], P[1])} vs ${rExpected}`);
         }
-        // Taut-string property (test in the unrotated frame): the NORMAL to
+        // Taut-string property (test in the unrotated frame): the normal to
         // the involute is tangent to the base circle, i.e. its distance from
         // the base center is exactly rb.
         if (startAngle === 0) {
@@ -77,7 +73,7 @@ test('makeInvoluteFlank: fitted NURBS stays within 0.01mm of the analytic involu
     assert.ok(isFiniteNet(flank.crv.ctrlPts), `finite rb=${rb}`);
     const dense = sampleCrv(flank.crv, 600);
     let worst = 0;
-    // Many analytic points at NON-sample t values.
+    // Many analytic points at non-sample t values.
     for (let i = 0; i <= 400; i++) {
       const t = tTip * (i / 400);
       const A = involutePoint(rb, t, 0.3, +1);
@@ -117,22 +113,22 @@ test('buildSpurGearProfile: exactly teethCount teeth, closed, finite, across par
   for (const [module, N, pa] of [[2, 12, 20], [2, 18, 20], [1.5, 24, 20], [3, 16, 14.5], [2, 30, 20]]) {
     const g = buildSpurGearProfile(module, N, pa);
     assert.ok(isFiniteNet(g.crv.ctrlPts), `finite m=${module} N=${N} pa=${pa}`);
-    // Genuinely closed: start point == end point (zero gap).
+    // Closed: start point == end point (zero gap).
     const p0 = curvePoint(g.crv, g.crv.knots[0]);
     const p1 = curvePoint(g.crv, g.crv.knots[g.crv.knots.length - 1]);
     assert.ok(Math.hypot(p0[0] - p1[0], p0[1] - p1[1]) < 1e-7, `closed m=${module} N=${N}: gap ${Math.hypot(p0[0] - p1[0], p0[1] - p1[1])}`);
-    // Exactly N teeth (a real periodicity/count property, not "looks toothy").
+    // Exactly N teeth, counted by radius crossings.
     const teeth = countTeeth(g.crv, g.metrics);
     assert.equal(teeth, N, `tooth count m=${module} N=${N} pa=${pa}: measured ${teeth}`);
   }
 });
 
 test('buildSpurGearProfile: assembled-outline flank stays within 0.04mm of the true analytic involute', () => {
-  // NOTE: the ISOLATED flank NURBS is proven < 0.01mm above; here the WHOLE
+  // The isolated flank NURBS is held to < 0.01mm above; here the whole
   // gear outline is one global cubic interpolation through several hundred
   // boundary points, so its flank tracks the analytic involute a little more
-  // loosely (a genuine, stated cost of interpolating the entire outline as one
-  // curve — never claimed exact). Cosine-clustered flank samples hold it well
+  // loosely (the cost of interpolating the entire outline as one curve).
+  // Cosine-clustered flank samples hold it well
   // under 0.04mm across ordinary teaching gears (N<=30).
   for (const N of [12, 18, 24, 30]) {
     const g = buildSpurGearProfile(2, N, 20);

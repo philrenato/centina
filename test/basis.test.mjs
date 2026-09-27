@@ -40,7 +40,7 @@ test('dersBasisFuns 1st derivative matches central-difference of basisFuns', () 
     const span = findSpan(n, p, u, U);
     const ders = dersBasisFuns(span, u, p, 1, U);
 
-    // Central difference needs the SAME span for u-h/u+h to compare the same
+    // Central difference needs the same span for u-h/u+h to compare the same
     // basis-function indices — pick points safely inside one span's interior.
     const spanMinus = findSpan(n, p, u - h, U);
     const spanPlus = findSpan(n, p, u + h, U);

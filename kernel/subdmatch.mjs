@@ -1,34 +1,33 @@
-// MATCH SUBD — moving a SuperB cage's boundary rows so the LIMIT SURFACE meets
-// a neighbor, not so the CAGE does.
+// Match SubD — moving a SuperB cage's boundary rows so the limit surface meets
+// a neighbor, not so the cage does.
 //
-// That distinction is the whole problem, and it is not a nicety. A Catmull-Clark
-// cage is not its surface: a boundary vertex's limit position sits at
-// (A + 4P + B)/6 of its two boundary neighbors, so dragging a cage vertex onto a
-// target leaves the surface roughly one sixth of the local second difference
-// short of it. Matching the cage to a neighbor and matching the surface to a
-// neighbor are different edits, and only the second is what a person sees.
+// A Catmull-Clark cage is not its surface: a boundary vertex's limit position
+// sits at (A + 4P + B)/6 of its two boundary neighbors, so dragging a cage
+// vertex onto a target leaves the surface roughly one sixth of the local
+// second difference short of it. Matching the cage to a neighbor and matching
+// the surface to a neighbor are different edits, and only the second is what
+// a person sees.
 //
-// ── WHAT THE BOUNDARY OF A CATMULL-CLARK SURFACE ACTUALLY IS ────────────────
+// The boundary of a Catmull-Clark surface
 //
-// Read subd.mjs's own rules at a boundary and the answer falls out with no new
-// machinery. `edgeSharpness` pins every boundary edge to sharpness 1, so
-// `computeEdgePoint` returns the plain MIDPOINT there, and a boundary vertex has
-// exactly two sharp edges, so `computeVertexPoint` takes the crease branch and
-// returns (A + 6P + B)/8. Those two rules together are precisely Lane and
-// Riesenfeld's subdivision for a uniform cubic B-spline curve (Lane & Riesenfeld,
-// IEEE PAMI 2(1), 1980), and they read NOTHING but the boundary polyline. So:
-//
-//   THE LIMIT BOUNDARY CURVE IS THE UNIFORM CUBIC B-SPLINE WHOSE CONTROL POLYGON
-//   IS THE CAGE'S OWN BOUNDARY POLYLINE.
+// It follows from subd.mjs's own rules at a boundary. `edgeSharpness` pins
+// every boundary edge to sharpness 1, so `computeEdgePoint` returns the plain
+// midpoint there, and a boundary vertex has exactly two sharp edges, so
+// `computeVertexPoint` takes the crease branch and returns (A + 6P + B)/8.
+// Those two rules together are Lane and Riesenfeld's subdivision for a
+// uniform cubic B-spline curve (Lane & Riesenfeld, IEEE PAMI 2(1), 1980), and
+// they read nothing but the boundary polyline. So the limit boundary curve is
+// the uniform cubic B-spline whose control polygon is the cage's own boundary
+// polyline.
 //
 // Everything else here is a consequence. Away from an extraordinary vertex the
 // limit surface is the uniform bicubic B-spline over the cage (Catmull & Clark,
 // CAD 10(6), 1978; the exact-evaluation statement of the same fact is Stam,
-// SIGGRAPH 1998, which kernel/subdlimit.mjs already builds on). Write the
-// boundary row as P_j and the row behind it as R_j, and extend the net outward by
-// one phantom row P'_j so that the extended surface's own boundary curve has
-// control points P_j. The u-basis of a uniform cubic at a knot is (1/6, 4/6, 1/6),
-// so that condition is (P'_j + 4P_j + R_j)/6 = P_j, giving
+// SIGGRAPH 1998, which kernel/subdlimit.mjs builds on). Write the boundary row
+// as P_j and the row behind it as R_j, and extend the net outward by one
+// phantom row P'_j so that the extended surface's own boundary curve has
+// control points P_j. The u-basis of a uniform cubic at a knot is
+// (1/6, 4/6, 1/6), so that condition is (P'_j + 4P_j + R_j)/6 = P_j, giving
 //
 //   P'_j = 2 P_j - R_j                          (the phantom row is a reflection)
 //
@@ -36,56 +35,55 @@
 // (1/6, 4/6, 1/6) for value, (-1/2, 0, 1/2) for the first derivative and
 // (1, -2, 1) for the second:
 //
-//   LIMIT POSITION    L_j = (P_{j-1} + 4 P_j + P_{j+1}) / 6
-//   ALONG TANGENT     A_j = (P_{j+1} - P_{j-1}) / 2
-//   CROSS TANGENT     X_j = (D_{j-1} + 4 D_j + D_{j+1}) / 6,   D_j = R_j - P_j
-//   CROSS CURVATURE   S_uu = P'_j - 2 P_j + R_j = 0,  IDENTICALLY
+//   Limit position    L_j = (P_{j-1} + 4 P_j + P_{j+1}) / 6
+//   Along tangent     A_j = (P_{j+1} - P_{j-1}) / 2
+//   Cross tangent     X_j = (D_{j-1} + 4 D_j + D_{j+1}) / 6,   D_j = R_j - P_j
+//   Cross curvature   S_uu = P'_j - 2 P_j + R_j = 0,  identically
 //
-// All four are verified by evaluating the limit surface through
-// `subdivideCatmullClark` and measuring, rather than taken on the derivation's
-// word: position to 2.86e-5 mm and tangent to 1.76e-2 degrees against a target,
-// with an unmatched boundary of the same cage held bit-identical as the control.
+// All four agree with the limit surface evaluated through
+// `subdivideCatmullClark`: position to 2.86e-5 mm and tangent to 1.76e-2
+// degrees against a target, with an unmatched boundary of the same cage held
+// bit-identical as the control.
 //
-// ── THE CEILING, AND WHY IT IS MATHEMATICS RATHER THAN SCOPE ────────────────
+// The ceiling is mathematics, not scope
 //
-// That last line is the honest ceiling of this whole feature. The second
-// cross-derivative of the limit surface at a Catmull-Clark boundary is ZERO, for
-// every cage, whatever anyone does to the rows: the phantom row is defined as the
-// reflection that makes it so. A curvature match to a target whose own normal
-// curvature across the seam is nonzero is therefore not approximate here, it is
-// unreachable, and `matchSubD` refuses order 2 by name rather than returning
-// something that looks matched in a shaded view and is not. The NURBS side of
-// this app reaches G2 through `applyG2` in kernel/matchedge.mjs; the SubD side
-// tops out at G1, and the reason is a property of the surface type.
+// The second cross-derivative of the limit surface at a Catmull-Clark
+// boundary is zero for every cage, whatever is done to the rows: the phantom
+// row is defined as the reflection that makes it so. A curvature match to a
+// target whose own normal curvature across the seam is nonzero is therefore
+// unreachable, not approximate, and `matchSubD` refuses order 2 by name
+// rather than returning something that looks matched in a shaded view and is
+// not. The NURBS side reaches G2 through `applyG2` in kernel/matchedge.mjs;
+// the SubD side tops out at G1, a property of the surface type.
 //
-// ── WHAT MOVES, AND WHAT PROVABLY DOES NOT ──────────────────────────────────
+// What moves, and what does not
 //
-// A match acts on a RUN of the cage's boundary: a contiguous chain of boundary
+// A match acts on a run of the cage's boundary: a contiguous chain of boundary
 // vertices. It writes exactly two rows of that run — the boundary vertices
-// themselves and their cross neighbors — and NO CAGE VERTEX OUTSIDE THE RUN. A
-// second object, or any other boundary of the same cage, comes back bit-identical.
+// themselves and their cross neighbors — and no cage vertex outside the run. A
+// second object, or any other boundary of the same cage, comes back
+// bit-identical.
 //
-// It does not follow that the limit SURFACE is untouched outside the run, and the
-// difference is worth stating rather than quietly enjoying. A limit position reads
-// its two boundary neighbors, so the surface at the boundary vertex immediately
-// beyond each end of an open run does move — by one station, and only there. That
-// is the same thing that happens on the NURBS side when a matched edge drags the
-// corner it shares with the surface's other three edges; it is what matching an
-// edge means, not a leak. A closed run — the whole boundary loop of an open cage —
-// has no outside at all, and its system is cyclic.
+// The limit surface outside the run is not untouched. A limit position reads
+// its two boundary neighbors, so the surface at the boundary vertex just
+// beyond each end of an open run moves — by one station, and only there. The
+// NURBS side does the same when a matched edge drags the corner it shares with
+// the surface's other three edges; it is what matching an edge means. A closed
+// run — the whole boundary loop of an open cage — has no outside, and its
+// system is cyclic.
 //
-// ── HOW THE ROWS ARE FOUND ─────────────────────────────────────────────────
+// How the rows are found
 //
-// Each run vertex needs a CROSS NEIGHBOR — the R_j above. Topologically it is the
-// one neighbor that is not a run neighbor: an interior station has valence 3 (two
-// boundary edges plus one interior edge, so the interior edge), and an open run's
-// end vertex at a cage corner has valence 2 with only one run neighbor, so the
-// other boundary edge serves, which is exactly the net's own next row there. Any
-// run vertex with a different count is refused by name: with two candidates there
-// is no single cross-boundary direction to redirect, and with none there is no row
-// behind the edge at all.
+// Each run vertex needs a cross neighbor — the R_j above. Topologically it is
+// the one neighbor that is not a run neighbor: an interior station has valence
+// 3 (two boundary edges plus one interior edge, so the interior edge), and an
+// open run's end vertex at a cage corner has valence 2 with only one run
+// neighbor, so the other boundary edge serves, which is the net's own next row
+// there. Any run vertex with a different count is refused by name: with two
+// candidates there is no single cross-boundary direction to redirect, and with
+// none there is no row behind the edge at all.
 
-import { buildTopology, edgeKey, creaseWeight, MARKED_CORNER_WEIGHT_FLOOR } from './subd.mjs';
+import { buildTopology, creaseWeight, MARKED_CORNER_WEIGHT_FLOOR } from './subd.mjs';
 import { surfacePointAndPartials } from './surface.mjs';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -97,23 +95,24 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const unit = (a) => { const L = len(a); return L > 1e-14 ? scale(a, 1 / L) : [0, 0, 0]; };
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-// ── THE UNIFORM CUBIC B-SPLINE, EVALUATED ONCE AND USED THREE WAYS ─────────
+// The uniform cubic B-spline, evaluated once and used three ways
 //
 // Position, along-tangent and cross-tangent above are the same basis read with
-// different derivative orders, so there is one evaluator and the station formulas
-// are it at t = 0. `pts` is a control polygon; `closed` wraps it. Parameter is
-// (segment index + t), so a closed polygon of n points has domain [0, n) and an
-// open one has domain [1, n-2] — an open uniform cubic spans only the segments
-// with a full four-point window. Its first and last control points therefore SHAPE
-// the matched arc without lying on it, which is why the fit below leaves them
-// free: pinning a control point that the curve never reaches puts the whole error
-// into the direction the curve travels at its ends.
+// different derivative orders, so there is one evaluator and the station
+// formulas are it at t = 0. `pts` is a control polygon; `closed` wraps it.
+// Parameter is (segment index + t), so a closed polygon of n points has domain
+// [0, n) and an open one has domain [1, n-2] — an open uniform cubic spans only
+// the segments with a full four-point window. Its first and last control
+// points therefore shape the matched arc without lying on it, which is why the
+// fit below leaves them free: pinning a control point that the curve never
+// reaches puts the whole error into the direction the curve travels at its
+// ends.
 export function uniformCubicDomain(n, closed) {
   return closed ? [0, n] : [1, n - 2];
 }
 
-// The four control points a parameter reads, AS INDICES — so the same routine
-// serves evaluation and the least-squares fit, and the fit can never disagree
+// The four control points a parameter reads, as indices, so the same routine
+// serves evaluation and the least-squares fit, and the fit cannot disagree
 // with the evaluator about which points a sample sees.
 export function cubicWindowIndices(n, closed, s) {
   const [lo, hi] = uniformCubicDomain(n, closed);
@@ -149,7 +148,7 @@ export function uniformCubicAt(pts, closed, s, order = 0) {
   return out;
 }
 
-// ── THE RUN ────────────────────────────────────────────────────────────────
+// The run
 
 // Order a set of boundary edge keys into one chain of vertices. Returns the
 // chain, whether it closes, and a refusal naming the offending vertex when the
@@ -190,7 +189,7 @@ export function boundaryRunFromEdges(cage, edgeKeys, ctx = buildTopology(cage)) 
 
 // The cross neighbor of every run vertex, plus every reason this run cannot
 // carry a match. Named refusals, never a clamp: a run this function accepts is
-// one every formula in this file is actually valid on.
+// one every formula in this file is valid on.
 export function runStations(cage, run, closed, ctx = buildTopology(cage)) {
   const n = run.length;
   if (n < (closed ? 3 : 3)) return { ok: false, reason: `a match needs at least 3 boundary vertices in the run, and this one has ${n}` };
@@ -227,22 +226,23 @@ export function runStations(cage, run, closed, ctx = buildTopology(cage)) {
   return { ok: true, stations };
 }
 
-// A BOUNDARY LOOP THAT CANNOT CARRY A MATCH ALL THE WAY ROUND, SPLIT INTO THE
-// ARCS THAT CAN.
+// A boundary loop that cannot carry a match all the way round, split into the
+// arcs that can.
 //
 // The rim of a grid patch is the case that forces this. Its four corners have
-// valence 2 — both of their edges run ALONG the rim — so at a corner there is no
-// third edge to read a cross-boundary direction from, and `runStations` refuses
-// the whole loop by name. The refusal is right: the row behind the boundary
-// TURNS at a corner, and there is no single direction across it. But three
-// quarters of that rim are perfectly ordinary boundary, and a caller looking for
-// something to meet should be offered them rather than told the rim is unusable.
+// valence 2 — both of their edges run along the rim — so at a corner there is
+// no third edge to read a cross-boundary direction from, and `runStations`
+// refuses the whole loop by name. The refusal is right: the row behind the
+// boundary turns at a corner, and there is no single direction across it. But
+// three quarters of that rim are ordinary boundary, and a caller looking for
+// something to meet should be offered them rather than told the rim is
+// unusable.
 //
-// So the loop is cut AT the corners, and each corner belongs to both arcs that
-// end on it — which is exactly what makes those arcs work: an open run's end
-// vertex has only ONE run neighbour, so its other boundary edge becomes the
-// cross direction, and that edge is the net's own next row there. A loop with
-// only one bad vertex yields nothing, because the single arc would have to begin
+// So the loop is cut at the corners, and each corner belongs to both arcs that
+// end on it — which is what makes those arcs work: an open run's end vertex
+// has only one run neighbor, so its other boundary edge becomes the cross
+// direction, and that edge is the net's own next row there. A loop with only
+// one bad vertex yields nothing, because the single arc would have to begin
 // and end at the same vertex and no control polygon can hold one point twice.
 export function usableRuns(cage, run, closed, ctx = buildTopology(cage)) {
   const whole = runStations(cage, run, closed, ctx);
@@ -294,13 +294,13 @@ export function limitFrameAt(cage, stations, closed, j) {
   return { point, along, cross: crossT, normal: unit(cross(along, crossT)) };
 }
 
-// ── TARGETS ────────────────────────────────────────────────────────────────
+// Targets
 //
 // A target answers three questions at a parameter: where its edge is, its
 // outward unit normal there, and the direction its own surface leaves the edge
-// in. The third is the side test — a base whose cross tangent agrees in SIGN
-// with the target's has folded back over it, and reports a perfect tangent angle
-// while doing so.
+// in. The third is the side test — a base whose cross tangent agrees in sign
+// with the target's has folded back over it, and reports a perfect tangent
+// angle while doing so.
 
 export function nurbsEdgeTarget(srf, edge) {
   const dom = (knots, deg) => [knots[deg], knots[knots.length - 1 - deg]];
@@ -345,11 +345,11 @@ export function subdBoundaryTarget(cage, run, closed, ctx = buildTopology(cage))
   };
 }
 
-// CLOSEST POINT ON THE TARGET EDGE — bounded and deterministic: a dense scan to
-// bracket the minimum, then a fixed number of ternary steps inside the bracket.
-// A match is a match, not a snap, so this is only ever asked to travel the small
-// distance a nearly-coincident pair of edges is apart; the scan density is what
-// keeps it from locking onto the wrong lobe of a folded target.
+// Closest point on the target edge — bounded and deterministic: a dense scan
+// to bracket the minimum, then a fixed number of ternary steps inside the
+// bracket. A match is not a snap, so this only travels the small distance a
+// nearly-coincident pair of edges is apart; the scan density keeps it from
+// locking onto the wrong lobe of a folded target.
 export function closestOnTarget(target, q, scan = 240, refine = 60) {
   const [lo, hi] = target.domain;
   let bestS = lo, bestD = Infinity;
@@ -368,13 +368,13 @@ export function closestOnTarget(target, q, scan = 240, refine = 60) {
   return { s, distance: len(sub(target.frame(s).point, q)) };
 }
 
-// ── THE SOLVE ──────────────────────────────────────────────────────────────
+// The solve
 //
 // Dense Gaussian elimination with partial pivoting, three right-hand sides at
-// once. The system is one row per moving station — a run is tens of vertices, not
-// thousands — so this is chosen over a tridiagonal or cyclic-tridiagonal solver
-// on purpose: the banded routines are the ones that are wrong in a way nobody
-// reads, and nothing here is large enough to notice the difference.
+// once. The system is one row per moving station — a run is tens of vertices,
+// not thousands — so a dense solver is used rather than a tridiagonal or
+// cyclic-tridiagonal one: the banded routines are harder to verify, and
+// nothing here is large enough to notice the difference.
 function solveDense(A, B) {
   const m = A.length, c = B[0].length;
   const M = A.map((row, i) => [...row, ...B[i]]);
@@ -395,25 +395,23 @@ function solveDense(A, B) {
   return M.map((row) => row.slice(m));
 }
 
-// LEAST-SQUARES FIT OF ONE CONTROL POLYGON TO A WANTED FIELD ALONG THE SPAN.
+// Least-squares fit of one control polygon to a wanted field along the span.
 //
-// The same routine serves the boundary row and the cross-offset row, because the
-// two are the same uniform cubic read on two different polygons — which is the
-// claim the header makes, made once in code. Standard B-spline global
-// approximation (Piegl & Tiller, The NURBS Book, ch. 9.4): stack one row per
-// sample, solve the normal equations.
+// The same routine serves the boundary row and the cross-offset row, because
+// the two are the same uniform cubic read on two different polygons. Standard
+// B-spline global approximation (Piegl & Tiller, The NURBS Book, ch. 9.4):
+// stack one row per sample, solve the normal equations.
 //
-// ⚠ EVERY CONTROL POINT OF THE RUN IS FREE, INCLUDING THE TWO AT ITS ENDS, and
-// that is a decision rather than an oversight. An open uniform cubic over n
-// points spans only [1, n-2], so the first and last control points shape the ends
-// of the matched arc without lying on it; holding them pins the arc's ENDS to
-// wherever the cage happened to be, and that error lands entirely in the
-// direction the boundary curve travels — which is half of the tangent plane. Held
-// ends measured 6 degrees of normal deviation at the last station of an otherwise
-// exact match. Freeing them costs one thing, stated plainly: a run's end vertices
-// move, so the limit surface changes within one station of the run's ends along
-// whatever else those vertices belong to. No cage vertex outside the run is
-// written.
+// Every control point of the run is free, including the two at its ends. An
+// open uniform cubic over n points spans only [1, n-2], so the first and last
+// control points shape the ends of the matched arc without lying on it;
+// holding them pins the arc's ends to wherever the cage happened to be, and
+// that error lands entirely in the direction the boundary curve travels —
+// half of the tangent plane. Held ends leave 6 degrees of normal deviation at
+// the last station of an otherwise exact match. The cost of freeing them: a
+// run's end vertices move, so the limit surface changes within one station of
+// the run's ends along whatever else those vertices belong to. No cage vertex
+// outside the run is written.
 function fitPolygon(nCtrl, closed, samples) {
   const A = Array.from({ length: nCtrl }, () => new Array(nCtrl).fill(0));
   const B = Array.from({ length: nCtrl }, () => [0, 0, 0]);
@@ -428,35 +426,33 @@ function fitPolygon(nCtrl, closed, samples) {
   return solveDense(A, B);
 }
 
-// THE SAME FIT, WITH A DIRECTION IT IS ALLOWED TO IGNORE.
+// The same fit, with a direction it is allowed to ignore.
 //
-// A boundary match wants each sample to land ON the target curve, not at one
-// nominated point of it — where it lands ALONG the curve is parametrization and
-// costs nothing. Charging for that tangential distance is what makes a plain
+// A boundary match wants each sample to land on the target curve, not at one
+// nominated point of it — where it lands along the curve is parametrization
+// and costs nothing. Charging for that tangential distance makes a plain
 // point-to-point fit lock: it drags the base's parametrization toward the
 // target's and then cannot represent the reparametrized curve that results, so
-// the residual stops falling with a real gap still in it. Measured on a rim whose
-// wobble is out of phase with its target's, that plateau sat at 2.6e-3 mm and
-// fell like 1/passes, so no iteration budget reaches it, against 2.0e-5 mm for
-// the same solve on an already-aligned pair. Corresponding by arc length instead
-// was worse still, at 1.3e-2 mm, because two rims of the same length can
+// the residual stops falling with a real gap still in it. On a rim whose
+// wobble is out of phase with its target's, that plateau sits at 2.6e-3 mm and
+// falls like 1/passes, so no iteration budget reaches it, against 2.0e-5 mm for
+// the same solve on an aligned pair. Corresponding by arc length instead is
+// worse still, at 1.3e-2 mm, because two rims of the same length can
 // distribute that length differently.
 //
-// So each sample carries a 3x3 weight rather than nothing: full weight across the
-// target's own tangent, a little along it. That couples the three coordinates,
-// which is why this is a 3n system where the plain fit is n with three right-hand
-// sides.
+// So each sample carries a 3x3 weight: full weight across the target's own
+// tangent, a little along it. That couples the three coordinates, which is why
+// this is a 3n system where the plain fit is n with three right-hand sides.
 //
-// ⚠⚠ AND THE SLACK MUST BE ANCHORED TO WHERE THE SAMPLE ALREADY IS, not to the
-// closest point. Both give the same matrix; only the right-hand side differs, and
-// the difference is the whole behavior. Pulled weakly toward the closest point,
-// the tangential freedom is a slow drift that ACCUMULATES: the first pass
-// measured 1.5e-3 mm and the third 1.6e-2, ten times worse, as the control points
-// bunched along the seam. Anchored to the sample's current position it is a
-// damping term instead, the parametrization holds still, and each pass only
-// removes the part of the error that is a genuine gap. The slide is small and
-// deliberately NOT zero — at exactly zero the tangential motion is unconstrained
-// and the system is singular.
+// The slack is anchored to where the sample already is, not to the closest
+// point. Both give the same matrix; only the right-hand side differs, and the
+// difference is the whole behavior. Pulled weakly toward the closest point,
+// the tangential freedom is a slow drift that accumulates (1.5e-3 mm after one
+// pass, 1.6e-2 after three) as the control points bunch along the seam.
+// Anchored to the sample's current position it is a damping term instead, the
+// parametrization holds still, and each pass removes only the part of the
+// error that is a real gap. The slide is small and not zero: at exactly zero
+// the tangential motion is unconstrained and the system is singular.
 const TANGENTIAL_SLIDE = 1e-3;
 
 function crossPlaneWeight(tangent) {
@@ -474,7 +470,7 @@ function fitPolygonWeighted(nCtrl, closed, samples) {
   for (const { s, wanted, here, tangent, weight } of samples) {
     const { t, idx } = cubicWindowIndices(nCtrl, closed, s);
     const b = cubicBasis(t, 0);
-    // ACROSS the tangent, aim at the target; ALONG it, aim at where the sample
+    // Across the tangent, aim at the target; along it, aim at where the sample
     // already is. One matrix, two anchors.
     const T = unit(tangent);
     const across = len(T) > 0.5 ? sub(wanted, scale(T, dot(T, wanted))) : wanted;
@@ -506,20 +502,19 @@ function fitParameters(nCtrl, closed, perSpan = 7) {
   return out;
 }
 
-// ── THE ONE ENTRY POINT ────────────────────────────────────────────────────
+// The entry point
 //
-// Returns a NEW cage; never mutates. `order` 0 is position, 1 is tangent, and 2
-// is refused by name for the reason the header derives. `blend` walks the result
-// back toward the cage it started from, so the whole edit stays a live parameter
-// rather than a one-way commit; `fullness` scales how far the surface leans off
-// the seam before it goes where it was going, the SubD reading of the same knob
-// `endBulgeNet` turns on a NURBS net.
+// Returns a new cage; never mutates. `order` 0 is position, 1 is tangent, and
+// 2 is refused by name for the reason the header derives. `blend` walks the
+// result back toward the cage it started from, so the whole edit stays a live
+// parameter rather than a one-way commit; `fullness` scales how far the
+// surface leans off the seam before it goes where it was going, the SubD
+// reading of the same knob `endBulgeNet` turns on a NURBS net.
 export function matchSubD(cage, run, closed, target, opts = {}) {
   const order = opts.order ?? 1;
   const blend = Math.max(0, Math.min(1, opts.blend ?? 1));
   const fullness = opts.fullness ?? 1;
   const maxPasses = opts.maxPasses ?? 12;
-  const tol = opts.tolerance ?? 1e-10;
 
   if (order === 2) {
     return { ok: false, reason: 'curvature (G2) is not reachable on a SubD boundary at all: the limit surface\u2019s second derivative across a Catmull-Clark boundary is identically zero, whatever the cage does, so a curvature match to a curved neighbor cannot exist. Tangent (G1) is the ceiling here — the NURBS side of this app reaches G2, the SubD side cannot' };
@@ -537,29 +532,28 @@ export function matchSubD(cage, run, closed, target, opts = {}) {
   const D0 = stations.map((s, j) => sub(cage.vertices[s.cross], P0[j]));
   const params = fitParameters(n, closed);
 
-  // TOLERANCES ARE DERIVED FROM THE RUN, never pinned: a match on a 4 mm bracket
-  // and a match on a 4 m hull are the same edit at different scales, and a fixed
+  // Tolerances are derived from the run: a match on a 4 mm bracket and a
+  // match on a 4 m hull are the same edit at different scales, and a fixed
   // epsilon is a different instrument in each.
   let span = 0;
   for (let j = 1; j < n; j++) span += len(sub(P0[j], P0[j - 1]));
   if (!(span > 0)) return { ok: false, reason: 'this run has no length — every vertex on it sits at the same point' };
   const moveTol = opts.tolerance ?? span * 1e-12;
 
-  // --- G0: fit the boundary polygon so the limit CURVE lies on the target across
+  // G0: fit the boundary polygon so the limit curve lies on the target across
   // the whole matched arc, not merely at the vertex stations.
   //
-  // ITERATED, AND THE BEST PASS IS THE ONE THAT IS KEPT — not the last one.
-  // The correspondence is a closest-point projection, so it is a function of
-  // where the curve currently is: the first pass projects from the curve the cage
-  // started with, and refitting from the new one is what closes the rest. But the
-  // tangential slack that makes the fit work at all (see fitPolygonWeighted) also
-  // means the samples can slide and bunch along the seam over many passes, and a
-  // pass that bunches them leaves the gap WORSE than the pass before it. Measured
-  // on an out-of-phase rim: 1.5e-3 mm at pass 1, 1.6e-2 by pass 3. The loop
-  // therefore records the best polygon it has seen, stops as soon as a pass buys
-  // less than a percent off the gap it still has, and returns the best rather than
-  // the latest. That makes the solve monotone in the only quantity anybody cares
-  // about, which a plain iteration on this correspondence is not.
+  // Iterated, keeping the best pass rather than the last. The correspondence
+  // is a closest-point projection, so it depends on where the curve currently
+  // is: the first pass projects from the curve the cage started with, and
+  // refitting from the new one closes the rest. But the tangential slack that
+  // makes the fit work (see fitPolygonWeighted) also lets the samples slide and
+  // bunch along the seam over many passes, and a pass that bunches them leaves
+  // the gap worse than the pass before it (on an out-of-phase rim: 1.5e-3 mm at
+  // pass 1, 1.6e-2 by pass 3). The loop records the best polygon it has seen,
+  // stops as soon as a pass buys less than a percent off the remaining gap, and
+  // returns the best rather than the latest, which makes the solve monotone in
+  // the gap.
   let P = P0.map((p) => p.slice());
   let passes = 0, moved = Infinity, gap = Infinity, prevGap = Infinity, converged = false;
   let bestP = P.map((p) => p.slice()), bestGap = Infinity, bestHits = null;
@@ -595,15 +589,15 @@ export function matchSubD(cage, run, closed, target, opts = {}) {
   let D = D0.map((d) => d.slice());
 
   if (order === 1) {
-    // --- G1: the smallest change to the cross-tangent FIELD that lays it in the
-    // target's tangent plane all along the seam. At each sample the current cross
-    // tangent loses its component along the target's normal and keeps its length,
-    // so the surface's own lean survives and only the part that broke continuity
-    // is removed; copying the target's direction outright would ask for more than
-    // tangency and distort the cage to get it. The side test is separate and not
-    // optional — coplanar says nothing about WHICH WAY the base leaves the seam,
-    // and a base folded back over its target measures a perfect angle while doing
-    // it.
+    // G1: the smallest change to the cross-tangent field that lays it in the
+    // target's tangent plane all along the seam. At each sample the current
+    // cross tangent loses its component along the target's normal and keeps its
+    // length, so the surface's own lean survives and only the part that broke
+    // continuity is removed; copying the target's direction outright would ask
+    // for more than tangency and distort the cage to get it. The side test is
+    // separate and required — coplanar says nothing about which way the base
+    // leaves the seam, and a base folded back over its target measures a
+    // perfect angle.
     const samples = [];
     for (let k = 0; k < params.length; k++) {
       const s = params[k];
@@ -623,7 +617,7 @@ export function matchSubD(cage, run, closed, target, opts = {}) {
     D = next;
   }
 
-  // --- BLEND, and write the new cage. Both rows are walked back together, so a
+  // Blend, and write the new cage. Both rows are walked back together, so a
   // partial blend is a partial match and never a G0 that outran its G1.
   const out = { vertices: cage.vertices.map((p) => p.slice()), faces: cage.faces.map((f) => f.slice()), creases: { ...(cage.creases || {}) } };
   for (let j = 0; j < n; j++) {
@@ -637,12 +631,12 @@ export function matchSubD(cage, run, closed, target, opts = {}) {
   };
 }
 
-// ── THE MEASUREMENT ────────────────────────────────────────────────────────
+// The measurement
 //
-// What was achieved, read off the LIMIT SURFACE and not off the cage — the
-// distinction this whole file exists for. Sampled between the stations as well as
-// at them, because a match solved at stations is exact there and approximate in
-// between, and the number worth reporting is the worse one.
+// What was achieved, read off the limit surface and not off the cage.
+// Sampled between the stations as well as at them, because a match solved at
+// stations is exact there and approximate in between, and the number worth
+// reporting is the worse one.
 export function matchDeviation(cage, run, closed, target, samples = 41) {
   const st = runStations(cage, run, closed);
   if (!st.ok) return { ok: false, reason: st.reason };

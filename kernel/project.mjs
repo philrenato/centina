@@ -1,13 +1,11 @@
-// "Project this object's edges to a plane at a scale" — the primitive
-// the dimensioning work names explicitly, so the
-// Spec Sheet room (v2 target) slots in later without kernel rework. A plane
-// is { origin, uAxis, vAxis, scale } — uAxis/vAxis orthonormal in-plane
-// basis vectors (e.g. a Spec Sheet view's Top/Front/Right/Iso projection).
+// Projects an object's edges to a plane at a scale, the primitive a
+// dimensioned drawing view is built on. A plane is
+// { origin, uAxis, vAxis, scale } — uAxis/vAxis orthonormal in-plane
+// basis vectors (e.g. a Top/Front/Right/Iso view).
 //
 // Tessellation here is uniform-parameter sampling, not the adaptive
-// chord-tolerance scheme the viewport display pipeline uses —
-// that's a P1 concern tied to view-dependent redraw; this primitive only
-// needs to produce a faithful enough polyline to project and dimension.
+// chord-tolerance scheme the viewport display pipeline uses; this primitive
+// only needs a polyline faithful enough to project and dimension.
 
 import { sub, dot } from './vec3.mjs';
 import { curvePoint, assertCurve } from './curve.mjs';

@@ -1,38 +1,33 @@
-// TRIMMED SURFACE DATA MODEL — the trimmed-surface spec,
-// built for the first time: "A TRIMMED SURFACE is a
-// NurbsSrf (unchanged) plus a set of TRIM LOOPS — each loop a closed 2D
-// curve living in that surface's own (u,v) parameter space... Trim curves
-// are POLYLINES (degree-1 UV polylines), not interpolated smooth NURBS
-// curves." Everything here operates on that exact shape: a "loop" is a
-// plain array of [u,v] pairs, implicitly closed (the segment from the last
-// point back to the first is part of the loop).
+// Trimmed surface data model. A trimmed surface is a NurbsSrf (unchanged)
+// plus a set of trim loops — each loop a closed 2D curve living in that
+// surface's own (u,v) parameter space. Trim curves are polylines (degree-1
+// UV polylines), not interpolated smooth NURBS curves. Everything here
+// operates on that exact shape: a "loop" is a plain array of [u,v] pairs,
+// implicitly closed (the segment from the last point back to the first is
+// part of the loop).
 //
-// Also builds the OTHER real prerequisite for Tier A/B:
-// projecting an ordinary 3D curve onto a surface's own parameter space (P&T
-// 6.1 point inversion walked along a curve, warm-started sample to sample
-// so a near-seam/near-pole curve doesn't jump to the wrong (u,v) preimage
-// mid-walk) — the real, materially SIMPLER sub-case named in the
-// own task brief: "split a surface by a CURVE... may be a materially
-// simpler, more tractable sub-case worth building FIRST."
+// Also projects an ordinary 3D curve onto a surface's own parameter space
+// (P&T 6.1 point inversion walked along a curve, warm-started sample to
+// sample so a near-seam/near-pole curve doesn't jump to the wrong (u,v)
+// preimage mid-walk).
 
 import { surfacePointAndPartials, closestPointOnSurface, surfaceClosure, wrapParam, escapeDegeneratePoint, nakedEdgeCount } from './surface.mjs';
 import { tessellateCurve } from './project.mjs';
-import { sub, dot, length, add, scale } from './vec3.mjs';
+import { sub, dot, add, scale } from './vec3.mjs';
 
-// A single warm-started Gauss-Newton refinement step against ONE surface —
-// the exact 2-unknown recipe closestPointOnSurface's own stage 2 already
-// uses (minimize |S(u,v)-P|^2 via the real first partials), factored out
-// here so a caller with an ALREADY-GOOD seed (the previous sample along a
-// curve being walked) can skip closestPointOnSurface's own coarse grid
-// search entirely — re-running that coarse search at every single sample
-// along a dense curve would be wasteful AND could jump to a genuinely
-// different (u,v) preimage between adjacent samples near a seam/pole,
-// exactly the failure mode this function is built to avoid. Wraps at a
-// closed direction's own seam and backtracks a worsening step instead of
-// rejecting it outright — see closestPointOnSurface's own header comment
-// in surface.mjs for the full reasoning (both functions must apply this
-// identically, since a curve walked sample-to-sample only ever gets one
-// real answer from whichever of the two the caller happens to invoke).
+// A single warm-started Gauss-Newton refinement step against one surface —
+// the exact 2-unknown recipe closestPointOnSurface's own stage 2 uses
+// (minimize |S(u,v)-P|^2 via the first partials), factored out here so a
+// caller with an already-good seed (the previous sample along a curve being
+// walked) can skip closestPointOnSurface's own coarse grid search entirely —
+// re-running that coarse search at every sample along a dense curve would be
+// wasteful and could jump to a different (u,v) preimage between adjacent
+// samples near a seam/pole, the failure mode this function exists to avoid.
+// Wraps at a closed direction's own seam and backtracks a worsening step
+// instead of rejecting it outright — see closestPointOnSurface's own header
+// comment in surface.mjs for the full reasoning (both functions must apply
+// this identically, since a curve walked sample-to-sample only ever gets one
+// answer from whichever of the two the caller happens to invoke).
 export function refineClosestPointOnSurface(srf, targetPt, u0, v0) {
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
@@ -109,12 +104,11 @@ function closestPointOnTriangle(a, b, c, p) {
   return add(a, add(scale(ab, v), scale(ac, w)));
 }
 
-// The nearest point on a whole triangle SOUP (a flat array of [a,b,c]
+// The nearest point on a whole triangle soup (a flat array of [a,b,c]
 // vertex triples, world space) to an arbitrary 3D point — a plain linear
 // scan, tracking the global closest across every triangle. O(triangle
-// count) per query; fine at this app's own real mesh densities for a
-// one-shot command (no BVH — a curve-projection command runs once, not
-// per-frame).
+// count) per query, which suits a one-shot curve-projection command (no
+// BVH — it runs once, not per frame).
 export function closestPointOnTriangleMesh(triangles, targetPt) {
   let best = null, bestDistSq = Infinity;
   for (const [a, b, c] of triangles) {
@@ -128,10 +122,10 @@ export function closestPointOnTriangleMesh(triangles, targetPt) {
 }
 
 // The mesh-target sibling of projectCurveToSurfaceUV below — same
-// "sample the curve, pull each sample onto the target, refuse honestly
-// past tolerance" contract, but returns real 3D POINTS directly rather
-// than a (u,v) pair, since a triangle soup has no continuous parameter
-// domain to report one against.
+// "sample the curve, pull each sample onto the target, refuse past
+// tolerance" contract, but returns 3D points directly rather than a (u,v)
+// pair, since a triangle soup has no continuous parameter domain to report
+// one against.
 export function projectCurveToMesh(crv, triangles, opts = {}) {
   const samples = opts.samples ?? 64;
   const tolerance = opts.tolerance ?? 1e-3;
@@ -150,13 +144,11 @@ export function projectCurveToMesh(crv, triangles, opts = {}) {
   return { ok: true, points };
 }
 
-// Project a real 3D curve believed to lie ON (or very near) a surface into
-// that surface's own UV parameter space, as a dense polyline — exactly the
-// "trim curves are polylines" data model. Honestly refuses
-// (rather than silently returning a UV curve wandering off the real
-// surface) if any sample's true 3D distance from the surface exceeds
-// `tolerance` — a real, checkable validity gate, not an assumption that the
-// caller already got this right.
+// Project a 3D curve believed to lie on (or very near) a surface into
+// that surface's own UV parameter space, as a dense polyline — the
+// "trim curves are polylines" data model. Refuses (rather than returning a
+// UV curve wandering off the surface) if any sample's true 3D distance from
+// the surface exceeds `tolerance`.
 export function projectCurveToSurfaceUV(crv, srf, opts = {}) {
   const samples = opts.samples ?? 64;
   return projectPointsToSurfaceUV(tessellateCurve(crv, samples), srf, opts);
@@ -166,7 +158,7 @@ export function projectCurveToSurfaceUV(crv, srf, opts = {}) {
 // NurbsCrv. An intersection curve arrives from the marcher as samples in the
 // first place, so making it synthesize a curve just to be re-tessellated back
 // into points would lose accuracy for no reason. `projectCurveToSurfaceUV` is
-// now this function plus one tessellation step, so both paths share one
+// this function plus one tessellation step, so both paths share one
 // definition of "warm-started, refuses when it leaves the surface".
 export function projectPointsToSurfaceUV(pts, srf, opts = {}) {
   const tolerance = opts.tolerance ?? 1e-3;
@@ -182,22 +174,22 @@ export function projectPointsToSurfaceUV(pts, srf, opts = {}) {
   let prevU = seed.u, prevV = seed.v;
   for (let i = 1; i < pts.length; i++) {
     let refined = refineClosestPointOnSurface(srf, pts[i], prevU, prevV);
-    // ⚠⚠ A WARM START CAN BE A TRAP, AND A DEGENERATE ONE ALWAYS IS. Refining
+    // A warm start can be a trap, and a degenerate one always is. Refining
     // from the previous sample is what makes a long chain cheap and keeps it on
     // one branch of a closed surface — but if the previous sample landed on a
-    // POLE, the surface's partials collapse there, Gauss-Newton has no
+    // pole, the surface's partials collapse there, Gauss-Newton has no
     // direction to move in, and every later sample stays pinned at the pole.
     //
-    // Measured on a cylinder cap (a revolved disc, whose u=0 edge IS its
-    // center, collapsed to a point): rim -> pole -> rim refuses with the sample
-    // after the pole "12.000000 away" — exactly the disc's radius, the distance
-    // from the center to the rim it should have found. Every one of those points
-    // projects EXACTLY when seeded cold, so nothing is off the surface and the
-    // refusal was about the seed, not the geometry.
+    // On a cylinder cap (a revolved disc, whose u=0 edge is its center,
+    // collapsed to a point), a rim -> pole -> rim chain would refuse with the
+    // sample after the pole "12.000000 away" — exactly the disc's radius, the
+    // distance from the center to the rim it should have found. Every one of
+    // those points projects exactly when seeded cold, so nothing is off the
+    // surface and the refusal would be about the seed, not the geometry.
     //
     // So a miss re-seeds from scratch before it is allowed to become a refusal.
     // The cost falls only on the failing sample, the fast path is untouched, and
-    // a point that is genuinely off the surface still refuses — `closestPointOnSurface`
+    // a point that is off the surface still refuses — `closestPointOnSurface`
     // is a global search, so if it cannot get there, nothing about this chain can.
     if (refined.distance > tolerance) {
       const cold = closestPointOnSurface(srf, pts[i]);
@@ -212,39 +204,39 @@ export function projectPointsToSurfaceUV(pts, srf, opts = {}) {
   return { ok: true, uv };
 }
 
-// WHERE A CHAIN MEETS THIS SURFACE'S SEAM, as the crossing's own segment index
+// Where a chain meets this surface's seam, as the crossing's own segment index
 // and the UV point on the domain edge — the raw material every routine above
-// consumes, exposed on its own for the one caller that needs the LOCATION
+// consumes, exposed on its own for the one caller that needs the location
 // rather than the re-expressed chain.
 //
 // That caller is the boolean's seam-point sharing pass. A seam crossing is
-// interpolated from the two samples straddling it IN THIS SURFACE'S OWN
-// PARAMETERS, so two faces cut by the same 3D curve, whose seams happen to
+// interpolated from the two samples straddling it in this surface's own
+// parameters, so two faces cut by the same 3D curve, whose seams happen to
 // pass through the same place, each derive their own answer and land apart by
 // roughly one sample spacing — far outside any weld tolerance. Sharing the
 // point requires knowing it before any chain has been built, which is what
 // this returns and what neither seamCrossingSpine nor seamStraddleChains can
 // hand back.
 //
-// `before` is deliberately the copy reported: it is the crossing expressed on
+// `before` is the copy reported: it is the crossing expressed on
 // the edge sample `seg` sits against, and both copies evaluate to the same 3D
 // point anyway, since aMin and aMax are the same place on a closed surface.
 //
-// An empty list is the honest answer for every non-crossing case, including
+// An empty list is the answer for every non-crossing case, including
 // the topologies seamJumps refuses by name — a caller asking only "where does
 // this touch the seam" has nothing to do about a double wrap that it would not
 // also do about a chain that never approaches the seam at all.
 //
-// ⚠ ORDERING CONSTRAINT — IT SITS HERE, AWAY FROM THE SEAM FAMILY IT BELONGS
-// TO, AND MUST STAY HERE. Everything boolean.mjs calls out of this file has to
-// be DEFINED INSIDE THE SPAN that runs from `projectPointsToSurfaceUV` down to
-// the shoelace comment below: embedders that inline the boolean path take that
-// span and nothing else out of this file. A definition placed outside it is
-// still CALLED from inside it, so the embedded copy references a function it
-// never defines — a runtime ReferenceError in that build, invisible to a parse
-// or a byte-comparison of this file. Moving it back down to its siblings
-// breaks such a build silently. Its siblings (seamCrossingSpine and the rest)
-// resolve there only because they are separately present at that build's top level.
+// Ordering constraint: this function sits here, away from the seam family it
+// belongs to, and must stay here. Everything boolean.mjs calls out of this
+// file has to be defined inside the span that runs from
+// `projectPointsToSurfaceUV` down to the shoelace comment below: embedders
+// that inline the boolean path take that span and nothing else out of this
+// file. A definition placed outside it is still called from inside it, so the
+// embedded copy references a function it never defines — a runtime
+// ReferenceError in that build, invisible to a parse or a byte-comparison of
+// this file. Its siblings (seamCrossingSpine and the rest) resolve there only
+// because they are separately present at that build's top level.
 export function seamCrossingUVPoints(chainUV, srf, cyclic = true) {
   const j = seamJumps(chainUV, srf, cyclic);
   if (!j.ok) return [];
@@ -266,11 +258,10 @@ export function signedArea2D(loop) {
 }
 
 // Standard ray-casting point-in-polygon test (even-odd rule) against a UV
-// trim loop, implicitly closed. A point exactly ON the boundary is reported
+// trim loop, implicitly closed. A point exactly on the boundary is reported
 // separately (within `tol`) rather than forced arbitrarily inside/outside —
 // callers doing tessellation classification (the "fully-inside /
-// fully-outside / boundary-crossing" cell test) need that third state
-// honestly, not a coin-flip.
+// fully-outside / boundary-crossing" cell test) need that third state.
 export function pointInUVPolygon(loop, u, v, tol = 1e-9) {
   const n = loop.length;
   for (let i = 0; i < n; i++) {
@@ -297,13 +288,14 @@ export function pointInUVPolygon(loop, u, v, tol = 1e-9) {
 }
 
 // Exported so trimtess.mjs's own keyhole-bridge merge (for
-// trim HOLES) can reuse this exact strict-crossing test rather than a
-// second copy — its own strict `>0`/`<0` comparisons already correctly
-// treat a shared-endpoint touch (the bridge's own two ends) as NOT a
+// trim holes) can reuse this exact strict-crossing test rather than a
+// second copy — its own strict `>0`/`<0` comparisons already
+// treat a shared-endpoint touch (the bridge's own two ends) as not a
 // crossing, which is exactly what a valid bridge-adjacency check needs.
 export function segmentsIntersect(p0, p1, p2, p3) {
   // Standard 2D segment-segment intersection via cross-product orientation
-  // tests (Cormen et al.), returns true for a genuine crossing OR overlap —
+  // tests (Cormen et al.), returns true for a proper crossing only (a
+  // collinear overlap is not reported) —
   // shared-endpoint touches (adjacent polyline segments) are excluded by
   // the caller skipping adjacent pairs, not handled specially here.
   const cross = (ax, ay, bx, by) => ax * by - ay * bx;
@@ -312,19 +304,14 @@ export function segmentsIntersect(p0, p1, p2, p3) {
   const d3 = cross(p1[0] - p0[0], p1[1] - p0[1], p2[0] - p0[0], p2[1] - p0[1]);
   const d4 = cross(p1[0] - p0[0], p1[1] - p0[1], p3[0] - p0[0], p3[1] - p0[1]);
   if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
-  return false; // collinear/touching edge cases are a real, separate robustness concern — not silently claimed handled here
+  return false; // collinear and touching cases are not reported; arrangement.mjs handles those
 }
 
-// Whether a UV trim loop (implicitly closed) self-intersects — the real,
-// bounded, elementary 2D geometry primitive the "TWO DESIGN
-// DECISIONS" ruling calls for ("Trim curves are POLYLINES... a smooth
-// global-interpolation fit... can overshoot... a wiggle in a trim boundary
-// is a geometry error"), deliberately NOT the harder general NURBS
-// curve-curve intersection, still unbuilt —
-// plain polyline segment intersection is elementary and does not need that
-// machinery. O(n^2) pairwise segment test, skipping segments that already
-// share an endpoint (adjacent polyline segments always "touch" there by
-// construction, not a real self-intersection).
+// Whether a UV trim loop (implicitly closed) self-intersects. Trim curves
+// are polylines, so this is plain polyline segment intersection, not general
+// NURBS curve-curve intersection. O(n^2) pairwise segment test, skipping
+// segments that already share an endpoint (adjacent polyline segments always
+// "touch" there by construction, not a self-intersection).
 export function polylineSelfIntersects(loop) {
   const n = loop.length;
   if (n < 3) return false;
@@ -341,12 +328,12 @@ export function polylineSelfIntersects(loop) {
   return false;
 }
 
-// The real, honest validity gate required before a trim loop enters
-// the document: every loop must be non-self-intersecting, and (for 2+
-// loops) exactly the outer/hole winding convention must hold — the
-// LARGEST-area loop (by absolute value) is the outer boundary and must wind
-// one way, every other loop is a hole and must wind the OTHER way. Returns
-// {ok:true} or {ok:false, reason} — never silently accepts a malformed set.
+// The validity check required before a trim loop enters the document:
+// every loop must be non-self-intersecting, and (for 2+ loops) the
+// outer/hole winding convention must hold — the largest-area loop (by
+// absolute value) is the outer boundary and must wind one way, every other
+// loop is a hole and must wind the other way. Returns {ok:true} or
+// {ok:false, reason} — never silently accepts a malformed set.
 export function trimLoopsValid(loops) {
   if (!loops || loops.length === 0) return { ok: false, reason: 'a trimmed surface needs at least one trim loop' };
   for (let i = 0; i < loops.length; i++) {
@@ -368,66 +355,54 @@ export function trimLoopsValid(loops) {
   return { ok: true, outerIdx };
 }
 
-// The trimmed-surface object itself — a NurbsSrf plus trim loops, per doc
-// 20's data model exactly: each loop segment carries slots for both its 2D
-// UV curve (built here) and an optional 3D edge curve + tolerance (left
-// null until an SSI-produced shared edge needs it — a nullable field from
-// day one, on the explicit "cheap now, expensive to retrofit"
-// reasoning, not a speculative addition).
+// The trimmed-surface object itself — a NurbsSrf plus trim loops: each loop
+// segment carries slots for both its 2D UV curve (built here) and an
+// optional 3D edge curve + tolerance (null until an SSI-produced shared edge
+// needs it).
 export function makeTrimmedSurface(srf, loops, opts = {}) {
   const wrapped = loops.map((uv) => ({ uv, edge3d: null, tolerance: opts.tolerance ?? null }));
   const validity = trimLoopsValid(loops);
   return { srf, loops: wrapped, valid: validity.ok, invalidReason: validity.ok ? null : validity.reason, outerIdx: validity.outerIdx ?? 0 };
 }
 
-// The trivial, always-valid UNTRIMMED case, named explicitly: "the
-// trivial single loop tracing the full parametric rectangle... existing
-// objects need no migration." Real, exact rectangle corners from the
-// surface's own knot domain — CCW winding in (u,v) by construction (this is
-// the convention trimLoopsValid's outer/hole check assumes for a
-// single-loop trim too, so anything built through THIS function on an
-// untrimmed surface is consistent with a later hole added to it).
+// The trivial, always-valid untrimmed case: a single loop tracing the full
+// parametric rectangle, so an untrimmed surface needs no separate
+// representation. Exact rectangle corners from the surface's own knot
+// domain — CCW winding in (u,v) by construction (this is the convention
+// trimLoopsValid's outer/hole check assumes for a single-loop trim too, so
+// anything built through this function on an untrimmed surface is
+// consistent with a later hole added to it).
 export function trivialTrimLoop(srf) {
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
   return [[uMin, vMin], [uMax, vMin], [uMax, vMax], [uMin, vMax]];
 }
 
-// TRIM-AWARE NAKED-EDGE COUNT — the long-named
-// "APP-SIDE RIPPLE" gap, named honestly in
-// the app itself since the day Trim shipped (Properties' own "Trimmed"
-// row: "Closed U/V and Open Edges above describe the full UNTRIMMED
-// surface — trim-aware naked-edge logic isn't built yet"): plain
-// `nakedEdgeCount` (surface.mjs) is CONTROL-NET-based — it only ever
-// describes the surface's own untrimmed parametric rectangle, which is
-// the wrong answer the instant a real trim loop exists. "Naked" needs to
-// mean "a trim boundary not shared with anything else," not "one of the
-// 4 domain sides," per the APP-SIDE RIPPLE wording exactly.
+// Trim-aware naked-edge count. Plain `nakedEdgeCount` (surface.mjs) is
+// control-net-based — it only describes the surface's own untrimmed
+// parametric rectangle, which is the wrong answer once a trim loop exists.
+// "Naked" here means "a trim boundary not shared with anything else," not
+// "one of the 4 domain sides."
 //
-// The two real trimmed-surface shapes this app actually produces (a
-// Trim's own single interior loop; a Split/IntersectSplit/SplitByCurve
-// piece's identical `{trimLoop, trimHoles}` shape) cover every case
-// without needing a stored "which kind of piece is this" flag: an
-// INTERIOR trim loop (not the full untrimmed rectangle) discards every
-// one of the original 4 sides entirely — the kept region's WHOLE
-// boundary is the outer loop itself, always exactly 1 regardless of the
-// surface's own U/V closure, plus one more per hole cut into it. The
-// EXTERIOR piece of a Split-family cut (trimLoop IS the full untrimmed
-// rectangle, with a hole where the other piece was removed) keeps every
-// side that survives closure exactly as plain `nakedEdgeCount` already
-// reports, plus one more naked loop per hole.
+// The two trimmed-surface shapes this app produces (a Trim's own single
+// interior loop; a Split/IntersectSplit/SplitByCurve piece's identical
+// `{trimLoop, trimHoles}` shape) cover every case without needing a stored
+// "which kind of piece is this" flag: an interior trim loop (not the full
+// untrimmed rectangle) discards every one of the original 4 sides entirely
+// — the kept region's whole boundary is the outer loop itself, always
+// exactly 1 regardless of the surface's own U/V closure, plus one more per
+// hole cut into it. The exterior piece of a Split-family cut (trimLoop is
+// the full untrimmed rectangle, with a hole where the other piece was
+// removed) keeps every side that survives closure exactly as plain
+// `nakedEdgeCount` reports, plus one more naked loop per hole.
 //
 // Distinguishing the two is a direct geometric comparison against
-// `trivialTrimLoop(srf)` (the exact untrimmed rectangle THIS surface
+// `trivialTrimLoop(srf)` (the exact untrimmed rectangle this surface
 // would produce) rather than a stored flag — robust to a cloned/
-// snapshotted trimLoop array (Copy/Paste, undo/redo, the debug-export
-// field all clone via `.map((p) => [...p])`, never keep the same
-// reference) with zero extra bookkeeping needed anywhere a trim
-// container is built. `trimLoop == null` (the ordinary untrimmed case,
-// every ordinary surface in the app today) is byte-identical to plain
-// `nakedEdgeCount(srf)` — this function is a strict superset, not a
-// replacement, and every existing `nakedEdgeCount` call site/test is
-// untouched.
+// snapshotted trimLoop array (Copy/Paste, undo/redo and the debug-export
+// field all clone via `.map((p) => [...p])`, never keeping the same
+// reference). `trimLoop == null` (the ordinary untrimmed case) returns
+// exactly `nakedEdgeCount(srf)`.
 export function trimmedNakedEdgeCount(srf, trimLoop, trimHoles = []) {
   if (!trimLoop) return nakedEdgeCount(srf);
   const holeCount = trimHoles ? trimHoles.length : 0;
@@ -437,41 +412,33 @@ export function trimmedNakedEdgeCount(srf, trimLoop, trimHoles = []) {
   return (isFullRect ? nakedEdgeCount(srf) : 1) + holeCount;
 }
 
-// SEAM-CROSSING ("WRAPPED") INTERSECTION LOOP -> TWO BAND LOOPS.
+// Seam-crossing ("wrapped") intersection loop -> two band loops.
 //
-// The "SEAM/POLE PROBLEM" names
-// this as the wall that stops IntersectSplit on the recommended
-// reference fixture (two perpendicular offset-axis cylinders, R2 < R1):
-// the smaller cylinder's intersection curve necessarily wraps its full
-// closed circumference, because R2*cos(theta) < R1 holds at EVERY theta.
-// A wrapped curve is not a loop bounding a patch, so the interior/
-// exterior-with-a-hole model IntersectSplit is built on cannot express
-// it, and v1 detected the wrap and refused by name.
+// Two perpendicular offset-axis cylinders (R2 < R1) show the case: the
+// smaller cylinder's intersection curve necessarily wraps its full closed
+// circumference, because R2*cos(theta) < R1 holds at every theta. A wrapped
+// curve is not a loop bounding a patch, so the interior/exterior-with-a-hole
+// model IntersectSplit is built on cannot express it.
 //
-// THE KEY OBSERVATION, and the reason this is tractable rather than the
-// "periodic-domain-aware clip" rewrite it was assumed to need: a curve
-// that crosses the seam EXACTLY ONCE does not need a periodic clipper at
-// all. It divides the parametric rectangle into exactly TWO regions, and
-// each one is an ORDINARY SIMPLE POLYGON once it is closed through the
-// domain boundary — walk the curve from one edge of the wrap axis to the
-// other, then return along the far side of the rectangle. The two bands
-// are plain trim loops of exactly the shape the existing tessellator
-// already handles; nothing downstream needs to learn about periodicity.
-// A trim edge lying exactly ON the parametric boundary is already
-// exercised and proven by every exterior piece IntersectSplit builds
-// today (trivialTrimLoop is that same shape).
+// A curve that crosses the seam exactly once does not need a periodic
+// clipper at all. It divides the parametric rectangle into exactly two
+// regions, and each one is an ordinary simple polygon once it is closed
+// through the domain boundary — walk the curve from one edge of the wrap
+// axis to the other, then return along the far side of the rectangle. The
+// two bands are plain trim loops of exactly the shape the tessellator
+// handles; nothing downstream needs to learn about periodicity. A trim edge
+// lying exactly on the parametric boundary is the same shape trivialTrimLoop
+// produces.
 //
-// The two bands PARTITION the rectangle, so their areas must sum to the
-// full domain area — a real, checkable invariant, asserted in the tests
-// rather than assumed.
+// The two bands partition the rectangle, so their areas must sum to the
+// full domain area — a checkable invariant, asserted in the tests.
 //
-// HONESTLY REFUSED, each by its own name rather than one generic wall:
-// a curve crossing the seam an EVEN number of times is not a wrap at all
-// (it straddles the seam and comes back — an ordinary hole that happens
-// to sit on the seam, which genuinely does need periodic clipping);
-// crossing more than once in the same direction, or wrapping BOTH closed
-// directions at once (a torus-like double wrap), are separate topologies
-// this does not attempt.
+// Refused, each by its own name rather than one generic wall: a curve
+// crossing the seam an even number of times is not a wrap at all (it
+// straddles the seam and comes back — an ordinary hole that happens to sit
+// on the seam, which two bands cannot express); crossing more than once in
+// the same direction, or wrapping both closed directions at once (a
+// torus-like double wrap), are separate topologies this does not attempt.
 export function seamBandLoops(loopUV, srf) {
   const cut = seamCrossingSpine(loopUV, srf);
   if (!cut.ok) return cut;
@@ -492,12 +459,12 @@ export function seamBandLoops(loopUV, srf) {
   return { ok: true, axis: cut.axis, loops: [orient(bandLow), orient(bandHigh)] };
 }
 
-// The half of the above that a FACE SPLIT wants on its own: the wrapped
-// loop re-expressed as an OPEN CHAIN running from one edge of the wrap axis
-// to the other, both ends landing exactly ON the domain boundary. A boolean
+// The half of the above that a face split wants on its own: the wrapped
+// loop re-expressed as an open chain running from one edge of the wrap axis
+// to the other, both ends landing exactly on the domain boundary. A boolean
 // splitting a face hands its cut curves to the planar arrangement rather
 // than clipping two bands itself, and the arrangement needs a cut that
-// genuinely reaches the rectangle's edge — a chain stopping a sample short
+// reaches the rectangle's edge — a chain stopping a sample short
 // of it is a dangling spur, which Stage 3 correctly prunes away, leaving the
 // face unsplit and the boolean quietly building from one fragment where
 // there should be several. Extracted rather than reimplemented so the wrap
@@ -507,7 +474,7 @@ export function seamCrossingSpine(loopUV, srf) {
   if (!j.ok) return j;
   const { ai, oi, crossings, aMin, aMax, oMin, oMax } = j;
   const n = loopUV.length;
-  // The crossing COUNT rides on the refusal as a real field, not only
+  // The crossing count rides on the refusal as a field, not only
   // inside the prose. A caller that wants to say something of its own
   // about this case must not have to parse a sentence back apart to do it
   // — the same reason `code` exists.
@@ -518,16 +485,16 @@ export function seamCrossingSpine(loopUV, srf) {
     return { ok: false, code: 'multi-wrap', crossings: crossings.length, reason: `crosses the seam ${crossings.length} times — only a single once-around wrap is handled` };
   }
   const k = crossings[0];
-  // Rotate so the list begins immediately AFTER the seam crossing, making
-  // the samples a genuinely OPEN chain running from one edge of the wrap
+  // Rotate so the list begins immediately after the seam crossing, making
+  // the samples an open chain running from one edge of the wrap
   // axis to the other instead of a cyclic list with a discontinuity in it.
   const rot = [];
   for (let i = 0; i < n; i++) rot.push(loopUV[(k + 1 + i) % n].slice());
   const ascending = rot[n - 1][ai] > rot[0][ai];
   const chain = ascending ? rot : rot.slice().reverse();
-  // Both ends of the chain land on the SAME physical point, because a=aMin
+  // Both ends of the chain land on the same physical point, because a=aMin
   // and a=aMax are the same place on a closed surface — so the chain
-  // genuinely closes in 3D even though its two endpoints differ in UV.
+  // closes in 3D even though its two endpoints differ in UV.
   const seam = seamPointAt(loopUV, k, ai, oi, aMin, aMax);
   const startPt = ascending ? seam.after : seam.before;
   const endPt = ascending ? seam.before : seam.after;
@@ -535,15 +502,14 @@ export function seamCrossingSpine(loopUV, srf) {
   return { ok: true, axis: ai === 0 ? 'u' : 'v', axisIndex: ai, spine, aMin, aMax, oMin, oMax };
 }
 
-// The EVEN-crossing case seamCrossingSpine refuses: a loop that crosses the
+// The even-crossing case seamCrossingSpine refuses: a loop that crosses the
 // seam and comes back is not a wrap at all, it is an ordinary closed region
 // that happens to straddle the seam. In the surface's own parameters that
-// region is genuinely in SEVERAL pieces — the domain rectangle cuts it — so
-// there is no single chain to return, and no re-expression of it as one that
-// would not be a lie.
+// region is in several pieces — the domain rectangle cuts it — so
+// there is no single chain to return.
 //
-// What there IS, and what a face split actually needs, is one open chain per
-// piece, each running between two points ON the domain boundary. Split the
+// What a face split needs is one open chain per piece, each running between
+// two points on the domain boundary. Split the
 // cyclic sample list at every crossing; each run between two consecutive
 // crossings lies on one continuous side of the seam, and gets the crossing's
 // own interpolated seam point attached at each end, on whichever edge that
@@ -553,11 +519,11 @@ export function seamCrossingSpine(loopUV, srf) {
 //
 // The two copies of a crossing point — (aMin, o) and (aMax, o) — are the same
 // place in 3D, so the fragments either side of the seam weld to each other
-// downstream for free, with no seam-specific sewing step.
+// downstream, with no seam-specific sewing step.
 //
 // A once-around wrap is refused here by name rather than handled: it is
 // seamCrossingSpine's own case, and a caller that let the two blur would be
-// choosing between two genuinely different topologies by accident.
+// choosing between two different topologies by accident.
 export function seamStraddleChains(loopUV, srf, forceAxis = -1) {
   const j = seamJumps(loopUV, srf, true, forceAxis);
   if (!j.ok) return j;
@@ -590,14 +556,13 @@ export function seamStraddleChains(loopUV, srf, forceAxis = -1) {
   return { ok: true, axis: ai === 0 ? 'u' : 'v', axisIndex: ai, chains, aMin, aMax, oMin, oMax };
 }
 
-// THE CORNER CASE, LITERALLY: a region sitting where a doubly-closed
-// surface's two seams meet.
+// The corner case: a region sitting where a doubly-closed surface's two
+// seams meet.
 //
 // A torus is closed in u and in v, so u = uMin/uMax and v = vMin/vMax are two
 // seams that cross at the domain's corners. A loop straddling that corner
 // crosses each seam twice and winds around neither — contractible, ordinary
-// geometry, and it was refused as a "double wrap" purely because both
-// directions had jumps in them. Nothing about it is a wrap.
+// geometry. It has jumps in both directions, and it is not a wrap.
 //
 // It is handled by composing the two splits that already exist rather than by
 // a third piece of seam arithmetic: split the loop on the first seam, which
@@ -631,22 +596,22 @@ export function seamDoubleStraddleChains(loopUV, srf) {
   return { ok: true, axis: 'uv', chains };
 }
 
-// The OPEN-CHAIN sibling of seamStraddleChains, and the only seam path in
+// The open-chain sibling of seamStraddleChains, and the only seam path in
 // this module that handles a chain with two real endpoints.
 //
 // Two closed surfaces always meet in a closed curve, so the closed cases
 // above cover only a pair that is closed on both sides. A sphere meeting a
-// BOX PANEL meets it in an open ARC — the arc runs off the panel's own
+// box panel meets it in an open arc — the arc runs off the panel's own
 // boundary rather than closing — and that arc can cross the sphere's seam
-// meridian in its MIDDLE. In the surface's own parameters that arc is then
-// genuinely two pieces, exactly as a straddling loop is, but it is NOT a
+// meridian in its middle. In the surface's own parameters that arc is then
+// two pieces, exactly as a straddling loop is, but it is not a
 // loop: it has two real endpoints of its own that are not seam crossings
 // and must not be closed along a domain edge.
 //
 // Split at every crossing; each run between crossings gets the crossing's
-// own interpolated seam point attached at whichever end IS a crossing, and
+// own interpolated seam point attached at whichever end is a crossing, and
 // keeps its real terminal sample at whichever end is not. Every piece
-// therefore reaches the rectangle's edge exactly where it genuinely leaves
+// therefore reaches the rectangle's edge exactly where it leaves
 // the domain and nowhere else — which is the property the arrangement
 // needs, and the property the raw chain lacks: without this, the raw chain
 // carries a phantom chord straight across the face between the two sides
@@ -654,9 +619,8 @@ export function seamDoubleStraddleChains(loopUV, srf) {
 // builds from fragments that are not real.
 //
 // The two UV copies of a crossing — (aMin, o) and (aMax, o) — are the same
-// place in 3D, so the fragments either side weld to each other downstream
-// for free, with no seam-specific sewing step, exactly as in the closed
-// case.
+// place in 3D, so the fragments either side weld to each other downstream,
+// with no seam-specific sewing step, exactly as in the closed case.
 export function seamOpenChains(chainUV, srf) {
   const j = seamJumps(chainUV, srf, false);
   if (!j.ok) return j;
@@ -670,8 +634,8 @@ export function seamOpenChains(chainUV, srf) {
     const endIdx = jx < crossings.length ? crossings[jx] : n - 1;
     const body = [];
     for (let i = startIdx; i <= endIdx; i++) body.push(chainUV[i].slice());
-    // A piece opens at the PREVIOUS crossing's far-side copy and closes at
-    // THIS crossing's near-side copy; the first and last pieces keep the
+    // A piece opens at the previous crossing's far-side copy and closes at
+    // this crossing's near-side copy; the first and last pieces keep the
     // curve's own real endpoint on their outer end instead.
     const startPt = jx > 0 ? seams[jx - 1].after : null;
     const endPt = jx < crossings.length ? seams[jx].before : null;
@@ -695,17 +659,17 @@ export function seamOpenChains(chainUV, srf) {
 // where the other saw a straddle.
 //
 // Every refusal carries a machine-readable `code` alongside its prose,
-// because a CALLER has to tell two very different failures apart and must
+// because a caller has to tell two very different failures apart and must
 // not do it by matching on the sentence. `no-seam-crossing` and
 // `too-few-points` mean the loop is not entangled with a seam at all, so the
 // raw UV chain is continuous and safe to use as-is. Every other code means
-// the chain genuinely DOES jump across the domain — a caller that uses it
+// the chain does jump across the domain — a caller that uses it
 // raw anyway is splitting a face along a phantom chord. See unwrapSeamCut in
 // boolean.mjs.
-// `cyclic` is what distinguishes a CLOSED loop from an OPEN chain, and it
+// `cyclic` is what distinguishes a closed loop from an open chain, and it
 // is the whole difference between the two callers. A closed loop's last
-// sample genuinely steps back to its first, so that step is a real edge to
-// test. An OPEN chain's last→first step does not exist — testing it counts
+// sample steps back to its first, so that step is a real edge to
+// test. An open chain's last→first step does not exist — testing it counts
 // a fake crossing, which turns an open arc crossing the seam in its middle
 // into an even-crossing straddle and gets it refused as degenerate.
 function seamJumps(loopUV, srf, cyclic = true, forceAxis = -1) {
@@ -719,10 +683,10 @@ function seamJumps(loopUV, srf, cyclic = true, forceAxis = -1) {
   const minPts = cyclic ? 3 : 2;
   if (n < minPts) return { ok: false, code: 'too-few-points', reason: `the intersection ${cyclic ? 'loop' : 'chain'} has fewer than ${minPts} points` };
   // A "jump" is a step longer than half the closed direction's own span —
-  // the same test loopWrapsClosedDirection already uses to DETECT a wrap,
-  // reused here to LOCATE it rather than only report that one exists.
+  // the same test loopWrapsClosedDirection uses to detect a wrap,
+  // reused here to locate it rather than only report that one exists.
   //
-  // The SIGN of each jump is kept, because presence and winding are different
+  // The sign of each jump is kept, because presence and winding are different
   // questions and only the second one distinguishes a wrap from a straddle. A
   // step that falls from near aMax to near aMin left the domain forwards and
   // re-entered at the bottom, so it counts +1; the reverse counts -1. A loop
@@ -736,12 +700,12 @@ function seamJumps(loopUV, srf, cyclic = true, forceAxis = -1) {
     if (closedU && Math.abs(b[0] - a[0]) > (uMax - uMin) / 2) { jumps[0].push(i); net[0] += b[0] < a[0] ? 1 : -1; }
     if (closedV && Math.abs(b[1] - a[1]) > (vMax - vMin) / 2) { jumps[1].push(i); net[1] += b[1] < a[1] ? 1 : -1; }
   }
-  // BOTH DIRECTIONS TOUCHED IS NOT THE SAME AS BOTH DIRECTIONS WRAPPED, and
-  // calling it one was a false statement about the topology. A torus's two
-  // seams MEET at a corner of the domain, so a small contractible loop sitting
-  // over that corner crosses each seam twice and winds around neither — it is
-  // an ordinary region in exotic parameters, not an exotic region. Only a
-  // genuine wrap in both directions is the topology this cannot express.
+  // Both directions touched is not the same as both directions wrapped. A
+  // torus's two seams meet at a corner of the domain, so a small contractible
+  // loop sitting over that corner crosses each seam twice and winds around
+  // neither — it is an ordinary region in exotic parameters, not an exotic
+  // region. Only a wrap in both directions is the topology this cannot
+  // express.
   if (forceAxis < 0 && jumps[0].length && jumps[1].length) {
     if (net[0] !== 0 && net[1] !== 0) {
       return { ok: false, code: 'double-wrap', net, reason: `wraps BOTH closed directions at once (net winding ${net[0]} in u, ${net[1]} in v) — a separate topology this does not handle` };
@@ -788,10 +752,9 @@ function samePt2(p, q) {
 // check to trip over.
 //
 // Either end may be null, which means "this end is not a seam crossing,
-// leave the chain's own terminal sample alone" — the case an OPEN chain's
+// leave the chain's own terminal sample alone" — the case an open chain's
 // first and last sub-chains have (they end at the curve's real endpoints,
-// not at a seam). With both ends supplied this is byte-identical to the
-// closed-loop behavior it was written for.
+// not at a seam).
 function closeChainOnSeam(chain, startPt, endPt) {
   const body = chain.filter((p, i) => !(i === 0 && startPt && samePt2(p, startPt)) && !(i === chain.length - 1 && endPt && samePt2(p, endPt)));
   return [...(startPt ? [startPt] : []), ...body, ...(endPt ? [endPt] : [])];

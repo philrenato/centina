@@ -1,24 +1,21 @@
-// PATCH — A SURFACE FITTED THROUGH SCATTERED CURVES AND POINTS.
+// Patch — a surface fitted through scattered curves and points.
 //
-// This is the one command in the taught set that could not be assembled out of
-// what was already here, and it is worth being precise about why, because two
-// nearby things look like they should have done the job:
+// Two nearby commands differ from it:
 //
 //   · `nSidedTangentPatch` (tangentpatch.mjs) fills a hole. It requires N
-//     boundary curves that already CLOSE INTO A LOOP, refuses anything else, and
-//     INTERPOLATES its boundary exactly.
+//     boundary curves that already close into a loop, refuses anything else, and
+//     interpolates its boundary exactly.
 //   · `boundSurfaceFromLoop` (loft.mjs) is a Coons fill over exactly four
-//     touching curves — the app ships it as BoundSrf, and its own tooltip says
-//     "Rhino: EdgeSrf".
+//     touching curves — the app's BoundSrf (Rhino: EdgeSrf).
 //
 // Patch is the opposite contract on every axis: the input is scattered, need not
-// touch, need not close, and may be bare points; the output APPROXIMATES it to a
-// tolerance rather than passing through it. So the fit is genuinely new: a coarse
+// touch, need not close, and may be bare points; the output approximates it to a
+// tolerance rather than passing through it. So the fit is its own: a coarse
 // control net, a least-squares solve against sampled targets, and a stiffness
 // term without which the whole thing is ill-posed the moment the data is sparse
 // or lopsided.
 //
-// ⚠⚠ THE STIFFNESS IS NOT A QUALITY KNOB, IT IS WHAT MAKES THE SOLVE POSSIBLE.
+// The stiffness is not a quality knob; it is what makes the solve possible.
 // A control point with no sample near it appears in no data row, so its column of
 // the normal equations is all zeros and the matrix is singular — the solve does
 // not merely fit badly, it fails. The fairness rows give every control point a
@@ -26,9 +23,9 @@
 // continuation of the ones around it instead of being undetermined. That is why
 // the default is non-zero and why zero is refused.
 //
-// ⚠ IT FITS IN THE PLANE THE DATA ITSELF PICKS. The samples are projected onto
-// their own best-fit plane (PCA, `fitPlane`) and that projection IS the surface's
-// parameter domain. This is the standard choice and it has an honest limit: data
+// It fits in the plane the data itself picks. The samples are projected onto
+// their own best-fit plane (PCA, `fitPlane`) and that projection is the surface's
+// parameter domain. This is the standard choice and it has a limit: data
 // that folds back over that plane — a C-shape seen edge-on, anything with two
 // points at the same (u,v) — cannot be represented by a single-valued height
 // field over it, and the refusal below names that rather than returning a
@@ -66,7 +63,7 @@ function clampedUniformKnots(count, degree) {
   return U;
 }
 
-// SAMPLE THE INPUT INTO TARGETS. A curve contributes points along its length; a
+// Sample the input into targets. A curve contributes points along its length; a
 // bare point contributes itself. Everything downstream sees one flat list, so
 // "fit through these curves" and "fit through this cloud" are the same problem
 // and cannot drift apart.
@@ -108,25 +105,22 @@ function curvePointLocal(crv, u) {
   return q.every(Number.isFinite) ? q : null;
 }
 
-// THE FIT ITSELF.
-//
 // Unknowns are the uCount x vCount control points. Each target contributes one
 // row of tensor-product basis values; each interior control point contributes two
 // fairness rows (a second difference along u and along v) whose right-hand side
 // is zero. Stacking them and forming the normal equations solves both objectives
-// at once, weighted by `stiffness` — no separate regularisation matrix to get out
+// at once, weighted by `stiffness` — no separate regularization matrix to get out
 // of step with the data rows.
 export function fitPatch(inputs, opts = {}) {
   const degree = Math.max(1, Math.min(3, Math.round(opts.degree ?? 3)));
   const uCount = Math.max(degree + 1, Math.round(opts.uCount ?? 6));
   const vCount = Math.max(degree + 1, Math.round(opts.vCount ?? 6));
-  /* ⚠ THE DEFAULT IS DELIBERATELY LOW, AND IT WAS MEASURED RATHER THAN CHOSEN.
-     The fairness rows are normalized against the data rows, so `stiffness` is
-     roughly "how much fairness is worth relative to fidelity" — and at 0.5 that
-     is already strong enough to hold a surface visibly off its own input: four
-     boundary curves fitted at 0.05mm with 0.02 came back at 3.58mm with 0.5, on
-     the same data and the same net. Low enough to follow the input, high enough
-     that a control point no sample reaches is still determined. */
+  /* The default is low. The fairness rows are normalized against the data
+     rows, so `stiffness` is roughly "how much fairness is worth relative to
+     fidelity", and at 0.5 it holds a surface visibly off its own input: four
+     boundary curves fit to 0.05mm at 0.02 and to 3.58mm at 0.5, on the same
+     data and net. Low enough to follow the input, high enough that a control
+     point no sample reaches is still determined. */
   const stiffness = opts.stiffness ?? 0.1;
   if (!(stiffness > 0)) {
     return refuse(PATCH_REFUSAL.BAD_REQUEST, 'stiffness must be greater than zero — with no fairness rows a control point that no sample reaches is undetermined and the solve is singular, not merely loose');
@@ -138,21 +132,26 @@ export function fitPatch(inputs, opts = {}) {
     return refuse(PATCH_REFUSAL.TOO_FEW, `${targets.length} point(s) cannot define a surface`);
   }
 
-  const plane = fitPlane(targets);
+  // Given parameters: a caller that knows where each target belongs on the
+  // patch (a boundary laid round the domain) passes them, and the fit skips the
+  // plane and its fold test — the shape may then turn past vertical.
+  const given = Array.isArray(opts.params) && opts.params.length === targets.length;
+  const plane = given ? { ok: true, origin: [0, 0, 0], xAxis: [1, 0, 0], yAxis: [0, 1, 0], normal: [0, 0, 1] } : fitPlane(targets);
   if (!plane || !plane.ok) return refuse(PATCH_REFUSAL.DEGENERATE_PLANE, 'the input has no best-fit plane to lay a patch over');
   const { origin, xAxis, yAxis, normal } = plane;
 
-  // Parameterise by the in-plane coordinates, normalized to the data's own
+  // Parameterize by the in-plane coordinates, normalized to the data's own
   // extent. The domain is the data's bounding box in that plane, so a patch is
   // never larger than what it was asked to cover.
   const su = [], sv = [];
-  for (const q of targets) {
+  targets.forEach((q, k) => {
+    if (given) { su.push(opts.params[k][0]); sv.push(opts.params[k][1]); return; }
     const d = sub3(q, origin);
     su.push(dot3(d, xAxis));
     sv.push(dot3(d, yAxis));
-  }
-  const u0 = Math.min(...su), u1 = Math.max(...su);
-  const v0 = Math.min(...sv), v1 = Math.max(...sv);
+  });
+  const u0 = given ? 0 : Math.min(...su), u1 = given ? 1 : Math.max(...su);
+  const v0 = given ? 0 : Math.min(...sv), v1 = given ? 1 : Math.max(...sv);
   const du = u1 - u0, dv = v1 - v0;
   if (!(du > 1e-9) || !(dv > 1e-9)) {
     return refuse(PATCH_REFUSAL.DEGENERATE_PLANE, 'the input is collinear in its own plane, so there is no second direction to span');
@@ -162,13 +161,13 @@ export function fitPatch(inputs, opts = {}) {
     Math.min(1, Math.max(0, (sv[k] - v0) / dv)),
   ]);
 
-  /* ⚠ REFUSE DATA THAT FOLDS OVER ITS OWN PLANE. Two targets at the same (u,v)
+  /* Refuse data that folds over its own plane. Two targets at the same (u,v)
      with a real gap between them cannot both lie on a single-valued patch, and a
-     least-squares fit will happily return the average of the two branches — a
+     least-squares fit returns the average of the two branches — a
      surface through neither, reported with a deviation that looks like half the
      gap rather than like a contradiction. Detected on a coarse grid, so the cost
      is linear and the message can say how far apart the offenders were. */
-  {
+  if (!given) {
     const g = 24;
     const cell = new Map();
     let worstFold = 0;
@@ -190,7 +189,9 @@ export function fitPatch(inputs, opts = {}) {
   const V = clampedUniformKnots(vCount, degree);
   const idx = (i, j) => i * vCount + j;
 
-  // Data rows.
+  // Data rows, sparse: a target touches (degree+1)^2 control points, a fairness
+  // row three. Rows are (indices, values) pairs, so forming the normal equations
+  // costs the entries that exist rather than the square of the net.
   const rows = [], rhs = [[], [], []];
   for (let k = 0; k < targets.length; k++) {
     const [uu, vv] = params[k];
@@ -198,17 +199,18 @@ export function fitPatch(inputs, opts = {}) {
     const vspan = findSpan(vCount - 1, degree, vv, V);
     const Nu = basisFuns(uspan, uu, degree, U);
     const Nv = basisFuns(vspan, vv, degree, V);
-    const row = new Float64Array(nCtrl);
+    const ix = [], vx = [];
     for (let a = 0; a <= degree; a++) {
       for (let b = 0; b <= degree; b++) {
-        row[idx(uspan - degree + a, vspan - degree + b)] += Nu[a] * Nv[b];
+        ix.push(idx(uspan - degree + a, vspan - degree + b));
+        vx.push(Nu[a] * Nv[b]);
       }
     }
-    rows.push(row);
+    rows.push({ ix, vx });
     rhs[0].push(targets[k][0]); rhs[1].push(targets[k][1]); rhs[2].push(targets[k][2]);
   }
 
-  /* THE FAIRNESS ROWS. A second difference across three consecutive control
+  /* Fairness rows. A second difference across three consecutive control
      points, weighted by `stiffness`, with a right-hand side of zero: the solve is
      asked to make the net as close to locally straight as the data allows. Scaled
      by the count so the same stiffness number means the same thing on a coarse
@@ -216,41 +218,65 @@ export function fitPatch(inputs, opts = {}) {
      stiffen the result. */
   const w = stiffness * Math.sqrt(targets.length / Math.max(1, nCtrl));
   const penalty = (a, b, c) => {
-    const row = new Float64Array(nCtrl);
-    row[a] += w; row[b] -= 2 * w; row[c] += w;
-    rows.push(row);
+    rows.push({ ix: [a, b, c], vx: [w, -2 * w, w] });
     rhs[0].push(0); rhs[1].push(0); rhs[2].push(0);
   };
   for (let i = 1; i < uCount - 1; i++) for (let j = 0; j < vCount; j++) penalty(idx(i - 1, j), idx(i, j), idx(i + 1, j));
   for (let i = 0; i < uCount; i++) for (let j = 1; j < vCount - 1; j++) penalty(idx(i, j - 1), idx(i, j), idx(i, j + 1));
 
-  // Normal equations: (B^T B) X = B^T Q, one solve for three right-hand sides.
-  const A = Array.from({ length: nCtrl }, () => new Array(nCtrl).fill(0));
-  for (const row of rows) {
-    for (let a = 0; a < nCtrl; a++) {
-      const ra = row[a];
-      if (ra === 0) continue;
-      for (let b = a; b < nCtrl; b++) {
-        const rb = row[b];
-        if (rb === 0) continue;
-        A[a][b] += ra * rb;
+  /* Normal equations, banded. Every row couples control points at most `degree`
+     apart in u, so B^T B is symmetric with half-bandwidth degree * vCount +
+     degree, and positive definite (the fairness rows see to that). Stored as
+     its band and factored by banded Cholesky: n b^2 work where a dense solve
+     is n^3 — a 48 x 48 net in a fraction of a second. A factor that meets a
+     non-positive pivot falls back to the dense solve. */
+  const bw = degree * vCount + degree;
+  const band = Array.from({ length: nCtrl }, () => new Float64Array(bw + 1)); // band[i][k] = A[i][i + k]
+  const btq = [0, 1, 2].map(() => new Float64Array(nCtrl));
+  rows.forEach((row, r) => {
+    const { ix, vx } = row;
+    for (let p = 0; p < ix.length; p++) {
+      const a = ix[p], va = vx[p];
+      if (va === 0) continue;
+      for (let c = 0; c < 3; c++) if (rhs[c][r] !== 0) btq[c][a] += va * rhs[c][r];
+      for (let q = 0; q < ix.length; q++) {
+        const b = ix[q];
+        if (b < a || vx[q] === 0) continue;
+        band[a][b - a] += va * vx[q];
       }
     }
-  }
-  for (let a = 0; a < nCtrl; a++) for (let b = 0; b < a; b++) A[a][b] = A[b][a];
-  const btq = [0, 1, 2].map((c) => {
-    const out = new Array(nCtrl).fill(0);
-    for (let r = 0; r < rows.length; r++) {
-      const val = rhs[c][r];
-      if (val === 0) continue;
-      const row = rows[r];
-      for (let a = 0; a < nCtrl; a++) if (row[a] !== 0) out[a] += row[a] * val;
-    }
-    return out;
   });
-
-  let sol;
-  try { sol = solveLinearSystem(A.map((r) => [...r]), btq); } catch (e) { sol = null; }
+  let sol = null;
+  {
+    const L = band.map((r) => Float64Array.from(r)); // L[i][k] = L(i+k, i), column-banded
+    let pd = true;
+    for (let j = 0; j < nCtrl && pd; j++) {
+      let d = L[j][0];
+      for (let k = Math.max(0, j - bw); k < j; k++) { const l = L[k][j - k]; d -= l * l; }
+      if (!(d > 1e-300)) { pd = false; break; }
+      const dj = Math.sqrt(d);
+      L[j][0] = dj;
+      const top = Math.min(nCtrl - 1, j + bw);
+      for (let i = j + 1; i <= top; i++) {
+        let v = L[j][i - j];
+        for (let k = Math.max(0, i - bw); k < j; k++) v -= L[k][i - k] * L[k][j - k];
+        L[j][i - j] = v / dj;
+      }
+    }
+    if (pd) {
+      sol = btq.map((b) => {
+        const y = new Float64Array(nCtrl);
+        for (let i = 0; i < nCtrl; i++) { let v = b[i]; for (let k = Math.max(0, i - bw); k < i; k++) v -= L[k][i - k] * y[k]; y[i] = v / L[i][0]; }
+        const x = new Float64Array(nCtrl);
+        for (let i = nCtrl - 1; i >= 0; i--) { let v = y[i]; const top = Math.min(nCtrl - 1, i + bw); for (let k = i + 1; k <= top; k++) v -= L[i][k - i] * x[k]; x[i] = v / L[i][0]; }
+        return Array.from(x);
+      });
+    } else {
+      const A = Array.from({ length: nCtrl }, () => new Array(nCtrl).fill(0));
+      for (let i = 0; i < nCtrl; i++) for (let k = 0; k <= bw && i + k < nCtrl; k++) { A[i][i + k] = band[i][k]; A[i + k][i] = band[i][k]; }
+      try { sol = solveLinearSystem(A, btq.map((b) => Array.from(b))); } catch (e) { sol = null; }
+    }
+  }
   if (!sol || sol.some((col) => col.some((x) => !Number.isFinite(x)))) {
     return refuse(PATCH_REFUSAL.SINGULAR, 'the fit did not resolve — try a coarser point count or more stiffness');
   }
@@ -266,11 +292,11 @@ export function fitPatch(inputs, opts = {}) {
   }
   const srf = { degU: degree, degV: degree, knotsU: U, knotsV: V, ctrlNet };
 
-  /* WHAT THE FIT ACTUALLY ACHIEVED, measured at each target's own parameter.
-     ⚠ NAMED HONESTLY: this is the residual at the fit parameters, not the true
-     point-to-surface distance, which would need a projection per point. It is an
-     UPPER BOUND on that distance — the real surface may pass closer somewhere
-     else — so reporting it cannot flatter the fit. */
+  /* Deviation of the fit, measured at each target's own parameter. This is
+     the residual at the fit parameters, not the true point-to-surface
+     distance, which would need a projection per point. It is an upper bound
+     on that distance — the surface may pass closer somewhere else — so
+     reporting it cannot understate the error. */
   let worst = 0, sum = 0;
   for (let k = 0; k < targets.length; k++) {
     const [uu, vv] = params[k];
@@ -290,12 +316,14 @@ export function fitPatch(inputs, opts = {}) {
     degree,
     stiffness,
     plane: { origin, xAxis, yAxis, normal },
+    // Where a point lands on the patch: its in-plane coordinates over this box.
+    domain: { u0, du, v0, dv },
   };
 }
 
-// FIT TO A TOLERANCE, by growing the net until the residual clears it.
+// Fit to a tolerance, by growing the net until the residual clears it.
 //
-// ⚠ IT GROWS RATHER THAN GUESSING, and it stops for a reason it can name: the
+// It stops for a reason it can name: the
 // tolerance was met, the net reached the cap, or the data ran out — a net with
 // more control points than the samples that constrain it is a fit with nothing
 // holding it. Every attempt is reported in `tried`, so a refusal says what it

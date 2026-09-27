@@ -3,9 +3,8 @@
 // where ctrlNet[i][j] = [x, y, z, w] (real point + weight, U-direction first
 // index, V-direction second — matches this kernel's data model).
 //
-// Surface derivatives (A4.4, for shading normals / isocurve tangents) are
-// deferred — not needed until P1's viewport shading. Point evaluation is
-// enough to prove P0's revolve/extrude/sweep surfaces are well-formed.
+// Surface derivatives (A4.4, for shading normals / isocurve tangents) are in
+// curvature.mjs (surfaceDerivs).
 
 import { findSpan, basisFuns, dersBasisFuns } from './basis.mjs';
 
@@ -40,10 +39,9 @@ export function surfacePointHomogeneous(srf, u, v) {
   return Sw;
 }
 
-/* WHAT A SURFACE IS — the surface half of `assertCurve`, and there for the same
-   reason: `surfacePoint({}, 0.5, 0.5)` used to answer "Cannot read properties of
-   undefined (reading 'map')", which tells a newcomer nothing about which of the
-   three arguments they got wrong. */
+/* Validates the surface shape, the surface half of `assertCurve`, so a
+   malformed argument fails with a message naming the missing field rather than
+   a property-read TypeError. */
 export function assertSurface(srf, fn = 'this function') {
   if (!srf || typeof srf !== 'object') throw new Error(`${fn}: expected a surface object { degU, knotsU, degV, knotsV, ctrlNet }, got ${srf === null ? 'null' : typeof srf}`);
   if (!Array.isArray(srf.knotsU) || !Array.isArray(srf.knotsV)) throw new Error(`${fn}: the surface has no usable knot vectors — expected { degU, knotsU, degV, knotsV, ctrlNet }`);
@@ -52,9 +50,8 @@ export function assertSurface(srf, fn = 'this function') {
   return srf;
 }
 
-/* THE (u, v) RANGES A SURFACE IS DEFINED OVER, published for the same reason as
-   `curveDomain`: neither is [0,1] in general, and every consumer would otherwise
-   re-derive it from the knot vectors by hand. */
+/* The (u, v) ranges a surface is defined over, as `curveDomain`: neither is
+   [0,1] in general. */
 export function surfaceDomain(srf) {
   assertSurface(srf, 'surfaceDomain');
   return {
@@ -69,15 +66,11 @@ export function surfacePoint(srf, u, v) {
 }
 
 // True if every control point in the net has finite, defined coordinates and
-// a positive weight — the basic well-formedness gate every primitive/history
-// command should pass before an object enters the document (04, 14 Note 2's
-// "refuse silent bad export" ethic starts here, at construction time).
-// Expects the NESTED surface shape (ctrlNet[i][j] = [x,y,z,w]) — the
-// hand-pasted twin in the app is deliberately a DIFFERENT, flat-
-// array-only version for curves (ctrlPts = [x,y,z,w][]), not a literal
-// copy; the app flattens a surface's own net (srf.ctrlNet.flat()) before
-// calling ITS version, precisely so both stay single-purpose and correct
-// for their own callers rather than one trying to handle both shapes.
+// a positive weight — the well-formedness check every primitive/history
+// command should pass before an object enters the document.
+// Expects the nested surface shape (ctrlNet[i][j] = [x,y,z,w]). The app's
+// version takes a flat array (ctrlPts = [x,y,z,w][]) and is called on
+// srf.ctrlNet.flat() for surfaces; it is not a copy of this one.
 export function isFiniteNet(ctrlNet) {
   for (const row of ctrlNet) {
     for (const [x, y, z, w] of row) {
@@ -88,14 +81,10 @@ export function isFiniteNet(ctrlNet) {
   return true;
 }
 
-// Whether a surface's own control net WRAPS AROUND in U and/or V — the
-// first and last U-rows (or V-columns) of the net coincide within
-// tolerance, meaning that parametric boundary is an internal SEAM, not a
-// real free edge. Genuinely computable from the control net alone, no
-// Brep/topology structure needed — this app's only surface
-// representation is still a single untrimmed face (no polysurface Join
-// exists yet), so per-surface closure is as far
-// as "naked edge" analysis can honestly go until a real Brep lands.
+// Whether a surface's control net wraps around in U and/or V — the first and
+// last U-rows (or V-columns) of the net coincide within tolerance, meaning
+// that parametric boundary is an internal seam, not a free edge. Computed
+// from the control net alone, with no Brep/topology structure.
 export function surfaceClosure(srf, tol = 1e-6) {
   const net = srf.ctrlNet;
   const nu = net.length, nv = net[0].length;
@@ -107,29 +96,28 @@ export function surfaceClosure(srf, tol = 1e-6) {
   return { closedU, closedV };
 }
 
-// THE SEAM BAND — the control points a drag near a closed surface's seam must
+// The seam band — the control points a drag near a closed surface's seam must
 // carry with it, the companion to surfaceStructuralGroup's "same physical
-// point" rule. These are DIFFERENT points, deliberately: they move together
-// not because they coincide but because the seam's smoothness is a relation
-// among them.
+// point" rule. These are different points: they move together not because
+// they coincide but because the seam's smoothness is a relation among them.
 //
-// A closed direction is stored CLAMPED, its first and last control column
+// A closed direction is stored clamped, its first and last control column
 // holding the same point with nothing structural tying the two ends. Writing
-// one column alone fails twice over, and only the first failure is obvious.
-// Measured on a degree-3 editable torus, moving the seam column by 12 against
-// an untouched seam of 0.0033 degrees:
-//   · the seam column alone         — an 8.0 mm gap AND a 64.5 degree break
+// one column alone breaks both position and tangent continuity. On a
+// degree-3 torus, moving the seam column by 12 against an untouched seam of
+// 0.0033 degrees:
+//   · the seam column alone         — an 8.0 mm gap and a 64.5 degree break
 //   · the coincident pair together  — no gap, still a 129 degree crease
 //   · one column either side too    — no gap, 0.0434 degrees
 //   · the full `degree`-wide band   — no gap, 0.0033 degrees, its own value
-// So closing the gap is not enough on its own, and the band is where it stops
-// improving: every difference INSIDE a rigidly moved band is unchanged, and
+// Closing the gap is not enough on its own, and the band is where it stops
+// improving: every difference inside a rigidly moved band is unchanged, and
 // the continuity relations across the seam are relations among exactly those
 // differences, so they survive the edit exactly rather than approximately.
 //
-// Returns every OTHER (i, j) in the band — matching surfaceStructuralGroup's
-// own convention of excluding the point asked about. An OPEN direction
-// contributes nothing, so an open surface's behavior is unchanged.
+// Returns every other (i, j) in the band — matching surfaceStructuralGroup's
+// convention of excluding the point asked about. An open direction
+// contributes nothing.
 export function surfaceSeamBandGroup(srf, i0, j0, closure) {
   const c = closure || surfaceClosure(srf);
   const rows = seamBandIndices(i0, srf.ctrlNet.length, srf.degU, c.closedU);
@@ -139,7 +127,7 @@ export function surfaceSeamBandGroup(srf, i0, j0, closure) {
   return out;
 }
 
-// The band is `degree` wide at EACH end, capped at half the net so a net too
+// The band is `degree` wide at each end, capped at half the net so a net too
 // small to hold two disjoint bands moves as a whole rather than producing an
 // overlapping one.
 function seamBandIndices(index, count, degree, closed) {
@@ -151,28 +139,20 @@ function seamBandIndices(index, count, degree, closed) {
   return [...band].sort((a, b) => a - b);
 }
 
-// DIVIDESRF — the surface analog of curve.mjs's divideByArcLength, but a
-// genuinely SIMPLER operation: real Rhino's own DivideSrf places points on a
-// plain PARAMETER-SPACE grid (equal U/V domain fractions), not an
-// arc-length-even one. That's not a corner cut — a general surface patch has
-// no single well-defined "even by real length" grid at all without
-// arbitrarily privileging one direction (a curve has exactly one own arc
-// length to divide evenly; a surface's physical spacing along an
-// isoparametric grid line varies row-to-row and column-to-column in
-// general), so a parameter-uniform grid IS the honest default here, matching
-// the real tool this mirrors. uCount/vCount name SEGMENT counts (Rhino's own
-// "number of divisions" language, and the same semantics divideByArcLength's
-// own `count` already uses). In a direction the surface is OPEN in, that
-// gives uCount+1 (or vCount+1) points, BOTH domain ends included EXACTLY (not
-// derived from a fractional step) so a bilinear (already parameter-
-// proportional) patch reproduces exact grid corners/edges bit-for-bit. In a
-// direction the surface is CLOSED in (surfaceClosure below — the same test
-// ExtractBorder already uses), the domain's own two ends are the SAME
+// DivideSrf — the surface analog of curve.mjs's divideByArcLength, placing
+// points on a parameter-space grid (equal U/V domain fractions), as Rhino's
+// DivideSrf does, not an arc-length-even one. A general surface patch has no
+// single well-defined grid that is even by length without privileging one
+// direction: a surface's physical spacing along an isoparametric line varies
+// row-to-row and column-to-column. uCount/vCount are segment counts (the
+// same semantics as divideByArcLength's `count`). In a direction the surface
+// is open in, that gives uCount+1 (or vCount+1) points, both domain ends
+// included exactly (not derived from a fractional step) so a bilinear patch
+// reproduces exact grid corners/edges bit-for-bit. In a direction the
+// surface is closed in (surfaceClosure), the domain's two ends are the same
 // physical seam, so only uCount (or vCount) points are placed around the
-// full loop, never repeating that seam column/row — the exact curve-level
-// rule divideByArcLength applies to a closed curve's own seam, applied here
-// per-direction. Reuses surfacePoint directly — no new evaluation math, only
-// the grid walk is new.
+// loop, never repeating the seam column/row — divideByArcLength's rule for a
+// closed curve's seam, applied per direction.
 export function divideSrfGrid(srf, uCount, vCount) {
   if (!Number.isInteger(uCount) || uCount < 1) throw new Error('divideSrfGrid: uCount must be a positive integer');
   if (!Number.isInteger(vCount) || vCount < 1) throw new Error('divideSrfGrid: vCount must be a positive integer');
@@ -192,56 +172,42 @@ export function divideSrfGrid(srf, uCount, vCount) {
   return results;
 }
 
-// The number of NAKED (free, unshared) boundary edges of a single
+// The number of naked (free, unshared) boundary edges of a single
 // untrimmed-face surface — up to 4 parametric sides, minus 2 for each
 // direction that wraps (a seam is internal, not a boundary). A pole
 // (profile point touching the revolve axis) degenerates that boundary to
-// a single point rather than removing it — still counted, same as Rhino
-// still lists a zero-length singular edge in its own WHAT/EDGES report.
+// a single point rather than removing it — still counted, as Rhino lists a
+// zero-length singular edge.
 export function nakedEdgeCount(srf) {
   const { closedU, closedV } = surfaceClosure(srf);
   return (closedU ? 0 : 2) + (closedV ? 0 : 2);
 }
 
-// SEAM/POLE STRUCTURAL SIBLINGS — given a
-// control-net (row, col) index, returns every OTHER (row, col) index that
-// is the SAME physical point and must therefore move together with it, so
-// a control-point drag can never open a seam or tear a pole apart by
-// moving only one of its duplicated copies. Two structural sources, both
-// reused rather than re-derived:
-//   - SEAM: a direction the surface is CLOSED in (surfaceClosure above —
-//     the exact same test INSPECT/naked-edge reporting already trusts)
-//     makes its own first and last control row (or column) the SAME
-//     physical seam — moving row 0 without row (nu-1) at the same column
-//     opens a gap that was never really there.
-//   - POLE: revolve()'s own pole detection (a profile point ON the axis
-//     collapses its whole row to one point, via the same coincidence test
-//     revolve() applies at 1e-9) is reused HERE post-hoc, on the already-
-//     built net, rather than re-derived from a profile — an entire row
-//     (or, defensively, an entire column, for a future surface-producing
-//     command that might collapse the other direction) sharing one exact
-//     point is a pole, wherever in the net it sits, not just at a
-//     boundary (an hourglass/goblet profile can touch the axis at an
-//     INTERIOR control point too).
-// Both checks are STRUCTURAL — whole-row/whole-column/whole-boundary
-// coincidence, the surface's own construction guaranteeing near-exact
-// float agreement — never a raw "these two individual points happen to be
-// near each other" distance check, which could accidentally weld two
-// genuinely distinct control points that merely touch. A small BFS closure
-// (not just one hop) is required because a direction closed in BOTH U and
-// V (a torus) identifies a CORNER control point across all four of its own
-// index combinations, transitively, not just one pairing away.
+// Seam/pole structural siblings — given a control-net (row, col) index,
+// returns every other (row, col) index that is the same physical point and
+// must move together with it, so a control-point drag cannot open a seam or
+// tear a pole apart by moving only one of its duplicated copies. Two sources:
+//   - Seam: a direction the surface is closed in (surfaceClosure above)
+//     makes its first and last control row (or column) the same physical
+//     seam — moving row 0 without row (nu-1) at the same column opens a gap.
+//   - Pole: an entire row (or column) sharing one point, as revolve()
+//     produces for a profile point on the axis, is a pole wherever in the net
+//     it sits, not only at a boundary (an hourglass/goblet profile can touch
+//     the axis at an interior control point). Detected on the built net.
+// Both checks are structural — whole-row/whole-column/whole-boundary
+// coincidence, which the surface's construction makes near-exact — never a
+// pairwise "these two points are near each other" test, which could weld two
+// distinct control points that merely touch. A BFS closure (not one hop) is
+// required because a direction closed in both U and V (a torus) identifies a
+// corner control point across all four of its index combinations,
+// transitively.
 //
-// The pole check compares POSITION only (x, y, z), deliberately not
-// weight — revolve()'s own pole row carries the correct ALTERNATING
-// rational weight shape across its columns (arcSpanPoints' tangent-line
-// weight, needed for the surface's own row-blend exactness — see
-// revolve()'s own header comment), even though every column's real 3D
-// POSITION already collapsed to the exact same point (radius 0). Weight
-// is exactly what setControlHandle already leaves untouched on a write
-// (matching Circle/a solid's shared-vertex write path), so pairing on
-// position alone is what makes every pole column move to the SAME
-// physical spot while each keeps its own distinct rational weight.
+// The pole check compares position only (x, y, z), not weight: revolve()'s
+// pole row carries the alternating rational weight shape across its columns
+// (see revolve()'s header comment) while every column's position is the same
+// point. setControlHandle leaves weight untouched on a write, so pairing on
+// position moves every pole column to the same spot while each keeps its own
+// weight.
 export function surfaceStructuralGroup(srf, i0, j0, tol = 1e-6) {
   const net = srf.ctrlNet;
   const nu = net.length, nv = net[0].length;
@@ -272,20 +238,14 @@ export function surfaceStructuralGroup(srf, i0, j0, tol = 1e-6) {
   return [...seen].map((k) => { const [i, j] = k.split('|').map(Number); return { i, j }; });
 }
 
-// STRUCTURED U/V ROW-COLUMN SELECTION —
-// "select the whole U row / V column a control point belongs to." A
-// tensor-product control net makes this pure arithmetic (every point
-// sharing a row or column index), never the BFS graph-walk a SubD cage's
-// SelEdgeLoop/SelEdgeRing genuinely needs over arbitrary topology — the
-// ONE real subtlety is the SAME one item 1d already solved: on a CLOSED
-// surface a row/column selection must include BOTH physically-coincident
-// seam copies (and a full pole row), or row-select becomes a fresh way to
-// tear the seam the instant a student drags the whole row. Reuses
-// surfaceStructuralGroup DIRECTLY, per (i,j), rather than re-deriving the
-// seam/pole pairing a second time — every produced pair is expanded
-// through it too, so a torus corner (row AND column both closed) still
-// resolves to its full seam-complete set from either surfaceRowGroup or
-// surfaceColGroup.
+// Row/column selection — the whole U row / V column a control point belongs
+// to. A tensor-product control net makes this arithmetic (every point
+// sharing a row or column index), not the graph walk a SubD cage's
+// SelEdgeLoop/SelEdgeRing needs over arbitrary topology. On a closed surface
+// the selection must include both coincident seam copies (and a full pole
+// row), or dragging the whole row tears the seam, so every (i,j) is expanded
+// through surfaceStructuralGroup; a torus corner (row and column both
+// closed) resolves to its full seam-complete set from either function.
 export function surfaceRowGroup(srf, i0, tol = 1e-6) {
   const nv = srf.ctrlNet[0].length;
   const seen = new Set();
@@ -309,31 +269,25 @@ export function surfaceColGroup(srf, j0, tol = 1e-6) {
   return out;
 }
 
-// ---------------------------------------------------------------
-// FACE (ISOCURVE-CELL) CHAINS — the ordinary-surface counterpart of a
-// SubD face loop, so "grab the strip of faces running this way" means the
-// same thing on both surface families.
+// Face (isocurve-cell) chains — the ordinary-surface counterpart of a SubD
+// face loop, so "the strip of faces running this way" means the same thing
+// on both surface families.
 //
-// A face here is what a student actually sees: one CELL bounded by four
-// adjacent drawn isocurves. Those isocurves sit at GREVILLE ABSCISSAE —
+// A face here is one cell bounded by four adjacent drawn isocurves. Those
+// isocurves sit at Greville abscissae —
 // one per control point — so an nu x nv control net draws an
 // (nu-1) x (nv-1) grid of cells, and cell (i, j) spans grevilleU[i]..
 // grevilleU[i+1] by grevilleV[j]..grevilleV[j+1].
 //
-// WHY THIS IS ARITHMETIC AND THE SUBD SIBLING IS A GRAPH WALK: a tensor-
-// product surface's cells are a genuine rectangular grid, so the strip
+// A tensor-product surface's cells are a rectangular grid, so the strip
 // through one is every cell sharing its row or column — no traversal, no
-// termination cases. The SubD walk exists because a cage has arbitrary
-// topology; this one would be dishonest to write that way.
+// termination cases, unlike the SubD walk over arbitrary topology.
 //
-// AND WHY NO SEAM SPECIAL CASE, which the control-point groups above DO
-// need: a closed direction makes the first and last control ROWS
-// coincide, so surfaceRowGroup has to pair them. Cells sit BETWEEN
-// Grevilles, so there is no duplicated cell to pair — a closed surface's
-// cell strip is simply every cell in that row. Checked rather than
-// assumed; it is why these two functions look so much simpler than their
-// neighbors directly above.
-// ---------------------------------------------------------------
+// No seam special case, unlike the control-point groups above: a closed
+// direction makes the first and last control rows coincide, so
+// surfaceRowGroup has to pair them, but cells sit between Grevilles, so
+// there is no duplicated cell to pair — a closed surface's cell strip is
+// every cell in that row.
 
 // Cell counts for a surface, as [uCells, vCells].
 export function surfaceCellCounts(srf) {
@@ -343,8 +297,8 @@ export function surfaceCellCounts(srf) {
 // The strip of cells running through cell (i0, j0).
 //   dir 'u' — every cell along U (i varies, j0 fixed)
 //   dir 'v' — every cell along V (i0 fixed, j varies)
-// Refuses an out-of-range cell or an unknown direction by name rather
-// than returning a plausible-looking empty strip.
+// Throws on an out-of-range cell or an unknown direction rather than
+// returning an empty strip.
 export function surfaceCellStrip(srf, i0, j0, dir) {
   const [uCells, vCells] = surfaceCellCounts(srf);
   if (!(i0 >= 0 && i0 < uCells && j0 >= 0 && j0 < vCells)) {
@@ -357,58 +311,43 @@ export function surfaceCellStrip(srf, i0, j0, dir) {
   return out;
 }
 
-// WHICH WAY DID THE PRESS MEAN — the direction whose bounding isocurve
-// the press landed nearest, given its position INSIDE the cell expressed
-// as fractions (fu, fv) of that cell's own span.
+// The strip direction a press means — the direction whose bounding isocurve
+// the press landed nearest, given its position inside the cell expressed
+// as fractions (fu, fv) of that cell's span.
 //
-// Same rule as the SubD sibling (nearestFaceEdgeToPoint): press near an
-// edge and you have pointed at the strip that CROSSES it. Crossing a
-// constant-u isocurve steps to the next cell in i, so a press near one
-// yields 'u'.
+// Same rule as the SubD sibling (nearestFaceEdgeToPoint): a press near an
+// edge points at the strip that crosses it. Crossing a constant-u isocurve
+// steps to the next cell in i, so a press near one yields 'u'.
 //
-// COMPARED IN CELL FRACTIONS, NOT RAW PARAMETERS, and that is the whole
-// reason this takes fractions at all: u and v domains have unrelated
-// scales (a revolve's sweep parameter against its profile's), so raw
-// parameter distances would let whichever domain happens to be numerically
-// larger win nearly every press regardless of where it actually landed.
+// Compared in cell fractions, not raw parameters: u and v domains have
+// unrelated scales (a revolve's sweep parameter against its profile's), so
+// raw parameter distances would let the numerically larger domain win
+// nearly every press.
 //
-// A dead-center press is a real tie and resolves to 'u' every time —
-// stable across repeated reads, so a caller re-reading the same press
-// gets the same answer and an explicit re-read control does not appear
-// dead on its second press.
+// A dead-center press is a tie and resolves to 'u' every time, so repeated
+// reads of the same press agree.
 export function nearestCellDirection(fu, fv) {
   const du = Math.min(fu, 1 - fu); // distance to the nearer constant-u edge
   const dv = Math.min(fv, 1 - fv);
   return du <= dv ? 'u' : 'v';
 }
 
-// ExtractIsocurve click-to-pick — surface point INVERSION:
-// given an arbitrary 3D point known to lie ON (or very near) the surface
-// — the real raycast hit point from a viewport click — find the (u, v)
-// parameter it corresponds to. curve.mjs's closestPointOnCurve already
-// solves the 1D analog for Sweep1 N-profiles' own rail-stationing need
-// (coarse search, then Newton-Raphson refinement on the real derivatives)
-// — this is the same two-stage recipe generalized to 2 parameters. The
-// one real difference from the curve case: a rational SURFACE'S closest-
-// point problem is a genuine 2-variable least-squares minimization of
-// |S(u,v) - P|^2, not a 1-variable root find, so the refinement step is
-// Gauss-Newton (solve the 2x2 normal-equations system J^T J * delta =
-// -J^T r using the real first partials Su/Sv, dropping the curvature
-// term full Newton would need from second partials — the standard,
-// well-known simplification for this exact class of problem, valid
-// because the residual r shrinks toward zero near the true closest
-// point, which is exactly where the dropped term would matter least)
-// rather than curve.mjs's own 1D Newton on f'(u)/f''(u).
+// Surface point inversion: given a 3D point on (or very near) the surface,
+// such as a viewport raycast hit, find the (u, v) parameter it corresponds
+// to. curve.mjs's closestPointOnCurve solves the 1D analog (coarse search,
+// then Newton-Raphson refinement); this is the same two-stage recipe in 2
+// parameters. A surface's closest-point problem is a 2-variable
+// least-squares minimization of |S(u,v) - P|^2, so the refinement step is
+// Gauss-Newton: solve the 2x2 normal-equations system J^T J * delta =
+// -J^T r using the first partials Su/Sv, dropping the second-partial term
+// full Newton would need. That term is multiplied by the residual r, which
+// shrinks toward zero near the closest point.
 //
 // surfacePointAndPartials is the 2-variable sibling of curve.mjs's
-// rationalCurveDerivs: dersBasisFuns (already used by isocurve.mjs's own
-// extractIsocurveU/V machinery indirectly via basisFuns) gives the
-// value+first-derivative basis functions in EACH direction independently
-// (no mixed d^2/dudv term is needed here, only Su and Sv, so this never
-// needs a true mixed-partial basis evaluation); the SAME quotient-rule
-// trick rationalCurveDerivs uses (a rational curve's homogeneous form IS
-// an ordinary B-spline in 4D) applies per-direction: Su = (Swu - wu*S)/w,
-// Sv = (Swv - wv*S)/w.
+// rationalCurveDerivs: dersBasisFuns gives the value and first-derivative
+// basis functions in each direction independently (only Su and Sv are
+// needed, no mixed partial), and the quotient rule on the homogeneous form
+// applies per direction: Su = (Swu - wu*S)/w, Sv = (Swv - wv*S)/w.
 export function surfacePointAndPartials(srf, u, v) {
   const { degU: p, degV: q, knotsU: U, knotsV: V } = srf;
   const Pw = toHomogeneousNet(srf.ctrlNet);
@@ -439,12 +378,11 @@ export function surfacePointAndPartials(srf, u, v) {
 }
 
 // Wraps t into [tMin,tMax) when `closed`, otherwise clamps to the domain —
-// the shared domain-boundary rule every Gauss-Newton step below and in
-// refineClosestPointOnSurface (kernel/trim.mjs) uses identically. A surface
-// closed in a direction (a full torus/revolve/sphere sweep) has no real
-// domain edge there at all — u=uMin and u=uMax are the SAME physical
-// point — so a search must be able to continue past the seam rather than
-// pin against a boundary that isn't geometrically real.
+// the domain-boundary rule for every Gauss-Newton step below and in
+// refineClosestPointOnSurface (kernel/trim.mjs). A surface closed in a
+// direction (a full torus/revolve/sphere sweep) has no domain edge there —
+// u=uMin and u=uMax are the same physical point — so a search must be able
+// to continue past the seam rather than stop against it.
 export function wrapParam(t, tMin, tMax, closed) {
   const span = tMax - tMin;
   if (!closed || span <= 0) return Math.max(tMin, Math.min(tMax, t));
@@ -453,33 +391,32 @@ export function wrapParam(t, tMin, tMax, closed) {
   return tMin + r;
 }
 
-// A POLE IS RANK-1, NOT RANK-0 — and a search that treats it as rank-0 cannot
-// leave it. Where a revolve's profile meets its axis, every v names the SAME
+// A pole is rank-1, not rank-0, and a search that treats it as rank-0 cannot
+// leave it. Where a revolve's profile meets its axis, every v names the same
 // physical point: `sv` collapses, and the Gauss-Newton determinant with it,
-// while `su` along the profile stays as healthy as anywhere else on the
-// surface (3e+4 against 5e-31 on a real one). Returning the current point
-// there — the only safe move for a 2-D solve that cannot be formed — makes the
-// pole ABSORBING, and a coarse seed grid puts searches there far more often
-// than the geometry warrants: on a strongly shaped revolve the pole is
-// genuinely the nearest sample of the whole grid, because the true minimum
-// hides inside the first cell beside it, where the surface expands fastest per
-// unit of u. A target lying ON such a surface then reads over a millimeter
-// away from it.
+// while `su` along the profile stays as large as anywhere else on the
+// surface (e.g. 3e+4 against 5e-31). Returning the current point there — the
+// only safe move for a 2-D solve that cannot be formed — makes the pole
+// absorbing, and a coarse seed grid puts searches there often: on a strongly
+// shaped revolve the pole can be the nearest sample of the whole grid,
+// because the true minimum lies inside the first cell beside it, where the
+// surface expands fastest per unit of u. A target lying on such a surface
+// then reads over a millimeter away from it.
 //
-// The escape is a 1-D move, but the live direction is only half of it: WHICH
+// The escape is a 1-D move, but the live direction is only half of it: which
 // meridian to leave along is decided by the collapsed parameter, whose value
 // at a pole is arbitrary. Stepping along the live direction while keeping that
 // arbitrary value walks away from the target on any surface whose pole is not
-// a long way from it — measured on a sphere, where the step is then rejected
-// and the search freezes exactly as before. So the dead parameter is CHOSEN,
-// not kept: step just off the degenerate point (a thousandth of the domain,
+// far from it (on a sphere the step is then rejected and the search stays at
+// the pole). So the dead parameter is chosen, not kept: step just off the
+// degenerate point (a thousandth of the domain,
 // where the collapsed direction has opened up but the geometry is still the
 // pole's own neighborhood) and scan the dead parameter across its whole
 // domain there, at the same 24 samples the seed grid caps itself at.
 //
-// A step is taken only if it genuinely improves, so a target whose nearest
-// point really IS the pole — anything on the axis — keeps the pole and this
-// returns null, leaving the caller to stop where it is.
+// A step is taken only if it improves, so a target whose nearest point is the
+// pole — anything on the axis — keeps the pole and this returns null,
+// leaving the caller to stop where it is.
 export function escapeDegeneratePoint(srf, targetPt, u, v, curDistSq, Juu, Jvv, closedU, closedV) {
   if (Juu < 1e-14 && Jvv < 1e-14) return null; // both directions collapsed — no move exists
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
@@ -507,27 +444,18 @@ export function escapeDegeneratePoint(srf, targetPt, u, v, curDistSq, Juu, Jvv, 
     : { u: bestDead, v: stepped, distSq: bestDistSq };
 }
 
-// Closest (u, v) on the surface to an arbitrary 3D point (the real click-
-// raycast hit). Stage 1: a coarse parameter-space grid search (resolution
-// scales with the control net's own size, clamped to a sane [8,24] range
-// per direction — a finer net can plausibly need a finer coarse seed, an
-// arbitrarily fixed constant here would silently under-seed a dense net
-// exactly like divideByArcLength's own tolerance comment warns against
-// for a fixed absolute number). Stage 2: bounded Gauss-Newton refinement.
-// A direction the surface is CLOSED in wraps at the domain boundary
-// instead of clamping (via wrapParam above), so the search can cross a
-// torus/revolve seam instead of pinning dead against it. A step that
-// worsens the distance is backtracked (halved, up to 5 times) rather than
-// rejected outright — the original hard-reject-on-first-worsening-step
-// only ever produced the exact right answer on an AFFINE surface (a flat
-// plane or a straight-profile ruled extrusion), where Gauss-Newton
-// converges in one exact step from any seed; on anything genuinely curved
-// the full step routinely overshoots (the algorithm drops the curvature
-// term (S-P).Suu from the Jacobian), and a hard reject there just freezes
-// the search at its current point forever — which is silently how a
-// caller warm-starting sample-to-sample (refineClosestPointOnSurface)
-// produced long runs of byte-identical points. A smaller step along the
-// same Newton direction is very often still an improvement.
+// Closest (u, v) on the surface to an arbitrary 3D point. Stage 1: a coarse
+// parameter-space grid search (resolution scales with the control net's
+// size, clamped to [8,24] per direction, so a dense net is not under-seeded).
+// Stage 2: bounded Gauss-Newton refinement. A direction the surface is
+// closed in wraps at the domain boundary instead of clamping (wrapParam), so
+// the search can cross a torus/revolve seam. A step that worsens the
+// distance is backtracked (halved, up to 5 times) rather than rejected: only
+// on an affine surface (a plane or a straight-profile ruled extrusion) does
+// Gauss-Newton converge in one exact step; on a curved surface the full step
+// often overshoots (the curvature term (S-P).Suu is dropped), and rejecting
+// it would freeze the search at its current point. A smaller step along the
+// same direction is usually still an improvement.
 export function closestPointOnSurface(srf, targetPt, opts = {}) {
   const uMin = srf.knotsU[0], uMax = srf.knotsU[srf.knotsU.length - 1];
   const vMin = srf.knotsV[0], vMax = srf.knotsV[srf.knotsV.length - 1];
@@ -538,22 +466,20 @@ export function closestPointOnSurface(srf, targetPt, opts = {}) {
     const dx = p[0] - targetPt[0], dy = p[1] - targetPt[1], dz = p[2] - targetPt[2];
     return dx * dx + dy * dy + dz * dz;
   };
-  /* ⚠⚠ THE GRID'S BEST SAMPLE IS NOT ALWAYS IN THE RIGHT BASIN, and descending
-     from it alone turns that into a wrong answer rather than a slow one. A
-     surface that comes back near itself has several places that are locally
-     nearest, the grid resolves each only to its own spacing, and where a tight
-     lobe is sampled closer than the true nearest region the solve descends into
-     the lobe and converges there, perfectly, somewhere else on the shape.
+  /* The grid's best sample is not always in the right basin, and descending
+     from it alone gives a wrong answer rather than a slow one. A surface that
+     comes back near itself has several locally nearest places, the grid
+     resolves each only to its own spacing, and where a tight lobe is sampled
+     closer than the true nearest region the solve converges in the lobe,
+     somewhere else on the shape.
 
-     It is not a density problem and raising the grid does not fix it: measured on
-     a freeform rim, seeds of 12, 30, 48, 96 and 192 all find the right point at
-     0.005mm and 24 — the value that surface's control net happens to ask for —
-     returns 6.57mm, because at exactly that spacing one sample lands on the
-     tightest lobe.
+     Grid density does not fix this: on a freeform rim, seeds of 12, 30, 48, 96
+     and 192 all find the right point at 0.005mm, while 24 returns 6.57mm
+     because at that spacing one sample lands on the tightest lobe.
 
-     So every local minimum of the grid is a candidate and the best few are each
-     descended from, keeping whichever converges nearest. The extra cost falls
-     only on surfaces that genuinely have more than one candidate. */
+     So every local minimum of the grid is a candidate and the best three are
+     each descended from, keeping whichever converges nearest. The extra cost
+     falls only on surfaces with more than one candidate. */
   const cells = [];
   for (let i = 0; i <= gridU; i++) {
     const u = uMin + (uMax - uMin) * (i / gridU);
@@ -615,75 +541,37 @@ export function closestPointOnSurface(srf, targetPt, opts = {}) {
   return best;
 }
 
-// ADAPTIVE V-DIRECTION RENDER-MESH DENSITY — a real, SEPARATE
-// gap alongside the just-shipped rounded-Pipe-
-// corner fix (kernel/sweep.mjs's own "PER-RAIL-SPAN COMPOSED FIT" comment):
-// that fix proves the swept NURBS SURFACE itself is genuinely fold-free
-// per real rail span (worst adjacent-face-normal angle under 0.0003 degrees,
-// sampled densely WITHIN each span) — but the app's own
-// `tessellateSurface`, the function that actually turns that surface into
-// the triangle mesh on screen, used to walk the V direction with a
-// PLAIN UNIFORM loop (`v = vMin + (j/vRes)*(vMax-vMin)`), completely blind
-// to where the surface's own real span boundaries are. On an irregular
-// rail (a short fillet-arc span next to much longer straight runs) one
-// span's own v-fraction footprint can be under 0.01 of the whole domain —
-// at the shipped default `vRes=96`, the uniform step (≈0.0104) can land
-// ZERO samples strictly inside a span that narrow, so two samples several
-// degrees of real surface curvature apart end up connected by a single
-// straight-line mesh edge. Confirmed directly (not assumed): on the
-// irregular reproduction fixture with a MILDER, non-self-intersecting
-// corner radius (15mm, comfortably larger than the swept tube's own 5mm
-// cross-section — see the self-intersection paragraph below for why that
-// qualifier matters), the shipped uniform-V mesh at `vRes=96` measured a
-// genuine 16.9-degree adjacent-face-normal fold; a real, visible facet,
-// even though the underlying surface has zero genuine C0-or-worse
-// discontinuity there (checked directly with the SAME derivative-dot-
-// product test `tessellateSurface`'s own existing U-direction hard-break
-// logic already uses — every one of these V-direction span-boundary knots
-// reads as fully G1-continuous in practice, dot >= 0.999 every time; this
-// is a pure SAMPLING gap, never a genuine kink, so the fix below adds
-// DENSITY, never a duplicate/kinked vertex row the way the existing
-// U-direction logic does for a real break).
+// V-direction sample parameters for tessellation, with a density floor per
+// span. A uniform V loop (`v = vMin + (j/vRes)*(vMax-vMin)`) ignores the
+// surface's span boundaries. On an irregular swept rail (a short fillet-arc
+// span next to long straight runs) one span's share of the V domain can be
+// under 0.01, and at `vRes=96` the uniform step (≈0.0104) can place no
+// sample strictly inside it, so two samples several degrees of surface
+// curvature apart are joined by one straight mesh edge. On a 15mm-corner
+// fixture swept with a 5mm tube this gave a 16.9-degree adjacent-face-normal
+// fold, though the surface is G1 across those knots (derivative dot >= 0.999,
+// the same test `tessellateSurface` uses for U-direction breaks). It is a
+// sampling gap, not a kink, so the remedy adds density, not a duplicated
+// vertex row.
 //
-// THE FIX: `tessellationVSamples` finds every GENUINE span boundary in
-// `srf.knotsV` (full-multiplicity knots, >= degV, excluding the two domain
-// ends — the exact same "real joint vs. an ordinary smooth interior knot"
-// distinction `kernel/sweep.mjs`'s own `railHardBreakParams` and
-// `tessellateSurface`'s own U-direction gate both already use) and, for any
-// such span whose plain uniform allotment falls under `minSamplesPerSpan`
-// (default 48 — reusing `kernel/sweep.mjs`'s own established
-// `MIN_SPAN_SAMPLES` constant/precedent for "a narrow span needs a real
-// density floor," not a newly-invented number), merges in extra evenly-
-// spaced samples so that span is genuinely resolved. A surface with no
-// such span at all (the overwhelming common case — a plain Line/Arc/
-// SketchCurve rail, or a sharp/no-corner Pipe) takes the exact plain
-// uniform array, BYTE-IDENTICAL to before this fix, zero regression risk.
-// Verified directly on the SAME milder 15mm-corner-radius fixture above:
-// worst adjacent-face-normal fold drops from 16.9 degrees (OLD) to 2.4
-// degrees (NEW, `minSamplesPerSpan=48`) — a genuine, large improvement,
-// not asserted-away to zero (an honest residual of finite density,
-// unavoidable for any fixed-budget adaptive tessellation, the same
-// character as MIN_SPAN_SAMPLES/MAX_SPAN_SAMPLES's own tradeoff).
+// Every span boundary in `srf.knotsV` (knots of multiplicity >= degV,
+// excluding the two domain ends — the same joint test as `kernel/sweep.mjs`'s
+// `railHardBreakParams`) is found, and any span whose uniform allotment
+// falls under `minSamplesPerSpan` (default 48, `kernel/sweep.mjs`'s
+// `MIN_SPAN_SAMPLES`) gets extra evenly spaced samples merged in. A surface
+// with a single span returns the plain uniform array. On the 15mm fixture the
+// worst fold drops from 16.9 to 2.4 degrees; the residual is finite density.
 //
-// HONEST, SEPARATE LIMITATION, measured and named directly rather than
-// silently left in place: on the EXACT severe reproduction fixture
-// (a 2mm fillet corner radius next to a swept 5mm-radius tube), this fix
-// does NOT close the gap — the worst adjacent-face-normal fold STAYS large
-// (176-179 degrees) no matter how much density is added, and actually
-// INCREASES slightly as density increases (176.3 at `minSamplesPerSpan=0`
-// -> 179.4 at `minSamplesPerSpan=48`), the opposite direction an aliasing
-// artifact would move. That signature, cross-checked directly by sweeping
-// `cornerRadius` from 2mm to 40mm (fold stays 150-179 degrees whenever
-// `cornerRadius` < the swept tube's own cross-section radius, then drops
-// sharply to single digits once `cornerRadius` exceeds it), confirms this
-// is a REAL, physical surface self-intersection — a tube literally cannot
-// bend around a fillet whose own radius of curvature is smaller than the
-// tube's cross-section radius without overlapping itself — not a
-// tessellation defect at all, and not something any render-mesh-density
-// fix can resolve. An exact fix would mean actual self-intersection
-// detection/avoidance at Pipe-build time (e.g. refusing or clamping a
-// `cornerRadius` smaller than `radius`), real, separate, harder scope,
-// deliberately not attempted.
+// Known limitation: when a Pipe's corner radius is smaller than the tube's
+// cross-section radius (e.g. a 2mm fillet with a 5mm tube), the fold stays at
+// 176-179 degrees at any density and grows slightly as density rises. Across
+// corner radii from 2mm to 40mm the fold stays at 150-179 degrees while the
+// corner radius is below the tube radius and drops to single digits above
+// it: the swept surface intersects itself, since a tube cannot bend around a
+// radius of curvature smaller than its own without overlapping. No
+// tessellation density resolves that; it would need self-intersection
+// handling at Pipe-build time (e.g. refusing or clamping a `cornerRadius`
+// smaller than `radius`).
 export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
   const vMin = srf.knotsV[srf.degV], vMax = srf.knotsV[srf.knotsV.length - 1 - srf.degV];
   const vSamples = [];
@@ -692,12 +580,12 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
   for (const k of srf.knotsV) mult.set(k, (mult.get(k) || 0) + 1);
   const bounds = [vMin];
   for (const [k, m] of mult) {
-    if (k <= vMin + 1e-9 || k >= vMax - 1e-9 || m < srf.degV) continue; // domain boundary, or provably-smooth-by-multiplicity — no real span break here
+    if (k <= vMin + 1e-9 || k >= vMax - 1e-9 || m < srf.degV) continue; // domain boundary, or multiplicity below degV — not a span break
     bounds.push(k);
   }
   bounds.push(vMax);
   bounds.sort((a, b) => a - b);
-  if (bounds.length <= 2 || !minSamplesPerSpan) return vSamples; // single span (or explicitly disabled) — byte-identical to plain uniform, the overwhelming common case
+  if (bounds.length <= 2 || !minSamplesPerSpan) return vSamples; // single span (or disabled): plain uniform
   const merged = new Set(vSamples);
   const uniformStep = (vMax - vMin) / vRes;
   for (let s = 0; s < bounds.length - 1; s++) {
@@ -705,8 +593,8 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
     let inside = 0;
     for (const v of vSamples) if (v > lo + 1e-9 && v < hi - 1e-9) inside++;
     if (inside >= minSamplesPerSpan) continue;
-    /* ⚠ A FORCED SAMPLE THAT LANDS ALMOST ON TOP OF A UNIFORM ONE IS NOT
-       DENSITY, IT IS A SLIVER. `Set` dedupes on exact equality, so two
+    /* A forced sample that lands almost on top of a uniform one adds a
+       sliver, not density. `Set` dedupes on exact equality, so two
        parameters a millionth of a span apart both survive and the grid gets a
        row strip that width — triangles whose circumradius-to-inradius ratio
        runs into the hundreds on a surface that is otherwise evenly meshed, and
@@ -716,9 +604,9 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
        the span and then handed 48 forced ones at k/49, which agree to
        1/(48*49) at the span ends and only separate toward the middle.
        A forced sample within a quarter of the local spacing of a uniform one is
-       therefore DROPPED, not added: the uniform sample already resolves that
+       therefore dropped, not added: the uniform sample already resolves that
        part of the span, so the span still clears `minSamplesPerSpan` counting
-       it, and the guarantee this function exists for is untouched. */
+       it. */
     const gap = Math.min((hi - lo) / (minSamplesPerSpan + 1), uniformStep) * 0.25;
     for (let k = 1; k <= minSamplesPerSpan; k++) {
       const v = lo + (hi - lo) * k / (minSamplesPerSpan + 1);
@@ -729,23 +617,23 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
   return [...merged].sort((a, b) => a - b);
 }
 
-// ARC-LENGTH GRID RESOLUTION — a declared `uRes x vRes` is a COUNT, and a
-// count says nothing about the SHAPE it is counting across. The same 96x192
+// Arc-length grid resolution — a declared `uRes x vRes` is a count, and a
+// count says nothing about the shape it is counting across. The same 96x192
 // grid that is well proportioned on a sphere puts 192 divisions along the
 // 7mm straight wall of a disc extrusion whose circumference is 283mm, so its
 // cells measure 1.47 x 0.036 units and its triangles carry interior angles
-// under 3 degrees. A rasteriser hides that; a path tracer draws it.
+// under 3 degrees. A rasterizer hides that; a path tracer draws it.
 //
-// THE MEASUREMENT IS CHORD DEVIATION IN WORLD UNITS, NOT PARAMETER SPAN.
+// The measurement is chord deviation in world units, not parameter span.
 // A coarse probe grid (`probe` cells per direction, capped by the declared
 // count so a small grid is never probed more finely than it is drawn) is
 // evaluated once, and three deviations are read off it:
 //
 //   devU  the sagitta of an isocurve in U — the perpendicular distance of a
-//         sample from the chord joining its two neighbours along U. Zero on
+//         sample from the chord joining its two neighbors along U. Zero on
 //         a straight ruling, largest where the surface turns tightest.
 //   devV  the same one direction over.
-//   devT  the TWIST: the distance of a cell's fourth corner from the plane
+//   devT  the twist: the distance of a cell's fourth corner from the plane
 //         of its other three. This is the term a per-direction sagitta
 //         cannot see, and it is the one that matters for a bilinear patch
 //         with a corner lifted — every isocurve of that saddle is a straight
@@ -760,36 +648,34 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
 // re-sampling: dev(n) = devU * (su/n)^2, and devT(nu,nv) = devT * (su/nu) *
 // (sv/nv).
 //
-// THE TOLERANCE IS THE DECLARED GRID'S OWN WORST DEVIATION, not a new
+// The tolerance is the declared grid's own worst deviation, not a new
 // constant. Evaluate all three at the declared counts, take the largest, and
 // solve each direction for the count that meets exactly that. Three
-// properties follow, and they are the whole reason this is safe to put under
-// every surface in an application:
+// properties follow, and they are what make this safe under every surface:
 //
-//   1. NOTHING GETS COARSER THAN IT ALREADY WAS. The direction that set the
+//   1. Nothing gets coarser than it was. The direction that set the
 //      tolerance solves back to its own declared count; every other
 //      direction was already finer than the tolerance and can only shrink.
 //      The mesh's worst chord deviation is therefore unchanged, by
 //      construction.
-//   2. THE COUNT NEVER RISES. Both results are clamped to the declared
-//      counts, so no surface can cost more triangles than it costs today —
-//      including under the aspect guard below. A ruled wall declared with
+//   2. The count never rises. Both results are clamped to the declared
+//      counts, so no surface costs more triangles than declared — including
+//      under the aspect guard below. A ruled wall declared with
 //      one division across stays at one division across, which is exact.
-//   3. IT COMPOSES WITH A GLOBAL DENSITY MULTIPLIER. Applied AFTER that
+//   3. It composes with a global density multiplier. Applied after that
 //      multiplier has scaled the declared counts, doubling the multiplier
 //      quarters the tolerance and doubles both solved counts — linear
 //      density scaling, preserved exactly.
 //
-// CURVATURE FALLS OUT OF THE SAME MECHANISM RATHER THAN NEEDING A SECOND
-// ONE. Equal deviation in both directions means cell edges in the ratio
+// Curvature falls out of the same mechanism. Equal deviation in both directions means cell edges in the ratio
 // 1/sqrt(curvature), so a tight fillet gets shorter edges than a slack one
 // of the same arc length, and a flat span collapses to a single division,
 // with no separate curvature term and no second set of constants to tune.
 //
-// THE ASPECT GUARD is the one place arc length itself is read. Equal
+// The aspect guard is the one place arc length itself is read. Equal
 // deviation does not imply a square cell: on a surface that is curved one
 // way and straight the other, the straight direction solves to one division
-// and the cell is as long as the surface. That is geometrically EXACT and
+// and the cell is as long as the surface. That is geometrically exact and
 // shades exactly — a ruled quad is planar and its normal is constant along
 // the ruling — but a cell tens of times longer than it is wide still yields
 // slivers a tracer can find. So a direction is subdivided further, up to but
@@ -798,10 +684,10 @@ export function tessellationVSamples(srf, vRes, minSamplesPerSpan = 48) {
 // the clamp holds it at 1, which is why a ruled extrusion cannot be inflated
 // by this.
 //
-// A SURFACE THAT IS ALREADY EXACT IS LEFT ALONE. When all three deviations
+// A surface that is already exact is left alone. When all three deviations
 // sit at the numerical floor the patch is planar (or bilinear-flat) and the
 // declared counts carry information this function does not have — a plane in
-// a modelling application is resolved for the shape it is about to be
+// a modeling application is resolved for the shape it is about to be
 // deformed into, not the flat one it starts as — so the declared counts are
 // returned untouched rather than collapsed to a single quad.
 //
@@ -839,8 +725,8 @@ export function tessellationGridResolution(srf, uRes, vRes, opts = {}) {
   const len = (a) => Math.hypot(a[0], a[1], a[2]);
   // The perpendicular distance of p1 from the chord p0->p2 — the sagitta the
   // mesh would carry if p1 were skipped and that chord drawn instead. That
-  // chord spans TWO probe steps, and a sagitta scales as the square of its
-  // chord, so the reading is divided by four to express it at ONE probe step —
+  // chord spans two probe steps, and a sagitta scales as the square of its
+  // chord, so the reading is divided by four to express it at one probe step —
   // the same unit the twist term below is already measured in, and the unit
   // every scaling here assumes.
   const sagitta = (p0, p1, p2) => {
@@ -876,31 +762,30 @@ export function tessellationGridResolution(srf, uRes, vRes, opts = {}) {
   const flatEps = 1e-9 * diag;
   if (devU <= flatEps && devV <= flatEps && devT <= flatEps) return out(uRes, vRes, false, 'planar within tolerance — the declared grid carries the intent');
 
-  /* THE TARGET DEVIATION, and why there are two ways to set it.
-     ==================================================================
-     By default the target is the DECLARED grid's own worst chord deviation, so
-     this function only ever REDISTRIBUTES density between the two directions
+  /* The target deviation, and why there are two ways to set it.
+
+     By default the target is the declared grid's own worst chord deviation, so
+     this function only redistributes density between the two directions
      and can never call a grid finer than it needs to be. That is right when the
      declared grid means something -- the untrimmed path derives it from the
      surface, so it carries the caller's intent and is worth preserving.
 
-     It is wrong when the declared grid is a CONSTANT. The trimmed path hands
+     It is wrong when the declared grid is a constant. The trimmed path hands
      every piece a flat 64x64 with no relation to its size, and a self-
-     referential target can only ever agree with it: a 5mm fillet band on a 90mm
-     box edge solved back to 64x64 and cost 8192 triangles, of which the arc
-     needed about 15. Measured on a filleted box, that was 110,592 of its
-     116,320 triangles, and the cells came out 11,145:1 -- needles, which is
-     what makes a fillet show its own tessellation under a shiny material.
+     referential target can only agree with it: a 5mm fillet band on a 90mm
+     box edge solves back to 64x64 and costs 8192 triangles, of which the arc
+     needs about 15. On a filleted box that is 110,592 of its 116,320
+     triangles, with cells of aspect 11,145:1 -- needles, which make a fillet
+     show its tessellation under a shiny material.
 
-     `relTolerance` sets the target instead as a fraction of arc length, PER
-     DIRECTION. Per direction is the load-bearing part: a band's bounding box is
+     `relTolerance` sets the target instead as a fraction of arc length, per
+     direction. Per direction is what matters: a band's bounding box is
      dominated by its 90mm length while the curvature a viewer can see is the
      5mm arc, so one tolerance taken from the diagonal is set by the direction
      that is already straight. Each direction is allowed a sagitta proportional
      to its own extent, which is what makes the result scale-invariant.
 
-     Neither mode may return a count HIGHER than the one handed in, so this
-     stays a reduction in both. */
+     Neither mode returns a count higher than the one handed in. */
   const relTol = opts.relTolerance == null ? 0 : opts.relTolerance;
   const relative = relTol > 0 && lenU > 0 && lenV > 0;
   const tolU = relative ? lenU * relTol : Math.max(devU * (su / uRes) ** 2, devV * (sv / vRes) ** 2, devT * (su / uRes) * (sv / vRes));
@@ -916,8 +801,8 @@ export function tessellationGridResolution(srf, uRes, vRes, opts = {}) {
   }
   nu = Math.max(1, Math.min(Math.round(uRes), Math.ceil(nu - 1e-9)));
   nv = Math.max(1, Math.min(Math.round(vRes), Math.ceil(nv - 1e-9)));
-  // THE ASPECT GUARD, and the clamp is load-bearing: it is what keeps a ruled
-  // wall declared at one division across from being inflated back up.
+  // The aspect guard. The clamp to the declared count keeps a ruled wall
+  // declared at one division across from being inflated.
   if (maxAspect > 0 && lenU > 0 && lenV > 0) {
     const hu = lenU / nu, hv = lenV / nv;
     if (hu > maxAspect * hv) nu = Math.min(Math.round(uRes), Math.ceil(lenU / (maxAspect * hv)));

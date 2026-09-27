@@ -9,22 +9,20 @@ import {
 import { makeEllipse, makeCircle } from '../kernel/primitives.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
 
-// ---------------------------------------------------------------------------
-// FIXTURES
+// Fixtures
 //
-// Deliberately NOT symmetric primitives. A symmetric fixture (a circle, a
+// Deliberately not symmetric primitives. A symmetric fixture (a circle, a
 // box) makes every sample equally sensitive to the param, so a bug in
 // sample-to-sample correspondence, in the least-squares mask, or in an index
-// somewhere produces the SAME right-looking answer as correct code. Every
-// fixture here has per-sample responses that genuinely differ, so a
+// somewhere produces the same right-looking answer as correct code. Every
+// fixture here has per-sample responses that differ, so a
 // misindexed Jacobian cannot pass.
-// ---------------------------------------------------------------------------
 
-// A "cam profile": 9 irregular anchor points, each carried along its OWN
+// A "cam profile": 9 irregular anchor points, each carried along its own
 // irregular direction by the param `throw`. Exact by construction:
 //   P_i(t) = base_i + t * dir_i        =>  dP_i/dt = dir_i
 // Nothing here is proportional to anything else, so the analytic Jacobian is
-// a genuinely discriminating target.
+// a discriminating target.
 const CAM_BASE = [
   [12.4, -3.1, 0.7], [18.9, 4.2, -2.3], [7.05, 11.8, 5.4],
   [-6.2, 13.35, 1.1], [-15.7, 5.9, -4.8], [-11.3, -8.4, 3.2],
@@ -46,7 +44,7 @@ function camEvaluate(inputs, p) {
 }
 const CAM_SPEC = { name: 'throw', type: 'number', default: 1, min: -20, max: 20, step: 0.1 };
 
-// An asymmetric truss whose `spread` param enters QUADRATICALLY (a real
+// An asymmetric truss whose `spread` param enters quadratically (a
 // nonlinear case — an area-like or squared-falloff param):
 //   P_i(s) = base_i + s^2 * dir_i      =>  dP_i/ds = 2*s*dir_i
 function trussEvaluate(inputs, p) {
@@ -59,13 +57,13 @@ function trussEvaluate(inputs, p) {
   };
 }
 
-// A real kernel fixture: an off-origin ELLIPSE with two genuinely different
-// radii. Its `radiusX` derivative is independently known WITHOUT
+// A kernel fixture: an off-origin ellipse with two different
+// radii. Its `radiusX` derivative is independently known without
 // differentiating anything, from the affine-invariance identity makeEllipse
 // itself is built on: a NURBS point is an affine combination of its control
 // points, so
 //     P(u; rx, ry) = center + rx*cx(u)*X + ry*cy(u)*Y
-// where (cx(u), cy(u)) is the UNIT circle's own point at the same u. Hence
+// where (cx(u), cy(u)) is the unit circle's own point at the same u. Hence
 //     dP/drx = cx(u) * X
 // and cx(u) comes from a separately constructed unit circle — ground truth
 // that never touches this module.
@@ -89,11 +87,9 @@ function ellipseSampleParams(count = 24) {
 
 const CAM_SAMPLER = (r) => r.points;
 
-// ===========================================================================
-// ANALYTIC CROSS-CHECKS — the reason this module can be trusted at all.
-// ===========================================================================
+// Analytic cross-checks
 
-test('sensitivity: the estimated Jacobian matches the EXACT analytic derivative on an irregular linear fixture', () => {
+test('sensitivity: the estimated Jacobian matches the exact analytic derivative on an irregular linear fixture', () => {
   const params = { throw: 3.5 };
   const res = estimateParamSensitivity({
     evaluate: camEvaluate, inputs: {}, params, key: 'throw',
@@ -117,7 +113,7 @@ test('sensitivity: the estimated Jacobian matches the EXACT analytic derivative 
   assert.ok(Math.abs(res.sensitivity - rms) < 1e-9, `sensitivity ${res.sensitivity} vs analytic RMS ${rms}`);
 });
 
-test('sensitivity: matches the analytic derivative of a REAL kernel ellipse (radiusX), cross-checked against an independently built unit circle', () => {
+test('sensitivity: matches the analytic derivative of a kernel ellipse (radiusX), cross-checked against an independently built unit circle', () => {
   const params = { radiusX: 37, radiusY: 13 };
   const res = estimateParamSensitivity({
     evaluate: ellipseEvaluate, inputs: {}, params, key: 'radiusX', spec: EL_SPEC,
@@ -136,10 +132,10 @@ test('sensitivity: matches the analytic derivative of a REAL kernel ellipse (rad
       biggest = Math.max(biggest, Math.abs(truth[c]));
     }
   }
-  // Not a symmetry-proof case: cx(u) genuinely varies from -1 to +1 across
+  // Not a symmetry-proof case: cx(u) varies from -1 to +1 across
   // the samples, so a misindexed Jacobian could not pass this.
-  assert.ok(biggest > 0.99, 'the analytic derivative must genuinely vary across samples for this to discriminate');
-  assert.ok(worst < 1e-6, `real-kernel ellipse derivative, worst absolute error ${worst.toExponential(3)}`);
+  assert.ok(biggest > 0.99, 'the analytic derivative must vary across samples for this to discriminate');
+  assert.ok(worst < 1e-6, `kernel ellipse derivative, worst absolute error ${worst.toExponential(3)}`);
 });
 
 test('solve: dragging one point of the ellipse outward recovers the exact radiusX (linear param, exact least-squares)', () => {
@@ -162,7 +158,7 @@ test('solve: a multi-point least-squares drag on the irregular cam recovers the 
   const params = { throw: 3.5 };
   const wanted = 5.25;
   const truth = camEvaluate({}, { throw: wanted }).points;
-  // Constrain FIVE of the nine points — genuinely over-determined, and the
+  // Constrain five of the nine points — over-determined, and the
   // solution is only reachable if each sample's own direction is used
   // against its own target.
   const targets = [0, 2, 4, 6, 8].map((index) => ({ index, point: truth[index] }));
@@ -176,8 +172,8 @@ test('solve: a multi-point least-squares drag on the irregular cam recovers the 
   assert.ok(Math.abs(res.alignment - 1) < 1e-9);
 });
 
-test('solve: unconstrained samples take NO part in the fit (a one-point drag is not diluted by the other 23 samples)', () => {
-  // The regression guard for a real bug: if unconstrained samples were
+test('solve: unconstrained samples take no part in the fit (a one-point drag is not diluted by the other 23 samples)', () => {
+  // If unconstrained samples were
   // folded in as "must not move", this same drag would return roughly
   // 37 + 5/12 instead of 42 — plausible, undramatic, and wrong.
   const params = { radiusX: 37, radiusY: 13 };
@@ -200,12 +196,10 @@ test('solve: unconstrained samples take NO part in the fit (a one-point drag is 
   assert.ok(Math.abs(res2.value - res.value) < 1e-12, 'both target forms must agree exactly');
 });
 
-// ===========================================================================
-// STEP SIZE — the same estimator across params whose scales differ by
+// Step size — the same estimator across params whose scales differ by
 // orders of magnitude. A fixed absolute epsilon fails at least one end.
-// ===========================================================================
 
-test('step size: a relative step handles a 1e-4-scale param and a 1e3-scale param with the SAME accuracy', () => {
+test('step size: a relative step handles a 1e-4-scale param and a 1e3-scale param with the same accuracy', () => {
   // One evaluate, two params, seven orders of magnitude apart in scale:
   //   P_i = base_i + (tiny * 1e4) * dir_i + (huge * 1e-3) * dir2_i
   // so both have well-conditioned, exactly-known derivatives.
@@ -244,7 +238,7 @@ test('step size: a relative step handles a 1e-4-scale param and a 1e3-scale para
   assert.ok(worstHuge < 1e-9, `huge-scale param derivative, worst error ${worstHuge.toExponential(3)}`);
 });
 
-test('step size: a param sitting exactly at its declared MAX is still estimated, by probing backward', () => {
+test('step size: a param sitting exactly at its declared max is still estimated, by probing backward', () => {
   const params = { throw: 20 }; // CAM_SPEC.max
   const res = estimateParamSensitivity({
     evaluate: camEvaluate, inputs: {}, params, key: 'throw',
@@ -259,11 +253,9 @@ test('step size: a param sitting exactly at its declared MAX is still estimated,
   assert.ok(worst < 1e-9, `backward difference must be just as exact here, worst ${worst.toExponential(3)}`);
 });
 
-// ===========================================================================
-// NONLINEARITY — where an estimator must be honest rather than accurate.
-// ===========================================================================
+// Nonlinearity — where an estimator must report its miss rather than hide it.
 
-test('nonlinear param: one linear step OVERSHOOTS and says so in the measured residual; iterating converges', () => {
+test('nonlinear param: one linear step overshoots and says so in the measured residual; iterating converges', () => {
   const params = { spread: 2 };
   const wanted = 3.5; // s^2: 4 -> 12.25, a big move for a single linearization
   const truth = trussEvaluate({}, { spread: wanted }).points;
@@ -276,11 +268,11 @@ test('nonlinear param: one linear step OVERSHOOTS and says so in the measured re
   });
   assert.equal(once.ok, true, once.message);
   assert.equal(once.iterations, 1);
-  // s^2 is convex, so its tangent at s=2 lies BELOW it: solving on that
+  // s^2 is convex, so its tangent at s=2 lies below it: solving on that
   // tangent for a target of 12.25 asks for s=4.0625, past the true 3.5.
-  // Overshoot, not shortfall — the honest outcome of one linearization, and
-  // the exact reason a predicted residual would be worthless here. What
-  // matters is that the MEASURED residual reports the miss.
+  // Overshoot, not shortfall — the outcome of one linearization, and
+  // the reason a predicted residual would be worthless here. What
+  // matters is that the measured residual reports the miss.
   assert.ok(once.value > wanted, `one linear step on a convex param should overshoot, got ${once.value}`);
   assert.ok(Math.abs(once.value - 4.0625) < 1e-6, `the overshoot is the exact tangent-line solution, got ${once.value}`);
   assert.ok(once.residual > 0.05, `the residual must expose the miss, got ${once.residual}`);
@@ -295,12 +287,10 @@ test('nonlinear param: one linear step OVERSHOOTS and says so in the measured re
   assert.ok(iterated.residual < 1e-6, `converged residual should be ~0, got ${iterated.residual}`);
 });
 
-// ===========================================================================
-// HONEST REFUSALS — the point of the module. Bad conditioning is exactly
-// when a drag feels broken, so these are not edge cases, they are the job.
-// ===========================================================================
+// Refusals. Bad conditioning is exactly when a drag feels broken, so these
+// are not edge cases.
 
-test('refuses a DECLARED discrete param (integer / enum / boolean / vec3) without spending an evaluate', () => {
+test('refuses a declared discrete param (integer / enum / boolean / vec3) without spending an evaluate', () => {
   let calls = 0;
   const counting = (inputs, p) => { calls++; return camEvaluate(inputs, p); };
   for (const spec of [
@@ -321,11 +311,11 @@ test('refuses a DECLARED discrete param (integer / enum / boolean / vec3) withou
   assert.equal(calls, 0, 'a structurally undraggable param must be refused before any geometry is evaluated');
 });
 
-test('refuses an UNDECLARED discrete param — a real segment count on a real kernel circle is caught as non-smooth', () => {
-  // The hard case, and the one that motivated the smoothness gate: sampling
-  // a curve at fixed parametric fractions returns the SAME sample count
+test('refuses an undeclared discrete param — a segment count on a kernel circle is caught as non-smooth', () => {
+  // The hard case for the smoothness check: sampling
+  // a curve at fixed parametric fractions returns the same sample count
   // whatever the segment count is, so the count check alone sees nothing
-  // wrong and a large, confident, WRONG derivative comes back.
+  // wrong and a large, confident, wrong derivative comes back.
   const evaluate = (inputs, p) => ({ crv: makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], p.radius, p.segments) });
   const spec = { name: 'segments', type: 'number', default: 4, min: 4, step: 1 };
   for (const segments of [4, 6, 9]) {
@@ -336,7 +326,7 @@ test('refuses an UNDECLARED discrete param — a real segment count on a real ke
     assert.equal(res.reason, 'non-smooth');
     assert.ok(res.asymmetry > 0.25, `asymmetry ${res.asymmetry} should be well past the gate`);
   }
-  // ...while the genuinely continuous param on the SAME evaluate is fine.
+  // ...while the continuous param on the same evaluate is fine.
   const ok = estimateParamSensitivity({
     evaluate, inputs: {}, params: { radius: 10, segments: 4 }, key: 'radius',
     spec: { name: 'radius', type: 'number', min: 1e-6 },
@@ -345,7 +335,7 @@ test('refuses an UNDECLARED discrete param — a real segment count on a real ke
   assert.ok(ok.asymmetry < 1e-6, 'a smooth param must sail through the same gate');
 });
 
-test('refuses a QUANTIZED param (rounded internally, sample count stable) and distinguishes it from an inert one', () => {
+test('refuses a quantized param (rounded internally, sample count stable) and distinguishes it from an inert one', () => {
   // Rounds to whole units internally: geometry does not budge at a fine
   // nudge but jumps at a coarse one. Count never changes, so only the
   // coarse-probe fallback can tell this apart from a dead param.
@@ -363,7 +353,7 @@ test('refuses a QUANTIZED param (rounded internally, sample count stable) and di
   assert.notEqual(res.reason, 'insensitive', 'a quantized param must not be conflated with a dead one');
 });
 
-test('refuses a ZERO-SENSITIVITY param — geometry does not move at any probe scale', () => {
+test('refuses a zero-sensitivity param — geometry does not move at any probe scale', () => {
   const evaluate = (inputs, p) => camEvaluate(inputs, { throw: p.throw }); // `unused` is ignored
   const res = solveParamForDrag({
     evaluate, inputs: {}, params: { throw: 3.5, unused: 12 }, key: 'unused',
@@ -373,12 +363,12 @@ test('refuses a ZERO-SENSITIVITY param — geometry does not move at any probe s
   assert.equal(res.ok, false);
   assert.equal(res.reason, 'insensitive');
   assert.ok(res.message.includes('unused'));
-  // Crucially: it does NOT return a huge value from dividing by a ~zero
+  // It does not return a huge value from dividing by a ~zero
   // sensitivity. There is no value at all.
   assert.equal(res.value, undefined);
 });
 
-test('refuses an ORTHOGONAL drag — the param is genuinely sensitive, just not in the direction asked', () => {
+test('refuses an orthogonal drag — the param is sensitive, just not in the direction asked', () => {
   // Moves every point purely along +X.
   const evaluate = (inputs, p) => ({ points: CAM_BASE.map((b, i) => [b[0] + p.slide * (1 + 0.1 * i), b[1], b[2]]) });
   const params = { slide: 4 };
@@ -390,12 +380,12 @@ test('refuses an ORTHOGONAL drag — the param is genuinely sensitive, just not 
   });
   assert.equal(res.ok, false);
   assert.equal(res.reason, 'orthogonal');
-  // The refusal must carry a REAL, nonzero sensitivity — proving this is
+  // The refusal must carry a nonzero sensitivity — proving this is
   // distinguished from 'insensitive' rather than lumped in with it.
-  assert.ok(res.sensitivity > 1, `sensitivity should be real and nonzero, got ${res.sensitivity}`);
+  assert.ok(res.sensitivity > 1, `sensitivity should be nonzero, got ${res.sensitivity}`);
   assert.ok(Math.abs(res.alignment) < 1e-9, `a perpendicular drag has ~zero alignment, got ${res.alignment}`);
 
-  // The same param with a drag it CAN explain still works — proof the
+  // The same param with a drag it can explain still works — proof the
   // refusal is about the drag, not the param.
   const okRes = solveParamForDrag({
     evaluate, inputs: {}, params, key: 'slide',
@@ -406,7 +396,7 @@ test('refuses an ORTHOGONAL drag — the param is genuinely sensitive, just not 
   assert.ok(Math.abs(okRes.residual) < 1e-9);
 });
 
-test('refuses when the param moves the geometry elsewhere but NOT the dragged sample', () => {
+test('refuses when the param moves the geometry elsewhere but not the dragged sample', () => {
   // `tipOnly` moves sample 8 alone. Dragging sample 0 with it is hopeless,
   // and must be said so rather than answered with a division by ~zero.
   const evaluate = (inputs, p) => ({
@@ -420,10 +410,10 @@ test('refuses when the param moves the geometry elsewhere but NOT the dragged sa
   });
   assert.equal(res.ok, false);
   assert.equal(res.reason, 'insensitive-at-target');
-  assert.ok(res.sensitivity > 0, 'the param IS sensitive overall — that is the point of the distinct reason code');
+  assert.ok(res.sensitivity > 0, 'the param is sensitive overall — that is the point of the distinct reason code');
 });
 
-test('refuses a topology-changing param that genuinely changes the SAMPLE COUNT', () => {
+test('refuses a topology-changing param that changes the sample count', () => {
   const evaluate = (inputs, p) => ({
     points: Array.from({ length: Math.max(2, Math.round(p.count)) }, (_, i) => [i * 3.7, i * -1.4, i * 0.9]),
   });
@@ -432,14 +422,14 @@ test('refuses a topology-changing param that genuinely changes the SAMPLE COUNT'
     spec: { name: 'count', type: 'number', min: 2, max: 40 }, sample: CAM_SAMPLER,
   });
   assert.equal(res.ok, false);
-  // Note the honest chain here: at a fine nudge this param rounds straight
-  // back to itself and looks inert; it is the COARSE fallback probe that
+  // At a fine nudge this param rounds straight
+  // back to itself and looks inert; it is the coarse fallback probe that
   // exposes the correspondence break, and that finding is what gets
   // reported rather than the weaker "insensitive".
   assert.equal(res.reason, 'unstable-sampling');
 });
 
-test('refuses honestly when evaluate() throws, or returns non-finite geometry — never propagates either', () => {
+test('refuses when evaluate() throws, or returns non-finite geometry — never propagates either', () => {
   const thrower = (inputs, p) => {
     if (p.t !== 1) throw new Error('degenerate recipe');
     return camEvaluate(inputs, { throw: p.t });
@@ -473,17 +463,15 @@ test('refuses a param with no finite value, and a zero-length requested drag', (
   const noDrag = solveParamForDrag({
     evaluate: camEvaluate, inputs: {}, params: { throw: 3.5 }, key: 'throw',
     spec: CAM_SPEC, sample: CAM_SAMPLER,
-    targets: [{ index: 2, point: [...base[2]] }], // target IS the current position
+    targets: [{ index: 2, point: [...base[2]] }], // target is the current position
   });
   assert.equal(noDrag.ok, false);
   assert.equal(noDrag.reason, 'no-target');
 });
 
-// ===========================================================================
-// CLAMPING + FINITENESS
-// ===========================================================================
+// Clamping and finiteness
 
-test('clamps to the declared range, flags it, stays finite, and reports the shortfall honestly', () => {
+test('clamps to the declared range, flags it, stays finite, and reports the shortfall', () => {
   const params = { throw: 3.5 };
   // Ask for a displacement that would need throw far past max=20.
   const truth = camEvaluate({}, { throw: 400 }).points;
@@ -494,10 +482,10 @@ test('clamps to the declared range, flags it, stays finite, and reports the shor
   });
   assert.equal(res.ok, true, res.message);
   assert.equal(res.value, 20, 'must land exactly on the declared max');
-  assert.equal(res.clamped, true, 'and must SAY it clamped');
+  assert.equal(res.clamped, true, 'and must say it clamped');
   assert.ok(Number.isFinite(res.value));
   // The measured residual must expose that most of the drag was not achieved.
-  assert.ok(res.residual > 0.5, `a hard clamp should leave a large honest residual, got ${res.residual}`);
+  assert.ok(res.residual > 0.5, `a hard clamp should leave a large residual, got ${res.residual}`);
 });
 
 test('every returned number is finite across a sweep of awkward-but-legal param values', () => {
@@ -527,11 +515,9 @@ test('never mutates the caller\'s params or inputs', () => {
   assert.equal(res.baseValue, 37);
 });
 
-// ===========================================================================
-// THE DEFAULT SAMPLER
-// ===========================================================================
+// The default sampler
 
-test('sampleGeometry: stable count and order for curve / points / line / point results, and an honest throw otherwise', () => {
+test('sampleGeometry: stable count and order for curve / points / line / point results, and a throw otherwise', () => {
   const crv = sampleGeometry({ crv: makeEllipse(EL_CENTER, EL_X, EL_Y, 37, 13, EL_SEGMENTS) });
   assert.equal(crv.length, 24);
   assert.equal(sampleGeometry({ crv: makeEllipse(EL_CENTER, EL_X, EL_Y, 99, 4, EL_SEGMENTS) }).length, 24,

@@ -1,8 +1,7 @@
-// OFFSET / THICKEN A SUBD CAGE. What is worth testing is not "the vertices
-// moved" but the three things that make the result usable: a sheet ends up
-// a slab that is genuinely closed and consistently wound, an already-closed
-// cage is REFUSED rather than split into two disconnected nested shells, and
-// the offset really is a normal-direction offset (not, say, a scale about
+// Offset and thicken a SubD cage. Three properties make the result usable:
+// a sheet ends up a slab that is closed and consistently wound, an
+// already-closed cage is refused rather than split into two disconnected
+// nested shells, and the offset is a normal-direction offset (not, say, a scale about
 // the origin, which looks identical on a symmetric fixture and is wrong on
 // every other one).
 import test from 'node:test';
@@ -42,8 +41,8 @@ test('offsetting a flat sheet moves every vertex along its own normal, by exactl
   }
 });
 
-test('THE DISCRIMINATING ONE: offsetting a BOX grows it by the distance in every direction — a scale about the origin would grow it proportionally instead, which is a different (and wrong) answer', () => {
-  // Deliberately OFF-ORIGIN and non-cubic, so "offset along normals" and
+test('offsetting a box grows it by the distance in every direction — a scale about the origin would grow it proportionally instead, which is a different (and wrong) answer', () => {
+  // Deliberately off-origin and non-cubic, so "offset along normals" and
   // "scale about the origin" cannot coincide.
   const cage = superbBoxCage([100, 0, 0], [10, 20, 30], 1);
   const out = offsetCage(cage, 3);
@@ -65,14 +64,14 @@ test('THE DISCRIMINATING ONE: offsetting a BOX grows it by the distance in every
   assert.ok(Math.hypot(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]) < 1e-9, 'and the box must not drift toward or away from the world origin');
 });
 
-test('a negative distance offsets INWARD', () => {
+test('a negative distance offsets inward', () => {
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const out = offsetCage(cage, -2);
   const r = (c) => Math.hypot(...c.vertices[0]);
   assert.ok(r(out) < r(cage), 'an inward offset must bring the corner closer to the center');
 });
 
-test('THICKEN turns a sheet into a genuinely closed, consistently wound slab', () => {
+test('thicken turns a sheet into a closed, consistently wound slab', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const { cage: out } = thickenCage(cage, 4);
   assert.equal(out.vertices.length, cage.vertices.length * 2);
@@ -81,7 +80,7 @@ test('THICKEN turns a sheet into a genuinely closed, consistently wound slab', (
   assert.equal(windingConsistent(out), true);
 });
 
-test('and the slab really subdivides — the downstream risk a wrongly-wound rim would only show up in', () => {
+test('and the slab subdivides cleanly — where a wrongly-wound rim would show up', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 2);
   const { cage: out } = thickenCage(cage, 4);
   const refined = subdivideCatmullClark(out);
@@ -91,13 +90,10 @@ test('and the slab really subdivides — the downstream risk a wrongly-wound rim
   assert.equal(windingConsistent(refined), true);
 });
 
-// REWRITTEN, deliberately, not weakened. This test previously ASSERTED the
-// two-nested-shells result as intended behavior. It is not: with no naked
-// edge there is no rim, so one cage becomes two disconnected components —
-// proven below by counting them, which the original never did. That is the
-// thing reported live as "a superb inside a superb; just have to undo or
-// delete", and it fails this app's own rule that an operation which cannot
-// keep a SuperB one watertight object must refuse and say why.
+// Thickening a closed cage: with no naked edge there is no rim, so one cage
+// would become two disconnected nested components (a SuperB inside a
+// SuperB) — counted below. An operation that cannot keep a SuperB one
+// watertight object must refuse and say why.
 function connectedComponentCount(cage) {
   const adj = new Map();
   const link = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); adj.get(a).add(b); };
@@ -111,19 +107,19 @@ function connectedComponentCount(cage) {
   return n;
 }
 
-test('thickening an ALREADY-CLOSED cage is REFUSED by name — there is no open edge for a wall to grow from', () => {
+test('thickening an already-closed cage is refused by name — there is no open edge for a wall to grow from', () => {
   for (const cage of [superbBoxCage([0, 0, 0], [10, 10, 10], 1), superbTorusCage([0, 0, 0], 30, 10, 8)]) {
-    assert.equal(connectedComponentCount(cage), 1, 'the cage starts as ONE connected object');
+    assert.equal(connectedComponentCount(cage), 1, 'the cage starts as one connected object');
     assert.throws(() => thickenCage(cage, -2), /already closed/, 'a closed cage must refuse, naming the reason');
-    assert.throws(() => thickenCage(cage, 2), /Delete a face first/, 'and must name the real escape hatch, not just say no');
+    assert.throws(() => thickenCage(cage, 2), /Delete a face first/, 'and must name the way out, not just say no');
   }
 });
 
-test('the refusal is exactly right: producing it anyway WOULD split one object into two disconnected shells', () => {
-  // Proves the refusal is protecting against something real rather than
-  // being conservative — reconstructs precisely what thickenCage's own body
-  // would have built for a closed cage (original + reversed offset copy, no
-  // rim, since no edge has a single owner face) and counts the components.
+test('the refusal is exactly right: producing it anyway would split one object into two disconnected shells', () => {
+  // Shows the refusal is necessary rather than conservative — reconstructs
+  // what thickenCage's own body would build for a closed cage (original +
+  // reversed offset copy, no rim, since no edge has a single owner face) and
+  // counts the components.
   const cage = superbBoxCage([0, 0, 0], [10, 10, 10], 1);
   const offset = offsetCage(cage, -2);
   const n = cage.vertices.length;
@@ -132,15 +128,15 @@ test('the refusal is exactly right: producing it anyway WOULD split one object i
     faces: [...cage.faces.map((f) => f.slice()), ...cage.faces.map((f) => f.slice().reverse().map((vi) => vi + n))],
     creases: {},
   };
-  assert.equal(connectedComponentCount(wouldBe), 2, 'one object would have become two disconnected nested shells — the reported "superb inside a superb"');
-  assert.deepEqual(report(wouldBe), { boundary: 0, nonManifold: 0 }, 'and each shell is individually watertight, which is exactly why this went unnoticed');
+  assert.equal(connectedComponentCount(wouldBe), 2, 'one object would have become two disconnected nested shells — a SuperB inside a SuperB');
+  assert.deepEqual(report(wouldBe), { boundary: 0, nonManifold: 0 }, 'and each shell is individually watertight, so a per-shell check would not see it');
 });
 
-test('an OPEN cage still thickens into a real single-component wall — the refusal is scoped to the closed case only', () => {
+test('an open cage still thickens into a single-component wall — the refusal is scoped to the closed case only', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const { cage: out, rimFaceIndices } = thickenCage(cage, 4);
-  assert.ok(rimFaceIndices.length > 0, 'a real rim was built');
-  assert.equal(connectedComponentCount(out), 1, 'and the result is still ONE connected object, not two');
+  assert.ok(rimFaceIndices.length > 0, 'a rim was built');
+  assert.equal(connectedComponentCount(out), 1, 'and the result is still one connected object, not two');
   assert.deepEqual(report(out), { boundary: 0, nonManifold: 0 });
   assert.equal(windingConsistent(out), true);
 });
@@ -156,7 +152,7 @@ test('creases ride along onto the offset copy — a hard edge stays hard on both
   assert.equal(out.creases[edgeKey(a + n, b + n)], 2);
 });
 
-test('honest refusals, and the input cage is never mutated', () => {
+test('refusals, and the input cage is never mutated', () => {
   const cage = superbPlaneCage([0, 0, 0], 40, 40, 1);
   const before = JSON.stringify(cage);
   assert.throws(() => offsetCage(cage, 0), /nonzero finite/);

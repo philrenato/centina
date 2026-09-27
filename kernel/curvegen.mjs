@@ -1,34 +1,29 @@
-// CURVE GENERATORS — a family of "no geometric input, build a brand-new
-// standalone curve from scratch" routines, kept DELIBERATELY in one module
-// because they are the three MODES of a single de-stacked Curve Generator
-// node (one node with a TYPE dropdown, not one node per family):
+// Curve generators: routines that build a standalone curve from parameters
+// alone, with no geometric input. They share one module because they are the
+// modes of a single Curve Generator node (one node with a type dropdown):
 //   1. L-System   — string-rewriting turtle graphics (Koch/Dragon/Plant).
-//   2. Lorenz      — the classic Lorenz chaotic attractor (RK4-integrated).
+//   2. Lorenz      — the Lorenz attractor (RK4-integrated).
 //   3. Random Walk — a seeded, deterministic random-walk path through space.
+//   ...and the wave, harmonic, fBm, roulette, superformula, spiral, Lissajous,
+//   rose, helix, catenary and torus-knot families below.
 //
-// NOTHING here takes an existing surface/curve as input. In particular the
-// "Random Walk / Noise Curve" mode is a COMPLETELY DIFFERENT operation from
-// the already-shipped Noise MODIFIER (kernel/noise.mjs, noiseControlNet),
-// which DISPLACES the control net of an EXISTING surface. This one builds a
-// new curve out of nothing. The user-facing label is deliberately "Random
-// Walk Curve" / "Noise Curve", never bare "Noise", to keep that distinction
-// unmistakable (documented naming-collision guard).
+// Nothing here takes an existing surface or curve as input. The Random Walk /
+// Noise Curve mode is a different operation from the Noise modifier
+// (kernel/noise.mjs, noiseControlNet), which displaces the control net of an
+// existing surface; the user-facing label is "Random Walk Curve" / "Noise
+// Curve", never bare "Noise", to keep the two apart.
 //
-// Each generator produces a plain [x,y,z][] point chain. The two smooth
-// families (Lorenz, Random Walk) are meant to be decimated + fed through
-// interpolate.mjs's globalCurveInterp into a real NURBS curve; the L-System
-// stays a polyline (degree-1 interpolation) so its sharp fractal corners are
-// preserved exactly rather than rounded away.
+// Each generator produces a plain [x,y,z][] point chain. The smooth families
+// are meant to be decimated and fed through interpolate.mjs's
+// globalCurveInterp into a NURBS curve; the L-System stays a polyline
+// (degree-1 interpolation) so its fractal corners are kept exactly.
 
 import { normalize, sub, length } from './vec3.mjs';
 
-// ---------------------------------------------------------------------------
-// Shared deterministic PRNG. BYTE-IDENTICAL to kernel/noise.mjs's own proven
-// hashU32/hash01 (a Murmur3 finalizer + FNV combine) — reused verbatim, NOT
-// reinvented, per the standing "one seeded hash, never Math.random" rule.
-// A per-index integer hash keyed by (seed, i, component) is the whole source
-// of randomness, so a given seed always reproduces the exact same curve.
-// ---------------------------------------------------------------------------
+// Shared deterministic PRNG, identical to kernel/noise.mjs's hashU32/hash01
+// (the 0x45d9f3b xor-shift-multiply hash); never Math.random. A per-index
+// integer hash keyed by (seed, i, component) is the only source of randomness,
+// so a given seed always reproduces the same curve.
 function hashU32(x) {
   x = x >>> 0;
   x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
@@ -41,34 +36,30 @@ export function hash01(...vals) {
   return (h >>> 0) / 4294967296;
 }
 
-// ===========================================================================
-// 1. L-SYSTEM
-// ===========================================================================
+// 1. L-system
 //
-// Standard, well-documented, textbook L-system presets — NOT invented rule
-// grammars. Each is verifiable by hand against a known reference shape:
+// Standard textbook L-system presets, each checkable by hand against a known
+// reference shape:
 //   - koch   : the Koch-curve-family generator F->F+F--F+F, angle 60. Each
-//              iteration replaces every F with 4 F's, so segment count is
-//              EXACTLY 4^iterations (an exact, checkable growth law).
-//   - dragon : the Heighway dragon curve (Wikipedia's canonical rules),
-//              axiom FX, X->X+YF+, Y->-FX-Y, angle 90. F count doubles each
-//              iteration -> EXACTLY 2^iterations segments.
-//   - plant  : the classic bracketed branching plant (Wikipedia "L-system"
-//              example 7), axiom X, X->F+[[X]-X]-F[-FX]+X, F->FF, angle 25.
-//              Exercises the push/pop [ ] branch stack.
+//              iteration replaces every F with 4 F's, so the segment count is
+//              exactly 4^iterations.
+//   - dragon : the Heighway dragon curve, axiom FX, X->X+YF+, Y->-FX-Y,
+//              angle 90. The F count doubles each iteration -> 2^iterations
+//              segments.
+//   - plant  : the bracketed branching plant (Wikipedia "L-system" example 7),
+//              axiom X, X->F+[[X]-X]-F[-FX]+X, F->FF, angle 25. Exercises the
+//              push/pop [ ] branch stack.
 export const LSYSTEM_PRESETS = {
   koch:   { axiom: 'F',  rules: { F: 'F+F--F+F' },                       angle: 60, label: 'Koch curve' },
   dragon: { axiom: 'FX', rules: { X: 'X+YF+', Y: '-FX-Y' },              angle: 90, label: 'Dragon curve' },
   plant:  { axiom: 'X',  rules: { X: 'F+[[X]-X]-F[-FX]+X', F: 'FF' },    angle: 25, label: 'Branching plant' },
 };
 
-// Count how many symbols (total) and how many drawing symbols ('F') an
-// expansion WOULD produce, WITHOUT building the (potentially enormous)
-// string. Tracks a per-symbol population and advances it one generation at a
-// time — cheap and exact — so the caller can refuse an over-cap request
-// before allocating anything. This is the "sanity cap, refuse rather than
-// hang the browser" convention ArrayLinear/ArrayPolar's own 500-copy cap
-// already established, applied to L-system's exponential growth.
+// Count the symbols (total) and drawing symbols ('F') an expansion would
+// produce, without building the string. Tracks a per-symbol population one
+// generation at a time — cheap and exact — so the caller can refuse an
+// over-cap request before allocating anything, as ArrayLinear/ArrayPolar do
+// with their 500-copy cap.
 export function countLSystemGrowth(axiom, rules, iterations) {
   let counts = new Map();
   for (const ch of axiom) counts.set(ch, (counts.get(ch) || 0) + 1);
@@ -85,14 +76,13 @@ export function countLSystemGrowth(axiom, rules, iterations) {
   return { fCount: counts.get('F') || 0, total };
 }
 
-// A generous ceiling on generated segments (F count). Beyond this the browser
-// would choke building/rendering the polyline, so we refuse honestly rather
-// than hang — matching the ArrayLinear/ArrayPolar refusal posture exactly.
+// Ceiling on generated segments (F count). Beyond this, building and rendering
+// the polyline stalls the browser, so the request is refused.
 export const MAX_LSYSTEM_SEGMENTS = 8000;
 export const MAX_LSYSTEM_SYMBOLS = 400000;
 
-// Expand an L-system string `iterations` times, refusing (throwing an honest,
-// specific message) if the result would exceed the sanity caps.
+// Expand an L-system string `iterations` times, throwing a specific message if
+// the result would exceed the caps.
 export function expandLSystem(axiom, rules, iterations) {
   if (!Number.isInteger(iterations) || iterations < 0) throw new Error('L-system iterations must be a non-negative integer');
   const { fCount, total } = countLSystemGrowth(axiom, rules, iterations);
@@ -111,19 +101,17 @@ export function expandLSystem(axiom, rules, iterations) {
   return s;
 }
 
-// A real 3D turtle. State = { position, heading, up }; '+'/'-' rotate the
-// heading around the UP axis by `angle` (standard planar turtle-graphics
-// interpretation — a genuine 3D state carried, just with a fixed up so the
-// classic 2D fractals read correctly); 'F' moves forward stepLength and draws
-// a segment; '[' pushes the full state, ']' pops it (branching). Returns:
+// A 3D turtle. State = { position, heading, up }; '+'/'-' rotate the heading
+// around the up axis by `angle` (planar turtle-graphics interpretation, with a
+// fixed up so the 2D fractals read correctly); 'F' moves forward stepLength
+// and draws a segment; '[' pushes the full state, ']' pops it (branching).
+// Returns:
 //   - segments : one [start,end] pair per drawn 'F' (segments.length === the
-//                exact F count, the checkable growth-law property).
+//                F count).
 //   - polyline : a single continuous [x,y,z][] path over the whole figure. A
-//                non-branching system chains naturally (every segment starts
-//                where the last ended). A branching system inserts a "travel"
-//                vertex whenever a pop jumps the pen elsewhere, so the output
-//                is still one connected curve (an honest v1 for a node whose
-//                output is a single curve).
+//                non-branching system chains naturally. A branching system
+//                inserts a travel vertex whenever a pop moves the pen, so the
+//                output is still one connected curve.
 export function lSystemTurtle(str, { angle = 90, stepLength = 1 } = {}) {
   const a = (angle * Math.PI) / 180;
   const rotZ = (v, ang) => {
@@ -165,17 +153,13 @@ export function lSystemTurtle(str, { angle = 90, stepLength = 1 } = {}) {
   return { segments, polyline };
 }
 
-// ===========================================================================
-// 2. LORENZ ATTRACTOR
-// ===========================================================================
+// 2. Lorenz attractor
 //
-// The canonical Lorenz system:  dx/dt = sigma(y-x),  dy/dt = x(rho-z)-y,
-// dz/dt = xy - beta*z, with the classic sigma=10, rho=28, beta=8/3 that give
-// the well-known butterfly attractor. Integrated with RK4 (a real 4th-order
-// scheme) — NOT naive forward-Euler, which visibly drifts/diverges from the
-// true attractor at any reasonable step size. The shared derivative is
-// exported so a test can build an Euler run from the SAME right-hand side and
-// prove the integrator choice actually matters.
+// The Lorenz system:  dx/dt = sigma(y-x),  dy/dt = x(rho-z)-y,
+// dz/dt = xy - beta*z, with sigma=10, rho=28, beta=8/3 (the butterfly
+// attractor). Integrated with RK4 rather than forward Euler, which drifts from
+// the attractor at any reasonable step size. The derivative is exported so a
+// test can build an Euler run from the same right-hand side and compare.
 export function lorenzDeriv([x, y, z], sigma, rho, beta) {
   return [sigma * (y - x), x * (rho - z) - y, x * y - beta * z];
 }
@@ -204,17 +188,14 @@ export function lorenzTrajectory(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// 3. RANDOM WALK ("Noise Curve" / "Random Walk Curve")
-// ===========================================================================
+// 3. Random walk ("Noise Curve" / "Random Walk Curve")
 //
-// A seeded, fully deterministic random walk through 3D space. Each step picks
-// a uniformly-random unit direction from the shared integer hash (seed, i, k)
-// — NEVER Math.random — then blends it toward the PREVIOUS heading by
-// `roughness` (0 = keep heading exactly, i.e. a straight line; 1 = fully
-// random each step, i.e. maximally jagged), so the knob genuinely controls
-// how correlated consecutive steps are. Same seed => bit-identical curve;
-// different seed => a genuinely different curve.
+// A seeded, deterministic random walk through 3D space. Each step picks a
+// uniformly random unit direction from the shared integer hash (seed, i, k),
+// then blends it toward the previous heading by `roughness` (0 = keep the
+// heading, a straight line; 1 = fully random each step), so the parameter
+// controls how correlated consecutive steps are. Same seed => bit-identical
+// curve.
 export const RANDOM_WALK_DEFAULTS = { seed: 1, stepCount: 200, stepLength: 1, roughness: 0.5, start: [0, 0, 0] };
 
 export function randomWalkCurve(params = {}) {
@@ -243,36 +224,26 @@ export function randomWalkCurve(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// DISTANCE (single scalar) — a trivial but real kernel helper, node-tested
-// alongside the generators. The straight-line Euclidean distance between two
-// points; the Distance node's numeric output.
-// ===========================================================================
+// Distance: the straight-line Euclidean distance between two points; the
+// Distance node's numeric output.
 export function pointDistance(a, b) {
   return length(sub(a, b));
 }
 
-// ===========================================================================
-// 4. WAVE — sine, square, triangle, sawtooth, from ONE parameter block
-// ===========================================================================
+// 4. Wave — sine, square, triangle, sawtooth, from one parameter block
 //
-// Asked for directly ("things like sine waves"), and the family whose own
-// stated purpose is to be made three times at different phases and lofted.
-// The four waveforms share every parameter because they ARE the same curve
-// with a different unit shape, so adding the other three to `sine` costs one
-// switch rather than three generators.
+// The family meant to be made several times at different phases and lofted.
+// The four waveforms share every parameter because they are the same curve
+// with a different unit shape.
 //
-// ⚠ SQUARE AND SAWTOOTH ARE DISCONTINUOUS AND MUST NOT BE FITTED SMOOTH.
-// `smoothFit` is false for them by default, exactly as the L-System above
-// stays degree-1 to keep its fractal corners: a degree-3 interpolation through
-// a step rings badly on both sides of every edge, which reads as a modeling
-// error rather than as the square wave the reader asked for. Exposed rather
-// than hidden so a reader who WANTS the ringing (it is a real, useful shape)
-// can have it.
+// Square and sawtooth are discontinuous and are not fitted smooth by default:
+// `smoothFit` is false for them, as the L-System stays degree-1 to keep its
+// corners, because a degree-3 interpolation through a step rings on both sides
+// of every edge. It is exposed so the ringing can be had on purpose.
 //
 // `skew` pulls the waveform's peak away from the center of its period: 0.5 is
 // symmetric, and at the extremes a triangle becomes a sawtooth. It is applied
-// to the phase WITHIN the cycle, so it leaves period and amplitude untouched.
+// to the phase within the cycle, so it leaves period and amplitude untouched.
 export const WAVE_FORMS = ['sine', 'square', 'triangle', 'sawtooth'];
 export const WAVE_CURVE_DEFAULTS = {
   form: 'sine', amplitude: 10, cycles: 3, length: 100, phase: 0,
@@ -285,12 +256,11 @@ export function waveUnit(form, u) {
   const t = ((u % 1) + 1) % 1;
   switch (form) {
     case 'square': return t < 0.5 ? 1 : -1;
-    // ⚠ ALL FOUR CROSS ZERO RISING AT t = 0, which is what makes the claim
-    // above ("the same curve with a different unit shape") true rather than
-    // merely tidy. A triangle written as 4t-1 starts at -1 and is a quarter
-    // period out of phase with the sine beside it, so lofting a sine section
-    // to a triangle section would twist for a reason nothing on screen
-    // explains. Peaks land on the quarter points, exactly like the sine.
+    // All four cross zero rising at t = 0, so they are the same curve with a
+    // different unit shape. A triangle written as 4t-1 would start at -1, a
+    // quarter period out of phase with the sine, and a loft from a sine section
+    // to a triangle section would twist. Peaks land on the quarter points,
+    // as for the sine.
     case 'triangle': return t < 0.25 ? 4 * t : (t < 0.75 ? 2 - 4 * t : 4 * t - 4);
     case 'sawtooth': return t < 0.5 ? 2 * t : 2 * t - 2;
     case 'sine':
@@ -308,13 +278,13 @@ export function waveCurve(params = {}) {
     const x = p.start[0] + s * p.length;
     // Phase in cycles, then skewed within the cycle. Splitting the cycle at
     // `skew` and rescaling each half keeps every period exactly one period
-    // long, so skew changes the SHAPE without changing the frequency.
+    // long, so skew changes the shape without changing the frequency.
     let u = s * p.cycles + p.phase / 360;
     const cyc = ((u % 1) + 1) % 1;
     const whole = Math.floor(u);
     const skewed = cyc < skew ? (cyc / skew) * 0.5 : 0.5 + ((cyc - skew) / (1 - skew)) * 0.5;
     u = whole + skewed;
-    // Damping is per UNIT LENGTH of the run, so the same value means the same
+    // Damping is per unit length of the run, so the same value means the same
     // decay whatever `length` is set to.
     const decay = p.damping ? Math.exp(-p.damping * s * p.cycles) : 1;
     const y = p.start[1] + p.offset + p.amplitude * decay * waveUnit(form, u);
@@ -322,18 +292,15 @@ export function waveCurve(params = {}) {
   }
   return pts;
 }
-// Whether this waveform should be interpolated smooth. See waveCurve's own
-// comment: the discontinuous forms are polylines on purpose.
+// Whether this waveform should be interpolated smooth. The discontinuous forms
+// are polylines on purpose (see waveCurve).
 export function waveWantsSmoothFit(form) { return form === 'sine' || form === 'triangle'; }
 
-// ===========================================================================
-// 5. HARMONIC — a Fourier sum, which is the wave family generalized
-// ===========================================================================
+// 5. Harmonic — a Fourier sum, the wave family generalized
 //
-// The teaching curve of the set: one term is a sine, and adding odd harmonics
-// at 1/n amplitude walks visibly toward a square wave, which is the fact a
-// student is meant to SEE rather than be told. `falloff` is the exponent on
-// 1/n, so 1 is the square/sawtooth law and 2 is the triangle law.
+// One term is a sine; adding odd harmonics at 1/n amplitude converges toward a
+// square wave. `falloff` is the exponent on 1/n, so 1 is the square/sawtooth
+// law and 2 is the triangle law.
 export const HARMONIC_DEFAULTS = {
   terms: 5, oddOnly: true, falloff: 1, amplitude: 10, cycles: 2,
   length: 100, phase: 0, samples: 300, start: [0, 0, 0],
@@ -356,23 +323,17 @@ export function harmonicCurve(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// 6. FBM NOISE CURVE — fractal Brownian motion along a run
-// ===========================================================================
+// 6. fBm noise curve — fractal Brownian motion along a run
 //
-// Asked for directly ("perlin noise curves"). Summed octaves of value noise:
-// each octave `lacunarity` times the frequency of the last and `persistence`
-// times the amplitude, which is the standard fBm parameter set.
+// Summed octaves of value noise: each octave `lacunarity` times the frequency
+// of the last and `persistence` times the amplitude, the standard fBm
+// parameter set. Distinct from the Noise modifier (kernel/noise.mjs,
+// noiseControlNet), which displaces an existing surface.
 //
-// ⚠ DISTINCT FROM THE NOISE MODIFIER, and the header of this module explains
-// why that distinction is guarded: kernel/noise.mjs's noiseControlNet
-// DISPLACES an existing surface. This builds a new curve out of nothing.
-//
-// ⚠ CLOSED IS NOT A CLAMP. A closed noise curve samples the noise field
-// around a CIRCLE in noise space rather than along a line, so the value at
-// t=1 is the value at t=0 by construction and the seam cannot show. Clamping
-// or mirroring the ends instead leaves a visible discontinuity exactly where
-// a reader is most likely to look.
+// A closed noise curve samples the noise field around a circle in noise space
+// rather than along a line, so the value at t=1 is the value at t=0 by
+// construction and there is no seam. Clamping or mirroring the ends instead
+// leaves a visible discontinuity.
 export const NOISE_CURVE_DEFAULTS = {
   seed: 1, octaves: 4, frequency: 1, lacunarity: 2, persistence: 0.5,
   amplitude: 10, length: 100, samples: 240, closed: false, radius: 40, start: [0, 0, 0],
@@ -384,13 +345,10 @@ export function fbm1D(x, y, seed, octaves, frequency, lacunarity, persistence, n
   let sum = 0, amp = 1, freq = frequency, norm = 0;
   const oct = Math.max(1, Math.round(octaves));
   for (let o = 0; o < oct; o++) {
-    /* ⚠ NO -1..1 REMAP HERE. kernel/noise.mjs's own latticeVal is
-       `2 * hash01(...) - 1`, so valueNoise2D ALREADY returns -1..1 — the
-       usual `* 2 - 1` applied on top pushes the sum to -3..1 and biases every
-       curve downward, which reads as "that is just what noise looks like"
-       rather than as a defect. Measured before the fix: -1.33 out of a
-       normalizer that guarantees -1..1. Check the convention of the noise you
-       are handed; do not assume the [0,1] one. */
+    /* No -1..1 remap here. kernel/noise.mjs's latticeVal is
+       `2 * hash01(...) - 1`, so valueNoise2D already returns -1..1; applying
+       `* 2 - 1` on top would push the sum to -3..1 and bias every curve
+       downward. */
     sum += amp * noise2D(x * freq, y * freq, seed + o * 1013);
     norm += amp;
     amp *= persistence;
@@ -407,13 +365,13 @@ export function noiseCurve(params = {}, noise2D) {
     // A ring in space, displaced radially by noise sampled on a circle in the
     // noise field — so both the geometry and the noise close exactly.
     for (let i = 0; i < n; i++) {
-      const s = i / n;                              // NOT n-1: the last point is not a repeat of the first
+      const s = i / n;                              // not n-1: the last point is not a repeat of the first
       const a = 2 * Math.PI * s;
       const d = fbm1D(Math.cos(a), Math.sin(a), p.seed, p.octaves, p.frequency, p.lacunarity, p.persistence, noise2D);
       const r = p.radius + p.amplitude * d;
       pts.push([p.start[0] + r * Math.cos(a), p.start[1] + r * Math.sin(a), p.start[2]]);
     }
-    pts.push(pts[0].slice()); // the wrap segment, explicitly — a closed loop that omits it looks right and is not
+    pts.push(pts[0].slice()); // the wrap segment, explicitly — a closed loop needs it
     return pts;
   }
   for (let i = 0; i < n; i++) {
@@ -424,19 +382,16 @@ export function noiseCurve(params = {}, noise2D) {
   return pts;
 }
 
-// ===========================================================================
-// 7. ROULETTE — hypotrochoid / epitrochoid, the spirograph family
-// ===========================================================================
+// 7. Roulette — hypotrochoid / epitrochoid, the spirograph family
 //
-// One formula, an enormous range, and several named classical curves fall out
-// as parameter presets rather than as separate generators:
+// One formula; several named classical curves are parameter presets rather
+// than separate generators:
 //   d = r          -> hypocycloid / epicycloid
 //   R = 4r, d = r  -> astroid          R = r (epi) -> cardioid
-//   R = 3r, d = r  -> deltoid          R = 2r (hypo) -> a straight line (real, and worth seeing)
+//   R = 3r, d = r  -> deltoid          R = 2r (hypo) -> a straight line
 //
-// The curve only CLOSES when R/r is rational; `turns` is therefore a real
-// parameter and not a detail, and the honest default walks enough turns to
-// close the common ratios.
+// The curve closes only when R/r is rational, so `turns` is a real parameter,
+// and the default walks enough turns to close the common ratios.
 export const ROULETTE_MODES = ['hypotrochoid', 'epitrochoid'];
 export const ROULETTE_DEFAULTS = { mode: 'hypotrochoid', R: 50, r: 15, d: 22, turns: 0, samples: 720, start: [0, 0, 0] };
 // How many turns of the driving circle are needed for the tracing point to
@@ -475,16 +430,14 @@ export function rouletteCurve(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// 8. SUPERFORMULA (Gielis) — the widest shape range per parameter here
-// ===========================================================================
+// 8. Superformula (Gielis)
 //
 // r(a) = ( |cos(m*a/4)/A|^n2 + |sin(m*a/4)/B|^n3 ) ^ (-1/n1)
 //
-// Proposed by Johan Gielis as a description of forms found in nature; it
-// covers circles, ellipses, superellipses, rounded polygons, stars and flower
-// forms continuously as the six numbers move. n1 = n2 = n3 = 2 with m = 4 is
-// an ellipse — an exact closed form, which is what the test pins it against.
+// Proposed by Johan Gielis as a description of natural forms; it covers
+// circles, ellipses, superellipses, rounded polygons, stars and flower forms
+// continuously as the six numbers move. n1 = n2 = n3 = 2 with m = 4 is an
+// ellipse — an exact closed form, which the test pins it against.
 export const SUPERFORMULA_DEFAULTS = { a: 1, b: 1, m: 6, n1: 1, n2: 1, n3: 1, scale: 40, samples: 360, start: [0, 0, 0] };
 export function superformulaRadius(theta, { a, b, m, n1, n2, n3 }) {
   const t1 = Math.pow(Math.abs(Math.cos(m * theta / 4) / a), n2);
@@ -506,55 +459,40 @@ export function superformulaCurve(params = {}) {
   return pts;
 }
 
-// ---------------------------------------------------------------------------
-// Shared integer GCD for the families below whose closure depends on a
-// rational ratio (rose, torus knot). rouletteClosingTurns above carries its
-// own recursive copy from before this was needed; it is left alone rather
-// than re-pointed, because its inputs are SCALED FLOATS (Math.round(R*1000))
-// and this one takes plain integers — merging them would silently widen the
-// contract of a function four tests already pin.
-// ---------------------------------------------------------------------------
+// Integer GCD for the families whose closure depends on a rational ratio
+// (rose, torus knot). rouletteClosingTurns keeps its own recursive copy because
+// its inputs are scaled floats (Math.round(R*1000)) while this one takes plain
+// integers.
 function intGcd(a, b) {
   a = Math.abs(a | 0); b = Math.abs(b | 0);
   while (b) { const t = a % b; a = b; b = t; }
   return a;
 }
 
-// ===========================================================================
-// 9. SPIRAL — archimedean / logarithmic / fermat, planar or conical
-// ===========================================================================
+// 9. Spiral — archimedean / logarithmic / fermat, planar or conical
 //
-// Three classical spirals behind ONE `kind` switch, because they differ only
-// in r(theta) and share every other parameter — the same reasoning that put
-// the four waveforms into waveCurve rather than into four generators.
+// Three classical spirals behind one `kind` switch, because they differ only
+// in r(theta) and share every other parameter.
 //
-//   archimedean : r = a + b*theta   — turns are EQUALLY SPACED. Successive
-//                 turns differ by exactly 2*pi*b, whatever theta is. This is
-//                 the spiral of a coiled rope or a clock spring.
-//   logarithmic : r = a * e^(b*theta) — turns grow by a constant RATIO
-//                 e^(2*pi*b) instead. Bernoulli's spira mirabilis: the shape
-//                 is SELF-SIMILAR, so it looks the same at every zoom, which
-//                 the equal-spacing spiral above emphatically does not.
-//   fermat      : r = a * sqrt(theta) — the parabolic spiral; equal AREA per
+//   archimedean : r = a + b*theta   — turns are equally spaced. Successive
+//                 turns differ by exactly 2*pi*b, whatever theta is (a coiled
+//                 rope, a clock spring).
+//   logarithmic : r = a * e^(b*theta) — turns grow by a constant ratio
+//                 e^(2*pi*b) instead. Bernoulli's spira mirabilis: the shape is
+//                 self-similar, the same at every zoom.
+//   fermat      : r = a * sqrt(theta) — the parabolic spiral; equal area per
 //                 turn rather than equal spacing or equal ratio.
 //
-// ⚠ theta IS IN RADIANS and `growth` is therefore PER RADIAN, not per turn.
-// That is the form the three formulas are quoted in everywhere, so quoting
-// them any other way would make every reference the reader checks disagree
-// with the code. The per-turn consequences (spacing 2*pi*b, ratio e^(2*pi*b))
-// are stated above and pinned in the tests.
+// theta is in radians and `growth` is therefore per radian, not per turn —
+// the form the three formulas are quoted in everywhere. The per-turn
+// consequences (spacing 2*pi*b, ratio e^(2*pi*b)) are pinned in the tests.
 //
-// ⚠ `startRadius` IS NOT THE STARTING RADIUS FOR FERMAT. It is the
-// coefficient a in every kind, and for fermat r(0) = a*sqrt(0) = 0 — a Fermat
-// spiral always begins at the origin, and `a` sets how fast it leaves. Naming
-// it `coefficient` would be accurate and unreadable; naming it `startRadius`
-// is readable and true for two kinds of three, so the trap is documented here
-// rather than papered over by special-casing fermat into starting somewhere
-// it does not.
+// `startRadius` is not the starting radius for fermat. It is the coefficient a
+// in every kind, and for fermat r(0) = a*sqrt(0) = 0: a Fermat spiral always
+// begins at the origin, and `a` sets how fast it leaves.
 //
 // `height` lifts the curve linearly along z over the whole run, turning the
-// planar spiral into a conical one (radius still growing, now climbing too).
-// height = 0 is the planar default.
+// planar spiral into a conical one. height = 0 is the planar default.
 export const SPIRAL_KINDS = ['archimedean', 'logarithmic', 'fermat'];
 export const SPIRAL_DEFAULTS = {
   kind: 'archimedean', turns: 4, startRadius: 5, growth: 2, height: 0,
@@ -573,12 +511,11 @@ export function spiralCurve(params = {}) {
   const kind = SPIRAL_KINDS.includes(p.kind) ? p.kind : 'archimedean';
   const n = Math.max(2, Math.round(p.samples));
   const thetaMax = p.turns * 2 * Math.PI;
-  // ⚠ REFUSE THE OVERFLOW RATHER THAN EMIT Infinity/NaN. A logarithmic spiral
-  // is an EXPONENTIAL in a number the user types: growth 1 with 40 turns is
-  // e^251, which is representable, but growth 3 with 40 turns is e^754 and is
-  // not. Left unguarded the chain fills with Infinity, every downstream fit
-  // produces NaN control points, and the reported error names interpolate.mjs
-  // — a place with nothing wrong with it.
+  // Refuse overflow rather than emit Infinity/NaN. A logarithmic spiral is an
+  // exponential in a user-typed number: growth 1 with 40 turns is e^251, which
+  // is representable, but growth 3 with 40 turns is e^754 and is not.
+  // Unguarded, the chain fills with Infinity, downstream fits produce NaN
+  // control points, and the error surfaces in interpolate.mjs.
   if (kind === 'logarithmic') {
     const rEnd = Math.abs(p.startRadius) * Math.exp(p.growth * thetaMax);
     if (!Number.isFinite(rEnd)) {
@@ -599,37 +536,31 @@ export function spiralCurve(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// 10. LISSAJOUS — x = A sin(a t + delta), y = B sin(b t), z = C sin(c t)
-// ===========================================================================
+// 10. Lissajous — x = A sin(a t + delta), y = B sin(b t), z = C sin(c t)
 //
-// The oscilloscope figure: two (here three) perpendicular sinusoids at
-// different frequencies. The whole interest of the family is that the
-// frequency RATIO decides the topology — 1:1 is an ellipse (a line at phase
-// 0), 1:2 is a figure-eight, 3:2 is the classic three-lobed knot-looking
-// figure — and the phase decides how that figure is presented.
+// Two (here three) perpendicular sinusoids at different frequencies. The
+// frequency ratio decides the topology — 1:1 is an ellipse (a line at phase
+// 0), 1:2 is a figure-eight, 3:2 is the three-lobed figure — and the phase
+// decides how that figure is presented.
 //
-// ⚠ IT ONLY CLOSES WHEN THE RATIO IS RATIONAL, and "rational" is not the same
-// thing as "whole". Integer frequencies close at t = 2pi, but so do half-integer
-// ones — at 4pi. sin(2.5 * 2pi) = sin(5pi) = 0 = sin(0), so a chain sampled over
-// [0, 2pi] at freq 2.5 comes back to the same POINT with the opposite tangent:
-// it is a half traversal that looks closed and is not, and a wrap segment added
-// there welds the figure to the middle of itself. lissajousPeriodTurns solves
-// for the real period instead, and an irrationally-related set (freq = pi) is
-// emitted OPEN with no closing repeat.
+// It closes only when the ratio is rational, which is not the same as whole.
+// Integer frequencies close at t = 2pi, half-integer ones at 4pi.
+// sin(2.5 * 2pi) = sin(5pi) = 0 = sin(0), so a chain sampled over [0, 2pi] at
+// freq 2.5 returns to the same point with the opposite tangent: a half
+// traversal, and a wrap segment added there would weld the figure to its own
+// middle. lissajousPeriodTurns solves for the true period, and an
+// irrationally related set (freq = pi) is emitted open with no closing repeat.
 //
-// ⚠ freqZ IS INERT WHEN ampZ IS 0, which is the default. That is not a bug
-// (a zero-amplitude axis has no frequency to see) but it is a real trap for
-// anything trying to test freqZ: a fixture with ampZ = 0 cannot tell a
-// correct freqZ from a discarded one.
+// freqZ has no effect when ampZ is 0, the default, so a test of freqZ needs a
+// nonzero ampZ.
 export const LISSAJOUS_DEFAULTS = {
   freqX: 3, freqY: 2, freqZ: 0, phase: 90,
   ampX: 40, ampY: 40, ampZ: 0, samples: 720, start: [0, 0, 0],
 };
 // Best rational p/q for x with q <= maxDen, or null if none is exact enough.
-// The tolerance is deliberately far tighter than the search is wide: 355/113
-// is within 2.7e-7 of pi and would otherwise make an irrational frequency
-// "close" after 113 turns, which is a lie that only shows at the seam.
+// The tolerance is far tighter than the search is wide: 355/113 is within
+// 2.7e-7 of pi and would otherwise make an irrational frequency close after
+// 113 turns, with a mismatch at the seam.
 function ratApprox(x, maxDen = 512) {
   for (let q = 1; q <= maxDen; q++) {
     const num = Math.round(x * q);
@@ -670,7 +601,7 @@ export function lissajousCurve(params = {}) {
   const turns = lissajousPeriodTurns(p.freqX, p.freqY, p.freqZ);
   if (turns > 0) {
     const span = turns * 2 * Math.PI;
-    for (let i = 0; i < n; i++) pts.push(at((i / n) * span)); // NOT n-1: the last sample is not a repeat of the first
+    for (let i = 0; i < n; i++) pts.push(at((i / n) * span)); // not n-1: the last sample is not a repeat of the first
     pts.push(pts[0].slice()); // the wrap segment, explicitly
     return pts;
   }
@@ -679,29 +610,25 @@ export function lissajousCurve(params = {}) {
   return pts;
 }
 
-// ===========================================================================
-// 11. ROSE (rhodonea) — r = a * cos(n*theta/d)
-// ===========================================================================
+// 11. Rose (rhodonea) — r = a * cos(n*theta/d)
 //
-// The petal count is the whole point and it is NOT n. For d = 1:
+// The petal count is not n. For d = 1:
 //   n odd  -> exactly n petals, traced over theta in [0, pi)
 //   n even -> exactly 2n petals, traced over theta in [0, 2pi)
-// The reason is that r goes NEGATIVE for half the range, and a negative r in
-// polar coordinates plots at theta + pi — so an odd rose retraces its own
-// petals on the second half turn instead of drawing new ones, while an even
-// rose draws a fresh petal in each gap. Rendering |r| instead of the signed r
-// (a very natural-looking "fix") destroys exactly this: it turns every rose
-// into a 2n-petal one and the classic 3-petal trefoil becomes a 6-petal
-// flower.
+// r goes negative for half the range, and a negative r in polar coordinates
+// plots at theta + pi — so an odd rose retraces its petals on the second half
+// turn, while an even rose draws a new petal in each gap. Plotting |r| instead
+// of the signed r turns every rose into a 2n-petal one (the 3-petal trefoil
+// becomes a 6-petal flower).
 //
 // The rational generalization r = a*cos(n*theta/d) with n/d in lowest terms
 // closes after d*pi when n*d is odd and 2*d*pi otherwise (the same signed-r
-// argument, one period of cos(n*theta/d) later). n/d = 7/2 and 2/7 are both
-// real, very different, and both closed.
+// argument, one period of cos(n*theta/d) later). n/d = 7/2 and 2/7 are
+// different and both closed.
 //
-// ⚠ n AND d MUST BE POSITIVE INTEGERS. An irrational ratio never closes — it
-// fills an annulus densely — so it is refused by name rather than emitted as
-// a chain with a chord across it.
+// n and d must be positive integers. An irrational ratio never closes — it
+// fills an annulus densely — so it is refused rather than emitted as a chain
+// with a chord across it.
 export const ROSE_DEFAULTS = { n: 5, d: 1, amplitude: 40, samples: 720, start: [0, 0, 0] };
 // The angular span of one complete traversal, after reducing n/d to lowest
 // terms. Exported because the sampling and any consumer wanting to subdivide
@@ -721,31 +648,25 @@ export function roseCurve(params = {}) {
   const k = p.n / p.d;
   const pts = [];
   for (let i = 0; i < n; i++) {
-    const th = (i / n) * thetaMax;              // NOT n-1: the last sample is not a repeat of the first
-    const r = p.amplitude * Math.cos(k * th);   // ⚠ SIGNED — see the header
+    const th = (i / n) * thetaMax;              // not n-1: the last sample is not a repeat of the first
+    const r = p.amplitude * Math.cos(k * th);   // signed — see the header
     pts.push([p.start[0] + r * Math.cos(th), p.start[1] + r * Math.sin(th), p.start[2]]);
   }
   pts.push(pts[0].slice()); // the wrap segment, explicitly
   return pts;
 }
 
-// ===========================================================================
-// 12. HELIX — the genuinely 3D staple: cylinder, cone, spring
-// ===========================================================================
+// 12. Helix — cylinder, cone, spring
 //
-// ⚠ pitch, turns AND height ARE ONE PARAMETER TOO MANY. height = pitch *
-// turns identically, so a UI offering all three can be put into a state that
-// contradicts itself. Rather than silently preferring one and letting the
-// other read as broken, the rule is stated and exported: PITCH DRIVES, and
-// `height` is an optional override — set height > 0 and pitch is DERIVED as
-// height / turns instead. helixResolve returns the triple actually used, so
-// the relationship can be read (and asserted) rather than inferred.
+// pitch, turns and height are one parameter too many: height = pitch * turns.
+// The rule: pitch drives, and `height` is an optional override — set
+// height > 0 and pitch is derived as height / turns. helixResolve returns the
+// triple actually used, so the relationship can be read and asserted.
 //
-// `taper` is the radius at the top as a fraction removed: 0 leaves a cylinder
+// `taper` is the fraction of the radius removed at the top: 0 leaves a cylinder
 // of constant radius, 1 closes the radius to exactly zero at the last point
 // (a cone / conical spring). Clamped to [0,1]: beyond 1 the radius goes
-// negative and the curve passes through the axis and unwinds on the far side,
-// which is a different shape from the one this parameter names.
+// negative and the curve passes through the axis and unwinds on the far side.
 export const HELIX_DEFAULTS = {
   radius: 20, pitch: 10, turns: 5, height: 0, taper: 0, phase: 0,
   samples: 400, start: [0, 0, 0],
@@ -759,7 +680,7 @@ export function helixResolve(params = {}) {
 export function helixCurve(params = {}) {
   const p = { ...HELIX_DEFAULTS, ...params };
   if (!(p.turns > 0)) throw new Error(`helixCurve needs turns > 0 (got ${p.turns}) — zero turns is a point, not a helix`);
-  const { pitch, height } = helixResolve(p);
+  const { height } = helixResolve(p);
   const taper = Math.min(1, Math.max(0, p.taper));
   const ph = (p.phase * Math.PI) / 180;
   const n = Math.max(2, Math.round(p.samples));
@@ -772,48 +693,40 @@ export function helixCurve(params = {}) {
   }
   return pts;
 }
-// The exact arc length of the UNTAPERED helix: each turn is the hypotenuse of
+// The exact arc length of the untapered helix: each turn is the hypotenuse of
 // a right triangle whose legs are the circumference and the pitch, so
-// L = turns * sqrt((2*pi*R)^2 + pitch^2). A closed form, so the polyline can
-// be measured against it rather than against another polyline.
+// L = turns * sqrt((2*pi*R)^2 + pitch^2).
 export function helixArcLength(radius, pitch, turns) {
   return turns * Math.hypot(2 * Math.PI * radius, pitch);
 }
 
-// ===========================================================================
-// 13. CATENARY — y = a*cosh(x/a), the hanging chain
-// ===========================================================================
+// 13. Catenary — y = a*cosh(x/a), the hanging chain
 //
-// The curve a uniform chain takes under its own weight, and famously NOT the
-// parabola it is mistaken for. The single shape parameter is `a` (the ratio
-// of horizontal tension to weight per unit length): small a is a deep sag,
-// large a is nearly flat.
+// The curve of a uniform chain under its own weight, not a parabola. The shape
+// parameter `a` is the ratio of horizontal tension to weight per unit length:
+// small a is a deep sag, large a is nearly flat.
 //
-// ⚠ THIS FAMILY TAKES span AND sag, AND SOLVES FOR a. That is the useful
-// input pair (a reader knows how wide the gap is and how far the chain should
-// hang) but it is a TRANSCENDENTAL relation:
+// This family takes span and sag and solves for a. The relation is
+// transcendental:
 //     sag = a * (cosh(span / (2a)) - 1)
-// which has no closed-form inverse in elementary functions. It is inverted
-// numerically, by bisection, and that is stated here rather than hidden
-// behind a formula-looking helper. The parabolic approximation a ~ span^2 /
-// (8*sag) is used only to SEED the bracket, never as the answer: it is the
-// leading term of the series and is exactly the "a catenary is a parabola"
-// error. At span 100 with sag 25 it gives a = 50 where the true a is 53.716,
-// so a curve built on it hangs 8.6% too deep.
+// with no closed-form inverse in elementary functions, so it is inverted
+// numerically by bisection. The parabolic approximation a ~ span^2 / (8*sag)
+// only seeds the bracket: it is the leading term of the series, and at span
+// 100 with sag 25 it gives a = 50 where the true a is 53.716 (a curve built on
+// it hangs 8.6% too deep).
 //
-// Bisection rather than Newton because sag(a) is strictly monotonic
-// decreasing on a > 0, so a bracket cannot be lost; Newton on the same
-// function is faster and can walk off toward a = 0, where cosh overflows.
+// Bisection rather than Newton because sag(a) is strictly decreasing on a > 0,
+// so a bracket cannot be lost; Newton on the same function can walk off toward
+// a = 0, where cosh overflows.
 export const CATENARY_DEFAULTS = { span: 100, sag: 25, samples: 121, start: [0, 0, 0] };
-// Solve sag = a*(cosh(span/(2a)) - 1) for a. Converges to `tol` RELATIVE,
-// which is what matters here: a scales with span, so an absolute tolerance
-// would mean something different for a 1mm chain and a 1km one.
+// Solve sag = a*(cosh(span/(2a)) - 1) for a. Converges to a relative `tol`,
+// because a scales with span.
 export function catenaryParameter(span, sag, tol = 1e-14) {
   if (!(span > 0)) throw new Error(`catenaryCurve needs span > 0 (got ${span})`);
   if (!(sag > 0)) throw new Error(`catenaryCurve needs sag > 0 (got ${sag}) — a chain with no sag is a straight line under infinite tension, not a catenary`);
   const sagOf = (a) => a * (Math.cosh(span / (2 * a)) - 1);
-  const seed = (span * span) / (8 * sag);   // parabolic approximation, a SEED only
-  let lo = seed, hi = seed;                 // sagOf is DECREASING: lo is small-a/deep-sag
+  const seed = (span * span) / (8 * sag);   // parabolic approximation, a seed only
+  let lo = seed, hi = seed;                 // sagOf is decreasing: lo is small-a/deep-sag
   for (let g = 0; g < 200 && sagOf(hi) > sag; g++) hi *= 2;
   for (let g = 0; g < 200 && sagOf(lo) < sag; g++) lo /= 2;
   for (let i = 0; i < 300; i++) {
@@ -823,10 +736,9 @@ export function catenaryParameter(span, sag, tol = 1e-14) {
   }
   return 0.5 * (lo + hi);
 }
-// ⚠ THE DEFAULT SAMPLE COUNT IS ODD ON PURPOSE. With an odd count one sample
-// lands exactly on the span midpoint, which is where the vertex is — so the
-// lowest point of the chain is a point on the curve rather than something the
-// polyline cuts a chord across.
+// The default sample count is odd so that one sample lands exactly on the span
+// midpoint, where the vertex is — the lowest point of the chain is then a
+// point on the curve rather than on a chord.
 export function catenaryCurve(params = {}) {
   const p = { ...CATENARY_DEFAULTS, ...params };
   const n = Math.max(2, Math.round(p.samples));
@@ -837,38 +749,34 @@ export function catenaryCurve(params = {}) {
   for (let i = 0; i < n; i++) {
     const s = i / (n - 1);
     const u = -half + s * p.span;        // u = 0 at the span midpoint, where the vertex is
-    // The textbook y = a*cosh(u/a), shifted so the two suspension points sit
-    // at start[1] and the chain hangs DOWN from them to start[1] - sag.
+    // y = a*cosh(u/a), shifted so the two suspension points sit at start[1]
+    // and the chain hangs down from them to start[1] - sag.
     pts.push([p.start[0] + half + u, p.start[1] + a * Math.cosh(u / a) - top, p.start[2]]);
   }
   return pts;
 }
 
-// ===========================================================================
-// 14. TORUS KNOT — the (p,q) knot, wound on a torus
-// ===========================================================================
+// 14. Torus knot — the (p,q) knot, wound on a torus
 //
 //   x = (R + r*cos(q*t)) * cos(p*t)
 //   y = (R + r*cos(q*t)) * sin(p*t)
 //   z =      r*sin(q*t)                       t in [0, 2*pi)
 //
-// Over one period the curve goes round the main axis exactly p times and
-// round the tube exactly q times, and EVERY point satisfies the implicit
-// equation of the torus it is wound on:
+// Over one period the curve goes round the main axis exactly p times and round
+// the tube exactly q times, and every point satisfies the implicit equation of
+// its torus:
 //     (sqrt(x^2 + y^2) - R)^2 + z^2 = r^2
-// identically, since sqrt(x^2+y^2) - R = r*cos(q*t) and z = r*sin(q*t). That
-// identity is the family's oracle and it holds to machine precision.
+// identically, since sqrt(x^2+y^2) - R = r*cos(q*t) and z = r*sin(q*t). The
+// tests use that identity as the oracle; it holds to machine precision.
 //
-// ⚠ gcd(p,q) MUST BE 1 OR IT IS NOT A KNOT. With gcd(p,q) = g > 1 the
-// parametrization above returns to its start after 2*pi/g and then retraces
-// the same points g times over — the object is a LINK of g separate
-// components, and a single point chain cannot represent it. That is refused
-// by name: emitting the g-fold retrace would look correct on screen and give
-// a curve with g coincident copies of itself, which every downstream fit and
-// offset would then choke on for reasons naming the wrong module.
+// gcd(p,q) must be 1. With gcd(p,q) = g > 1 the parametrization returns to its
+// start after 2*pi/g and retraces the same points g times — the object is a
+// link of g components, which a single point chain cannot represent. It is
+// refused rather than emitted as g coincident copies, which downstream fits
+// and offsets would fail on.
 //
-// (p,q) and (q,p) are the SAME knot type (a torus is symmetric in its two
-// circles) but they are different CURVES in space, so both are offered.
+// (p,q) and (q,p) are the same knot type (a torus is symmetric in its two
+// circles) but different curves in space, so both are offered.
 export const TORUS_KNOT_DEFAULTS = { p: 2, q: 3, R: 40, r: 12, samples: 720, start: [0, 0, 0] };
 export function torusKnotCurve(params = {}) {
   const cfg = { ...TORUS_KNOT_DEFAULTS, ...params };
@@ -882,7 +790,7 @@ export function torusKnotCurve(params = {}) {
   const n = Math.max(8, Math.round(cfg.samples));
   const pts = [];
   for (let i = 0; i < n; i++) {
-    const t = (i / n) * 2 * Math.PI;     // NOT n-1: the last sample is not a repeat of the first
+    const t = (i / n) * 2 * Math.PI;     // not n-1: the last sample is not a repeat of the first
     const ring = cfg.R + cfg.r * Math.cos(cfg.q * t);
     pts.push([
       cfg.start[0] + ring * Math.cos(cfg.p * t),

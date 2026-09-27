@@ -1,17 +1,13 @@
-// PIPE ROUNDED-CORNER CROSS-SECTION RESOLUTION — closes the
-// session-carried-over bug: `cornerStyle:'rounded'` on a CLOSED, multi-
-// corner rail produced visibly torn/self-intersecting geometry, with
-// Properties reporting an implausible `Ctrl Pts V: 157`. See
-// kernel/sweep.mjs's own `denseRailFrames`/`MIN_SPAN_SAMPLES` header
-// comment for the full derivation — short version: 157 was never itself
-// anomalous (an ordinary ~6-corner rail's own V-resolution from
-// `sweep1RigidResampled`'s dense sampling, unrelated to the rail's OWN,
-// much smaller, control-point count); the real defect was genuine
-// under-sampling producing Gibbs-like ringing at every arc/line junction,
-// fixed by raising `denseRailFrames`'s per-span sample floor. Every
-// assertion here measures the REAL swept surface via `surfacePoint`
-// (never internals), matching this kernel's own established discipline
-// for exactly this class of fix (test/sweep-true-miter.test.mjs).
+// Pipe rounded-corner cross-section resolution. `cornerStyle:'rounded'` on a
+// closed, multi-corner rail needs enough dense-rail samples per span:
+// under-sampling produces Gibbs-like ringing at every arc/line junction, seen
+// as torn or self-intersecting geometry. The per-span sample floor is
+// `MIN_SPAN_SAMPLES` in `denseRailFrames` (kernel/sweep.mjs; its header
+// comment has the derivation). The swept surface's V control-point count
+// comes from `sweep1RigidResampled`'s dense sampling, not from the rail's own
+// control-point count, so a count such as 157 on a ~6-corner rail is
+// expected. Every assertion here measures the swept surface via
+// `surfacePoint`, never internals.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -52,7 +48,7 @@ function roundedPipeSurface(points, cornerRadius, pipeRadius) {
   return sweep1Rigid(rail, circleProfile);
 }
 
-test('a rounded-corner Pipe on a genuinely 3D, 5-corner closed rail keeps every cross-section close to a true circle — the exact reported bug, now bounded', () => {
+test('a rounded-corner Pipe on a 3D, 5-corner closed rail keeps every cross-section close to a true circle', () => {
   const pts = [
     [0, 0, 0],
     [40, 5, 8],
@@ -62,7 +58,7 @@ test('a rounded-corner Pipe on a genuinely 3D, 5-corner closed rail keeps every 
   ];
   const srf = roundedPipeSurface(pts, 1, 5);
   const worst = worstCrossSectionEllipticity(srf, 5);
-  assert.ok(worst < 0.03, `worst cross-section ellipticity ${(worst * 100).toFixed(2)}% should be well under the old fixed-density baseline's ~19%`);
+  assert.ok(worst < 0.03, `worst cross-section ellipticity ${(worst * 100).toFixed(2)}% should be under 3%`);
 });
 
 test('a tight-cornered 8-vertex star rail (small radius relative to segment length) stays close to circular at every station', () => {
@@ -93,9 +89,9 @@ test('a 12-corner closed rail — many junctions in one loop — stays well-beha
 test('a straight (zero-turn) span still gets at least MIN_SPAN_SAMPLES worth of resolution — the floor applies uniformly, not only near corners', () => {
   // A rail with one real corner and one very long straight run: the straight
   // run's own local shape is a plain 3D line (rigidly transported, zero
-  // curvature) — reproduced exactly at ANY density, so this proves the floor
+  // curvature) — reproduced exactly at any density, so this proves the floor
   // is actually applied there (a real V-resolution jump vs. a much shorter
-  // straight run in the SAME rail), not that quality happens to be fine.
+  // straight run in the same rail), not that quality happens to be fine.
   const pts = [[0, 0, 0], [20, 0, 0], [20, 200, 0]];
   const res = filletOpenPolyline(pts, 3, { closed: false });
   assert.equal(res.ok, true, res.reason);
@@ -104,13 +100,13 @@ test('a straight (zero-turn) span still gets at least MIN_SPAN_SAMPLES worth of 
   const srf = sweep1Rigid(rail, circleProfile);
   // 3 segments (short line, arc, long line) each contribute (n+1) points minus
   // shared joints; with a floor of 48 samples/span this must be substantially
-  // denser than the OLD fixed-12 formula's total of ~3*13-2=37.
-  assert.ok(srf.ctrlNet[0].length > 100, `expected a much denser V-resolution than the old fixed-12 formula, got ${srf.ctrlNet[0].length}`);
+  // denser than a fixed 12 samples per span (~3*13-2=37 in total).
+  assert.ok(srf.ctrlNet[0].length > 100, `expected a much denser V-resolution than a fixed 12 samples per span, got ${srf.ctrlNet[0].length}`);
   const worst = worstCrossSectionEllipticity(srf, 2);
   assert.ok(worst < 0.03, `worst cross-section ellipticity ${(worst * 100).toFixed(2)}% should be small on this simple 1-corner rail`);
 });
 
-test('the composed rail\'s own control-point count is unaffected by this fix — it is purely a resampling-resolution change downstream of it', () => {
+test('the composed rail\'s own control-point count is independent of the sweep\'s resampling floor', () => {
   const pts = [
     [0, 0, 0],
     [40, 5, 8],
@@ -120,5 +116,5 @@ test('the composed rail\'s own control-point count is unaffected by this fix —
   ];
   const res = filletOpenPolyline(pts, 1, { closed: true });
   const rail = filletSegmentsToCurve(res.segments);
-  assert.equal(rail.ctrlPts.length, 21, 'the rail\'s own composed control-net size (4*cornerCount+1) is untouched by this fix');
+  assert.equal(rail.ctrlPts.length, 21, 'the rail\'s own composed control-net size (4*cornerCount+1) does not depend on the sweep resampling');
 });

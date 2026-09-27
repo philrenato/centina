@@ -1,49 +1,44 @@
-// TESSELLATE — a "surface -> curves" generator
-// ("TESSELLATION — BUILD, pulled OUT of the Modifiers stack entirely"). It is
-// a category sibling of PaintCurves (surface -> N real new curve objects),
-// NOT a surface->surface modifier-chain member, exactly as the reconciled
-// note rules. Three cell patterns over the surface's OWN UV DOMAIN (this app
-// works trims/paint/tessellation in UV space, matching Trim/Paint):
-//   1. QUAD        — a regular MxN grid subdivision, each cell -> its 4-edge
+// Tessellate — a "surface -> curves" generator. It is a sibling of
+// PaintCurves (surface -> N new curve objects), not a surface->surface
+// modifier-chain member. Three cell patterns over the surface's own UV
+// domain (trims, paint and tessellation all work in UV space):
+//   1. Quad        — a regular MxN grid subdivision, each cell -> its 4-edge
 //                    boundary loop. An "irregularity" jitter (0 = perfectly
 //                    regular grid) displaces interior grid intersections.
-//   2. TRIANGULAR  — the same MxN grid, each quad split into 2 triangles.
-//   3. VORONOI     — the flagship. Scatter N generator points across the UV
-//                    domain (a REGULAR near-hexagonal lattice at
-//                    irregularity 0, so it never defaults to the "soccer
-//                    ball" over-regular look the doc warns against), then the
-//                    real 2D Voronoi diagram of those points via the
+//   2. Triangular  — the same MxN grid, each quad split into 2 triangles.
+//   3. Voronoi     — scatter N generator points across the UV
+//                    domain (a regular near-hexagonal lattice at
+//                    irregularity 0, which avoids the over-regular "soccer
+//                    ball" look of a square lattice), then the
+//                    2D Voronoi diagram of those points via the
 //                    Delaunay dual (Bowyer-Watson triangulation -> the
 //                    Voronoi vertices are the Delaunay triangle circumcenters,
 //                    Voronoi edges connect circumcenters of adjacent
 //                    triangles). Cells touching the UV rectangle edge are
-//                    CLIPPED to it (reusing trimtess.mjs's proven
-//                    Sutherland-Hodgman clipPolygonToRect, not a new one).
+//                    clipped to it (trimtess.mjs's Sutherland-Hodgman
+//                    clipPolygonToRect).
 //
-// EVERYTHING here works in the normalized fraction square [0,1]x[0,1]. The
-// caller (the app) maps a fraction (fu,fv) -> the surface's real
-// (u,v) domain -> surfacePoint -> a real 3D curve object, exactly as Paint's
-// own node map does. A CLOSED UV direction needs no special handling for
+// Everything here works in the normalized fraction square [0,1]x[0,1]. The
+// caller (the app) maps a fraction (fu,fv) -> the surface's
+// (u,v) domain -> surfacePoint -> a 3D curve object, as Paint's
+// node map does. A closed UV direction needs no special handling for
 // Quad/Triangular: the grid always covers the full [0,1] domain, and the
 // seam cell's outer edge maps to fraction 1.0 == fraction 0.0 physically
 // (surfacePoint(uMax) == surfacePoint(uMin) on a closed surface), so it wraps
-// continuously by construction (the same "seam falls out for free" property
-// Paint's 3D-distance brush already relies on). Voronoi is OPEN-DOMAIN-ONLY
-// in v1 (its point-scatter/dual construction isn't naturally seam-periodic);
-// the app refuses it honestly on a closed-direction surface.
+// continuously by construction (the same property Paint's 3D-distance brush
+// relies on). Known limitation: Voronoi is open-domain only (its
+// point-scatter/dual construction is not seam-periodic); the app refuses it
+// on a closed-direction surface.
 //
 // Determinism: the same (seed, indices) always hashes to the same jitter, so
-// a given seed reproduces the exact same tessellation — the SAME integer-hash
-// PRNG (hashU32/hash01) the Noise modifier and the Curve Generator already
-// prove, reused verbatim, NEVER Math.random.
+// a given seed reproduces the exact same tessellation — the same integer-hash
+// PRNG (hashU32/hash01) as the Noise modifier and the Curve Generator, never
+// Math.random.
 
 import { clipPolygonToRect } from './trimtess.mjs';
 
-// ---------------------------------------------------------------------------
-// Shared deterministic PRNG — BYTE-IDENTICAL to kernel/noise.mjs and
-// kernel/curvegen.mjs (Murmur3 finalizer + FNV combine). Reused, not
-// reinvented, per the standing "one seeded hash, never Math.random" rule.
-// ---------------------------------------------------------------------------
+// Shared deterministic PRNG — byte-identical to kernel/noise.mjs and
+// kernel/curvegen.mjs (the 0x45d9f3b xor-shift-multiply hash).
 function hashU32(x) {
   x = x >>> 0;
   x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
@@ -79,15 +74,13 @@ function clampInt(v, lo, hi, dflt) {
   return Math.max(lo, Math.min(hi, Math.round(v)));
 }
 
-// ===========================================================================
-// QUAD + TRIANGULAR
-// ===========================================================================
+// Quad and triangular
 //
 // The (nu+1)x(nv+1) grid vertices in [0,1]^2. An interior intersection (not
 // on any of the four outer grid lines) is jittered by up to
 // irregularity * 0.45 * cellSize, so even at irregularity 1 a vertex never
 // crosses into a neighboring cell (no inverted/self-overlapping cell). The
-// outer grid lines (i=0,i=nu,j=0,j=nv) are NEVER jittered, keeping both the
+// outer grid lines (i=0,i=nu,j=0,j=nv) are never jittered, keeping both the
 // UV domain boundary and a closed direction's seam clean.
 export function gridVertices(nu, nv, irregularity, seed) {
   const du = 1 / nu, dv = 1 / nv;
@@ -134,16 +127,14 @@ export function triangularCells(nu, nv, irregularity, seed) {
   return cells;
 }
 
-// ===========================================================================
-// VORONOI
-// ===========================================================================
+// Voronoi
 //
 // A near-hexagonal generator lattice inset slightly from the domain edge (so
-// its reflections, below, are genuinely outside). irregularity>0 jitters each
+// its reflections, below, are outside). irregularity>0 jitters each
 // point by up to irregularity * 0.5 * spacing. At irregularity 0 this is a
-// clean hex packing — deliberately NOT a square lattice, which would produce
-// 4-cocircular Delaunay degeneracies AND is exactly the over-regular
-// "soccer ball" look the doc warns against defaulting to.
+// clean hex packing — not a square lattice, which would produce
+// 4-cocircular Delaunay degeneracies and the over-regular
+// "soccer ball" look.
 export function hexGenerators(targetCount, irregularity, seed, keepFn = null) {
   const n = Math.max(4, targetCount);
   // Hex packing: dy = dx*sqrt(3)/2, area 1 => n*dx*dy ~= 1.
@@ -173,11 +164,10 @@ export function hexGenerators(targetCount, irregularity, seed, keepFn = null) {
   return pts;
 }
 
-// PAINT-DRIVEN DENSITY (optional). A keep-predicate for hexGenerators that
-// deterministically THINS generators in LOW-paint regions, so the Voronoi is
-// DENSER where the painted scalar is HIGHER. Direction chosen deliberately:
-// a student paints to MARK where they want more detail/cells, so "more paint
-// -> more cells" is the intuitive reading. `field(u,v)` returns a value in
+// Paint-driven density (optional). A keep-predicate for hexGenerators that
+// deterministically thins generators in low-paint regions, so the Voronoi is
+// denser where the painted scalar is higher: paint marks where more
+// cells are wanted. `field(u,v)` returns a value in
 // [0,1]; a generator at a node with field value f is kept with probability
 // minKeep + (1-minKeep)*f (deterministic, hash01-driven), so the sparsest a
 // region ever gets is minKeep of the base lattice.
@@ -258,15 +248,15 @@ export function delaunayTriangulate(points) {
 }
 
 // The Voronoi diagram of `generators` (points in [0,1]^2), as one clipped cell
-// polygon per generator. Uses the REFLECTION-PADDING technique: every
+// polygon per generator. Uses reflection padding: every
 // generator is mirrored across each of the four domain edges, and the
-// Delaunay of the augmented set is taken. This bounds every ORIGINAL
-// generator's cell cleanly at (or inside) the domain edge — the bisector
-// between a near-edge site and its own reflection across that edge IS the
+// Delaunay of the augmented set is taken. This bounds every original
+// generator's cell at (or inside) the domain edge — the bisector
+// between a near-edge site and its own reflection across that edge is the
 // domain edge — so the interior Voronoi edges between two real generators are
 // exact perpendicular bisectors (the equidistance property), while boundary
 // cells terminate at the domain edge. Each polygon is a final Sutherland-
-// Hodgman clip to [0,1]^2 (trimtess.mjs's proven clipPolygonToRect, reused).
+// Hodgman clip to [0,1]^2 (trimtess.mjs's clipPolygonToRect).
 export function voronoiCells(generators) {
   const nG = generators.length;
   if (nG < 3) return generators.map((g, i) => ({ site: i, generator: g, polygon: [] }));
@@ -325,7 +315,7 @@ export function polygonArea2D(poly) {
 
 // The full cell set in [0,1]^2 fraction space for any tessellation type. Each
 // cell is an array of [u,v] boundary points (a closed loop). For Voronoi the
-// caller must gate closed-direction surfaces out first (open-domain-only v1).
+// caller must exclude closed-direction surfaces first (open domain only).
 export function tessellateCells(params) {
   const p = normalizeTessParams(params);
   if (p.type === 'quad') return quadCells(p.nu, p.nv, p.irregularity, p.seed);

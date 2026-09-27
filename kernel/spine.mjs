@@ -1,39 +1,37 @@
-// A CENTERLINE MEASURED FROM A BODY, WHICH THEN DRIVES IT.
+// A centerline measured from a body, which then drives it.
 //
-// Every flow tool asks the reader to author a base curve. Here the base curve is
-// MEASURED: press Spine on a shape and you get the curve down its middle, with a
-// handful of control points. Bend those and the body bends with them.
+// Every flow tool asks for an authored base curve. Here the base curve is
+// measured: Spine on a shape gives the curve down its middle, with a handful of
+// control points. Bending those bends the body with them.
 //
 // Two ideas carry the whole file.
 //
-// ⚠⚠ SECTIONS MOVE RIGIDLY. A point is stored as an arc length along the rest
+// Sections move rigidly. A point is stored as an arc length along the rest
 // spine plus an offset in the frame there, and replayed against the same curve
 // after it has been bent. Because a whole cross-section shares one frame, the
 // section is carried by a rotation and a translation and nothing else — so
-// thickness is preserved to 5e-5 of itself at every bend amplitude measured from
-// 5mm to 100mm, the residue being that two mirrored points can land at slightly
-// different arc lengths and so take slightly different frames. The obvious
-// alternative, displacing each point along one axis by a height field, shears
-// instead: it thins the body to cos(atan|grad h|).
+// thickness is preserved to 5e-5 of itself at bend amplitudes from 5mm to
+// 100mm, the residue being that two mirrored points can land at slightly
+// different arc lengths and so take slightly different frames. Displacing each
+// point along one axis by a height field instead shears: it thins the body to
+// cos(atan|grad h|).
 //
-// ⚠⚠ AND THE FRAME'S SEED IS CARRIED FROM THE REST CURVE. Rotation-minimizing
-// frames need a starting normal, and any rule that picks one from the tangent
-// alone has a DISCONTINUITY somewhere: the usual one (cross the tangent with X,
-// or with Y when the tangent is too close to X) switches reference vector at
-// |Tx| = 0.9. Choosing independently per curve therefore lets a drag that walks
-// the start tangent across that threshold roll every downstream frame at once —
-// measured here, a 5mm drag of the first control point rolled a section at the
-// far end 45.6 degrees, so the body spun about its own axis because its nose
-// moved. Carrying the rest curve's seed across by the minimal rotation between
-// the two start tangents gives 0.00 degrees over the same sweep.
-// ⚠ The threshold is why a fixture for this has to be built AT it: the same
-// drag on a spine whose start tangent stays clear of 0.9 rolls 0.99 degrees with
-// the carry removed, which reads as though the fix hardly matters.
+// The frame's seed is carried from the rest curve. Rotation-minimizing frames
+// need a starting normal, and any rule that picks one from the tangent alone
+// has a discontinuity somewhere: the usual one (cross the tangent with X, or
+// with Y when the tangent is too close to X) switches reference vector at
+// |Tx| = 0.9. Choosing independently per curve lets a drag that walks the
+// start tangent across that threshold roll every downstream frame at once (a
+// 5mm drag of the first control point can roll a section at the far end by
+// 45.6 degrees). Carrying the rest curve's seed across by the minimal rotation
+// between the two start tangents gives 0.00 degrees over the same sweep.
+// A test for this has to put the start tangent at the threshold: away from
+// 0.9 the same drag without the carry rolls only 0.99 degrees.
 import { curvePoint, curvePointAndTangent, closestPointOnCurve } from './curve.mjs';
 import { leastSquaresFit, centripetalParams } from './fitcurve.mjs';
 import { jacobiEigenSym3 } from './refit.mjs';
 
-const SAMPLES = 16000;   // 4k leaves 1.45mm of noise on a fish's stations, 16k leaves 0.55mm, 32k leaves 0.55mm
+const SAMPLES = 16000;   // 4k leaves 1.45mm of noise on a fish's stations; 16k and 32k both leave 0.55mm
 const SLABS = 48;
 const STATION_RESAMPLE = 64;
 const FRAME_SAMPLES = 256;
@@ -47,15 +45,15 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const norm = (a) => { const L = len(a) || 1; return [a[0] / L, a[1] / L, a[2] / L]; };
 
 /* A deterministic low-discrepancy point, so the same body always measures to the
-   same centerline. A random sequence would make the spine a different curve each
-   press, which is not something a reader can be asked to live with. */
+   same centerline. A random sequence would make the spine a different curve
+   each time. */
 function halton(i, base) {
   let f = 1, r = 0, n = i + 1;
   while (n > 0) { f /= base; r += f * (n % base); n = Math.floor(n / base); }
   return r;
 }
 
-/* Area-uniform samples of a triangle soup. Uniform over AREA rather than over
+/* Area-uniform samples of a triangle soup. Uniform over area rather than over
    vertices, because a body's centroid is a property of its surface and a dense
    corner would otherwise pull the whole spine toward itself. */
 export function sampleSurface(positions, count = SAMPLES) {
@@ -92,10 +90,10 @@ export function sampleSurface(positions, count = SAMPLES) {
   return { pts, total };
 }
 
-/* THE LONG AXIS, AND HOW CONFIDENT IT IS. `aniso` is the ratio of the two
-   largest spreads: near 1 the body has no long axis at all (a sphere, a cube, a
-   disc), the direction is still deterministic but it is not MEANINGFUL, and the
-   caller is expected to say so rather than pretend. */
+/* The long axis, and how confident it is. `aniso` is the ratio of the two
+   largest spreads: near 1 the body has no long axis (a sphere, a cube, a disc);
+   the direction is still deterministic but not meaningful, and the caller is
+   expected to report that. */
 export function principalAxisOf(pts) {
   const n = pts.length;
   if (n < 3) return null;
@@ -108,8 +106,8 @@ export function principalAxisOf(pts) {
     for (let i = 0; i < 3; i += 1) for (let j = 0; j < 3; j += 1) M[i][j] += d[i] * d[j];
   }
   for (let i = 0; i < 3; i += 1) for (let j = 0; j < 3; j += 1) M[i][j] /= n;
-  // jacobiEigenSym3 returns ASCENDING, with a deterministic tie-break for an
-  // exactly-degenerate spectrum — which is what a sphere gives, and why the
+  // jacobiEigenSym3 returns ascending, with a deterministic tie-break for an
+  // exactly degenerate spectrum — which is what a sphere gives, and why the
   // direction is repeatable even where it is not meaningful.
   const eig = jacobiEigenSym3(M);
   const axis = norm(eig[2].vector);
@@ -117,16 +115,15 @@ export function principalAxisOf(pts) {
   return { axis, centroid, aniso: Math.sqrt(l0 / Math.max(l1, 1e-12)), values: [eig[2].value, eig[1].value, eig[0].value] };
 }
 
-/* THE MEASURED CENTERLINE. Slabs perpendicular to the long axis, each station
+/* The measured centerline. Slabs perpendicular to the long axis, each station
    the area-weighted centroid of its slab.
-   ⚠ THE SLABS STAY PERPENDICULAR TO THE MEAN AXIS, and that is a deliberate
-   limit rather than a first draft. Re-slicing each station perpendicular to the
-   running tangent — the obvious refinement — was built and measured three ways
-   (iterated, damped, single pass) and declined: it oscillates on a flat body
-   (a fish zig-zagged 3-8mm per pass and its spine shrank from 94 to 63mm) and
-   the single pass made a plate's ends worse, 2.2mm to 10mm. The cost of the
-   stable definition is that an already-bent body reads straighter than it is:
-   a banana's ends are off by about the tube radius. A reader bends it back. */
+   The slabs stay perpendicular to the mean axis, as a deliberate limit.
+   Re-slicing each station perpendicular to the running tangent (iterated,
+   damped, or single pass) oscillates on a flat body (a fish zig-zags 3-8mm per
+   pass and its spine shrinks from 94 to 63mm), and a single pass makes a
+   plate's ends worse, 2.2mm to 10mm. The cost of the stable definition is that
+   an already-bent body reads straighter than it is: a banana's ends are off by
+   about the tube radius, and the user bends it back. */
 export function deriveSpineStations(positions, opts = {}) {
   const count = opts.samples ?? SAMPLES;
   const { pts } = sampleSurface(positions, count);
@@ -161,10 +158,10 @@ export function deriveSpineStations(positions, opts = {}) {
     members[k].push(i);
   }
 
-  /* A frame in the slab plane, to ask whether a station sits in MATERIAL or in
-     AIR. A ring's centroid is in its hole; that is a legitimate answer (the
-     spine becomes a bending axis rather than a centerline) but the reader has to
-     be told, so it is measured rather than assumed away. */
+  /* A frame in the slab plane, to ask whether a station sits in material or in
+     air. A ring's centroid is in its hole; that is a legitimate answer (the
+     spine becomes a bending axis rather than a centerline), but it is measured
+     and reported rather than assumed away. */
   const ref = Math.abs(axis[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
   const e1 = norm(cross(axis, ref));
   const e2 = cross(axis, e1);
@@ -226,12 +223,12 @@ function resamplePolyline(pts, n) {
   return out;
 }
 
-/* THE NOISE FILTER, AND IT IS A REAL CONTROL. The stations carry the sampling's
-   own wobble; without this the fit chases it. Measured at 8 control points: the
-   fit's deviation is 2.9mm unfaired and 0.24mm at Smoothness 1; at 16 points the
+/* The noise filter, exposed as a control. The stations carry the sampling's
+   wobble; without this the fit chases it. At 8 control points the fit's
+   deviation is 2.9mm unfaired and 0.24mm at Smoothness 1; at 16 points the
    unfaired fit's peak curvature is 0.31/mm — a 3mm-radius wobble in a body
-   100mm long — against 0.044/mm faired. What it costs is 5% of the amplitude of
-   a gentle curve at 1. Ends stay pinned so the spine still spans the body. */
+   100mm long — against 0.044/mm faired. It costs 5% of the amplitude of a
+   gentle curve at 1. Ends stay pinned so the spine still spans the body. */
 export function fairStations(stations, amount, iterationsAt1 = 20, lambda = 0.5) {
   const iterations = Math.round(Math.max(0, Math.min(1, amount)) * iterationsAt1);
   let pts = stations.map((p) => p.slice());
@@ -246,13 +243,13 @@ export function fairStations(stations, amount, iterationsAt1 = 20, lambda = 0.5)
   return pts;
 }
 
-/* THE SPINE RUNS PAST THE BODY AT BOTH ENDS, and the reason is not cosmetic.
-   With the spine cut exactly to the body, the last span of the fit lies INSIDE
-   it, so an end handle puts the curvature of a short clamped span into the tip:
-   measured on a 20mm end drag, the tightest bend radius inside the body was
-   6.9mm against a half-thickness of 13.3 — folded, Jacobian -1.05. At 20% of the
-   body's length it is 18.1mm and the Jacobian 0.73. Sections never bunch (they
-   stay rigid); this is entirely about where the fit's last span sits. */
+/* The spine runs past the body at both ends. With the spine cut exactly to
+   the body, the last span of the fit lies inside it, so an end handle puts the
+   curvature of a short clamped span into the tip: on a 20mm end drag, the
+   tightest bend radius inside the body is 6.9mm against a half-thickness of
+   13.3 — folded, Jacobian -1.05. With 20% of the body's length of overhang it
+   is 18.1mm and the Jacobian 0.73. Sections never bunch (they stay rigid);
+   this is only about where the fit's last span sits. */
 function withOverhang(stations, overhang) {
   if (!(overhang > 0)) return stations;
   const n = stations.length;
@@ -261,15 +258,15 @@ function withOverhang(stations, overhang) {
   return [add(stations[0], mul(t0, overhang)), ...stations, add(stations[n - 1], mul(t1, overhang))];
 }
 
-/* Degree 3, clamped, ends interpolated, a FIXED number of control points — a
-   fit, not an interpolation. Interpolating 12 noisy stations gave a peak
+/* Degree 3, clamped, ends interpolated, a fixed number of control points — a
+   fit, not an interpolation. Interpolating 12 noisy stations gives a peak
    curvature of 0.14/mm (a 7mm-radius wobble) against 0.05/mm for the 12-point
    fit and 0.014/mm for the 5-point one.
-   ⚠ THE FIT'S ACCURACY DOES NOT AFFECT THE DEFORMATION'S CORRECTNESS, which is
-   why there is no second, finer, hidden curve. Rest coordinates are measured
-   against the fitted spine ITSELF, so a spine that misses the centroids by
-   0.75mm still leaves the body bit-identical at rest and still bends it rigidly.
-   The miss only decides how natural the bending axis looks. */
+   The fit's accuracy does not affect the deformation's correctness, so there
+   is no second, finer, hidden curve. Rest coordinates are measured against the
+   fitted spine itself, so a spine that misses the centroids by 0.75mm still
+   leaves the body bit-identical at rest and still bends it rigidly. The miss
+   only decides how natural the bending axis looks. */
 export function fitSpine(stations, opts = {}) {
   const points = Math.max(4, Math.min(16, Math.round(opts.points ?? 5)));
   const smoothness = opts.smoothness ?? 0.5;
@@ -291,11 +288,11 @@ export function fitSpine(stations, opts = {}) {
   return { ok: true, crv, deviation, stations: faired };
 }
 
-/* ROTATION-MINIMIZING FRAMES BY DOUBLE REFLECTION (Wang 2008), with the seed
-   handed IN. The seed is the whole point: see this file's header — an
-   independently chosen starting normal rolled a body 52 degrees when its nose
-   moved 12mm. Two reflections per step carry the previous frame onto the next
-   tangent without accumulating the twist a naive cross-product frame does. */
+/* Rotation-minimizing frames by double reflection (Wang 2008), with the seed
+   passed in — see this file's header for why the seed is carried rather than
+   chosen per curve. Two reflections per step carry the previous frame onto the
+   next tangent without accumulating the twist a naive cross-product frame
+   does. */
 export function spineFrameTable(crv, seedNormal, samples = FRAME_SAMPLES) {
   const uMin = crv.knots[0], uMax = crv.knots[crv.knots.length - 1];
   const us = [], pts = [], Ts = [];
@@ -331,7 +328,7 @@ export function spineFrameTable(crv, seedNormal, samples = FRAME_SAMPLES) {
 }
 
 export function frameAtArc(table, s) {
-  const { arc, pts, Ts, Ns, Bs, total } = table;
+  const { arc, pts, Ts, Ns, total } = table;
   const target = Math.max(0, Math.min(total, s));
   let lo = 0, hi = arc.length - 1;
   while (lo < hi - 1) { const m = (lo + hi) >> 1; if (arc[m] <= target) lo = m; else hi = m; }
@@ -344,13 +341,12 @@ export function frameAtArc(table, s) {
   return { P, T, N, B: cross(T, N), beyond: s < 0 ? s : (s > total ? s - total : 0) };
 }
 
-/* REST COORDINATES — measured ONCE, against the fitted spine itself.
-   ⚠ ARC LENGTH IS MEASURED FROM THE SPINE'S MIDPOINT, not from its start, and
-   that is not arbitrary. Lifting a start control point added 4.95mm of arc to
-   the first span; anchored at the start the ENTIRE body slid 4.95mm along the
-   spine, so an edit at the nose moved the tail. Anchored at the middle the body
-   stays where it is and the two ends share the change: the tail moved 2.9mm and
-   the nose 4mm. */
+/* Rest coordinates — measured once, against the fitted spine itself.
+   Arc length is measured from the spine's midpoint, not from its start. An
+   edit at one end changes the arc length of the end span (lifting a start
+   control point can add ~5mm); anchored at the start, the entire body would
+   slide along the spine by that amount, so an edit at the nose would move the
+   tail. Anchored at the middle, the two ends share the change. */
 export function spineRestCoords(points, crv, seedNormal) {
   const table = spineFrameTable(crv, seedNormal);
   const half = table.total / 2;
@@ -371,12 +367,12 @@ export function spineRestCoords(points, crv, seedNormal) {
   return { rest, table, seedNormal: table.Ns[0], restLength: table.total };
 }
 
-/* THE FLOW. A section is carried by the frame at its own arc length and nothing
-   else, which is what makes thickness exact — see this file's header. */
+/* The flow. A section is carried by the frame at its own arc length and
+   nothing else, which is what makes thickness exact — see this file's header. */
 export function spineFlow(restInfo, crv, opts = {}) {
   const stretch = !!opts.stretch;
   // The seed rides across from the rest curve by the minimal rotation between
-  // the two start tangents, which is the whole of the anti-roll fix.
+  // the two start tangents (the anti-roll carry described in the header).
   const restT = restInfo.table.Ts[0];
   const { tangent } = curvePointAndTangent(crv, crv.knots[0]);
   const curT = norm(tangent);
@@ -403,13 +399,13 @@ export function spineFlow(restInfo, crv, opts = {}) {
   return { points: out, length: table.total };
 }
 
-/* HOW CLOSE THE BODY IS TO FOLDING, as a percentage. The Jacobian in the bending
-   plane is 1 - kappa*d, with d the offset toward the turn's center, so the
-   inside of a bend folds where the offset reaches the center of curvature.
-   ⚠ REPORTED, NEVER REFUSED. A folded body is drawn folded, saves, and reopens
-   folded; the reader is told what to ease. A fish's real wriggle sits at 40-80%.
-   Evaluate this on the DISPLAY points, not the cage: measured on a hard bend the
-   cage read a healthy +0.15 while the limit surface was at -1.87. */
+/* How close the body is to folding, as a percentage. The Jacobian in the
+   bending plane is 1 - kappa*d, with d the offset toward the turn's center, so
+   the inside of a bend folds where the offset reaches the center of curvature.
+   Reported, never refused: a folded body is drawn folded, saves, and reopens
+   folded; the user is told what to ease. A fish's natural wriggle sits at
+   40-80%. Evaluate this on the display points, not the cage: on a hard bend
+   the cage can read +0.15 while the limit surface is at -1.87. */
 export function spineReach(restInfo, crv) {
   const table = spineFrameTable(crv, restInfo.seedNormal);
   const half = table.total / 2;

@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { booleanSolids } from '../kernel/boolean.mjs';
 import { massPropertiesOfBrep, volumeIdentityResidual } from '../kernel/massprops.mjs';
 
-// THE BOOLEAN VALIDITY ORACLE, RUN FOR REAL.
+// The boolean validity oracle, run for real.
 //
 //     volume(A u B) + volume(A n B) == volume(A) + volume(B)
 //     volume(A - B) + volume(A n B) == volume(A)
@@ -15,20 +15,20 @@ import { massPropertiesOfBrep, volumeIdentityResidual } from '../kernel/massprop
 // looks entirely plausible in a viewport. Its volume does not add up. That is
 // the whole reason to measure rather than to look.
 //
-// WHY THIS IS A FUZZ RUN AND NOT ONE FIXTURE. The already-shipped boolean
-// test pins ONE hand-derived box pair, and a single fixture is exactly where
+// Why this is a fuzz run and not one fixture. The other boolean
+// test pins one hand-derived box pair, and a single fixture is exactly where
 // a fragment-keeping bug hides: it either happens to be right there or the
 // test was written around it. Sweeping a family of corner overlaps at varying
 // extents and offsets makes the keep-rule answer differently case by case.
 //
-// THE FAMILY IS BOX-LIKE ON PURPOSE, for now: box-like solids are
-// where fuzzing starts, because every volume here also has a CLOSED FORM, so
-// each case is checked twice — against the analytic answer AND against the
+// The family is box-like on purpose: box-like solids are
+// where fuzzing starts, because every volume here also has a closed form, so
+// each case is checked twice — against the analytic answer and against the
 // identity. The analytic half proves the identity is not passing vacuously;
-// the identity half is what survives when the corpus grows to wrapped-face
-// and revolve-x-revolve cases that have no closed form at all.
+// the identity half also applies to wrapped-face and revolve-x-revolve cases
+// that have no closed form at all.
 //
-// EVERY CASE IS DETERMINISTIC. The generator is a seeded integer hash, never
+// Every case is deterministic. The generator is a seeded integer hash, never
 // Math.random — the same convention kernel/noise.mjs already holds to, so a
 // failure names a case number that reproduces exactly.
 
@@ -76,8 +76,8 @@ function seg(from, to, n = 9) {
   return out;
 }
 
-// The six shared edges of a corner overlap: each is where one MAX face of A
-// meets one MIN face of B, running the full width of the overlap box in the
+// The six shared edges of a corner overlap: each is where one max face of A
+// meets one min face of B, running the full width of the overlap box in the
 // third axis. Derived from the two boxes' own extents, not read back out of
 // anything under test.
 function cornerCurves(a1, b0) {
@@ -92,7 +92,7 @@ function cornerCurves(a1, b0) {
   ];
 }
 
-// A corner overlap with NO coplanar faces anywhere: b0 lands strictly inside
+// A corner overlap with no coplanar faces anywhere: b0 lands strictly inside
 // A on every axis, and B extends strictly past a1 on every axis. Coincident
 // faces are a named research-grade problem and deliberately not
 // what this sweeps.
@@ -108,7 +108,7 @@ function makeCase(seed, i) {
 
 const boxVol = (lo, hi) => (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
 
-test('VOLUME IDENTITY: a swept family of corner overlaps satisfies both identities AND their own closed forms', () => {
+test('Volume identity: a swept family of corner overlaps satisfies both identities and their own closed forms', () => {
   const CASES = 24;
   let worstIdentity = 0, worstAnalytic = 0, worstClosure = 0;
   const insideOut = { union: 0, intersect: 0, difference: 0 };
@@ -130,14 +130,14 @@ test('VOLUME IDENTITY: a swept family of corner overlaps satisfies both identiti
       assert.equal(res.stats.shellCount, 1, `case ${i} ${op} is not one shell`);
 
       const m = massPropertiesOfBrep(res.solid);
-      // The closed-surface theorem, measured rather than assumed: a genuinely
+      // The closed-surface theorem, measured rather than assumed: a
       // closed, consistently wound shell sums its face area vectors to zero.
       assert.ok(m.closureResidual < 1e-12,
         `case ${i} ${op} fails the closed-surface theorem, residual ${m.closureResidual}`);
       worstClosure = Math.max(worstClosure, m.closureResidual);
       if (m.volume < 0) insideOut[op]++;
 
-      // Magnitudes throughout: orientation is a SEPARATE property with its own
+      // Magnitudes throughout: orientation is a separate property with its own
       // separate report below, and folding the two together would let one mask
       // the other.
       const rel = Math.abs(Math.abs(m.volume) - truth[op]) / truth[op];
@@ -159,12 +159,12 @@ test('VOLUME IDENTITY: a swept family of corner overlaps satisfies both identiti
   assert.ok(worstClosure < 1e-12, `worst closure residual: ${worstClosure}`);
 });
 
-test('VOLUME IDENTITY: every boolean result comes out OUTWARD-oriented, not merely consistent', () => {
+test('Volume identity: every boolean result comes out outward-oriented, not merely consistent', () => {
   // `orientLoops` guarantees consistency; outwardness is a separate fact and
   // is enforced separately. This pins it, because a negative-volume result is
   // a real shell that every downstream consumer — a renderer, an exporter, a
   // Thicken — reads inside-out while chi, the naked-edge count and even the
-  // volume MAGNITUDE all still look perfect.
+  // volume magnitude all still look perfect.
   for (let i = 0; i < 8; i++) {
     const { a0, a1, b0, b1 } = makeCase(777, i);
     const A = { faces: boxFaces(a0, a1), triangles: boxTriangles(a0, a1) };
@@ -180,7 +180,7 @@ test('VOLUME IDENTITY: every boolean result comes out OUTWARD-oriented, not mere
   }
 });
 
-test('VOLUME IDENTITY: the oracle genuinely FAILS a boolean given a deliberately wrong keep set', () => {
+test('Volume identity: the oracle fails a boolean given a deliberately wrong keep set', () => {
   // The negative control this whole file rests on. Nothing above proves the
   // oracle can fail until something wrong is handed to it — and the wrong
   // thing has to be wrong in the way a real bug is wrong: a closed, ordinary,
@@ -202,11 +202,11 @@ test('VOLUME IDENTITY: the oracle genuinely FAILS a boolean given a deliberately
   const D = massPropertiesOfBrep(d.solid).volume;
   assert.equal(volumeIdentityResidual({ a: VA, b: VB, union: U, intersect: I, difference: D }).ok, true);
 
-  // Substitute the DIFFERENCE result where the union belongs — a real solid,
-  // genuinely closed, genuinely produced by this same machine, simply the
+  // Substitute the difference result where the union belongs — a real solid,
+  // closed, produced by this same machine, simply the
   // wrong one. chi and the naked-edge count are identical either way.
   const swapped = volumeIdentityResidual({ a: VA, b: VB, union: D, intersect: I, difference: D });
-  assert.equal(swapped.ok, false, 'the oracle must catch a plausible, closed, WRONG union');
+  assert.equal(swapped.ok, false, 'the oracle must catch a plausible, closed, wrong union');
   assert.ok(swapped.unionResidual > 0.1,
     `and catch it obviously, not marginally — residual ${swapped.unionResidual}`);
 });

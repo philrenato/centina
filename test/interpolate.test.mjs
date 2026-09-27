@@ -21,7 +21,7 @@ test('globalCurveInterp: 2 points clamps to a degree-1 line through both', () =>
   }
 });
 
-test('globalCurveInterp: curve passes through EVERY input point exactly, at its own chord-length parameter', () => {
+test('globalCurveInterp: curve passes through every input point exactly, at its own chord-length parameter', () => {
   const pts = [[0, 0, 0], [10, 4, 0], [25, -6, 5], [40, 0, 0], [55, 10, -5], [70, 0, 0]];
   const crv = globalCurveInterp(pts, 3);
   assert.equal(crv.degree, 3);
@@ -61,7 +61,7 @@ test('chordLengthParams: degenerate all-coincident points falls back to uniform 
 test('closedCurveInterp: still passes through every original point exactly', () => {
   const pts = [[40, 0, 0], [20, 35, 0], [-20, 35, 0], [-40, 0, 0], [-20, -35, 0], [20, -35, 0]];
   const { crv, uStart, uEnd } = closedCurveInterp(pts, 3);
-  // The kept sub-range's OWN parameter list, in order, corresponds 1:1 to
+  // The kept sub-range's own parameter list, in order, corresponds 1:1 to
   // the original points (paramsUsed[k..k+n] on the padded curve — k is the
   // degree here, matching closedCurveInterp's own padding amount).
   const k = 3;
@@ -73,7 +73,7 @@ test('closedCurveInterp: still passes through every original point exactly', () 
   }
 });
 
-test('closedCurveInterp: TANGENT continuity at the seam — approaching the closing point and leaving it point the same direction (unlike plain positional closure, which kinks)', () => {
+test('closedCurveInterp: tangent continuity at the seam — approaching the closing point and leaving it point the same direction (unlike plain positional closure, which kinks)', () => {
   const pts = [[40, 0, 0], [20, 35, 0], [-20, 35, 0], [-40, 0, 0], [-20, -35, 0], [20, -35, 0]];
   const { crv, uStart, uEnd } = closedCurveInterp(pts, 3);
   const du = (uEnd - uStart) * 1e-4;
@@ -83,7 +83,7 @@ test('closedCurveInterp: TANGENT continuity at the seam — approaching the clos
   assert.ok(dot > 0.999, `tangent directions should match closely across the seam (dot=${dot}, want close to 1)`);
 });
 
-test('closedCurveInterp: a REGULAR polygon-ish loop closes to something visibly rounder than its straight-chord positional counterpart (sanity: not degenerate)', () => {
+test('closedCurveInterp: a regular polygon-ish loop closes to something visibly rounder than its straight-chord positional counterpart (sanity: not degenerate)', () => {
   const pts = [[40, 0, 0], [20, 35, 0], [-20, 35, 0], [-40, 0, 0], [-20, -35, 0], [20, -35, 0]];
   const { crv, uStart, uEnd } = closedCurveInterp(pts, 3);
   let allFinite = true;
@@ -95,13 +95,12 @@ test('closedCurveInterp: a REGULAR polygon-ish loop closes to something visibly 
   assert.ok(allFinite, 'closed curve should be finite everywhere across its kept sub-range');
 });
 
-// solveLinearSystem's zero-pivot guard (Project's own torus/non-planar-
-// extrusion bug): a run of duplicate consecutive sample points —
-// the exact failure mode a clamped/stalled Gauss-Newton projection search
+// solveLinearSystem's zero-pivot guard: a run of duplicate consecutive
+// sample points — what a clamped/stalled Gauss-Newton projection search
 // produces — gives chordLengthParams two identical parameters, so
 // interpAtParams builds two byte-identical rows in its coefficient matrix.
-// Partial pivoting alone can't fix a matrix that's genuinely singular (every
-// candidate row in that column is the same) — this must THROW a clear,
+// Partial pivoting alone can't fix a matrix that is singular (every
+// candidate row in that column is the same) — this must throw a clear,
 // catchable error instead of silently dividing by ~0 into NaN control
 // points.
 test('globalCurveInterp throws a clear error (not silent NaN) on duplicate consecutive through-points', () => {
@@ -109,8 +108,8 @@ test('globalCurveInterp throws a clear error (not silent NaN) on duplicate conse
   assert.throws(() => globalCurveInterp(pts, 3), /singular|coincide/, 'expected a clear singular-matrix error, not a silent NaN result');
 });
 
-test('globalCurveInterp still succeeds normally when points are merely CLOSE but genuinely distinct', () => {
+test('globalCurveInterp still succeeds normally when points are merely close but distinct', () => {
   const pts = [[0, 0, 0], [10, 0, 0], [10.0001, 0.0001, 0], [20, 5, 0], [30, 10, 0]];
   const crv = globalCurveInterp(pts, 3);
-  assert.ok(crv.ctrlPts.flat().every(Number.isFinite), 'a genuinely (if narrowly) distinct point set must still fit cleanly');
+  assert.ok(crv.ctrlPts.flat().every(Number.isFinite), 'a (narrowly) distinct point set must still fit cleanly');
 });

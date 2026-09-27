@@ -1,9 +1,9 @@
 // Structured U/V control-point row/column
 // selection. surfaceRowGroup(srf, i0)/surfaceColGroup(srf, j0) must return
 // every (row, col) index belonging to the requested row/column, expanded
-// through surfaceStructuralGroup so a CLOSED direction's seam (and any
-// pole) is always seam-complete, never a torn half-selection. Proven
-// against real revolve()/extrude() surfaces, the same fixtures
+// through surfaceStructuralGroup so a closed direction's seam (and any
+// pole) is always seam-complete, never a torn half-selection. Checked
+// against revolve()/extrude() surfaces, the same fixtures
 // seam-pole-structural-group.test.mjs already uses.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,7 +26,7 @@ test('surfaceRowGroup: a cylinder (extrude of a closed circle, closed in U, open
   for (const k of expect0) assert.ok(asSet(row0).has(k), `row0 group missing ${k}`);
 
   const rowLast = surfaceRowGroup(srf, nu - 1);
-  assert.deepEqual(asSet(rowLast), expect0, 'row (nu-1) resolves to the IDENTICAL seam-complete set as row 0');
+  assert.deepEqual(asSet(rowLast), expect0, 'row (nu-1) resolves to the identical seam-complete set as row 0');
 
   const mid = Math.floor(nu / 2);
   assert.notEqual(mid, 0); assert.notEqual(mid, nu - 1);
@@ -35,7 +35,7 @@ test('surfaceRowGroup: a cylinder (extrude of a closed circle, closed in U, open
   assert.deepEqual(asSet(rowMid), expectMid, 'an interior row is just its own row, no seam pulled in');
 });
 
-test('surfaceColGroup: the SAME cylinder — every column is open (V is not closed), so a column group is always just that one column', () => {
+test('surfaceColGroup: the same cylinder — every column is open (V is not closed), so a column group is always just that one column', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 2);
   const srf = extrude(profile, [0, 0, 1], 5);
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
@@ -46,7 +46,7 @@ test('surfaceColGroup: the SAME cylinder — every column is open (V is not clos
   }
 });
 
-test('surfaceRowGroup/surfaceColGroup: a torus (revolve of a closed profile, closed in BOTH directions) — a corner row AND corner column both resolve to the full 4-way seam identification', () => {
+test('surfaceRowGroup/surfaceColGroup: a torus (revolve of a closed profile, closed in both directions) — a corner row and corner column both resolve to the full 4-way seam identification', () => {
   const minorProfile = makeCircle([5, 0, 0], [1, 0, 0], [0, 0, 1], 1);
   const srf = revolve(minorProfile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -55,7 +55,7 @@ test('surfaceRowGroup/surfaceColGroup: a torus (revolve of a closed profile, clo
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
 
   // the corner (0,0) is identified with (nu-1,0), (0,nv-1), (nu-1,nv-1) —
-  // so row 0 must ALSO drag in row (nu-1), fully, because column 0 and
+  // so row 0 must also drag in row (nu-1), fully, because column 0 and
   // column (nv-1) of row (nu-1) are themselves seam-identified with row 0.
   const row0 = surfaceRowGroup(srf, 0);
   const rowSet = asSet(row0);
@@ -81,7 +81,7 @@ test('surfaceRowGroup/surfaceColGroup: a torus (revolve of a closed profile, clo
   assert.equal(surfaceColGroup(srf, midJ).length, nu, 'an interior column stays exactly its own column');
 });
 
-test('surfaceRowGroup: a full revolve of an open profile touching the axis at BOTH ends (a sphere-like pole-to-pole case) — the pole row group is exactly its own row (already seam-complete by being one physical point), never bleeds into the other pole', () => {
+test('surfaceRowGroup: a full revolve of an open profile touching the axis at both ends (a sphere-like pole-to-pole case) — the pole row group is exactly its own row (already seam-complete by being one physical point), never bleeds into the other pole', () => {
   const profile = { degree: 2, knots: [0, 0, 0, 1, 1, 1], ctrlPts: [[0, 0, 10, 1], [10, 0, 0, Math.SQRT1_2], [0, 0, -10, 1]] };
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
@@ -103,18 +103,16 @@ test('surfaceRowGroup/surfaceColGroup: a partial (non-closed) revolve — every 
   for (let j = 0; j < nv; j++) assert.equal(surfaceColGroup(srf, j).length, nu, `col ${j} should be exactly its own ${nu} rows`);
 });
 
-// ---------------------------------------------------------------
-// FACE (ISOCURVE-CELL) CHAINS — the ordinary-surface counterpart of a
+// Face (isocurve-cell) chains — the ordinary-surface counterpart of a
 // SubD face loop. Same fixtures, so the closed-direction behavior is
-// proven against a surface genuinely known to be closed rather than a
+// checked against a surface known to be closed rather than a
 // hand-built grid that only looks like one.
-// ---------------------------------------------------------------
 
-test('surfaceCellStrip: a cell strip runs the full width or height of the cell grid, and the two directions genuinely differ', () => {
+test('surfaceCellStrip: a cell strip runs the full width or height of the cell grid, and the two directions differ', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 2);
   const srf = extrude(profile, [0, 0, 1], 5);
   const [uCells, vCells] = surfaceCellCounts(srf);
-  assert.ok(uCells > 1 && vCells >= 1, 'fixture has a real cell grid to walk');
+  assert.ok(uCells > 1 && vCells >= 1, 'fixture has a cell grid to walk');
 
   const alongU = surfaceCellStrip(srf, 1, 0, 'u');
   const alongV = surfaceCellStrip(srf, 1, 0, 'v');
@@ -127,18 +125,18 @@ test('surfaceCellStrip: a cell strip runs the full width or height of the cell g
   assert.ok(alongU.some((c) => c.i === 1) && alongV.some((c) => c.j === 0), 'the seed cell is in both');
 });
 
-test('surfaceCellStrip: a CLOSED direction needs no seam pairing — cells sit between Grevilles, so there is no duplicated cell to pair', () => {
+test('surfaceCellStrip: a closed direction needs no seam pairing — cells sit between Grevilles, so there is no duplicated cell to pair', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 2);
   const srf = extrude(profile, [0, 0, 1], 5); // closed in U
   assert.equal(surfaceClosure(srf).closedU, true);
   const [uCells] = surfaceCellCounts(srf);
   const strip = surfaceCellStrip(srf, 0, 0, 'u');
   // Exactly one cell per column, no coincident duplicate — the contrast
-  // with surfaceRowGroup on this SAME closed fixture, which must pull in
+  // with surfaceRowGroup on this same closed fixture, which must pull in
   // the seam's second copy.
   assert.equal(strip.length, uCells);
   assert.equal(new Set(strip.map((c) => c.i)).size, uCells);
-  assert.ok(surfaceRowGroup(srf, 0).length > srf.ctrlNet[0].length, 'control-point rows DO pair at the seam, cells do not');
+  assert.ok(surfaceRowGroup(srf, 0).length > srf.ctrlNet[0].length, 'control-point rows do pair at the seam, cells do not');
 });
 
 test('surfaceCellStrip: refuses an out-of-range cell or an unknown direction by name', () => {
@@ -150,7 +148,7 @@ test('surfaceCellStrip: refuses an out-of-range cell or an unknown direction by 
   assert.throws(() => surfaceCellStrip(srf, 0, 0, 'w'), /must be 'u' or 'v'/);
 });
 
-test('nearestCellDirection: the press position picks the direction, compared in CELL FRACTIONS so an unequal domain scale cannot decide it', () => {
+test('nearestCellDirection: the press position picks the direction, compared in cell fractions so an unequal domain scale cannot decide it', () => {
   // Near a constant-u edge (left or right) -> the strip that crosses it.
   assert.equal(nearestCellDirection(0.02, 0.5), 'u');
   assert.equal(nearestCellDirection(0.98, 0.5), 'u');
@@ -160,7 +158,7 @@ test('nearestCellDirection: the press position picks the direction, compared in 
   // Opposite edges agree, so there is no thin band where a few pixels
   // flip the answer — it only changes across the cell's own diagonal.
   assert.equal(nearestCellDirection(0.1, 0.5), nearestCellDirection(0.9, 0.5));
-  // A dead-center press is a real tie and resolves the SAME way every
+  // A dead-center press is a tie and resolves the same way every
   // time, so re-reading one press cannot appear to do nothing.
   const centre = nearestCellDirection(0.5, 0.5);
   for (let k = 0; k < 5; k++) assert.equal(nearestCellDirection(0.5, 0.5), centre);

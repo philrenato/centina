@@ -1,4 +1,4 @@
-// FIBERS FROM ROOT FRAMES — the interchange type every fiber/hair generator
+// Fibers from root frames — the interchange type every fiber/hair generator
 // in this kernel is built on.
 //
 // The thing worth generalizing was never any one generator. It is what such a
@@ -24,9 +24,7 @@ import { divideByArcLength, curvePointAndTangent, isCurveClosed } from './curve.
 // than a wrong-but-finite result, so those roots are refused and counted.
 const DEGENERATE = 1e-9;
 
-// ---------------------------------------------------------------------------
-// SURFACE HOST
-// ---------------------------------------------------------------------------
+// Surface host
 
 // Root frames on a (u,v) grid over a NURBS surface.
 //
@@ -45,9 +43,9 @@ export function surfaceRootFrames(srf, uCount, vCount, opts = {}) {
   const dv = knotDomain(srf.knotsV, srf.degV);
   const { uMin = du[0], uMax = du[1], vMin = dv[0], vMax = dv[1] } = opts;
 
-  // On a closed direction the first and last grid lines are the SAME physical
+  // On a closed direction the first and last grid lines are the same physical
   // place, so sampling both lays a double-thick row of fibers down the seam.
-  // Drop the duplicate end line instead of the honest interior samples.
+  // Drop the duplicate end line instead of the interior samples.
   // surfaceClosure reports `closedU` / `closedV`. Reading any other spelling
   // silently disables the seam handling below and the only visible symptom is
   // a double-thick row of fibers down one isocurve.
@@ -59,9 +57,9 @@ export function surfaceRootFrames(srf, uCount, vCount, opts = {}) {
   let skippedPoles = 0;
   let seamCollapsed = 0;
 
-  // On a CLOSED direction the parameter wraps, so dividing by n (not n-1) and
+  // On a closed direction the parameter wraps, so dividing by n (not n-1) and
   // stopping one short means the last sample sits one step before the seam
-  // rather than back on top of the first. On an OPEN direction both ends are
+  // rather than back on top of the first. On an open direction both ends are
   // real, distinct edges and must both be sampled.
   for (let i = 0; i < nU; i++) {
     const uDen = closedU ? nU : Math.max(1, nU - 1);
@@ -107,12 +105,12 @@ export function surfaceFrameAt(srf, u, v) {
 
   const n = cross(su, sv);
   // su and sv can both be long yet parallel (a crease collapsing the tangent
-  // plane); the cross product is the only thing that actually proves a plane.
+  // plane); the cross product is the only thing that proves a plane.
   if (length(n) < DEGENERATE) return null;
 
   const normal = normalize(n);
   const tangentU = normalize(su);
-  // Re-derived rather than taken from sv, so the basis is genuinely
+  // Re-derived rather than taken from sv, so the basis is
   // orthonormal even where the surface's own isocurves are not perpendicular.
   const tangentV = cross(normal, tangentU);
   if (!isFinite3(point) || !isFinite3(normal) || !isFinite3(tangentU) || !isFinite3(tangentV)) return null;
@@ -124,14 +122,12 @@ function isFinite3(p) {
   return Array.isArray(p) && p.length >= 3 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]);
 }
 
-// ---------------------------------------------------------------------------
-// AIM — two angles, not a tangent/perpendicular toggle
-// ---------------------------------------------------------------------------
+// Aim — two angles, not a tangent/perpendicular toggle
 
 // lift  0..90   0 = flat in the tangent plane, 90 = straight out along normal
 // sweep 0..360  rotation within the tangent plane, 0 = along tangentU
 //
-// "Tangent" and "perpendicular" are two PRESETS of this one control rather
+// "Tangent" and "perpendicular" are two presets of this one control rather
 // than two modes, which is why a flat 2D curve needs no special case: lift
 // going 0 -> 90 is literally the fibers rising out of the plane.
 export function aimDirection(frame, liftDeg, sweepDeg) {
@@ -141,8 +137,8 @@ export function aimDirection(frame, liftDeg, sweepDeg) {
   return normalize(add(scale(frame.normal, Math.sin(lift)), scale(inPlane, Math.cos(lift))));
 }
 
-// T1 — LAUNCH HEMISPHERE CLAMP. Free, and always on: a fiber may
-// not leave INTO the thing it grows on. Rotating the direction toward the
+// T1 — launch hemisphere clamp. Free, and always on: a fiber may
+// not leave into the thing it grows on. Rotating the direction toward the
 // normal preserves its sweep, where simply projecting it would collapse a
 // fiber aimed straight down onto an arbitrary in-plane heading.
 export function clampToHemisphere(dir, normal, minLiftDeg = 2) {
@@ -156,16 +152,12 @@ export function clampToHemisphere(dir, normal, minLiftDeg = 2) {
   return normalize(add(scale(normal, minDot), scale(scale(tangential, 1 / tLen), keep)));
 }
 
-// ---------------------------------------------------------------------------
-// THE FIBER
-// ---------------------------------------------------------------------------
+// The fiber
 
-// Sampled points for one fiber. The droop/recoil construction is carried over
-// from the shipped strand builder deliberately and unchanged: droop ramps as
-// an ANGLE through sin(), with recoil extending that angle past PI/2 so the
-// weight genuinely peaks partway along and swings back. A plain power curve
-// cannot do this — it is monotonic for any exponent, so no amount of tuning
-// curls a tip back, which was the original bug. Do not "simplify" it.
+// Sampled points for one fiber. Droop ramps as an angle through sin(), with
+// recoil extending that angle past PI/2 so the weight peaks partway along and
+// swings back. A plain power curve cannot do this — it is monotonic for any
+// exponent, so no amount of tuning curls a tip back.
 export function fiberPoints(frame, opts = {}) {
   const {
     cvs = 8,
@@ -185,8 +177,8 @@ export function fiberPoints(frame, opts = {}) {
   const aimed = clampToHemisphere(aimDirection(frame, liftDeg, sweepDeg), frame.normal, minLiftDeg);
   // Default droop is -normal ("lie down against the host"), not world -Z.
   // World -Z is gravity, which is right for hair on a head and points straight
-  // into the wall on the inside of a cup — the single default that separates
-  // "hair" from "fur" without the student learning a new word.
+  // into the wall on the inside of a cup — one default that serves both
+  // "hair" and "fur" without a separate mode.
   const dd = droopDir ? normalize(droopDir) : scale(frame.normal, -1);
 
   const pts = [];
@@ -201,10 +193,10 @@ export function fiberPoints(frame, opts = {}) {
   return pts;
 }
 
-// T2 — ROOT TANGENT-PLANE HALF-SPACE CLAMP. Every deform
+// T2 — root tangent-plane half-space clamp. Every deform
 // displacement is clamped so no sample crosses below its own root's tangent
-// plane. This is the tier that actually makes a concave host work, because
-// droop points INTO the wall on the inside of any cup.
+// plane. This is the tier that makes a concave host work, because
+// droop points into the wall on the inside of any cup.
 export function liftAboveTangentPlane(p, frame, minLiftDeg = 0) {
   const rel = sub(p, frame.position);
   const along = dot(rel, frame.normal);
@@ -213,18 +205,16 @@ export function liftAboveTangentPlane(p, frame, minLiftDeg = 0) {
   return add(p, scale(frame.normal, floor - along));
 }
 
-// ---------------------------------------------------------------------------
-// CURVE HOST
-// ---------------------------------------------------------------------------
+// Curve host
 
 // The plane a curve lies in, as { normal, origin, axisU, axisV }, or null if it
-// is genuinely non-planar or a straight line.
+// is non-planar or a straight line.
 //
-// A STRAIGHT LINE RETURNS null DELIBERATELY. It lies in infinitely many planes,
-// so there is no outward direction to pick and no honest way to choose one; the
+// A straight line returns null. It lies in infinitely many planes,
+// so there is no outward direction to pick and no way to choose one; the
 // caller falls back to a transported frame instead of inventing a side.
 //
-// Fitted to the CONTROL POINTS, which is exact rather than sampled: a NURBS
+// Fitted to the control points, which is exact rather than sampled: a NURBS
 // curve lies in the plane of its control points by the convex-hull property, so
 // a plane containing the net contains the curve. Sampling could miss a bulge
 // between samples.
@@ -243,7 +233,7 @@ export function curvePlane(crv, tolScale = 1e-6) {
   if (!axisU || bestU < 1e-12) return null;
   axisU = scale(axisU, 1 / bestU);
 
-  // Then the point furthest OFF that axis fixes the plane. If nothing is off it,
+  // Then the point furthest off that axis fixes the plane. If nothing is off it,
   // the net is collinear and this is a line.
   let normal = null, bestN = 0;
   for (const p of pts) {
@@ -253,7 +243,7 @@ export function curvePlane(crv, tolScale = 1e-6) {
   if (!normal || bestN < bestU * 1e-9) return null;
   normal = scale(normal, 1 / length(normal));
 
-  // Planarity is judged RELATIVE to the curve's own size — a 0.01mm deviation
+  // Planarity is judged relative to the curve's own size — a 0.01mm deviation
   // is planar on a 1000mm curve and is not on a 0.1mm one.
   const tol = Math.max(bestU * tolScale, 1e-12);
   for (const p of pts) if (Math.abs(dot(sub(p, origin), normal)) > tol) return null;
@@ -262,7 +252,7 @@ export function curvePlane(crv, tolScale = 1e-6) {
 }
 
 // Signed area of a closed planar point loop, measured in the plane's own basis.
-// Its SIGN is the whole point: it says whether the loop winds counter-clockwise
+// Its sign says whether the loop winds counter-clockwise
 // about `normal`, which is what makes "outward" mean outward everywhere on the
 // loop instead of outward for half of a star's points.
 export function planarLoopSignedArea(points, plane) {
@@ -274,24 +264,24 @@ export function planarLoopSignedArea(points, plane) {
   return a / 2;
 }
 
-// Root frames along a curve, at equal REAL ARC LENGTH — not equal parameter,
+// Root frames along a curve, at equal arc length — not equal parameter,
 // which bunches roots at a polygon's corners.
 //
-// PLANAR: normal is the in-plane OUTWARD perpendicular and tangentV is the plane
+// Planar: normal is the in-plane outward perpendicular and tangentV is the plane
 // normal, so lift 0 lies flat in the plane and raising it lifts the fibers out
 // of it. On a closed curve the outward sign comes from the loop's own winding,
 // so a 5-point star's reflex vertices point outward like every other root.
 //
-// NON-PLANAR: there is no outward, so a rotation-minimizing frame is carried
+// Non-planar: there is no outward, so a rotation-minimizing frame is carried
 // along the curve by double reflection (Wang, Jüttler, Zheng & Liu, ACM TOG
 // 27(1), 2008). Picking a fresh arbitrary perpendicular per point instead is a
 // silent-wrong-result bug rather than a crash: it visibly twists along a helix.
 //
-// ⚠ A CLOSED NON-PLANAR CURVE DOES NOT CLOSE ITS FRAME. Transport around a loop
-// accumulates real holonomy, so the last frame does not meet the first and the
-// fibers step at the seam. That is a genuine property of the curve, not a bug
-// here, and it is the same wall the closed-rail sweep already measured; it is
-// not worked around on this path.
+// A closed non-planar curve does not close its frame. Transport around a loop
+// accumulates holonomy, so the last frame does not meet the first and the
+// fibers step at the seam. That is a property of the curve, not a bug here;
+// the closed-rail sweep has the same limit, and it is not worked around on
+// this path.
 export function curveRootFrames(crv, count, opts = {}) {
   const n = Math.max(1, Math.round(count));
   const stations = divideByArcLength(crv, n, opts.tolerance);
@@ -348,7 +338,7 @@ export function curveRootFrames(crv, count, opts = {}) {
   return { frames, skippedDegenerate, planar: !!plane, closed };
 }
 
-// Any unit vector perpendicular to `t`. Only ever used to SEED a transported
+// Any unit vector perpendicular to `t`. It only seeds a transported
 // frame — every later frame comes from the one before it, which is what stops
 // the twist an arbitrary per-point perpendicular produces.
 function seedPerpendicular(t) {

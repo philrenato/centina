@@ -52,7 +52,7 @@ test('ourKnotsToRhino / rhinoKnotsToOurs round-trip exactly', () => {
   assert.deepEqual(rhinoKnotsToOurs(reduced), ours);
 });
 
-test('curveToRhino: a real rational arc matches rhino3dm pointAt in-memory', () => {
+test('curveToRhino: a rational arc matches rhino3dm pointAt in-memory', () => {
   const arc = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 10, 0, Math.PI / 2, 1);
   const nc = curveToRhino(rhino, arc);
   assert.equal(nc.points().count, arc.ctrlPts.length);
@@ -88,12 +88,12 @@ test('curveFromRhino: inverts curveToRhino exactly (round trip our-shape -> rhin
       assert.ok(Math.abs(back.ctrlPts[i][k] - arc.ctrlPts[i][k]) < 1e-9, `ctrlPt ${i}[${k}] mismatch`);
     }
   }
-  // and the reconstructed curve still evaluates to the same real shape
+  // and the reconstructed curve still evaluates to the same shape
   const worst = worstCurveDeviation(back, nc);
   assert.ok(worst < 1e-9, `worst deviation of reconstructed curve ${worst}`);
 });
 
-test('surfaceToRhino: a real revolved (rational) cylinder matches rhino3dm pointAt in-memory', () => {
+test('surfaceToRhino: a revolved (rational) cylinder matches rhino3dm pointAt in-memory', () => {
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[5, 0, 0, 1], [5, 0, 20, 1]] };
   const cyl = revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
   const ns = surfaceToRhino(rhino, cyl);
@@ -139,9 +139,9 @@ test('curveToRhino: a non-rational degree-1 curve (all weights 1) still round-tr
     line.ctrlPts.map(p => p.map(x => Math.round(x * 1e6) / 1e6)));
 });
 
-// ---- document-level export/import ----
+// Document-level export/import
 
-test('exportDocument + importDocument: a real multi-object document round-trips through a genuine .3dm', () => {
+test('exportDocument + importDocument: a multi-object document round-trips through a .3dm file', () => {
   const arc = makeArc([0, 0, 0], [1, 0, 0], [0, 1, 0], 8, 0, Math.PI / 2, 1);
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[4, 0, 0, 1], [4, 0, 12, 1]] };
   const cyl = revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
@@ -215,11 +215,11 @@ test('exportDocument: a multi-panel container (N separate surface entries) round
   assert.ok(result.objects.some(o => o.name === 'RuledLoft04 panel 2'));
 });
 
-test('importDocument: a genuine multi-face Brep imports as one untrimmed surface panel per face, honestly named, never silently dropped', () => {
+test('importDocument: a multi-face Brep imports as one untrimmed surface panel per face, named, never silently dropped', () => {
   const doc = new rhino.File3dm();
   const bbox = new rhino.BoundingBox([0, 0, 0], [10, 10, 10]);
   const brep = rhino.Brep.createFromBoundingBox(bbox);
-  assert.ok(brep, 'expected a real 6-face box brep from rhino3dm itself');
+  assert.ok(brep, 'expected a 6-face box brep from rhino3dm itself');
   assert.equal(brep.isSurface, false, 'a 6-face box brep is not a single trivially-trimmed face');
   const attrs = new rhino.ObjectAttributes();
   attrs.name = 'Box01';
@@ -249,25 +249,25 @@ test('importDocument: a single-face (trivially-trimmed) Brep imports as a plain 
   assert.equal(result.objects[0].kind, 'surface');
 });
 
-// SUBD IMPORT (the import half of native-SubD interchange).
-// The fixture is a genuinely Rhino-authored SubD — it has to be, because
+// SubD import (the import half of native-SubD interchange).
+// The fixture is a Rhino-authored SubD — it has to be, because
 // nothing in this toolchain can author one: rhino3dm's JS binding exposes
 // SubD as an opaque handle with no constructor and no cage accessors, in
-// 8.17.0 and 8.32.0 alike. That is exactly why this test reads a checked-in
+// 8.17.0 and 8.32.0 alike. That is why this test reads a checked-in
 // .3dm rather than round-tripping through a synthetic one.
-test('importDocument: a real Rhino SubD arrives as its own welded control net, not a refined mesh', () => {
+test('importDocument: a Rhino SubD arrives as its own welded control net, not a refined mesh', () => {
   const bytes = new Uint8Array(readFileSync(new URL('./fixtures/rhino_subd.3dm', import.meta.url)));
   const result = importDocument(rhino, bytes);
-  assert.equal(result.skipped.length, 0, 'a SubD must not be skipped anymore');
+  assert.equal(result.skipped.length, 0, 'a SubD must not be skipped');
   assert.equal(result.objects.length, 1);
   const o = result.objects[0];
   assert.equal(o.kind, 'subd');
   const { vertices, faces } = o.cage;
 
-  // WELDED, not per-face. createFromSubDControlNet's second argument
+  // Welded, not per-face. createFromSubDControlNet's second argument
   // decides this and its own .d.ts declares the function taking no
   // arguments at all; getting it wrong returns 4 vertices per quad, which
-  // still LOOKS like a cage and subdivides into confetti because no two
+  // still looks like a cage and subdivides into confetti because no two
   // faces share a vertex. The discriminating check is not the count but
   // the sharing: a closed cage must have far fewer vertices than 4x its
   // face count, and every vertex must be used by more than one face.
@@ -285,11 +285,11 @@ test('importDocument: a real Rhino SubD arrives as its own welded control net, n
   assert.equal(o.creasesLost, true, 'the crease loss must be reported, not silent');
 });
 
-test('importDocument: the imported SubD cage is a genuine manifold that really subdivides', () => {
+test('importDocument: the imported SubD cage is a manifold that subdivides', () => {
   const bytes = new Uint8Array(readFileSync(new URL('./fixtures/rhino_subd.3dm', import.meta.url)));
   const { cage } = importDocument(rhino, bytes).objects[0];
 
-  // The real test of a cage is not that it parses — it is that this app's
+  // The test of a cage is not that it parses — it is that this app's
   // own Catmull-Clark machinery accepts it. Every edge shared by exactly
   // 2 faces (closed and manifold), and a refinement pass that quadruples
   // the face count without producing anything degenerate.

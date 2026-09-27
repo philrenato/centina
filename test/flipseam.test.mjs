@@ -23,14 +23,14 @@ function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b
 function norm(v) { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; }
 function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
-// THE INVARIANT, AS A FUNCTION. Both Flip and Seam claim the shape occupies
-// the same points afterwards. A parametrization change moves points AROUND the
+// The invariant, as a function. Both Flip and Seam claim the shape occupies
+// the same points afterwards. A parametrization change moves points around the
 // domain, so comparing sample i to sample i is the wrong test, and so is
-// comparing two finite sample GRIDS — the moved shape's uniform grid lands
+// comparing two finite sample grids — the moved shape's uniform grid lands
 // between the original's samples, and the residual that leaves is a fact about
 // sampling density, not about geometry. What has to be measured is the distance
-// from each sample of one shape to the OTHER SHAPE ITSELF, via the kernel's own
-// closest-point solve. Checked BOTH ways, because one-way containment would
+// from each sample of one shape to the other shape itself, via the kernel's own
+// closest-point solve. Checked both ways, because one-way containment would
 // also pass for a shape that lost a piece.
 function maxDeviationFromCurve(pts, crv) {
   let worst = 0, at = null;
@@ -76,12 +76,12 @@ function unitNormal(srf, u, v) {
 }
 
 function torus(R = 30, r = 8) {
-  // A closed profile revolved a full turn: closed in BOTH directions.
+  // A closed profile revolved a full turn: closed in both directions.
   const profile = makeCircle([R, 0, 0], [1, 0, 0], [0, 0, 1], r);
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, TAU);
 }
 function cylinder(R = 20, h = 40) {
-  // An OPEN profile revolved a full turn: closed in the sweep direction only.
+  // An open profile revolved a full turn: closed in the sweep direction only.
   const profile = makeLine([R, 0, 0], [R, 0, h]);
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, TAU);
 }
@@ -90,9 +90,7 @@ function openPatch() {
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI / 2);
 }
 
-// ============================================================================
-// FLIP — CURVE
-// ============================================================================
+// Flip: curve
 
 test('reverseCurve: the reversed curve occupies the same points', () => {
   const crv = globalCurveInterp([[0, 0, 0], [10, 6, 2], [22, -4, 5], [35, 2, 0], [48, 9, -3]], 3);
@@ -100,7 +98,7 @@ test('reverseCurve: the reversed curve occupies the same points', () => {
   assert.ok(r.ok, `point set moved by ${r.worst}`);
 });
 
-test('reverseCurve: start and end genuinely swap', () => {
+test('reverseCurve: start and end swap', () => {
   const crv = globalCurveInterp([[0, 0, 0], [10, 6, 2], [22, -4, 5], [35, 2, 0]], 3);
   const [dMin, dMax] = curveDomain(crv), rev = reverseCurve(crv), [rMin, rMax] = curveDomain(rev);
   assert.ok(dist(curvePoint(crv, dMin), curvePoint(rev, rMax)) < 1e-9);
@@ -115,9 +113,7 @@ test('reverseCurve: reversing twice is the identity, knot for knot', () => {
   crv.ctrlPts.forEach((p, i) => p.forEach((c, j) => assert.ok(Math.abs(c - back.ctrlPts[i][j]) < 1e-12, `cp ${i}.${j}`)));
 });
 
-// ============================================================================
-// FLIP — SURFACE NORMALS
-// ============================================================================
+// Flip: surface normals
 
 test('flipSurfaceNormals: the surface occupies the same points', () => {
   const srf = cylinder();
@@ -125,7 +121,7 @@ test('flipSurfaceNormals: the surface occupies the same points', () => {
   assert.ok(r.ok, `point set moved by ${r.worst}`);
 });
 
-test('flipSurfaceNormals: the normal genuinely reverses at every sampled point', () => {
+test('flipSurfaceNormals: the normal reverses at every sampled point', () => {
   const srf = cylinder();
   const flipped = flipSurfaceNormals(srf);
   const d = surfaceDomain(srf), fd = surfaceDomain(flipped);
@@ -133,7 +129,7 @@ test('flipSurfaceNormals: the normal genuinely reverses at every sampled point',
   for (const fu of [0.13, 0.37, 0.61, 0.88]) {
     for (const fv of [0.2, 0.5, 0.8]) {
       const u = d.u[0] + (d.u[1] - d.u[0]) * fu, v = d.v[0] + (d.v[1] - d.v[0]) * fv;
-      // The SAME physical point on the flipped surface sits at the mirrored u.
+      // The same physical point on the flipped surface sits at the mirrored u.
       const u2 = remapReversedParam(u, srf.knotsU);
       assert.ok(dist(surfacePoint(srf, u, v), surfacePoint(flipped, u2, v)) < 1e-8, 'remapReversedParam must name the same point');
       const n0 = unitNormal(srf, u, v), n1 = unitNormal(flipped, u2, v);
@@ -171,9 +167,7 @@ test('reverseSurfaceDirection: v reverses the normal too, and is its own inverse
   assert.ok(dist(surfacePoint(srf, u, v), surfacePoint(back, u, v)) < 1e-12);
 });
 
-// ============================================================================
-// SEAM — CLOSED CURVE
-// ============================================================================
+// Seam: closed curve
 
 test('moveCurveSeam: a circle keeps its exact point set and starts where it was told to', () => {
   const crv = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 25);
@@ -217,9 +211,7 @@ test('moveCurveSeamToPoint: the seam lands on the point nearest the pick', () =>
   assert.ok(dist(curvePoint(moved, mMin), [0, 25, 0]) < 0.2, `landed at ${curvePoint(moved, mMin)}`);
 });
 
-// ============================================================================
-// SEAM — CLOSED SURFACE
-// ============================================================================
+// Seam: closed surface
 
 test('surfaceSeamDirections: a torus is closed both ways, a cylinder one way, a patch neither', () => {
   assert.deepEqual(surfaceSeamDirections(torus()), { u: true, v: true });
@@ -251,7 +243,7 @@ test('moveSurfaceSeam: a torus keeps its exact point set, in either direction', 
   }
 });
 
-test('moveSurfaceSeam: the moved seam is genuinely where it was asked for', () => {
+test('moveSurfaceSeam: the moved seam is where it was asked for', () => {
   const srf = torus();
   const closed = surfaceSeamDirections(srf);
   const dir = closed.u ? 'u' : 'v';
@@ -269,9 +261,7 @@ test('moveSurfaceSeam: the moved seam is genuinely where it was asked for', () =
   }
 });
 
-// ============================================================================
-// REFUSALS — each fires BY NAME on the wrong input
-// ============================================================================
+// Refusals: each fires by name on the wrong input
 
 test('refusal: an open curve has no seam, and it says so in those words', () => {
   const open = globalCurveInterp([[0, 0, 0], [10, 5, 0], [20, 0, 0]], 2);
@@ -306,16 +296,13 @@ test('refusal: a direction that is not u or v is named as such, not coerced', ()
   assert.throws(() => reverseSurfaceDirection(torus(), 'w'), /must be 'u' or 'v'/);
 });
 
-// ============================================================================
-// WHAT A FLIPPED NORMAL ACTUALLY CHANGES
-// ============================================================================
-// The honest answer to "is this only shading?" is no, and this is the proof:
-// offsetSurface derives its direction from Su x Sv, so a flipped surface offsets
+// What a flipped normal changes
+// A flip is not only shading: offsetSurface derives its direction from Su x Sv, so a flipped surface offsets
 // the other way. The same orientation decides an exported mesh's facet winding
 // and the sign of a divergence-theorem volume, which is why a flipped normal on
 // a closed solid is a correctness matter rather than a cosmetic one.
 
-test('a flipped surface offsets the OTHER way — the flip reaches real operations, not just shading', () => {
+test('a flipped surface offsets the other way — the flip reaches geometric operations, not just shading', () => {
   const srf = cylinder(20, 40);
   const a = offsetSurface(srf, 5);
   const b = offsetSurface(flipSurfaceNormals(srf), 5);
@@ -327,25 +314,23 @@ test('a flipped surface offsets the OTHER way — the flip reaches real operatio
   const rBase = Math.hypot(base[0], base[1]);
   const rA = Math.hypot(outA[0], outA[1]);
   const rB = Math.hypot(outB[0], outB[1]);
-  /* WHICH WAY THE UNFLIPPED ONE GOES IS THE REVOLVE'S OWN BUSINESS — a full
-     revolve of a line happens to come out normal-inward — so the claim tested
-     here is the RELATIONSHIP, not a sign: the two offsets move the same distance
-     in opposite directions. That is the whole point of being able to flip. */
+  /* Which way the unflipped one goes is set by the revolve — a full revolve
+     of a line comes out normal-inward — so the claim tested here is the
+     relationship, not a sign: the two offsets move the same distance in
+     opposite directions. */
   assert.ok(Math.abs(Math.abs(rA - rBase) - 5) < 1e-6, `the unflipped offset moves by 5: ${rBase} -> ${rA}`);
   assert.ok(Math.abs(Math.abs(rB - rBase) - 5) < 1e-6, `the flipped offset moves by 5: ${rBase} -> ${rB}`);
-  assert.ok((rA - rBase) * (rB - rBase) < 0, `and they go OPPOSITE ways: ${rA} vs ${rB} around ${rBase}`);
+  assert.ok((rA - rBase) * (rB - rBase) < 0, `and they go opposite ways: ${rA} vs ${rB} around ${rBase}`);
 });
 
-// ============================================================================
-// AND IT HAS TO SURVIVE A **FEATURE** REBUILD
-// ============================================================================
-// A flip on a polysurface is stored as a MODIFIER on the object and written
-// into every face. A FEATURE rebuild — a fillet radius edited, a hole resized —
+// A flip survives a feature rebuild
+// A flip on a polysurface is stored as a modifier on the object and written
+// into every face. A feature rebuild — a fillet radius edited, a hole resized —
 // re-derives that face list from the base the feature was named on, so anything
 // written onto the finished faces is not in the base and does not come back
 // unless it is replayed. These hold the rule that replay follows.
 //
-// The measure is the SIGN OF THE VOLUME, by the divergence theorem
+// The measure is the sign of the volume, by the divergence theorem
 // V = (1/3)∮ x·n dA = (1/3)∫∫ S·(Su x Sv) du dv, which is exactly the quantity a
 // lost flip gets wrong. On bilinear faces the integrand is linear in each
 // parameter, so one midpoint cell per face integrates it exactly.
@@ -357,7 +342,7 @@ function quadPatch(p00, p10, p01, p11) {
     ctrlNet: [[[...p00, 1], [...p01, 1]], [[...p10, 1], [...p11, 1]]],
   };
 }
-// The six faces of a cube, every one of them oriented OUTWARD: u x v is the
+// The six faces of a cube, every one of them oriented outward: u x v is the
 // outward direction on each, which is what makes the volume below come out
 // positive and gives the flip something to reverse.
 function cubeFaces(a) {
@@ -383,10 +368,10 @@ function signedVolume(faces, n = 8) {
   }
   return v / 3;
 }
-// THE FEATURE REBUILD, in the shape the real one has: the face list is thrown
+// The feature rebuild, in the shape of the modeler's rebuild: the face list is thrown
 // away and re-derived from the base, and the rebuild produces a face that was
 // never in the base at all (a blend band, a hole wall). Nothing about the
-// finished faces survives it — which is the whole problem.
+// finished faces survives it.
 function rebuildFromBase(baseFaces) {
   const out = baseFaces.map((f) => quadPatch(
     f.ctrlNet[0][0].slice(0, 3), f.ctrlNet[1][0].slice(0, 3),
@@ -395,39 +380,39 @@ function rebuildFromBase(baseFaces) {
 }
 const replay = (faces, flipped) => (flipped ? faces.map(flipSurfaceNormals) : faces);
 
-test('the sign of a closed solid\'s volume IS its orientation — a flip is not cosmetic', () => {
+test('the sign of a closed solid\'s volume is its orientation — a flip is not cosmetic', () => {
   const faces = cubeFaces(10);
   assert.ok(Math.abs(signedVolume(faces) - 8000) < 1e-6, `an outward cube encloses +8000: ${signedVolume(faces)}`);
   const flipped = faces.map(flipSurfaceNormals);
   assert.ok(Math.abs(signedVolume(flipped) + 8000) < 1e-6, `and the flipped one encloses -8000: ${signedVolume(flipped)}`);
 });
 
-test('a flip is LOST by a feature rebuild unless the modifier is replayed', () => {
+test('a flip is lost by a feature rebuild unless the modifier is replayed', () => {
   const base = cubeFaces(10);
   const flippedNow = base.map(flipSurfaceNormals);
   assert.ok(signedVolume(flippedNow) < 0, 'the solid is flipped to begin with');
   // The rebuild alone — what a path that forgets the modifier produces.
   const naive = rebuildFromBase(base);
-  assert.ok(signedVolume(naive) > 0, 'a rebuild from the base comes back UNFLIPPED — this is the defect');
+  assert.ok(signedVolume(naive) > 0, 'a rebuild from the base comes back unflipped when the modifier is not replayed');
   // The rebuild with the modifier replayed once.
   const replayed = replay(rebuildFromBase(base), true);
   assert.ok(signedVolume(replayed) < 0, 'replaying the modifier keeps the orientation the flip asked for');
   assert.ok(Math.abs(Math.abs(signedVolume(replayed)) - 8000) < 1e-6, 'and the solid is the same size — a flip moves nothing');
 });
 
-test('replaying it TWICE is the same as not replaying it at all — why the replay is bracketed, not copied per path', () => {
+test('replaying it twice is the same as not replaying it at all — why the replay is bracketed, not copied per path', () => {
   const base = cubeFaces(10);
   const once = replay(rebuildFromBase(base), true);
   const twice = replay(once, true);
   assert.ok(signedVolume(once) < 0, 'once: flipped');
   assert.ok(signedVolume(twice) > 0, 'twice: back to unflipped, and nothing anywhere says so');
-  /* This is the reason the fillet roads share ONE depth-counted bracket rather
+  /* This is the reason the fillet paths share one depth-counted bracket rather
      than each stripping and replaying for themselves: add -> records -> stages
      -> the applier all run on one edit, and an even number of reversals is no
      reversal. */
 });
 
-test('a face the rebuild INVENTED carries the flip too — a blend band is not in the base', () => {
+test('a face the rebuild created carries the flip too — a blend band is not in the base', () => {
   const base = cubeFaces(10);
   // The rebuild splits the +z face in two, the way a blend band appears between
   // two faces that were adjacent in the base.
@@ -440,7 +425,7 @@ test('a face the rebuild INVENTED carries the flip too — a blend band is not i
   assert.ok(dot(norm(cross(su, sv)), [0, 0, 1]) < -0.99, 'the new face points inward with the rest of the flipped solid');
 });
 
-test('and the solid OFFSETS the way the flip asked, after the rebuild — the consequence a lost flip gets wrong', () => {
+test('and the solid offsets the way the flip asked, after the rebuild — the consequence a lost flip gets wrong', () => {
   const base = cubeFaces(10);
   const centre = [0, 0, 0];
   const faceOf = (faces) => faces[0]; // the +x face
@@ -453,6 +438,6 @@ test('and the solid OFFSETS the way the flip asked, after the rebuild — the co
   const plain = radialShift(faceOf(rebuildFromBase(base)));
   const flipped = radialShift(faceOf(replay(rebuildFromBase(base), true)));
   assert.ok(Math.abs(plain - 3) < 1e-6, `an unflipped face offsets outward by 3: ${plain}`);
-  assert.ok(Math.abs(flipped + 3) < 1e-6, `a flipped one offsets INWARD by 3: ${flipped}`);
+  assert.ok(Math.abs(flipped + 3) < 1e-6, `a flipped one offsets inward by 3: ${flipped}`);
   assert.ok(plain * flipped < 0, 'thickening the same solid goes opposite ways — this is what a lost flip silently gets wrong');
 });

@@ -1,10 +1,9 @@
-// PROFILE SELF-INTERSECTION — Phase C of the self-intersection guards,
-// planar tier and the profile-validity consumer it names as the highest-value
-// application of it.
+// Profile self-intersection — the planar tier of the self-intersection
+// guards, and its profile-validity consumer.
 //
-// The gate stated for this phase, tested literally:
+// The requirement, tested literally:
 //   "a figure-eight planar SketchCurve is caught; a non-planar curve merely
-//    passing near itself is NOT reported as intersecting."
+//    passing near itself is not reported as intersecting."
 //
 // Every fixture is built from coordinates whose crossing (or lack of one) is
 // obvious by inspection, so a failure here is a failure of the code and never
@@ -31,24 +30,24 @@ function polylineCrv(points, closed) {
   return { degree: 1, knots, ctrlPts };
 }
 
-// -------------------------------------------------------- THE 2D PRIMITIVE
+// The 2D primitive
 
 test('polylineSelfIntersects2D respects open vs closed rather than assuming a loop', () => {
-  // Three sides of a square, OPEN. There is no crossing — but a loop-assuming
+  // Three sides of a square, open. There is no crossing — but a loop-assuming
   // test would invent the closing segment and could report one.
   const openL = [[0, 0], [10, 0], [10, 10], [0, 10]];
   assert.equal(polylineSelfIntersects2D(openL, false), false);
   assert.equal(polylineSelfIntersects2D(openL, true), false, 'a plain square is clean closed too');
 
-  // A genuine planar figure-eight (a bow-tie), the canonical crossing case.
+  // A real planar figure-eight (a bow-tie), the canonical crossing case.
   const bowtie = [[0, 0], [10, 10], [10, 0], [0, 10]];
   assert.equal(polylineSelfIntersects2D(bowtie, true), true);
-  assert.equal(polylineSelfIntersects2D(bowtie, false), true, 'the crossing is between two INTERIOR segments, so it is there open too');
+  assert.equal(polylineSelfIntersects2D(bowtie, false), true, 'the crossing is between two interior segments, so it is there open too');
 });
 
 test('a closed polyline is not reported as crossing itself at its own seam', () => {
-  // The one-directional-adjacency bug this guards: on a closed ring the FIRST
-  // and LAST segments are adjacent, and excluding only j === i+1 would report
+  // The one-directional-adjacency bug this guards: on a closed ring the first
+  // and last segments are adjacent, and excluding only j === i+1 would report
   // every closed curve in the app as self-intersecting.
   for (const n of [3, 4, 5, 8, 16]) {
     const ring = [];
@@ -57,18 +56,18 @@ test('a closed polyline is not reported as crossing itself at its own seam', () 
   }
 });
 
-// ---------------------------------------------------------------- PLANES
+// Planes
 
 test('bestFitPlane refuses a collinear ring rather than normalizing noise', () => {
   assert.equal(bestFitPlane([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]), null);
 });
 
-// THE REASON bestFitPlane DOES NOT USE NEWELL'S METHOD, pinned as a test so
+// The reason bestFitPlane does not use Newell's method, pinned as a test so
 // a future "simplify this to the same technique capProfilePlaneCheck uses"
 // fails loudly instead of silently disabling the guard.
 //
-// Newell's sums SIGNED per-edge contributions — an area-weighted normal. A
-// figure-eight's two lobes wind in OPPOSITE directions, so they cancel and
+// Newell's sums signed per-edge contributions — an area-weighted normal. A
+// figure-eight's two lobes wind in opposite directions, so they cancel and
 // the normal comes out zero-length. Newell's therefore reports the canonical
 // self-intersecting profile as having no plane at all, and the whole guard
 // declines to judge the one shape it exists for.
@@ -82,9 +81,9 @@ test('Newell\'s method cancels to zero on a figure-eight — bestFitPlane must n
     newell[2] += (a[0] - b[0]) * (a[1] + b[1]);
   }
   const newellLen = Math.hypot(...newell);
-  assert.ok(newellLen < 1e-9, `Newell's must genuinely cancel here for this test to mean anything (got ${newellLen})`);
+  assert.ok(newellLen < 1e-9, `Newell's must cancel here for this test to mean anything (got ${newellLen})`);
 
-  // The shipped method finds the plane regardless — this is the whole point.
+  // bestFitPlane finds the plane regardless.
   const plane = bestFitPlane(bowtie);
   assert.ok(plane, 'bestFitPlane must still find the plane a figure-eight obviously lies in');
   assert.ok(Math.abs(Math.abs(plane.normal[2]) - 1) < 1e-9, 'and it is the Z plane, as drawn');
@@ -102,9 +101,9 @@ test('bestFitPlane recovers a known tilted plane exactly', () => {
   assert.ok(Math.abs(d - 1) < 1e-9, `normal should be parallel to the known one, |dot| = ${d}`);
 });
 
-// ------------------------------------------------------- THE STATED GATE
+// The requirement
 
-test('GATE: a planar figure-eight profile is caught', () => {
+test('Gate: a planar figure-eight profile is caught', () => {
   const crv = polylineCrv([[0, 0, 0], [40, 40, 0], [40, 0, 0], [0, 40, 0]], true);
   const r = curveSelfIntersects(crv);
   assert.equal(r.tested, true);
@@ -112,9 +111,9 @@ test('GATE: a planar figure-eight profile is caught', () => {
   assert.equal(r.selfIntersects, true);
 });
 
-test('GATE: a non-planar curve merely passing near itself is NOT reported as intersecting', () => {
-  // The SAME figure-eight footprint, but lifted so the two branches pass at
-  // genuinely different heights — a real 3D crossing-over, not a crossing.
+test('Gate: a non-planar curve merely passing near itself is not reported as intersecting', () => {
+  // The same figure-eight footprint, but lifted so the two branches pass at
+  // different heights — a real 3D crossing-over, not a crossing.
   // The lift is large relative to the curve's own size, so this is
   // unambiguously a space curve, not a near-planar one.
   const crv = polylineCrv([[0, 0, 0], [40, 40, 30], [40, 0, 0], [0, 40, -30]], true);
@@ -125,9 +124,8 @@ test('GATE: a non-planar curve merely passing near itself is NOT reported as int
   assert.match(r.reason, /not planar/);
 });
 
-// ----------------------------------------------------- ORDINARY PROFILES
-// The regression half: every profile a student actually draws must stay
-// clean, or this guard becomes noise the moment it ships.
+// Ordinary profiles
+// Every ordinary profile must stay clean, or this guard is noise.
 
 test('ordinary profiles are clean — a circle, a polygon, a smooth open curve', () => {
   const circle = curveSelfIntersects(makeCircle(O, X, Y, 25));
@@ -140,17 +138,17 @@ test('ordinary profiles are clean — a circle, a polygon, a smooth open curve',
   const poly = curveSelfIntersects(polylineCrv(hex, true));
   assert.equal(poly.selfIntersects, false);
 
-  // A smooth interpolated OPEN curve, the SketchCurve case.
+  // A smooth interpolated open curve, the SketchCurve case.
   const smooth = globalCurveInterp([[0, 0, 0], [20, 15, 0], [40, -10, 0], [60, 5, 0]], 3);
   const sm = curveSelfIntersects(smooth);
   assert.equal(sm.tested, true);
   assert.equal(sm.selfIntersects, false);
 });
 
-test('a NEARLY-planar crossing profile is still caught — the case that matters', () => {
+test('a nearly planar crossing profile is still caught — the case that matters', () => {
   // The figure-eight again, with one point nudged off-plane by well under the
   // planarity tolerance. Its exact 3D crossing is gone, but the tolerance-
-  // level one that genuinely breaks Extrude/boolean/export remains — so this
+  // level one that breaks Extrude/boolean/export remains — so this
   // must still be caught, not excused as "a space curve".
   const size = 40 * Math.SQRT2;
   const nudge = size * 0.002; // comfortably inside PLANARITY_TOL_FRAC (1%)
@@ -160,12 +158,12 @@ test('a NEARLY-planar crossing profile is still caught — the case that matters
   assert.equal(r.selfIntersects, true);
 });
 
-test('a self-crossing OPEN profile is caught without inventing a closing segment', () => {
-  // An open curve whose own two interior stretches genuinely cross.
+test('a self-crossing open profile is caught without inventing a closing segment', () => {
+  // An open curve whose own two interior stretches cross.
   const crossing = polylineCrv([[0, 0, 0], [40, 40, 0], [40, 0, 0], [0, 40, 0]], false);
   assert.equal(curveSelfIntersects(crossing).selfIntersects, true);
 
-  // An open curve that only LOOKS like it would cross if a phantom closing
+  // An open curve that only looks like it would cross if a phantom closing
   // segment were added — three sides of a Z. The closing chord from the last
   // point back to the first would cross nothing here either, so the sharper
   // check is the C shape below.

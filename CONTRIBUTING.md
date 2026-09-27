@@ -17,7 +17,7 @@ npm test
 
 About ninety seconds. Most of it is pure kernel and needs nothing installed.
 
-⚠ `node --test test/` does **not** work on Node ≥ 22 — positional arguments are
+`node --test test/` does **not** work on Node ≥ 22 — positional arguments are
 files and globs, not directories. Use `npm test`, or
 `node --test 'test/*.test.mjs'`.
 
@@ -37,10 +37,12 @@ otherwise passes its own tests and fails on a circle.
 This boundary is the reason the two live in different places, and it is easy to
 erase by accident.
 
-- **Everything under `kernel/` is derived from Piegl & Tiller *The NURBS Book*
-  only**, and cited per function. Do not paste, port or transcribe code from
-  another geometry kernel into it — not OpenNURBS, not OCCT, not a GPL project,
-  not a decompiled anything. If a routine needs a source, name the source.
+- **Everything under `kernel/` is hand-derived from published research** —
+  Piegl & Tiller *The NURBS Book* first among about ninety works — and cited
+  per function, with no code taken from another kernel. Do not paste, port or
+  transcribe code from another geometry kernel into it — not OpenNURBS, not
+  OCCT, not a GPL project, not a decompiled anything. If a routine needs a
+  source, name the source.
 - **`io3dm.mjs` sits at the repo root deliberately.** It converts against
   rhino3dm/OpenNURBS's own representation, so it is attributed third-party-adjacent
   infrastructure rather than clean-room. Do not move it under `kernel/` to tidy
@@ -55,8 +57,10 @@ PR that replaces the kernel with a mature one is a fork, not a merge.
 ## Third-party code
 
 `vendor/rhino3dm/` holds McNeel's openNURBS binding under its own MIT license,
-built locally with a small patch — see `vendor/rhino3dm/NOTICE.txt`. That notice
-travels with any copy you distribute.
+built locally with two small binding patches. `vendor/rhino3dm/NOTICE.txt`
+carries its notice and those of everything compiled into the build (openNURBS,
+zlib, libuuid, Draco, Emscripten and musl). That notice travels with any copy
+you distribute.
 
 ## Names
 

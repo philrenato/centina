@@ -1,65 +1,62 @@
-// PARAM SENSITIVITY — the GENERIC finite-difference fallback for direct
+// Param sensitivity — the generic finite-difference fallback for direct
 // manipulation.
 //
-// WHAT THIS IS FOR. Every operator in the app is a plain-data param bag plus a
+// Every operator in the app is a plain-data param bag plus a
 // pure `evaluate(inputs, params)`. Any numeric param has to be
-// DRAGGABLE on canvas. For most params the inverse is analytic and trivial
+// draggable on canvas. For most params the inverse is analytic and trivial
 // (an offset distance is the perpendicular distance from the source curve to
 // the cursor) and the author hand-writes `fromDrag`. This module is what
-// happens for every OTHER param — the ones nobody wrote an inverse for:
+// happens for every other param — the ones nobody wrote an inverse for:
 // nudge the param, re-run the entry's own `evaluate`, measure how the
 // sampled geometry moved, and least-squares that measured response against
-// the geometric change the cursor is asking for. That is what makes
-// draggability scale to every registry entry instead of the handful
-// someone hand-writes.
+// the geometric change the cursor is asking for, so draggability covers
+// every registry entry rather than only those with a hand-written inverse.
 //
-// CITED SOURCE — "Direct Manipulation of Procedural Implicit Surfaces",
+// Source: "Direct Manipulation of Procedural Implicit Surfaces",
 // Marzia Riso, Elie Michel, Axel Paris, Valentin Deschaintre, Mathieu
 // Gaillard, Fabio Pellacini. SIGGRAPH Asia 2024, ACM TOG 43(6),
-// DOI 10.1145/3687936. WHAT WE TOOK: the framing (a user drags the rendered
+// DOI 10.1145/3687936. Taken from it: the framing (a user drags the rendered
 // geometry; the drag is propagated back into parameter updates) and the idea
-// of a GENERIC fallback that works off the procedural definition itself
-// rather than a per-parameter hand-written inverse. WHAT WE DID NOT TAKE:
-// their machinery. They automatically differentiate a procedural graph over
-// an IMPLICIT (SDF) surface and carry a co-parameterization to keep surface
-// points identified across an edit. Our geometry is EXPLICIT NURBS and our
+// of a generic fallback that works off the procedural definition itself
+// rather than a per-parameter hand-written inverse. Not taken: their
+// machinery. They automatically differentiate a procedural graph over
+// an implicit (SDF) surface and carry a co-parameterization to keep surface
+// points identified across an edit. Our geometry is explicit NURBS and our
 // params are plain scalars, so a one-scalar-at-a-time finite difference is
-// sufficient — and, far more importantly here, it is verifiable: every claim
-// this module makes can be cross-checked against a case whose analytic
-// derivative is independently known (see test/sensitivity.test.mjs). No
-// autodiff, no co-parameterization, no implicit surfaces.
+// sufficient, and it can be cross-checked against a case whose analytic
+// derivative is independently known. No autodiff, no co-parameterization,
+// no implicit surfaces.
 //
-// THIS IS AN ESTIMATOR. Nothing here is exact for a nonlinear param. Every
+// This is an estimator. Nothing here is exact for a nonlinear param. Every
 // entry point returns its own measured quality signal alongside its answer,
-// and refuses honestly rather than returning a plausible wrong number — a
-// wrong-but-plausible parameter value is worse than a refusal here, because
-// downstream it becomes a silent geometry jump the student can't explain.
+// and refuses rather than returning a plausible wrong number — a
+// wrong-but-plausible parameter value becomes an unexplained geometry jump
+// downstream.
 //
-// THE LOAD-BEARING ASSUMPTION — CORRESPONDENCE. A finite difference compares
+// The central assumption is correspondence. A finite difference compares
 // "geometry before" against "geometry after", which is only meaningful once
-// you have decided WHICH point corresponds to WHICH. This module's answer:
+// you have decided which point corresponds to which. This module's answer:
 // the caller supplies a `sample(result)` function, and sample index i of the
-// baseline is DEFINED to correspond to sample index i of every probe. That
+// baseline is defined to correspond to sample index i of every probe. That
 // puts the assumption in one visible place instead of hiding it in the math.
 // The caller's contract is therefore: sample() must return points in a
-// STABLE ORDER and a STABLE COUNT across small changes of the param being
+// stable order and a stable count across small changes of the param being
 // probed. A changed count is detected and refused ('unstable-sampling') —
 // that is exactly what a topology-changing param (a segment count, a sides
-// count) does, so the check doubles as a real discrete-param detector.
-// A changed count is detectable; a silently REORDERED or reparametrized
-// sample set is NOT, and would produce a confidently wrong answer. That is
-// the residual risk of this whole method, named here rather than buried:
-// see sampleGeometry() below for the correspondence rule the default sampler
-// uses, and its own honest limits.
+// count) does, so the check doubles as a discrete-param detector.
+// A changed count is detectable; a silently reordered or reparametrized
+// sample set is not, and would produce a confidently wrong answer. That is
+// the residual risk of this method: see sampleGeometry() below for the
+// correspondence rule the default sampler uses, and its limits.
 
 import { curvePoint } from './curve.mjs';
 import { surfacePoint } from './surface.mjs';
 
 export const SENSITIVITY_DEFAULTS = Object.freeze({
-  // STEP SIZE. A single absolute epsilon is wrong across params whose scales
+  // Step size. A single absolute epsilon is wrong across params whose scales
   // differ by orders of magnitude — 1e-3 is a reasonable nudge for a radius
   // in mm and a catastrophic one for a normalized 0..1 softness. So the step
-  // is RELATIVE to the param's own magnitude, with an absolute floor so a
+  // is relative to the param's own magnitude, with an absolute floor so a
   // param sitting at (or near) zero still gets probed at all.
   //
   //   h = max(relStep * |value|, floor)
@@ -80,17 +77,17 @@ export const SENSITIVITY_DEFAULTS = Object.freeze({
 
   // Central differences (two probes, O(h^2)) by default. Set false to spend
   // one evaluate instead of two, at O(h) accuracy — worth it only if the
-  // caller's evaluate is genuinely expensive at drag rate.
+  // caller's evaluate is expensive at drag rate.
   central: true,
 
   // 1 = a single linear solve. >1 re-linearizes at the proposed value and
-  // solves again (Gauss-Newton), which matters for a genuinely nonlinear
+  // solves again (Gauss-Newton), which matters for a nonlinear
   // param; each extra iteration costs another probe pair.
   iterations: 1,
 
   // |cos| between the param's measured geometric response and the requested
   // displacement, below which the param is refused as unable to explain the
-  // drag ('orthogonal'). Deliberately small: a param that explains even a
+  // drag ('orthogonal'). Small: a param that explains even a
   // little of the drag is still a legitimate (if weak) handle, and the
   // returned `alignment` lets the caller apply a stricter rule.
   alignmentTol: 0.05,
@@ -99,47 +96,45 @@ export const SENSITIVITY_DEFAULTS = Object.freeze({
   // geomScale is the largest sample coordinate magnitude, because absolute
   // float error in an evaluation scales with the magnitude of the
   // coordinates involved — a geometry sitting 10 meters from the origin
-  // genuinely cannot resolve a nanometer of response.
+  // cannot resolve a nanometer of response.
   motionTol: 1e-9,
 
-  // When the fine step produces no measurable motion, retry ONCE at
+  // When the fine step produces no measurable motion, retry once at
   // coarseFactor * h before declaring the param dead. This is what separates
   // "this param does nothing" from "this param only responds in discrete
   // jumps" — see the 'quantized' refusal. Since h is itself ~relStep*|value|,
-  // coarseFactor 250 makes the coarse probe roughly a QUARTER of the param's
-  // own magnitude: deliberately huge, because its only job is a yes/no
-  // "does this param do anything at all". Anything smaller silently fails
-  // the commonest real case — a param quantized to WHOLE units (a notch
+  // coarseFactor 250 makes the coarse probe roughly a quarter of the param's
+  // own magnitude: large, because its only job is a yes/no
+  // "does this param do anything at all". Anything smaller fails
+  // the commonest case — a param quantized to whole units (a notch
   // count, an internally rounded index) sitting at a value of a few, where a
   // 3% nudge rounds straight back to where it started and the param reads as
   // inert. (planProbes still clamps the coarse step to the declared range.)
   coarseFactor: 250,
 
-  // THE SMOOTHNESS GATE, and why it exists — this was found by probing, not
-  // by reasoning. A param that rebuilds the geometry's own parametric
+  // Smoothness check. A param that rebuilds the geometry's own parametric
   // structure (a `segments` count feeding makeCircle, a `sides` count) does
-  // NOT necessarily change the number of samples: a parameter-fraction
-  // sampler happily returns the same 24 points off a curve whose knot vector
-  // was just rebuilt from 9 control points to 11. The count check misses it
-  // completely, and what comes back is a large, confident, WRONG derivative
-  // — the single worst failure this module could have. The detector that
-  // does catch it is smoothness: for any genuinely differentiable response,
+  // not necessarily change the number of samples: a parameter-fraction
+  // sampler returns the same 24 points off a curve whose knot vector
+  // was just rebuilt from 9 control points to 11. The count check misses it,
+  // and what comes back is a large, confident, wrong derivative. The
+  // detector that does catch it is smoothness: for any differentiable response,
   // the forward and backward halves of a central difference must agree to
   // O(h^2), i.e. (P(v+h) - P(v)) ~= (P(v) - P(v-h)). A param that jumps
   // structurally disagrees grossly (typically one side moves and the other
   // does not move at all). smoothTol is the fraction of the response allowed
   // to disagree between the two sides before the param is refused as
-  // 'non-smooth'. 0.25 is deliberately permissive — a real nonlinear param
+  // 'non-smooth'. 0.25 is permissive — a nonlinear param
   // disagrees by only about h*|f''/f'|, which at a 1e-3 relative step is
   // parts-per-thousand, so this rejects structural jumps without touching
   // ordinary curvature.
   //
   // A param pinned at a declared bound can only be probed one-sided, and so
-  // gets the same gate via a HALF-STEP probe on the one legal side instead
-  // (see jacobianAt). HONEST LIMIT of both forms: they detect a jump that
-  // lands INSIDE the probed interval. A param that is genuinely smooth
+  // gets the same check via a half-step probe on the one legal side instead
+  // (see jacobianAt). Limit of both forms: they detect a jump that
+  // lands inside the probed interval. A param that is smooth
   // across the whole probe window but discontinuous somewhere further out is
-  // correctly not refused here — the estimate is locally honest, and the
+  // not refused here — the estimate is locally correct, and the
   // measured `residual` on the solve path is what catches the drag having
   // gone somewhere unexpected.
   smoothTol: 0.25,
@@ -149,9 +144,7 @@ function resolveOptions(o) {
   return { ...SENSITIVITY_DEFAULTS, ...(o || {}) };
 }
 
-// ---------------------------------------------------------------------------
-// small vector helpers over a flat [x0,y0,z0, x1,y1,z1, ...] array
-// ---------------------------------------------------------------------------
+// Small vector helpers over a flat [x0,y0,z0, x1,y1,z1, ...] array
 
 function dot(a, b) {
   let s = 0;
@@ -167,22 +160,20 @@ function refuse(reason, message, extra) {
   return { ok: false, reason, message, ...(extra || {}) };
 }
 
-// ---------------------------------------------------------------------------
-// DEFAULT SAMPLER (optional — a caller may always supply its own)
+// Default sampler (optional — a caller may always supply its own)
 //
-// CORRESPONDENCE RULE: samples are taken at FIXED FRACTIONS of each curve's /
+// Correspondence rule: samples are taken at fixed fractions of each curve's /
 // surface's own parametric domain, in a fixed traversal order. Sample i of
 // one evaluation therefore corresponds to sample i of another IF the two
 // share the same parametric structure — which is true for an ordinary
-// continuous param (a radius, a distance, an angle) and FALSE for a param
+// continuous param (a radius, a distance, an angle) and false for a param
 // that rebuilds the knot vector (a segment/sides count). The latter usually
-// changes the sample COUNT too and is refused, but not always: a param that
+// changes the sample count too and is refused, but not always: a param that
 // keeps the count while reparametrizing would slide correspondence silently.
-// A caller with a better correspondence (arc-length fractions, a real
-// closest-point mapping, or the actual dragged control point's own index)
-// should pass its own sampler; this one is the honest generic default, not a
-// claim of correctness for every possible param.
-// ---------------------------------------------------------------------------
+// A caller with a better correspondence (arc-length fractions, a
+// closest-point mapping, or the dragged control point's own index)
+// should pass its own sampler; this one is the generic default, not
+// correct for every possible param.
 
 function curveDomain(crv) {
   const p = crv.degree;
@@ -241,13 +232,11 @@ export function sampleGeometry(result, opts = {}) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// probing
-// ---------------------------------------------------------------------------
+// Probing
 
-// Runs evaluate at ONE param value and flattens the sampled points. Never
+// Runs evaluate at one param value and flattens the sampled points. Never
 // mutates the caller's params object. Returns either {ok:true, flat, points}
-// or a refusal — an evaluate() that throws is a completely ordinary outcome
+// or a refusal — an evaluate() that throws is an ordinary outcome
 // (a degenerate recipe), not an exception to propagate.
 function probe(req, value) {
   const { evaluate, inputs, params, key } = req;
@@ -282,7 +271,7 @@ function probe(req, value) {
 }
 
 // The largest sample coordinate magnitude — the scale float error in an
-// evaluation is actually proportional to (see motionTol above).
+// evaluation is proportional to (see motionTol above).
 function geomScaleOf(flat) {
   let m = 0;
   for (let i = 0; i < flat.length; i += 3) {
@@ -310,11 +299,10 @@ function stepFor(value, spec, opt) {
   return Math.max(opt.relStep * Math.abs(value), floor);
 }
 
-// Refuse a param this method structurally cannot handle, BEFORE spending any
-// evaluate calls. A declared non-number (boolean/enum/vec3/array/string), a
-// declared integer, or a non-finite current value are all honest refusals —
-// finite-differencing a value that has no meaningful "slightly more" is not
-// a hard problem to be solved, it is a category error.
+// Refuse a param this method structurally cannot handle, before spending any
+// evaluate calls: a declared non-number (boolean/enum/vec3/array/string), a
+// declared integer, or a non-finite current value. Such a value has no
+// meaningful "slightly more" to finite-difference.
 function declaredRefusal(value, spec, key) {
   if (spec) {
     if (spec.type && spec.type !== 'number') {
@@ -333,9 +321,9 @@ function declaredRefusal(value, spec, key) {
   return null;
 }
 
-// Where to place the probe(s), honouring a declared [min,max]. A param
-// sitting exactly at its max cannot step forward, so it steps BACKWARD — a
-// param pinned at a bound is still perfectly draggable in the direction that
+// Where to place the probe(s), honoring a declared [min,max]. A param
+// sitting exactly at its max cannot step forward, so it steps backward — a
+// param pinned at a bound is still draggable in the direction that
 // stays legal, and refusing there would make every clamped param dead.
 function planProbes(value, h, spec, opt, key) {
   const min = spec && Number.isFinite(spec.min) ? spec.min : -Infinity;
@@ -402,7 +390,7 @@ function jacobianAt(req, value, opt, spec) {
       for (let i = 0; i < jac.length; i++) jac[i] = sign * (other.flat[i] - base.flat[i]) / step;
       motion = maxPointMotion(base.flat, other.flat);
       // One-sided probing has no opposite half to compare against, so the
-      // smoothness gate uses a HALF-STEP probe on the same side instead:
+      // smoothness check uses a half-step probe on the same side instead:
       // for a differentiable response f(v+h)-f(v) must be about twice
       // f(v+h/2)-f(v) (both are h*f' to leading order; they differ only by
       // h^2*f''/4). A structural jump fails this the same way it fails the
@@ -434,14 +422,14 @@ function jacobianAt(req, value, opt, spec) {
   const noiseFloor = opt.motionTol * geomScale;
   if (fine.motion <= noiseFloor) {
     // No measurable response at the fine step. Before calling the param dead,
-    // try a much coarser one — this is what tells a genuinely inert param
+    // try a much coarser one — this is what tells an inert param
     // apart from one that only ever responds in discrete jumps (an internally
     // rounded count, a thresholded mode switch).
     const coarse = measure(h0 * opt.coarseFactor);
-    // A coarse probe that BREAKS CORRESPONDENCE is a more informative answer
-    // than "inert": the param is discrete/topology-changing, it just happens
-    // to round back to itself at a fine nudge. Report what was actually
-    // found rather than the weaker fine-step conclusion.
+    // A coarse probe that breaks correspondence is a more informative answer
+    // than "inert": the param is discrete/topology-changing and
+    // rounds back to itself at a fine nudge. Report that rather than the
+    // weaker fine-step conclusion.
     if (!coarse.ok && coarse.reason === 'unstable-sampling') return coarse;
     if (coarse.ok && coarse.motion > noiseFloor) {
       return refuse('quantized', `'${req.key}' does not move the geometry at a ${h0.toPrecision(3)} nudge but does at ${(h0 * opt.coarseFactor).toPrecision(3)} — it is either quantized/rounded internally (a discrete param in continuous clothing) or its influence is below numerical resolution at this scale. Either way there is no trustworthy derivative here.`, {
@@ -457,7 +445,7 @@ function jacobianAt(req, value, opt, spec) {
     });
   }
 
-  // The param genuinely moved the geometry — but did it move it CONTINUOUSLY?
+  // The param moved the geometry — but did it move it continuously?
   // (See smoothTol: this is the check that catches a structure-rebuilding
   // param whose sample count happens to stay stable.)
   if (fine.asymmetry !== null && fine.asymmetry > opt.smoothTol) {
@@ -480,7 +468,7 @@ function jacobianAt(req, value, opt, spec) {
     jacobian: fine.jac,
     jacobianNorm: jNorm,
     // RMS millimeters of geometric motion per unit change of the param —
-    // the honest scalar answer to "how strongly does this param bite?"
+    // the scalar answer to "how strongly does this param bite?"
     sensitivity: jNorm / Math.sqrt(sampleCount),
     asymmetry: fine.asymmetry,
     motion: fine.motion,
@@ -491,19 +479,17 @@ function jacobianAt(req, value, opt, spec) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// PUBLIC: sensitivity only
-// ---------------------------------------------------------------------------
+// Public: sensitivity only
 
-// ESTIMATE how strongly one param moves the sampled geometry, with no target
-// drag involved. Useful on its own for deciding whether to OFFER a drag
+// Estimate how strongly one param moves the sampled geometry, with no target
+// drag involved. Useful on its own for deciding whether to offer a drag
 // handle at all, and for ranking which of several params best explains a
 // gesture. Returns a refusal (ok:false, with a `reason` code) rather than a
 // number whenever the param is structurally undraggable.
 //
 //   req = { evaluate, inputs, params, key, spec?, sample?, options? }
 //
-// Every returned figure is MEASURED, never assumed.
+// Every returned figure is measured, never assumed.
 export function estimateParamSensitivity(req) {
   const opt = resolveOptions(req.options);
   const spec = req.spec || null;
@@ -515,24 +501,20 @@ export function estimateParamSensitivity(req) {
   return jacobianAt(req, value, opt, spec);
 }
 
-// ---------------------------------------------------------------------------
-// PUBLIC: solve a param for a requested geometric change
-// ---------------------------------------------------------------------------
+// Public: solve a param for a requested geometric change
 
 // Normalizes the two accepted `targets` shapes into a flat desired-
 // displacement vector d plus the list of flat component indices that are
-// actually CONSTRAINED:
+// constrained:
 //   (a) an array parallel to the samples, entries [x,y,z] or null
 //   (b) an array of { index, point:[x,y,z] } pairs
 //
-// THE `active` MASK IS LOAD-BEARING, not bookkeeping. A sample the caller
-// said nothing about is UNCONSTRAINED — it must be excluded from the fit
+// The `active` mask is required, not bookkeeping. A sample the caller
+// said nothing about is unconstrained — it must be excluded from the fit
 // entirely, not folded in as a zero-displacement "stay exactly put" demand.
-// Conflating the two is a real and easy mistake with a silently plausible
-// result: drag one point of a 24-sample circle outward by 5mm while the
-// other 23 are (wrongly) pinned, and the least-squares fit dutifully returns
-// about 5/24th of the radius change the cursor asked for. The drag would
-// simply feel weak and laggy, with nothing obviously broken to point at.
+// Otherwise, dragging one point of a 24-sample circle outward by 5mm with the
+// other 23 pinned makes the least-squares fit return about 5/24th of the
+// radius change the cursor asked for, and the drag feels weak.
 function buildDesired(targets, baseFlat, sampleCount) {
   const d = new Array(baseFlat.length).fill(0);
   const active = [];
@@ -579,7 +561,7 @@ function clampToSpec(v, spec) {
   return { value: out, clamped };
 }
 
-// SOLVE for the param value that best moves the sampled geometry toward
+// Solve for the param value that best moves the sampled geometry toward
 // `targets`, by finite-differencing `evaluate` in that one param and taking
 // the 1-D least-squares fit of the measured response against the requested
 // displacement:
@@ -592,31 +574,31 @@ function clampToSpec(v, spec) {
 //
 //   req = { evaluate, inputs, params, key, spec?, sample?, targets, options? }
 //
-// RETURNS on success:
+// Returns on success:
 //   { ok:true, value, delta, clamped,
 //     sensitivity, alignment, residual, achieved,
 //     step, stepMode, sampleCount, geomScale, iterations, verified:true }
 //
 //   alignment — |cos| of the angle between the param's measured response and
-//     the requested displacement, in [-1, 1]. THIS is the quality signal that
+//     the requested displacement, in [-1, 1]. This is the quality signal that
 //     answers "can this param explain what the cursor is asking for at all?".
 //     1 means the param moves the geometry exactly the way the drag wants;
 //     0 means the drag is orthogonal to everything this param can do.
-//   residual — MEASURED, not predicted: the geometry is re-evaluated at the
+//   residual — measured, not predicted: the geometry is re-evaluated at the
 //     proposed value and the leftover distance to the target is divided by
 //     the distance that was there to begin with. 0 = the drag landed exactly;
 //     1 = nothing was achieved; >1 = it got worse (reachable when a clamp
 //     bites, or when a strongly nonlinear param overshoots at iterations=1).
 //   achieved — 1 - residual, for callers that prefer the positive framing.
 //
-// RETURNS on refusal: { ok:false, reason, message, ...diagnostics }. Reason
+// Returns on refusal: { ok:false, reason, message, ...diagnostics }. Reason
 // codes: 'discrete-param', 'non-numeric-param', 'degenerate-range',
 // 'evaluate-failed', 'sample-failed', 'non-finite-geometry',
 // 'unstable-sampling', 'non-smooth', 'quantized', 'insensitive',
 // 'insensitive-at-target', 'no-target', 'orthogonal', 'bad-targets',
 // 'non-finite-result'.
 //
-// Samples the caller gave no target for are UNCONSTRAINED and take no part
+// Samples the caller gave no target for are unconstrained and take no part
 // in the fit — see buildDesired.
 export function solveParamForDrag(req) {
   const opt = resolveOptions(req.options);
@@ -643,8 +625,8 @@ export function solveParamForDrag(req) {
   }
 
   // The fit — and the alignment quality signal — live entirely on the
-  // CONSTRAINED samples. `sensitivity` below stays a whole-geometry figure;
-  // these are deliberately different quantities.
+  // constrained samples. `sensitivity` below stays a whole-geometry figure;
+  // these are different quantities.
   const jNormActive = normOn(jac.jacobian, active);
   if (jNormActive <= 0) {
     return refuse('insensitive-at-target', `'${req.key}' does move the geometry elsewhere (${jac.sensitivity.toPrecision(3)} mm per unit overall) but does not move the dragged sample(s) at all — this param is not the handle for this point`, {
@@ -664,7 +646,7 @@ export function solveParamForDrag(req) {
     });
   }
 
-  // --- least-squares step(s) -------------------------------------------
+  // Least-squares step(s)
   const iterations = Math.max(1, Math.floor(opt.iterations));
   let value = baseValue;
   let totalClamped = false;
@@ -697,11 +679,11 @@ export function solveParamForDrag(req) {
     return refuse('non-finite-result', `solving '${req.key}' produced a non-finite value`);
   }
 
-  // --- MEASURED quality: re-evaluate at the answer and look --------------
+  // Measured quality: re-evaluate at the answer
   // A predicted residual (which for a single linear step is just
   // sqrt(1 - alignment^2)) would tell us nothing the alignment did not. The
   // point of re-evaluating is that it catches nonlinearity, clamping, and
-  // any correspondence surprise for real, in the geometry itself.
+  // any correspondence surprise, in the geometry itself.
   let residual = null;
   const finalProbe = probe(req, value);
   if (finalProbe.ok && finalProbe.flat.length === jac.baseFlat.length) {

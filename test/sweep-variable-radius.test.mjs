@@ -1,16 +1,13 @@
-// VARIABLE RADIUS ALONG A SWEEP1 RAIL — added directly after the
-// corner-rounding fix shipped.
-// This file is WITHIN one curve only — a single Pipe's own
-// rail carries several `{t, radius}` breakpoints, `t` a normalized
-// rail-PARAMETER fraction (0=start, 1=end), matching this app's own
-// existing `splitFrac` convention (a parameter-domain fraction, not an
+// Variable radius along a sweep1 rail, within one curve only — a single
+// Pipe's own rail carries several `{t, radius}` breakpoints, `t` a normalized
+// rail-parameter fraction (0=start, 1=end), matching this app's own
+// `splitFrac` convention (a parameter-domain fraction, not an
 // arc-length fraction — see kernel/sweep.mjs's own header comment on
 // `radiusAtT`/`variableRadiusScaler` for the full derivation and the
-// honest limitation this implies once a rail is corner-rounded). MultiPipe's
-// own "per curve" case (each independent tube in a network getting its OWN
-// radius profile) is a deliberately staged, separate follow-up round — not
-// attempted here, and this file proves `sweepNProfiles`/`sweep2` are
-// untouched (no radiusOpts threading exists there at all).
+// limitation this implies once a rail is corner-rounded). MultiPipe's
+// "per curve" case (each independent tube in a network getting its own
+// radius profile) is out of scope; this file checks that
+// `sweepNProfiles`/`sweep2` take no radiusOpts at all.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sweep1Rigid, radiusAtT } from '../kernel/sweep.mjs';
@@ -22,8 +19,8 @@ function length(a) { return Math.hypot(a[0], a[1], a[2]); }
 
 // A straight, OPEN, degree-1 rail along +Z with `n` evenly-spaced control
 // points from z=0 to z=zMax — getProfileCrv's own real knot convention for
-// a Polyline (UNIFORM per-segment parameter width [0,0,1,2,...,n-1,n-1]),
-// hand-built here rather than imported (this file tests the KERNEL function
+// a Polyline (uniform per-segment parameter width [0,0,1,2,...,n-1,n-1]),
+// hand-built here rather than imported (this file tests the kernel function
 // directly, not the app's own Polyline object).
 function straightRail(n, zMax) {
   const ctrlPts = [];
@@ -35,10 +32,10 @@ function straightRail(n, zMax) {
 }
 
 // A Pipe circle profile, radius 1 (its own control point at U=0 sits at
-// exactly LOCAL (1,0,0,1) — makeArc's own p0 at angleStart=0 is
+// exactly local (1,0,0,1) — makeArc's own p0 at angleStart=0 is
 // center + xAxis*r*cos(0) + yAxis*r*sin(0) = (r,0,0) for center=(0,0,0),
 // xAxis=(1,0,0) — so ctrlNet[0][k]'s distance from frame k's own origin is
-// EXACTLY r*scaleFactor(k), a clean, direct numeric proof requiring no
+// exactly r*scaleFactor(k), a clean, direct numeric proof requiring no
 // surface sampling at all.
 const unitCircle = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 1);
 
@@ -48,7 +45,7 @@ function ringRadius(srf, rowIdx, colIdx) {
   return length(sub([cp[0], cp[1], cp[2]], origin));
 }
 
-// ---- radiusAtT, the pure interpolation/clamp helper ----
+// radiusAtT, the pure interpolation/clamp helper
 test('radiusAtT: single breakpoint returns that radius for any t', () => {
   const pts = [{ t: 0.4, radius: 7 }];
   assert.equal(radiusAtT(pts, 0), 7);
@@ -78,7 +75,7 @@ test('radiusAtT: out-of-order input is sorted defensively before interpolating',
   assert.ok(Math.abs(radiusAtT(pts, 0.5) - 5) < 1e-12);
 });
 
-// ---- THE single most important regression guard ----
+// No radius options: output identical to the plain sweep
 test('sweep1Rigid: no radiusOpts at all is byte-identical to plain sweep1Rigid (free path, degree<=1 rail)', () => {
   const rail = straightRail(5, 100);
   const plain = sweep1Rigid(rail, unitCircle);
@@ -106,7 +103,7 @@ test('sweep1RigidResampled (degree>1 rail path): no radiusOpts is byte-identical
   assert.deepEqual(withNull.ctrlNet, plain.ctrlNet);
 });
 
-// ---- two breakpoints: monotonic growth, exact at both ends ----
+// Two breakpoints: monotonic growth, exact at both ends
 test('sweep1Rigid: two breakpoints (small start, large end) produce a monotonically-growing tube, exact at t=0 and t=1', () => {
   const rail = straightRail(5, 100); // 5 stations at t = 0, 0.25, 0.5, 0.75, 1.0
   const radiusPoints = [{ t: 0, radius: 2 }, { t: 1, radius: 10 }];
@@ -119,7 +116,7 @@ test('sweep1Rigid: two breakpoints (small start, large end) produce a monotonica
   for (let i = 1; i < measured.length; i++) assert.ok(measured[i] > measured[i - 1] + 1e-9, `radius must strictly grow station-to-station (${measured[i - 1]} -> ${measured[i]})`);
 });
 
-// ---- three breakpoints: bulge, exact at the middle, correct in between ----
+// Three breakpoints: bulge, exact at the middle, correct in between
 test('sweep1Rigid: three breakpoints (small-large-small bulge) — exact at the middle breakpoint, correct linear interpolation either side', () => {
   const rail = straightRail(5, 100);
   const radiusPoints = [{ t: 0, radius: 3 }, { t: 0.5, radius: 9 }, { t: 1, radius: 3 }];
@@ -130,7 +127,7 @@ test('sweep1Rigid: three breakpoints (small-large-small bulge) — exact at the 
   measured.forEach((m, i) => assert.ok(Math.abs(m - expected[i]) < 1e-9, `station ${i}: expected ${expected[i]}, measured ${m}`));
 });
 
-// ---- clamping outside [minT, maxT] holds the end value ----
+// Clamping outside [minT, maxT] holds the end value
 test('sweep1Rigid: breakpoints not spanning the full [0,1] domain clamp at both ends, never extrapolate', () => {
   const rail = straightRail(5, 100); // stations at t=0, .25, .5, .75, 1
   const radiusPoints = [{ t: 0.25, radius: 4 }, { t: 0.75, radius: 8 }];
@@ -140,12 +137,12 @@ test('sweep1Rigid: breakpoints not spanning the full [0,1] domain clamp at both 
   measured.forEach((m, i) => assert.ok(Math.abs(m - expected[i]) < 1e-9, `station ${i}: expected ${expected[i]}, measured ${m}`));
 });
 
-// ---- combined with corner-rounding: finite, exact at the true endpoints, approximately right in between ----
-test('sweep1Rigid: variable radius composed with a corner-rounded rail stays finite; exact at the rail\'s true start/end; approximately right at an interior breakpoint (honest, not claimed exact)', () => {
+// Combined with corner-rounding: finite, exact at the true endpoints, approximately right in between
+test('sweep1Rigid: variable radius composed with a corner-rounded rail stays finite; exact at the rail\'s true start/end; approximately right at an interior breakpoint (approximate, not claimed exact)', () => {
   const res = filletOpenPolyline([[0, 0, 0], [20, 0, 0], [20, 20, 0]], 3, { closed: false });
   assert.equal(res.ok, true, res.reason);
   const rail = filletSegmentsToCurve(res.segments);
-  assert.ok(rail.degree > 1, 'sanity: this rail really does route through the resampled path, the same path Pipe\'s cornerStyle:\'rounded\' uses');
+  assert.ok(rail.degree > 1, 'sanity: this rail routes through the resampled path, the same path Pipe\'s cornerStyle:\'rounded\' uses');
   const radiusPoints = [{ t: 0, radius: 2 }, { t: 0.5, radius: 6 }, { t: 1, radius: 10 }];
   const srf = sweep1Rigid(rail, unitCircle, { radiusPoints, baseRadius: 1 });
   assert.ok(isFiniteNet(srf.ctrlNet), 'no NaN/Infinity anywhere, even combined with corner-rounding');
@@ -156,8 +153,8 @@ test('sweep1Rigid: variable radius composed with a corner-rounded rail stays fin
   assert.ok(Math.abs(startR - 2) < 1e-6, `rail start must read exactly radiusPoints[0].radius=2, measured ${startR}`);
   assert.ok(Math.abs(endR - 10) < 1e-6, `rail end must read exactly radiusPoints[last].radius=10, measured ${endR}`);
   // An interior station near the middle of the dense frame list should land
-  // APPROXIMATELY near the t=0.5 bulge (6) — not asserted exact, per this
-  // file's own header comment and kernel/sweep.mjs's own honest limitation
+  // approximately near the t=0.5 bulge (6) — not asserted exact, per this
+  // file's own header comment and kernel/sweep.mjs's own stated limitation
   // (parameter-fraction, not arc-length-fraction, is more visibly
   // approximate once the rail is corner-rounded).
   const midCol = Math.round((srf.frames.length - 1) / 2);
@@ -165,8 +162,8 @@ test('sweep1Rigid: variable radius composed with a corner-rounded rail stays fin
   assert.ok(midR > startR && midR < endR + 1e-6 || Math.abs(midR - 6) < 3, `interior station should land roughly near the intended bulge region (measured ${midR}) — approximate, not exact, by design on a rounded rail`);
 });
 
-// ---- MultiPipe / sweepNProfiles / sweep2 are completely untouched ----
-test('sweepNProfiles and sweep2 have no radiusOpts parameter — this file is single-Pipe (within-curve) scope only, per curve MultiPipe support is a separate staged follow-up', async () => {
+// MultiPipe / sweepNProfiles / sweep2 take no radius options
+test('sweepNProfiles and sweep2 have no radiusOpts parameter — this file is single-Pipe (within-curve) scope only; per-curve MultiPipe support is out of scope', async () => {
   const { sweepNProfiles, sweep2 } = await import('../kernel/sweep.mjs');
   assert.equal(sweepNProfiles.length, 2, 'sweepNProfiles signature unchanged: (rail, profiles, uSampleCount=24, ...) — Function.length only counts params before the first one with a default');
   assert.equal(sweep2.length, 3, 'sweep2 signature unchanged: (rail1, rail2, profile, opts)');

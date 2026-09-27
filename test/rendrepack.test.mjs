@@ -1,4 +1,4 @@
-// THE THREE FAILURES THAT DRAW A PLAUSIBLE PICTURE.
+// Three failures that draw a plausible picture.
 //
 // Nothing in the geometry upload throws. A permutation applied to two of three
 // arrays, an index written as a float instead of as its bits, and a node's two
@@ -8,8 +8,8 @@
 // here are not "did it produce a buffer" — they are the three specific
 // questions those failures answer differently.
 //
-// Each is written so that it FAILS on its own defect: the defect was introduced
-// in `kernel/rendrepack.mjs`, the failure watched, and the defect removed.
+// Each assertion fails when its own defect is introduced in
+// `kernel/rendrepack.mjs`.
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import {
@@ -27,7 +27,7 @@ const SHADER_STACK = 40;     // the traversal's fixed stack depth
 let seed = 0x2545f491;
 const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return ((seed >>> 0) / 4294967296); };
 
-/* THE FIXTURE'S PARTS ARE IN A DIFFERENT SPATIAL ORDER FROM THEIR PART INDICES.
+/* The fixture's parts are in a different spatial order from their part indices.
    A scene whose parts happen to be laid out in index order can come back from a
    spatial sort in its original order, and then a permutation applied to two
    arrays out of three is indistinguishable from one applied to all three. Part
@@ -74,7 +74,7 @@ const parts = makeParts();
 const boxes = parts.map(boxOf);
 const nT = TRI_COUNTS.reduce((a, b) => a + b, 0);
 
-/* VERIFY THE FIXTURE BEFORE BLAMING THE CODE. Every assertion below about a
+/* The fixture is verified first. Every assertion below about a
    triangle naming its owner rests on the boxes being separable; if two boxes
    overlapped, a triangle in the overlap would satisfy the containment test for
    the wrong part and the whole check would pass on a scrambled buffer. */
@@ -87,14 +87,13 @@ const nT = TRI_COUNTS.reduce((a, b) => a + b, 0);
     }
   }
   assert.equal(pairs, 6, 'fixture: all four parts were compared');
-  console.log(`  fixture:        ${parts.length} parts, ${nT} triangles, ${pairs} box pairs all disjoint`);
 }
 
 const scene = packSceneForGPU(parts, { leafMax: LEAF_MAX });
 const trisU = new Uint32Array(scene.tris.buffer);
 const nodesU = new Uint32Array(scene.nodes.buffer);
 
-// ---------------------------------------------------------------- shape ----
+// Shape
 {
   assert.equal(scene.triangleCount, nT, 'every part\'s triangles reached the buffer');
   assert.equal(scene.tris.length, nT * TRI_STRIDE_FLOATS, 'tris is 3 vec4 per triangle');
@@ -103,23 +102,21 @@ const nodesU = new Uint32Array(scene.nodes.buffer);
   assert.equal(scene.partMats.length, parts.length, 'one partMats entry per part');
   assert.ok(scene.maxDepth < SHADER_STACK, `tree is ${scene.maxDepth} deep against a ${SHADER_STACK}-entry shader stack`);
 
-  /* AND THE PERMUTATION IS NOT THE IDENTITY. Every check below would pass
+  /* The permutation must not be the identity. Every check below would pass
      trivially on an unpermuted scene, which would make them assertions about
      nothing. */
   let moved = 0;
   for (let i = 0; i < nT; i += 1) if (scene.order[i] !== i) moved += 1;
   assert.ok(moved > nT / 4, `the BVH reordered only ${moved} of ${nT} triangles — the permutation checks would be vacuous`);
-  console.log(`  layout:         ${scene.nodeCount} nodes, depth ${scene.maxDepth}, ${moved}/${nT} triangles moved by the reorder`);
 }
 
-// ------------------------------------- FAILURE 1: the third array not permuted ----
+// Failure 1: the third array not permuted
 /* The material index carried on triangle i must name the part whose bounding
    box actually contains triangle i's vertices — for every i, not for a sample.
-   A sample is what the original guard proposed and it is not enough: a
+   A sample is not enough: a
    permutation that agrees with itself on most of a scene is exactly what a
    partition produces, and a spot check finds the agreeing half. */
 {
-  let checked = 0;
   for (let i = 0; i < nT; i += 1) {
     const d = i * TRI_STRIDE_FLOATS;
     const claimed = trisU[d + 3];
@@ -133,20 +130,18 @@ const nodesU = new Uint32Array(scene.nodes.buffer);
     }
     assert.equal(owners, 1, `triangle ${i} sits in ${owners} part boxes, so the fixture cannot name its owner`);
     assert.equal(claimed, owner, `triangle ${i} is inside part ${owner}'s box and claims part ${claimed} — the reorder missed an array`);
-    checked += 1;
   }
 
-  /* THE NORMALS ARE THE THIRD ARRAY AND CARRY NO INDEX OF THEIR OWN, so they
+  /* The normals are the third array and carry no index of their own, so they
      are checked by content: each part's corner normals encode its index. */
   for (let i = 0; i < nT; i += 1) {
     const d = i * TRI_STRIDE_FLOATS;
     assert.equal(scene.norms[d + 2], trisU[d + 3] + 1, `triangle ${i}: the normal came from a different part than the position`);
   }
-  console.log(`  failure 1:      all ${checked} triangles name the part whose box holds them, normals agree`);
 }
 
-// ------------------------------------------ FAILURE 2: .w written as a float ----
-/* Read through a Uint32Array view of the SAME buffer, which is what the shader
+// Failure 2: .w written as a float
+/* Read through a Uint32Array view of the same buffer, which is what the shader
    does with `bitcast<u32>`. Written as a float, part 3 arrives as 1077936128;
    the shader clamps that instead of faulting, so every triangle in the scene
    resolves to one material and the symptom is "materials do nothing". */
@@ -164,20 +159,19 @@ const nodesU = new Uint32Array(scene.nodes.buffer);
   }
   assert.ok(nonZero > 0, 'fixture: every part index is 0, where a float write and a bit write agree');
   assert.equal(wouldDiffer, nonZero, 'fixture: a float write differs from a bit write for every non-zero index');
-  console.log(`  failure 2:      ${nT} v0.w fields are u32 bits; ${wouldDiffer} of them would differ if written as floats`);
 }
 
-// ------------------------------------------- FAILURE 3: node .w fields swapped ----
+// Failure 3: node .w fields swapped
 /* Swapping first-triangle and count turns every interior node into a leaf with
    a plausible count and every early leaf into an interior node. The traversal
-   still terminates and the image is still CORRECT — it just walks the whole
+   still terminates and the image is still correct — it just walks the whole
    scene per ray. There is no visual tell, so the only place to catch it is the
    buffer.
-   The strongest form is not a bound on the counts but a PARTITION: the leaf
+   The strongest form is not a bound on the counts but a partition: the leaf
    runs must cover [0, nT) exactly once each. */
 {
   const covered = new Uint8Array(nT);
-  let leafNodes = 0, innerNodes = 0, sum = 0, maxLeaf = 0;
+  let leafNodes = 0, innerNodes = 0, sum = 0;
   for (let i = 0; i < scene.nodeCount; i += 1) {
     const b = i * NODE_STRIDE_FLOATS;
     const first = nodesU[b + 3], count = nodesU[b + 7];
@@ -194,17 +188,15 @@ const nodesU = new Uint32Array(scene.nodes.buffer);
         covered[t] = 1;
       }
       sum += count;
-      if (count > maxLeaf) maxLeaf = count;
     }
   }
   assert.equal(sum, nT, `leaf counts sum to ${sum}, not the ${nT} triangles in the scene`);
   assert.equal(leafNodes, scene.leaves, 'the leaf nodes in the buffer are the leaves the builder says it made');
   assert.ok(innerNodes > 0, 'fixture: the tree has no interior node, so a swap would be invisible');
   for (let t = 0; t < nT; t += 1) assert.equal(covered[t], 1, `triangle ${t} belongs to no leaf`);
-  console.log(`  failure 3:      ${innerNodes} interior counts are 0, ${leafNodes} leaves (max ${maxLeaf} <= ${LEAF_MAX}) partition all ${nT} triangles`);
 }
 
-// ------------------------------------------------- the shader's own walk ----
+// The shader's own walk
 /* Traversal parity against brute force, walking the GPU buffers exactly as the
    shader does — nodes[n*2].w as the left child or first triangle, nodes[n*2+1].w
    as the count, the right child taken as left+1. This is the check that the
@@ -256,7 +248,7 @@ function triRay(i, o, d) {
 }
 {
   let rays = 0, hits = 0;
-  /* AIMED RAYS, NOT RANDOM ONES. Scattered triangles occupy a vanishing
+  /* Aimed rays, not random ones. Scattered triangles occupy a vanishing
      fraction of the scene's bounding box, so random rays miss almost
      everything and a parity check made of misses proves nothing. Each ray here
      is aimed at a point inside a randomly chosen triangle; the nearest hit
@@ -289,10 +281,9 @@ function triRay(i, o, d) {
     rays += 1;
   }
   assert.ok(hits > rays / 2, `only ${hits} of ${rays} rays hit anything — the parity check is nearly vacuous`);
-  console.log(`  traversal:      ${rays} rays walk the GPU buffers to the same nearest hit as brute force (${hits} hits)`);
 }
 
-// ------------------------------------------------------------ partMats ----
+// partMats
 {
   const pm = packPartMats(parts);
   for (let i = 0; i < parts.length; i += 1) {
@@ -301,10 +292,9 @@ function triRay(i, o, d) {
     assert.equal(hidden, parts[i].visible === false, `part ${i}: visibility bit is wrong`);
   }
   assert.equal(packPartMats([]).length, 1, 'an empty scene still gets a one-entry partMats — a zero-length storage buffer is a validation error');
-  console.log(`  partMats:       ${parts.length} rows, 1 hidden, mask and bit 31 round-trip`);
 }
 
-// -------------------------------------------------------- the empty scene ----
+// The empty scene
 {
   const empty = packSceneForGPU([], { leafMax: LEAF_MAX });
   assert.equal(empty.triangleCount, 1, 'an empty scene synthesizes one degenerate triangle');
@@ -312,12 +302,11 @@ function triRay(i, o, d) {
   assert.ok(empty.nodeCount >= 1, 'the degenerate triangle still builds a root node');
   assert.equal(empty.partMats.length, 1, 'partMats is never zero-length');
   assert.ok(empty.degenerate, 'the empty case reports itself');
-  console.log('  empty scene:    one degenerate triangle, one node, one partMats entry — no zero-length buffer');
 }
 
-// ---------------------------------------------------- the material stride ----
+// The material stride
 /* The stride is 52 floats because `getMat` reads mats[i*13u] through
-   mats[i*13u+12u]. Taking 48 from the buffer's stale binding comment leaves row
+   mats[i*13u+12u]. A 48-float stride leaves row
    0 correct and every later row progressively wrong — asserted here as an
    actual collision rather than as a restatement of the number. */
 {
@@ -331,7 +320,7 @@ function triRay(i, o, d) {
   assert.equal(table[MAT_STRIDE_FLOATS + 1], 0, 'row 1 base is where row 1 begins');
 
   /* Rows written 48 apart, read back at the 52 the shader uses. Row 0 is still
-     correct, which is what makes this so hard to see; row 1 comes back shifted
+     correct, which hides the defect; row 1 comes back shifted
      by four floats, and every later row by four more. */
   const wrong = new Float32Array(2 * MAT_STRIDE_FLOATS);
   matPack(wrong, 0, grey); matPack(wrong, 48, red);
@@ -359,11 +348,10 @@ function triRay(i, o, d) {
   assert.equal(lamp[8], 8, 'emis.r is pre-multiplied by emisStr');
   assert.equal(lamp[9], 4, 'emis.g is pre-multiplied by emisStr');
   assert.equal(lamp[10], 2, 'emis.b is pre-multiplied by emisStr');
-  console.log('  material row:   stride 52 floats (13 vec4), defaults and pre-multiplied emission hold');
 }
 
-// ------------------------------------------- the pattern exclusion chain ----
-/* marble, woven, grain, grid and mottle share the SAME sixteen floats under
+// The pattern exclusion chain
+/* marble, woven, grain, grid and mottle share the same sixteen floats under
    different names. A material carrying two must resolve to exactly one, in the
    documented order, or the shader reads the sub-fields under the wrong names
    and draws a plausible wrong texture. */
@@ -399,13 +387,12 @@ function triRay(i, o, d) {
   const mottle = packMaterials([{ base, mottle: { tone2: [0.3, 0.3, 0.3], tone3: [0.9, 0.9, 0.9], soft: 0.5 } }]);
   assert.equal(mottle[20], f32(0.9), 'mottle is the one family that uses the clast slot, for a third tone');
   assert.equal(mottle[47], 0.5, 'mottleSoft rides the twelfth vec4\'s w');
-  console.log('  pattern chain:  six kinds resolve in order, sub-fields land in the slots getMat reads');
 }
 
-// ------------------------------------------ the real library, packed once ----
+// The authored library, packed once
 /* A hundred authored materials through the packer. The value here is not the
    count — it is that a field the packer reaches for and does not find must
-   produce a DEFAULT and never a NaN. One NaN in a material row poisons every
+   produce a default and never a NaN. One NaN in a material row poisons every
    pixel that material touches, and it arrives from an object where a number was
    expected, which is exactly what an authored library is full of. */
 {
@@ -419,10 +406,9 @@ function triRay(i, o, d) {
   assert.equal(bad, 0, `${bad} non-finite floats in the packed library`);
   assert.ok(!kinds.has(6), 'no kind 6 row was emitted — the volume machinery is starved, not fed');
   assert.ok(kinds.size > 1, 'the library exercises more than one pattern kind');
-  console.log(`  library:        ${lib.length} authored materials pack to ${packed.length} finite floats, kinds {${[...kinds].sort().join(',')}}`);
 }
 
-// --------------------------------------------------- reorder in isolation ----
+// Reorder in isolation
 {
   const { pos, nrm, mp, nT: n } = gatherGeometry(parts);
   const identity = new Uint32Array(n);
@@ -436,7 +422,4 @@ function triRay(i, o, d) {
     assert.equal(tris[i * TRI_STRIDE_FLOATS + 7], 0, 'v1.w is unused and must be zero');
     assert.equal(tris[i * TRI_STRIDE_FLOATS + 11], 0, 'v2.w is unused and must be zero');
   }
-  console.log(`  reorder:        the identity permutation is a no-op on all three arrays (${n} triangles)`);
 }
-
-console.log('rendrepack: ok');

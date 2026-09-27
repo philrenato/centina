@@ -4,16 +4,14 @@ import { globalCurveInterp } from '../kernel/interpolate.mjs';
 import { makeCircle } from '../kernel/primitives.mjs';
 import { sweep1Rigid } from '../kernel/sweep.mjs';
 
-// A real, live-reported bug: Pipe on a Curve-Generator
-// Lorenz-attractor curve (~100 knot spans, no hard breaks — an ordinary
-// smooth global-interpolation curve) hung the tab indefinitely. Root
-// cause: sweep1RigidResampled's own `numSpans<=1` branch (the path any
-// rail with no genuine C0 corner takes) handed its ENTIRE dense sample
-// set — which scales with the rail's KNOT SPAN COUNT, not with real
-// curvature complexity — to ONE interpAtParams call, a dense O(n^3)
-// Gauss-Jordan solve. For a ~100-span rail this reached ~6000 points,
-// an ~6000x6000 solve that never finished in practice. Fixed with a
-// uniform-stride cap (MAX_DENSE_INTERP_POINTS) before that final solve.
+// A Lorenz-attractor rail (~100 knot spans, no hard breaks — an ordinary
+// smooth global-interpolation curve). sweep1RigidResampled's `numSpans<=1`
+// branch (the path any rail with no C0 corner takes) builds a dense sample
+// set that scales with the rail's knot span count, not with curvature, and
+// solves it in one interpAtParams call, a dense O(n^3) Gauss-Jordan solve.
+// Uncapped, a ~100-span rail reaches ~6000 points, a ~6000x6000 solve that
+// does not finish in practice; a uniform-stride cap
+// (MAX_DENSE_INTERP_POINTS) bounds it.
 function lorenzLikeRail(n) {
   const pts = [];
   let x = 0.1, y = 0, z = 0;
@@ -28,7 +26,7 @@ function lorenzLikeRail(n) {
 
 test('sweep1Rigid on a ~100-knot-span rail (no hard breaks) completes fast and produces a finite, correctly-shaped surface', () => {
   const rail = globalCurveInterp(lorenzLikeRail(101), 3);
-  assert.ok(rail.knots.length > 90, 'sanity: this rail genuinely has many knot spans, matching the reported reproduction');
+  assert.ok(rail.knots.length > 90, 'sanity: this rail has many knot spans');
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 5);
   const t0 = Date.now();
   const srf = sweep1Rigid(rail, profile);
@@ -39,11 +37,11 @@ test('sweep1Rigid on a ~100-knot-span rail (no hard breaks) completes fast and p
   for (const row of srf.ctrlNet) for (const cp of row) for (const v of cp) assert.ok(Number.isFinite(v));
 });
 
-test('a SHORT rail (few knot spans) is completely unaffected by the cap — byte-identical point count to before', () => {
+test('a short rail (few knot spans) is unaffected by the cap', () => {
   const rail = globalCurveInterp([[0, 0, 0], [10, 0, 5], [20, 0, 0], [30, 0, 5], [40, 0, 0]], 3);
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 5);
   const srf = sweep1Rigid(rail, profile);
   for (const row of srf.ctrlNet) for (const cp of row) for (const v of cp) assert.ok(Number.isFinite(v));
   // a short rail's own dense sample count never approaches the cap, so this
-  // is just a plain correctness/no-regression check, not a size assertion.
+  // is a plain correctness check, not a size assertion.
 });

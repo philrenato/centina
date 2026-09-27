@@ -1,6 +1,6 @@
-// Root frames and fibers (kernel/fiber.mjs) — the core of Phase 1.
+// Root frames and fibers (kernel/fiber.mjs).
 //
-// Fixtures are real revolved surfaces, not hand-written control nets: a
+// Fixtures are revolved surfaces, not hand-written control nets: a
 // sphere (closed in V, degenerate at both poles) and a cylinder (closed in V,
 // no poles). Between them they carry every case the emitter has to refuse or
 // wrap, which a flat test patch would not.
@@ -18,8 +18,8 @@ import {
 } from '../kernel/fiber.mjs';
 
 const R = 20;
-// A half-meridian from south pole to north pole, revolved a full turn: a real
-// sphere, with genuinely degenerate poles at v=0 and v=1.
+// A half-meridian from south pole to north pole, revolved a full turn: a
+// sphere, with degenerate poles at v=0 and v=1.
 const meridian = makeArc([0, 0, 0], [0, 0, 1], [1, 0, 0], R, 0, Math.PI); // north pole -> equator -> south pole, in XZ
 const sphere = revolve(meridian, [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 // A cylinder wall: closed in u, no poles anywhere.
@@ -41,25 +41,25 @@ test('frames on a sphere are orthonormal', () => {
   }
 });
 
-test('every sphere frame is radial — the normal really points out of the surface', () => {
+test('every sphere frame is radial — the normal points out of the surface', () => {
   const { frames } = surfaceRootFrames(sphere, 10, 7);
   for (const f of frames) {
     const radial = normalize(f.position);
     const alignment = Math.abs(dot(f.normal, radial));
-    // On a sphere the surface normal IS the radial direction, so this is an
+    // On a sphere the surface normal is the radial direction, so this is an
     // analytic check against the geometry rather than against the emitter's
     // own output. Sign may be inward or outward depending on the revolve's
     // own winding; what must hold is that it is radial at all.
     assert.ok(alignment > 0.999, `normal is radial (got ${alignment.toFixed(6)})`);
-    assert.ok(Math.abs(length(f.position) - R) < 1e-6, 'root really lies on the sphere');
+    assert.ok(Math.abs(length(f.position) - R) < 1e-6, 'root lies on the sphere');
   }
 });
 
 test('a degenerate pole is refused, not emitted as a NaN fiber', () => {
   // Sampling the poles directly: one of v=0 / v=1 is the collapsed row.
-  // The poles are the PROFILE's own ends, so they live at the extremes of u —
-  // and u runs [0,2] here, not [0,1]. Reading the domain off the surface is the
-  // whole point; hard-coding 0..1 is what hid this the first time.
+  // The poles are the profile's own ends, so they live at the extremes of u —
+  // and u runs [0,2] here, not [0,1]. The domain is read off the surface; a
+  // hard-coded 0..1 would miss the poles.
   const [u0, u1] = knotDomain(sphere.knotsU, sphere.degU);
   const atPole = [surfaceFrameAt(sphere, u0, 0.5), surfaceFrameAt(sphere, u1, 0.5)];
   assert.ok(atPole.some((f) => f === null), 'at least one pole row refuses');
@@ -107,7 +107,7 @@ test('aim: lift 90 is the normal, lift 0 sweep 0 is tangentU', () => {
   }
 });
 
-test('T1 refuses to launch a fiber INTO its host', () => {
+test('T1 refuses to launch a fiber into its host', () => {
   const f = surfaceFrameAt(cylinder, 0.5, 1.0);
   const inward = normalize([-f.normal[0], -f.normal[1], -f.normal[2]]);
   const clamped = clampToHemisphere(inward, f.normal, 5);
@@ -131,32 +131,30 @@ test('T2 keeps droop out of the host — and is shown to be doing something', ()
     assert.ok(dot(sub(p, f.position), f.normal) > -1e-9, 'every guarded sample stays on the outward side of its root tangent plane');
   }
 
-  // THE CONTROL. A guard that cannot be shown to change the outcome is not
-  // tested — with it off, this same fixture must genuinely violate.
+  // The control. A guard that cannot be shown to change the outcome is not
+  // tested — with it off, this same fixture must violate.
   const bare = fiberPoints(f, { ...opts, droopDir: into, tangentPlaneGuard: false });
   const violations = bare.filter((p) => dot(sub(p, f.position), f.normal) < -1e-9);
-  assert.ok(violations.length > 0, 'with the guard off the same fixture really does penetrate');
+  assert.ok(violations.length > 0, 'with the guard off the same fixture does penetrate');
 });
 
 test('a fiber starts exactly at its root and has the requested point count', () => {
   const f = surfaceFrameAt(sphere, 1.0, 1.0);
   const pts = fiberPoints(f, { cvs: 6, lengthValue: 12 });
   assert.equal(pts.length, 6);
-  assert.ok(length(sub(pts[0], f.position)) < 1e-9, 'the first sample IS the root');
+  assert.ok(length(sub(pts[0], f.position)) < 1e-9, 'the first sample is the root');
   for (const p of pts) for (const v of p) assert.ok(Number.isFinite(v), 'no NaN anywhere in a fiber');
   // It must actually go somewhere — a fiber collapsed to its root would pass
   // every check above.
   assert.ok(length(sub(pts[pts.length - 1], f.position)) > 1, 'the fiber has real extent');
 });
 
-// ---------------------------------------------------------------------------
-// CURVE HOST
+// Curve host
 //
-// Fixtures are the two the spec itself names, plus a line. A CIRCLE checks that
-// outward means outward at all; a 5-POINT STAR checks it at reflex vertices,
-// where a locally-derived side would flip; a HELIX checks the frame does not
-// twist, which is the silent-wrong-result case the spec calls out by name.
-// ---------------------------------------------------------------------------
+// A circle checks that outward means outward at all; a five-point star checks
+// it at reflex vertices, where a locally-derived side would flip; a helix
+// checks the frame does not twist, which is the silent-wrong-result case; a
+// line has no plane.
 
 // A closed degree-1 loop through `pts`. Degree 1 with n control points needs
 // n + 2 knots, clamped at both ends.
@@ -179,7 +177,7 @@ function starPoints(outer, inner, arms, z = 0) {
   return pts;
 }
 
-// Is a 2D point inside this polygon? Ray casting, used to prove "outward"
+// Is a 2D point inside this polygon? Ray casting, which proves "outward"
 // geometrically rather than by comparing against a centroid — on a star the
 // centroid test passes for the wrong reason at an arm tip and fails at a notch.
 function insidePolygonXY(pt, poly) {
@@ -191,11 +189,11 @@ function insidePolygonXY(pt, poly) {
   return inside;
 }
 
-// NET rotation of the frame about its own tangent along the chain — SIGNED, and
-// that matters. Summing absolute per-step angles measures the difference between
+// Net rotation of the frame about its own tangent along the chain, signed.
+// Summing absolute per-step angles measures the difference between
 // two RMF approximations (this reference uses projection, the emitter uses
 // double reflection) and accumulates ~0.4 rad of pure discretization noise over
-// 60 stations while the frame is not twisting at all. Twist is a NET quantity:
+// 60 stations while the frame is not twisting at all. Twist is a net quantity:
 // it is what fails to cancel. A carried frame nets ~0; a per-point arbitrary
 // perpendicular nets the whole rotation of its reference vector.
 function netTwist(frames) {
@@ -203,7 +201,7 @@ function netTwist(frames) {
   for (let i = 1; i < frames.length; i++) {
     const t = frames[i].tangentU;
     const prev = frames[i - 1].normal;
-    // Previous normal, projected into the plane perpendicular to THIS tangent,
+    // Previous normal, projected into the plane perpendicular to this tangent,
     // is where a non-twisting frame would have put this normal.
     const proj = sub(prev, scaleV(t, dot(prev, t)));
     if (length(proj) < 1e-12) continue;
@@ -254,7 +252,7 @@ test('frames on a planar curve are orthonormal, outward, and lie in the plane', 
     assert.ok(Math.abs(length(f.normal) - 1) < 1e-9, 'normal is unit');
     assert.ok(Math.abs(dot(f.normal, f.tangentU)) < 1e-9, 'normal perpendicular to tangent');
     assert.ok(Math.abs(dot(f.normal, f.tangentV)) < 1e-9, 'normal perpendicular to tangentV');
-    // tangentV is the PLANE normal on a planar curve, which is what makes
+    // tangentV is the plane normal on a planar curve, which is what makes
     // "flat in the plane, then lift out of it" mean anything.
     assert.ok(Math.abs(Math.abs(dot(f.tangentV, [0, 0, 1])) - 1) < 1e-9, 'tangentV is the plane normal');
     // Outward: away from the center, for a circle.
@@ -264,8 +262,7 @@ test('frames on a planar curve are orthonormal, outward, and lie in the plane', 
 
 test('outward stays outward when the winding reverses', () => {
   // Same circle traversed the other way. A per-point perpendicular with no
-  // winding term points INWARD for this one, which is the bug the signed area
-  // exists to prevent.
+  // winding term points inward for this one; the signed area prevents that.
   const { frames } = curveRootFrames(reverseCurve(circle), 16);
   for (const f of frames) {
     assert.ok(dot(f.normal, normalize(f.position)) > 0.999, 'still points away from the center');
@@ -280,8 +277,8 @@ test('a 5-point star points outward at its reflex vertices too', () => {
   assert.ok(frames.length >= 30, `a real sample of roots (${frames.length})`);
   let outside = 0;
   for (const f of frames) {
-    // Step a short way along the normal. If the normal is genuinely outward,
-    // that lands OUTSIDE the polygon — at an arm tip and in a notch alike.
+    // Step a short way along the normal. If the normal is outward,
+    // that lands outside the polygon — at an arm tip and in a notch alike.
     const probe = [f.position[0] + f.normal[0] * 2, f.position[1] + f.normal[1] * 2, 0];
     if (!insidePolygonXY(probe, pts)) outside++;
   }
@@ -302,7 +299,7 @@ test('a non-planar curve gets a rotation-minimizing frame, not a per-point perpe
     assert.ok(Math.abs(dot(f.normal, f.tangentU)) < 1e-9, 'normal perpendicular to tangent');
   }
 
-  // The differential the spec asks for: the same stations, framed the naive way
+  // The differential: the same stations, framed the naive way
   // (a fresh arbitrary perpendicular per point) twist substantially over two
   // turns; the carried frame must not.
   const naive = frames.map((f) => {

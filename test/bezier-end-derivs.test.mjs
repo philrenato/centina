@@ -26,7 +26,7 @@ test('globalCurveInterpWithEndDerivs: passes through every input point exactly, 
   }
 });
 
-test('globalCurveInterpWithEndDerivs: matches the REQUESTED derivative exactly at both ends (analytic rationalCurveDerivs)', () => {
+test('globalCurveInterpWithEndDerivs: matches the requested derivative exactly at both ends (analytic rationalCurveDerivs)', () => {
   const D0 = [8, 6, 0], Dn = [10, -6, 4];
   const crv = globalCurveInterpWithEndDerivs(PTS, D0, Dn);
   const [, atStart] = rationalCurveDerivs(crv, crv.paramsUsed[0], 1);
@@ -37,27 +37,27 @@ test('globalCurveInterpWithEndDerivs: matches the REQUESTED derivative exactly a
   }
 });
 
-test('globalCurveInterpWithEndDerivs: the analytic derivative is cross-checked against an INDEPENDENT finite-difference derivative (never trust one method alone)', () => {
+test('globalCurveInterpWithEndDerivs: the analytic derivative is cross-checked against an independent finite-difference derivative', () => {
   const D0 = [8, 6, 0], Dn = [10, -6, 4];
   const crv = globalCurveInterpWithEndDerivs(PTS, D0, Dn);
   const u0 = crv.paramsUsed[0], un = crv.paramsUsed[PTS.length - 1];
   const du = (un - u0) * 1e-5;
   const fdStart = finiteDiffDeriv(crv, u0 + du, du); // offset off the exact clamped boundary so both samples stay inside the domain
   const fdEnd = finiteDiffDeriv(crv, un - du, du);
-  // A generous tolerance here on purpose — this is a SANITY cross-check
+  // A generous tolerance here on purpose — this is a sanity cross-check
   // (does an independent numerical method roughly agree?), not the
   // exactness proof itself: the offset off the true boundary (needed so
   // both finite-difference samples stay inside the domain) introduces its
   // own small, expected discrepancy proportional to local curvature. The
-  // analytic rationalCurveDerivs comparison above is the real exactness
-  // proof, already held to 1e-6.
+  // analytic rationalCurveDerivs comparison above is the exactness
+  // proof, held to 1e-6.
   for (let i = 0; i < 3; i++) {
     assert.ok(Math.abs(fdStart[i] - D0[i]) < 0.5, `finite-diff start axis ${i}: got ${fdStart[i]} want ~${D0[i]}`);
     assert.ok(Math.abs(fdEnd[i] - Dn[i]) < 0.5, `finite-diff end axis ${i}: got ${fdEnd[i]} want ~${Dn[i]}`);
   }
 });
 
-test('globalCurveInterpWithEndDerivs: editing ONE end\'s derivative leaves every interpolated point (both ends included) untouched — only the SHAPE between them can move', () => {
+test('globalCurveInterpWithEndDerivs: editing one end\'s derivative leaves every interpolated point (both ends included) untouched — only the shape between them can move', () => {
   const D0a = [8, 6, 0], Dn = [10, -6, 4];
   const D0b = [40, -30, 15]; // wildly different start tangent
   const crvA = globalCurveInterpWithEndDerivs(PTS, D0a, Dn);
@@ -70,7 +70,7 @@ test('globalCurveInterpWithEndDerivs: editing ONE end\'s derivative leaves every
       assert.ok(Math.abs(cB[i] - PTS[k][i]) < 1e-6, `changing only the start derivative must not break interpolation at point ${k}`);
     }
   }
-  // And the shape genuinely DID change near the start — a real, provable
+  // And the shape did change near the start — a measurable
   // effect, not a no-op: sample just past u=paramsUsed[0] and confirm the
   // two curves diverge there.
   const uNear = crvA.paramsUsed[0] + (crvA.paramsUsed[1] - crvA.paramsUsed[0]) * 0.4;
@@ -79,7 +79,7 @@ test('globalCurveInterpWithEndDerivs: editing ONE end\'s derivative leaves every
   assert.ok(dist > 0.1, `a drastically different start tangent should visibly move the curve near the start (dist=${dist})`);
 });
 
-test('globalCurveInterpWithEndDerivs: feeding the VANILLA curve\'s own true end derivatives back in still interpolates every point exactly and stays finite everywhere (a different, higher-DOF representation of related but not necessarily identical shape — this proves it is still a well-posed, non-degenerate system, not that the two curves coincide)', () => {
+test('globalCurveInterpWithEndDerivs: feeding the vanilla curve\'s own true end derivatives back in still interpolates every point exactly and stays finite everywhere (a different, higher-DOF representation of related but not necessarily identical shape — this proves it is still a well-posed, non-degenerate system, not that the two curves coincide)', () => {
   const vanilla = globalCurveInterp(PTS, 3);
   const [, d0] = rationalCurveDerivs(vanilla, vanilla.paramsUsed[0], 1);
   const [, dn] = rationalCurveDerivs(vanilla, vanilla.paramsUsed[PTS.length - 1], 1);
@@ -95,6 +95,6 @@ test('globalCurveInterpWithEndDerivs: feeding the VANILLA curve\'s own true end 
   }
 });
 
-test('globalCurveInterpWithEndDerivs: refuses honestly with fewer than 4 points (cubic + 2 end derivatives needs n>=3)', () => {
+test('globalCurveInterpWithEndDerivs: refuses fewer than 4 points (cubic + 2 end derivatives needs n>=3)', () => {
   assert.throws(() => globalCurveInterpWithEndDerivs(PTS.slice(0, 3), [1, 0, 0], [1, 0, 0]));
 });

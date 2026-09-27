@@ -1,4 +1,4 @@
-// A TRANSPOSED COLOR MATRIX IS INVISIBLE IN THE SOURCE AND INVISIBLE ON SCREEN.
+// A transposed color matrix is invisible in the source and invisible on screen.
 //
 // AgX's two matrices are near-identity: every row sums to about one either way
 // round, every entry keeps its magnitude, and the transform still returns
@@ -15,7 +15,7 @@ import { agx, agxExposed, agxContrast, AGX_M, AGX_MINV, AGX_MIN_EV, AGX_MAX_EV }
 const transpose = (m) => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
 
 /* An independently shaped evaluation of the shader's own expression: the
-   matrices are turned into explicit ROWS and applied as dot products, rather
+   matrices are turned into explicit rows and applied as dot products, rather
    than as the column-indexed multiply the module uses. Same arithmetic, written
    the other way round, so a convention error in one does not reproduce in the
    other. `minv` is a parameter precisely so the transposed variant can be run
@@ -34,7 +34,7 @@ function agxRowwise(rgb, minv = AGX_MINV) {
 
 const spread = (c) => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
 
-// ------------------------------------------------------- the round trip ----
+// The round trip
 /* M and its inverse are exact to machine precision, which is the tight form of
    the neutrality claim: this is the property the transpose destroys, and it
    destroys it by four orders of magnitude. */
@@ -56,39 +56,35 @@ const spread = (c) => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
   const flipped = off(mul(AGX_M, transpose(AGX_MINV)));
   assert.ok(good < 1e-12, `M * Minv is off the identity by ${good} — the inverse does not invert`);
   assert.ok(flipped > 1e-2, 'a transposed Minv must be visibly not an inverse, or this check proves nothing');
-  console.log(`  round trip:     M * Minv is the identity to ${good.toExponential(1)}; transposed it misses by ${flipped.toExponential(1)}`);
 }
 
-// ----------------------------------------------- neutral in, neutral out ----
-/* ⚠ THE TOLERANCE IS 1e-3, NOT 1e-6, AND THE NUMBER IS MEASURED RATHER THAN
-   CHOSEN. AgX's inset matrix is not row-normalized — its three row sums differ
+// Neutral in, neutral out
+/* The tolerance is 1e-3, not 1e-6, and the number is measured rather than
+   chosen. AgX's inset matrix is not row-normalized — its three row sums differ
    in the fourth decimal — and the sigmoid between the two rotations amplifies
    that into a channel spread the round trip cannot cancel. The transform is
    therefore neutral to about 2.3e-4 across its whole domain, and an assertion
-   at 1e-6 would fail on the CORRECT matrices. The transposed defect misses by
-   nearly seventy times that bound (printed by the check below), so the looser
-   tolerance costs this nothing. */
+   at 1e-6 would fail on the correct matrices. The transposed defect misses by
+   nearly seventy times that bound, so the looser tolerance costs this nothing. */
 const NEUTRAL_TOL = 1e-3;
 {
   const grey = agx([0.18, 0.18, 0.18]);
   assert.ok(spread(grey) < 1e-4, `middle gray came back with a channel spread of ${spread(grey)}`);
 
-  let worst = 0, worstAt = 0, samples = 0;
+  let worst = 0, worstAt = 0;
   for (let ev = -14; ev <= 6; ev += 0.02) {
     const v = 2 ** ev;
     const s = spread(agx([v, v, v]));
     if (s > worst) { worst = s; worstAt = v; }
-    samples += 1;
   }
   assert.ok(worst < NEUTRAL_TOL, `a neutral input came back with a spread of ${worst} at ${worstAt}`);
-  console.log(`  neutrality:     ${samples} neutral inputs, worst channel spread ${worst.toExponential(2)} at ${worstAt.toFixed(3)} (bound ${NEUTRAL_TOL})`);
 }
 
-// -------------------------------------- the transpose, run and confirmed ----
-/* The defect reproduced exactly: the shader's own record of the incident says a
-   neutral gray came back as (1.091, 0.956, 0.953) relative to correct. Matching
-   those three numbers is what ties this module to the transform that actually
-   shipped, rather than to a plausible reimplementation of it. */
+// The transpose, run and confirmed
+/* The defect reproduced exactly: with Minv transposed, the shader's own notes
+   give a neutral gray as (1.091, 0.956, 0.953) relative to correct. Matching
+   those three numbers ties this module to the shader's transform rather than
+   to a plausible reimplementation of it. */
 {
   const good = agx([0.18, 0.18, 0.18]);
   const bad = agxRowwise([0.18, 0.18, 0.18], transpose(AGX_MINV));
@@ -97,10 +93,9 @@ const NEUTRAL_TOL = 1e-3;
   assert.ok(Math.abs(ratio[0] - 1.091) < 5e-4, `red should come back 9.1% hot, got ${ratio[0]}`);
   assert.ok(Math.abs(ratio[1] - 0.956) < 5e-4, `green should come back 4.4% cold, got ${ratio[1]}`);
   assert.ok(Math.abs(ratio[2] - 0.953) < 5e-4, `blue should come back 4.7% cold, got ${ratio[2]}`);
-  console.log(`  the defect:     transposed Minv tints neutral gray by (${ratio.map((v) => v.toFixed(3)).join(', ')}) — spread ${spread(bad).toFixed(4)}, ${(spread(bad) / NEUTRAL_TOL).toFixed(0)}x the bound`);
 }
 
-// ----------------------------------------- non-neutral, against the WGSL ----
+// Non-neutral, against the WGSL
 /* Symmetry alone would be satisfied by any transform that treats the three
    channels alike, including the wrong one. These are saturated and mixed
    colors, checked against the row-wise transcription of the shader's
@@ -126,10 +121,9 @@ const NEUTRAL_TOL = 1e-3;
   assert.ok(red[0] > red[1] && red[0] > red[2], 'a red input must come back reddest');
   const blue = agx([0.02, 0.02, 1]);
   assert.ok(blue[2] > blue[0] && blue[2] > blue[1], 'a blue input must come back bluest');
-  console.log(`  non-neutral:    ${cases.length} colors match the shader's expression to ${worst.toExponential(1)}, hue order preserved`);
 }
 
-// ------------------------------------------------ the curve and the window ----
+// The curve and the window
 {
   // Below the window everything is the same black; above it, the same white.
   const floor0 = agx([0, 0, 0]);
@@ -140,18 +134,17 @@ const NEUTRAL_TOL = 1e-3;
   assert.ok(Math.min(...over) > 0.99, 'above the window is white');
 
   // Monotone: more light is never less display value.
-  let prev = -1, steps = 0;
+  let prev = -1;
   for (let ev = AGX_MIN_EV; ev <= AGX_MAX_EV; ev += 0.05) {
     const v = agx([2 ** ev, 2 ** ev, 2 ** ev])[1];
     assert.ok(v >= prev - 1e-12, `the transform is not monotone at ${ev} EV (${v} after ${prev})`);
-    prev = v; steps += 1;
+    prev = v;
   }
   assert.ok(agxContrast(0) < 0 && agxContrast(1) > 0.99, 'the sigmoid spans its unit domain');
-  console.log(`  window:         black below ${AGX_MIN_EV} EV, white above ${AGX_MAX_EV}, monotone across ${steps} steps`);
 }
 
-// --------------------------------------------------------------- exposure ----
-/* Exposure is applied in LINEAR light, before the transform. After it, the
+// Exposure
+/* Exposure is applied in linear light, before the transform. After it, the
    scale would multiply display-encoded values and flatten the rolloff the
    transform exists to provide. */
 {
@@ -165,7 +158,4 @@ const NEUTRAL_TOL = 1e-3;
   const ret = agx([0.5, 0.5, 0.5], buf);
   assert.equal(ret, buf, 'agx returns the output it was handed');
   assert.ok(buf[0] > 0, 'agx wrote into the caller\'s array');
-  console.log('  exposure:       four exposures equal a linear pre-multiply; the output array is the caller\'s');
 }
-
-console.log('agx: ok');

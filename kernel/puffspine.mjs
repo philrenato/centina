@@ -1,60 +1,40 @@
-// SPINE — the medial axis of a drawn outline, as an inscribed-ball march.
+// Spine — the medial axis of a drawn outline, as an inscribed-ball march.
 //
-// ⚠⚠⚠ THIS IS WIRED, NOT DORMANT. `buildPuff` calls buildSpine/attachToSpine whenever a boundary point
-// cannot see the deepest point in a straight line, and uses the per-point target instead of the
-// single center. A star-shaped outline never reaches this file, so nothing that already worked
-// changed. What was here before this line, and why it was wrong, is worth keeping:
+// `buildPuff` calls buildSpine/attachToSpine whenever a boundary point cannot see the deepest
+// point in a straight line, and uses the per-point target instead of the single center. A
+// star-shaped outline never reaches this file.
 //
-//   "NOT WIRED. THIS IS CORRECT AND IT IS NOT ENOUGH... What it does NOT solve is the CAP. Ring M
-//    ends up spread along the spine and the shipped cap closes it to a SINGLE APEX, so the fan
-//    sweeps and the surface creases: measured worst dihedral 172 degrees on a crescent and 178 on a
-//    hand-drawn loop, against 52 for a disc."
+// Lerping every boundary point straight toward one interior point leaves the shape on a crescent
+// — 23 of 96 boundary points against 0 of 96 on a disc. A crescent, a C, an S, a comma, a bean
+// and a boomerang are ordinary things to draw, and a closed loop should give a solid for each.
 //
-// ⚠⚠ BOTH OF THOSE NUMBERS WERE TAKEN WITH `family: 'tangent'`, and that profile turned out to be
-// the defect all by itself — slope 0 at the rim (a thin flaring edge, the reported "flange") and
-// slope 2 at the peak (a cone tip, the pinched center on every ordinary puff). The cap carried the
-// blame for the profile for four builds. With the Lame hemisphere the disc measures 4.5 degrees
-// worst off-rim, not 52.
+// Cap dihedrals depend on the profile. `family: 'tangent'` has slope 0 at the rim (a thin flaring
+// edge) and slope 2 at the peak (a cone tip); with it a disc measures 52 degrees worst off-rim,
+// with the Lamé hemisphere 4.5.
 //
-// ⚠ THE CAP IS STILL NOT SOLVED, and that is pinned rather than hidden. Ring M is a long thin loop
-// hugging the spine, and collapsing it to one apex puts near-coplanar faces back to back — worst
-// 179.7 degrees on a C. Fairing was tried and made the count WORSE: it is a topological degeneracy,
-// not a smoothing problem. It is under 1% of the surface (C 0.43%, comma 0.36%), it does not show
-// in a render, and the body is clean below 60% of the apex height. `puff_curved_guard` section D
-// asserts it with budgets so it cannot quietly grow. THE FIX IS STILL THE RIDGE/SLIT CAP: the apex
-// becomes a RIDGE belonging to one sheet, closed as a slit traversed out and back, with PAIR and
-// EDGE quads. Euler stays 2 for every ridge length, and at zero it is character-for-character the
-// shipped pole closure.
+// The apex cap does not suit a spined shape. Ring M is a long thin loop hugging the spine, and
+// collapsing it to one apex puts near-coplanar faces back to back — worst 179.7 degrees on a C.
+// Fairing makes the count worse: it is a topological degeneracy, not a smoothing problem. It is
+// under 1% of the surface (C 0.43%, comma 0.36%), and the body is clean below 60% of the apex
+// height. The grid cap (puffgridcap.mjs) closes that loop with a ridge patch instead.
 //
-// ⚠⚠ AND EVERY INVARIANT WAS GREEN ON THE VERSION THAT SHIPPED A STARFISH. Closed, genus 0, Euler
-// 2, zero degenerate quads, every directed edge once, positive signed volume, and COVERAGE
-// 1.000000 — because coverage is an XY projection test and the crease is in Z.
+// The march is balls, not a ridge scan. The obvious approach is to sample the distance field on a
+// grid and extract its ridge, but a sampled distance field's worst-case error is 46-49% of a cell
+// at every resolution, and it lands on the medial axis: an axis midway between two grid columns
+// gives both nodes the same value. Ridge extraction estimates precisely the locus where grid
+// sampling is structurally worst. This marches instead, on the exact polygon distance, and never
+// builds a grid.
 //
-// ⚠ WHY THIS EXISTS. puff's first version lerped every boundary point straight toward ONE interior
-// point, so on a crescent that segment left the shape — measured, 23 of 96 boundary points against
-// 0 of 96 on a disc — and the shape was refused rather than drawn wrong. A crescent, a C, an S, a
-// comma, a bean and a boomerang are ordinary things to draw, and "draw a closed loop, get a solid"
-// that refuses a comma is a tool with a visible hole in it.
-//
-// ⚠⚠ AND THE MARCH IS BALLS, NOT A RIDGE SCAN, FOR A REASON THIS REPO ALREADY PAID FOR. The
-// obvious approach is to sample the distance field on a grid and extract its ridge — and
-// A sampled distance field's worst-case error is
-// 46-49% OF A CELL AT EVERY RESOLUTION, and says exactly where it lands: "put a medial axis midway
-// between two grid columns and both nodes hold the same value". Ridge extraction estimates
-// precisely the locus where grid sampling is structurally worst. This marches instead, on the
-// exact polygon distance, and never builds a grid.
-//
-// THE ONE FACT THE WHOLE DESIGN RESTS ON: the closed ball B(s, r(s)) with r(s) = the distance from
+// The design rests on one fact: the closed ball B(s, r(s)) with r(s) = the distance from
 // s to the boundary lies entirely inside the polygon. So a segment from a boundary point p to s is
-// guaranteed inside IFF |p − s| <= r(s). That single inequality is what makes every spoke safe,
+// guaranteed inside iff |p − s| <= r(s). That single inequality is what makes every spoke safe,
 // and it is why the attachment rule below minimizes |p − s| − r(s) rather than |p − s|: nearest
 // point on the spine carries no containment guarantee at all.
 
 import { distanceToBoundary, pointInPolygon } from './puffoutline.mjs';
 
-/** Signed: positive inside, negative outside. ⚠ distanceToBoundary is UNSIGNED, so at the boundary
- *  its field rises in BOTH directions and its gradient is degenerate — which is what made a first
- *  attempt at this move nothing at all, on a disc. */
+/** Signed: positive inside, negative outside. distanceToBoundary is unsigned, so at the boundary
+ *  its field rises in both directions and its gradient is degenerate. */
 export function signedDistance(pts, x, y) {
   return (pointInPolygon(pts, x, y) ? 1 : -1) * distanceToBoundary(pts, x, y);
 }
@@ -79,10 +59,10 @@ function refineBall(pts, p, step) {
 
 /**
  * March outward from the root along one direction, re-centering onto the ridge at every step.
- * ⚠ THE STOP CONDITION THAT MATTERS IS THE REDUNDANT-BALL TEST, AND IT IS AGAINST THE ROOT.
+ * The stop condition that matters is the redundant-ball test, and it is against the root.
  * A ball wholly contained in the root's ball adds nothing to the medial axis. Tested against the
- * PREVIOUS step instead it never fires, and a DISC marches all the way to its own rim — which is
- * the difference between a disc staying a disc and a disc growing a spurious spine.
+ * previous step instead it never fires, and a disc marches all the way to its own rim, growing a
+ * spurious spine.
  */
 function marchRun(pts, root, r0, dir, opts) {
   const { minR, maxSteps, turnMax } = opts;
@@ -106,12 +86,12 @@ function marchRun(pts, root, r0, dir, opts) {
     q = [q[0] + nx * bestT, q[1] + ny * bestT];
     const rq = bestR;
     if (!(rq > minR)) break;
-    // ⚠ REDUNDANT AGAINST THE ROOT — a ball inside the root's ball is not part of the axis.
-    // ⚠⚠ AND THE TOLERANCE IS LOAD-BEARING, NOT TIDINESS. On a DISC this quantity is r0 EXACTLY at
+    // Redundant against the root — a ball inside the root's ball is not part of the axis.
+    // The tolerance is load-bearing. On a disc this quantity is r0 exactly at
     // every step — the field is r0 − |q − root| by construction — so an exact `<=` is a coin flip
-    // on the last bit, and it came up false: the disc grew a 16-sample spine and 32 runs where it
-    // should have had none. A disc must return a single sample, because that is what keeps the
-    // shipped hemisphere oracle and the incenter assertions bit-identical.
+    // on the last bit, and a false result grows a 16-sample spine and 32 runs where there should
+    // be none. A disc must return a single sample, so that it builds exactly as the single-center
+    // construction does.
     if (Math.hypot(q[0] - root[0], q[1] - root[1]) + rq <= r0 * (1 + 1e-6)) break;
     const nu = [q[0] - p[0], q[1] - p[1]];
     const L = Math.hypot(nu[0], nu[1]);
@@ -126,9 +106,9 @@ function marchRun(pts, root, r0, dir, opts) {
 
 /**
  * @returns { ok, reason, pts:[[x,y],...], r:Float64Array, root, rootR, runs, thirdLimb }
- *   `pts` is an ORDERED OPEN POLYLINE. A disc returns a single sample — the design's degenerate
- *   case falls out of the pruning rather than being special-cased, which is what keeps a disc
- *   bit-identical to the version that had no spine at all.
+ *   `pts` is an ordered open polyline. A disc returns a single sample — the degenerate case
+ *   falls out of the pruning rather than being special-cased, which keeps a disc bit-identical
+ *   to the single-center construction.
  */
 export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax = Math.PI / 3.2 } = {}) {
   const root0 = refineBall(pts, seed.at, seed.r * 0.25);
@@ -155,12 +135,12 @@ export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax =
   const marchOpts = { minR, maxSteps: 200, turnMax };
   let runs = dirs.map(d => marchRun(pts, root, r0, d, marchOpts)).filter(rn => rn.length > 0);
 
-  // ⚠⚠ THE PRUNE IS WHAT COLLAPSES A DISC TO A POINT, AND THE ROOT BALL MUST BE ONE OF THE
-  // CANDIDATES OR IT CANNOT. A sample whose ball is contained in another's is not on the medial
-  // axis — and on a disc every marched ball is contained in the ROOT's, in no other. Pruning only
-  // against sibling samples left a disc with a 16-sample spine and 32 runs.
-  // ⚠ AND THE TOLERANCE IS NOT TIDINESS EITHER. A drawn "disc" is a 96-gon, so
-  // |s − root| + r(s) = r0 holds exactly only along the perpendicular to the nearest EDGE; toward
+  // The prune is what collapses a disc to a point, and the root ball must be one of the
+  // candidates or it cannot. A sample whose ball is contained in another's is not on the medial
+  // axis — and on a disc every marched ball is contained in the root's, in no other. Pruning only
+  // against sibling samples leaves a disc with a 16-sample spine and 32 runs.
+  // The tolerance: a drawn "disc" is a 96-gon, so
+  // |s − root| + r(s) = r0 holds exactly only along the perpendicular to the nearest edge; toward
   // a vertex the marched ball is legitimately a little larger. The slack is what makes a polygon
   // behave like the circle it is drawn as. 2% of the root radius: far above that discretization,
   // far below any real limb, and the crescent (whose limbs run 3.3 root-radii) is untouched by it.
@@ -176,10 +156,10 @@ export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax =
   runs.sort((a, b) => lenOf(b) - lenOf(a));
   const thirdLimb = runs.length > 2 ? lenOf(runs[2]) : 0;
 
-  // ⚠ TWO LIMBS ONLY, AND A THIRD IS REPORTED RATHER THAN QUIETLY DROPPED. An unbranched pruned
-  // axis is the scope line: a Y, a T or a plus needs a spine TREE and a cap that is not a slit,
-  // and silently flattening the ignored limb into a wedge is the "plausible blob that is not what
-  // was drawn" failure this whole module exists to refuse.
+  // Two limbs only; a third is reported rather than quietly dropped. An unbranched pruned
+  // axis is the scope: a Y, a T or a plus needs a spine tree and a cap that is not a slit,
+  // and silently flattening the ignored limb into a wedge would give a plausible shape that is
+  // not what was drawn.
   const A1 = runs[0] || [], B1 = runs[1] || [];
   const line = [...A1.slice().reverse(), { p: root, r: r0 }, ...B1];
   return {
@@ -191,8 +171,8 @@ export function buildSpine(pts, { seed, samples = 24, minRFrac = 0.03, turnMax =
 
 /**
  * Attach every boundary point to the spine sample whose maximal ball reaches it best.
- * ⚠ MINIMIZING |p − s| − r(s), NOT |p − s|. The residual it returns IS the safety statement: it is
- * how far the point lies OUTSIDE the ball assigned to it, so zero means the spoke is provably
+ * Minimizes |p − s| − r(s), not |p − s|. The residual it returns is the safety statement: it is
+ * how far the point lies outside the ball assigned to it, so zero means the spoke is provably
  * inside the polygon and a large value means the spine does not describe this part of the shape.
  * A branching form passes every containment test and fails here — which is the only place it fails.
  */
@@ -207,19 +187,18 @@ export function attachToSpine(pts, spine, { smoothPasses = 8 } = {}) {
     tau[i] = bj; residual[i] = best;
   }
 
-  // ⚠⚠⚠ THE TARGET IS SMOOTHED AROUND THE LOOP, AND WITHOUT THIS THE TOOL MADE GARBAGE.
-  // The attachment above is a nearest-BALL argmin, and an argmin is a step function: on a
-  // hand-drawn outline neighboring boundary points land on DIFFERENT spine samples. Measured on a
-  // wobbly loop of the kind a pencil actually produces — 8 places where tau jumps by more than one
-  // sample, jumping by as much as FOUR — against a perfectly clean map on a smooth disc.
-  // Adjacent spokes then point in different directions, the ring lattice zigzags, and the surface
-  // comes out as a crumpled starfish with radial creases converging on a point. It is closed,
-  // genus 0, Euler 2, zero degenerate quads and it projects one-to-one — every invariant this
-  // module had was green on it, because they are all topology or an XY projection and the crease
-  // is in Z.
+  // The target is smoothed around the loop.
+  // The attachment above is a nearest-ball argmin, and an argmin is a step function: on a
+  // hand-drawn outline neighboring boundary points land on different spine samples. Measured on a
+  // wobbly pencil-drawn loop — 8 places where tau jumps by more than one sample, by as much as
+  // four — against a clean map on a smooth disc. Unsmoothed, adjacent spokes point in different
+  // directions, the ring lattice zigzags, and the surface comes out as a crumpled starfish with
+  // radial creases converging on a point. That surface is closed, genus 0, Euler 2, with zero
+  // degenerate quads, every directed edge once, positive signed volume and a one-to-one XY
+  // projection: topology and projection checks cannot see a crease in Z.
   //
-  // So the TARGET POSITIONS are averaged around the loop rather than the indices. Positions,
-  // because the fix has to be continuous: smoothing an integer index still steps. The targets lie
+  // So the target positions are averaged around the loop rather than the indices. Positions,
+  // because the result has to be continuous: smoothing an integer index still steps. The targets lie
   // on the medial axis and their neighbors lie along it, so averaging keeps them there — asserted
   // by the caller, not assumed here.
   const target = new Array(N);

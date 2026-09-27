@@ -1,17 +1,16 @@
-// A BOOLEAN EXPORTED AS ONE JOINED BREP, JUDGED BY OPENNURBS.
+// A boolean exported as one joined brep, judged by OpenNURBS.
 //
-// `test/boolean-to-onbrep.test.mjs` already proved our booleans assemble into
-// valid ON_Breps. It does that from the LIVE half-edge solid, which the app
+// `test/boolean-to-onbrep.test.mjs` proves our booleans assemble into
+// valid ON_Breps from the live half-edge solid, which the app
 // cannot keep: the solid is cyclic, so it cannot be serialized, cloned, or
-// carried through an autosave. This tests the path that can actually ship —
+// carried through an autosave. This tests the path the app stores —
 // flatten the solid to plain data once, then build the brep from nothing but
 // that.
 //
-// ⚠ THE CLAIM UNDER TEST IS "CLOSED SOLID", NOT "VALID". N loose trimmed faces
-// are also valid; they are simply not a solid, and that is the whole difference
-// this work exists to close. So `isSolid` is asserted, and the record is put
-// through JSON.stringify/parse first — if a single object reference survives
-// the flattening, that round trip is where it shows up.
+// The claim under test is "closed solid", not "valid". N loose trimmed faces
+// are also valid; they are simply not a solid. So `isSolid` is asserted, and
+// the record is put through JSON.stringify/parse first — if a single object
+// reference survives the flattening, that round trip is where it shows up.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -57,25 +56,25 @@ for (const op of ['union', 'intersect', 'difference']) {
   results[op] = r.ok ? { boolean: r, record: solidToBrepRecord(r.solid, { tolerance: TOL }) } : { refused: r.reason };
 }
 
-test('THE INPUT LANDS: all three booleans close before any of this means anything', () => {
+test('The input lands: all three booleans close before any of this means anything', () => {
   for (const op of ['union', 'intersect', 'difference']) {
     assert.ok(!results[op].refused, `${op} refused: ${results[op].refused}`);
     assert.equal(results[op].boolean.stats.nakedEdgeCount, 0, `${op} leaves no naked edge`);
   }
 });
 
-test('THE RECORD IS PLAIN DATA — it survives JSON, which is the only reason it can be stored', () => {
+test('The record is plain data — it survives JSON, which is the only reason it can be stored', () => {
   // The solid it came from cannot do this at all: a half-edge points at its
   // twin, its next and its vertex, and they point back. If any reference
   // leaked into the record, stringify throws on the cycle right here.
   //
-  // ⚠ COMPARED IGNORING THE SIGN OF ZERO, and that is a real distinction
+  // Compared ignoring the sign of zero, and that is a real distinction
   // rather than a loosened test. `JSON.stringify(-0)` is "0", so a round trip
   // turns -0 into +0 and `deepStrictEqual` — which compares numbers by
   // Object.is — calls that a difference. Four pcurve control points here carry
   // -0 in the z slot a (u,v) curve keeps permanently zero. Nothing downstream
   // can observe it (-0 === 0, and every arithmetic use agrees), so the property
-  // worth asserting is that no VALUE and no STRUCTURE was lost, not that the
+  // worth asserting is that no value and no structure was lost, not that the
   // bits are identical.
   const norm = (v) => (typeof v === 'number' ? (v === 0 ? 0 : v) : v);
   const walk = (a) => (Array.isArray(a) ? a.map(walk)
@@ -91,7 +90,7 @@ test('THE RECORD IS PLAIN DATA — it survives JSON, which is the only reason it
   }
 });
 
-test('THE MERGE IS REAL: hundreds of sampled edges become the edges a B-rep has', () => {
+test('The merge is real: hundreds of sampled edges become the edges a B-rep has', () => {
   const rec = results.union.record;
   assert.ok(rec.stats.sourceEdges > 400, `the sew has ${rec.stats.sourceEdges} edges to merge`);
   assert.ok(rec.stats.edges < rec.stats.sourceEdges / 5,
@@ -100,8 +99,8 @@ test('THE MERGE IS REAL: hundreds of sampled edges become the edges a B-rep has'
   assert.equal(rec.stats.droppedTrims, 0, 'no trim was dropped for want of an edge');
 });
 
-test('⭐ AND OPENNURBS CALLS IT A CLOSED SOLID — not merely a valid pile of faces', () => {
-  // The whole point. N loose trimmed faces are valid too; `isSolid` is what
+test('OpenNURBS calls it a closed solid — not merely a valid pile of faces', () => {
+  // N loose trimmed faces are valid too; `isSolid` is what
   // separates a solid from a heap, and it is Rhino's own opinion, not ours.
   for (const op of ['union', 'intersect', 'difference']) {
     const rec = JSON.parse(JSON.stringify(results[op].record)); // built from stored data only
@@ -109,14 +108,14 @@ test('⭐ AND OPENNURBS CALLS IT A CLOSED SOLID — not merely a valid pile of f
     assert.ok(built && built.brep, `${op}: OpenNURBS rejected the assembly — ${built && built.log}`);
     assert.equal(built.log, '', `${op}: valid with an empty log`);
     assert.equal(built.brep.faces().count, rec.faces.length, `${op}: every face reached the brep`);
-    assert.ok(built.brep.isSolid, `${op}: the assembled brep must be a CLOSED SOLID, not loose faces`);
+    assert.ok(built.brep.isSolid, `${op}: the assembled brep must be a closed solid, not loose faces`);
   }
 });
 
-test('FACES SHARE THEIR EDGES — the count proves it, since loose faces cannot', () => {
+test('Faces share their edges — the count proves it, since loose faces cannot', () => {
   // If every face had authored its own copy of every boundary, the edge count
   // would be the sum of the faces' own trim counts. Sharing makes it far
-  // smaller, and that gap IS the join.
+  // smaller, and that gap is the join.
   const rec = results.union.record;
   const built = brepRecordToRhino(rhino, rec, TOL);
   const edges = built.brep.edges().count;
@@ -124,8 +123,8 @@ test('FACES SHARE THEIR EDGES — the count proves it, since loose faces cannot'
     `${edges} edges for ${rec.stats.trims} trims means edges are shared; equal would mean nothing was joined`);
 });
 
-test('A RIGID TRANSFORM MOVES THE SOLID AND LEAVES THE PCURVES ALONE', () => {
-  // A trim lives in its own face's PARAMETERS, which a rigid motion of the
+test('A rigid transform moves the solid and leaves the pcurves alone', () => {
+  // A trim lives in its own face's parameters, which a rigid motion of the
   // face does not change. Transforming them would shift every boundary within
   // its own surface — a file that opens and is quietly the wrong shape.
   const rec = results.union.record;
@@ -141,7 +140,7 @@ test('A RIGID TRANSFORM MOVES THE SOLID AND LEAVES THE PCURVES ALONE', () => {
   assert.ok(built && built.brep && built.brep.isSolid, 'the moved solid is still a closed solid');
 });
 
-test('IT SURVIVES A REAL .3dm WRITE AND READ BACK, still a solid', () => {
+test('It survives a real .3dm write and read back, still a solid', () => {
   const { bytes, skipped } = exportDocument(rhino, {
     tolerance: TOL,
     layers: [{ id: 0, name: 'Default', color: { r: 0, g: 0, b: 0 }, parentId: null }],
@@ -153,21 +152,19 @@ test('IT SURVIVES A REAL .3dm WRITE AND READ BACK, still a solid', () => {
   const geo = back.objects().get(0).geometry();
   assert.ok(geo.faces, 'it came back as a Brep');
   assert.ok(geo.isValid, 'still valid after the round trip');
-  assert.ok(geo.isSolid, 'and still a CLOSED SOLID after the round trip');
+  assert.ok(geo.isSolid, 'and still a closed solid after the round trip');
 });
 
-// ⚠⚠ A BOX PAIR IS NOT A WEAKER FIXTURE THAN THE TORI — it is the one that
+// A box pair is not a weaker fixture than the tori — it is the one that
 // catches a whole class the tori structurally cannot. Every edge of a box is
-// STRAIGHT, so `fitLine` recognizes it and returns its CANONICALIZED direction
+// straight, so `fitLine` recognizes it and returns its canonicalized direction
 // (largest component positive), which for a chain traveling the other way is
 // a curve running backwards. A trim's `reversed` flag is computed against the
 // chain's traversal order, so a backwards edge curve puts every trim on it a
 // full edge-length from its own edge — and OpenNURBS reports exactly that.
 //
 // The tori cannot see it: their chains are curved, so no primitive is
-// recognized and the least-squares fit interpolates the endpoints in order. All
-// three torus booleans stayed valid throughout, which is precisely why this
-// needed its own fixture rather than a harder torus.
+// recognized and the least-squares fit interpolates the endpoints in order.
 const quad = (p00, p10, p11, p01) => {
   const w = (p) => [p[0], p[1], p[2], 1];
   return { degU: 1, degV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1], ctrlNet: [[w(p00), w(p01)], [w(p10), w(p11)]] };
@@ -190,7 +187,7 @@ const seg = (f, t, n = 9) => Array.from({ length: n + 1 }, (_, i) => {
   return [f[0] + (t[0] - f[0]) * s, f[1] + (t[1] - f[1]) * s, f[2] + (t[2] - f[2]) * s];
 });
 
-test('⭐ A BOX PAIR — every edge straight — ALSO becomes a closed solid', () => {
+test('A box pair — every edge straight — also becomes a closed solid', () => {
   const a0 = [-20, -20, -20], a1 = [20, 20, 20], b0 = [0, 0, 0], b1 = [35, 35, 35];
   const A = { faces: boxFaces(a0, a1), triangles: boxTriangles(a0, a1) };
   const B = { faces: boxFaces(b0, b1), triangles: boxTriangles(b0, b1) };
@@ -211,14 +208,13 @@ test('⭐ A BOX PAIR — every edge straight — ALSO becomes a closed solid', (
     const built = brepRecordToRhino(rhino, rec, 0.001);
     assert.ok(built && built.brep, `${op}: OpenNURBS rejected it — ${built && built.log}`);
     assert.equal(built.log, '', `${op}: valid with an empty log`);
-    assert.ok(built.brep.isSolid, `${op}: a box boolean must be a CLOSED SOLID too`);
+    assert.ok(built.brep.isSolid, `${op}: a box boolean must be a closed solid too`);
   }
 });
 
-test('...and the edge curves genuinely run the way their chains do', () => {
-  // The property the fix installs, asserted directly rather than only through
-  // OpenNURBS' verdict — so a regression says WHAT broke, not just that the
-  // validator stopped being happy.
+test('...and the edge curves run the way their chains do', () => {
+  // Asserted directly rather than only through OpenNURBS' verdict, so a
+  // failure says what broke, not only that the validator rejected the brep.
   const a0 = [-20, -20, -20], a1 = [20, 20, 20], b0 = [0, 0, 0], b1 = [35, 35, 35];
   const A = { faces: boxFaces(a0, a1), triangles: boxTriangles(a0, a1) };
   const B = { faces: boxFaces(b0, b1), triangles: boxTriangles(b0, b1) };
@@ -242,23 +238,23 @@ test('...and the edge curves genuinely run the way their chains do', () => {
   }
 });
 
-test('A RECORD THAT IS NOT OK REFUSES rather than building half a brep', () => {
+test('A record that is not ok refuses rather than building half a brep', () => {
   assert.equal(solidToBrepRecord(null, { tolerance: TOL }).ok, false);
   assert.equal(solidToBrepRecord({ edges: [] }, { tolerance: TOL }).ok, false);
   assert.equal(brepRecordToRhino(rhino, { ok: false }, TOL), null);
   assert.equal(brepRecordToRhino(rhino, null, TOL), null);
 });
 
-test('THE VENDORED BUILD EXPOSES NewSingularTrim, and it really authors one', () => {
-  // ON represents a POLE — a surface edge that collapses to a single point, as
-  // a revolved disc's center does — as a SINGULAR TRIM: a real loop member with
+test('The vendored build exposes NewSingularTrim, and it authors one', () => {
+  // ON represents a pole — a surface edge that collapses to a single point, as
+  // a revolved disc's center does — as a singular trim: a real loop member with
   // (u,v) extent and no 3-D length. The released rhino3dm binds no such thing,
   // so `vendor/rhino3dm/brep_authoring.patch` adds it alongside the rest of the
   // authoring API.
   //
-  // ⚠ ASSERTED AGAINST THE BUILD, not the patch file. The glue stayed
-  // byte-identical across a build that added ten methods once before, so the
-  // only honest check is calling it.
+  // Asserted against the build, not the patch file: the glue can stay
+  // byte-identical across a build that adds methods, so the only reliable
+  // check is calling it.
   assert.equal(typeof rhino.Brep.prototype.newSingularTrim, 'function',
     'the vendored build must expose newSingularTrim — rebuild via vendor/rhino3dm/rebuild.sh');
   const brep = new rhino.Brep();
@@ -280,20 +276,20 @@ test('THE VENDORED BUILD EXPOSES NewSingularTrim, and it really authors one', ()
   assert.ok(ti >= 0, `newSingularTrim must return a real trim index, got ${ti}`);
 });
 
-test('A SOLID WHOSE LOOPS DO NOT CLOSE IS REFUSED BY NAME, not written and rejected', () => {
-  // `fitFaceLoops` already measures the largest (u,v) gap between one trim's
+test('A solid whose loops do not close is refused by name, not written and rejected', () => {
+  // `fitFaceLoops` measures the largest (u,v) gap between one trim's
   // end and the next one's start. Writing a brep from a loop with a gap makes
   // OpenNURBS report a defect three layers upstream in its own vocabulary
   // ("end of m_T[72]=(1.1e-16,1.33333) and start of m_T[70]=(0,0) do not
   // match"), which reads like a bug in the writer.
   //
-  // The union here is genuinely closed (zero naked edges) — the loops are what
+  // The union here is closed (zero naked edges) — the loops are what
   // is broken, which is why this cannot be caught by the boolean's own checks.
   const rec = results.union.record;
   assert.ok(rec.ok, 'the torus union still produces a usable record');
   // And the refusal path is reachable and says the right kind of thing.
-  // ⚠ A MALFORMED SOLID MUST REFUSE, NOT THROW. This exact fixture — edges and
-  // shells present, vertices absent — got past the original guard and threw out
+  // A malformed solid must refuse, not throw. With edges and shells present
+  // and vertices absent, an unguarded path throws out
   // of `fitSolidEdgeCurves` on `solid.vertices.length`. A refusal is a return
   // value in this kernel; a throw here reaches the app as an unexplained
   // failure of whatever called it.
@@ -306,18 +302,16 @@ test('A SOLID WHOSE LOOPS DO NOT CLOSE IS REFUSED BY NAME, not written and rejec
   }
 });
 
-// ⭐⭐⭐ A POLE-BEARING SOLID — the case that blocked a cylinder-bearing boolean
-// from ever being one closed solid.
+// A pole-bearing solid, as in any cylinder-bearing boolean.
 //
-// A cylinder cap is a revolved DISC: its whole u=0 edge collapses to the center
+// A cylinder cap is a revolved disc: its whole u=0 edge collapses to the center
 // point. The sew builds face boundaries from 3-D points and welds consecutive
 // duplicates — correctly — so that stretch vanishes and the face's loop arrives
-// with a hole in it. ON represents exactly that as a SINGULAR TRIM, and the
+// with a hole in it. ON represents exactly that as a singular trim, and the
 // recovery rebuilds it from the surface, which still knows.
 //
-// ⚠ THE TORUS PAIR ABOVE CANNOT CATCH THIS. A torus has no poles at all, which
-// is why every earlier check passed while a cylinder could not be written.
-test('⭐ A CYLINDER-BEARING BOOLEAN BECOMES A CLOSED SOLID — poles and all', () => {
+// The torus pair above cannot catch this: a torus has no poles at all.
+test('A cylinder-bearing boolean becomes a closed solid — poles and all', () => {
   const R = 12, Z0 = -30, Z1 = 30, B = 20;
   const wall = revolve(makeLine([R, 0, Z0], [R, 0, Z1]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const capBot = revolve(makeLine([0, 0, Z0], [R, 0, Z0]), [0, 0, Z0], [0, 0, -1], 0, 2 * Math.PI);
@@ -349,11 +343,11 @@ test('⭐ A CYLINDER-BEARING BOOLEAN BECOMES A CLOSED SOLID — poles and all', 
   const built = brepRecordToRhino(rhino, rec, 0.001);
   assert.ok(built && built.brep, `OpenNURBS rejected it — ${built && built.log}`);
   assert.equal(built.log, '', 'valid with an empty log');
-  assert.ok(built.brep.isSolid, 'and it must be a CLOSED SOLID, which is the whole point');
+  assert.ok(built.brep.isSolid, 'and it must be a closed solid');
 });
 
-test('...and a genuine hole still refuses — the pole recovery is not a blanket gap-filler', () => {
-  // The recovery only closes a gap the SURFACE collapses across. If it closed
+test('...and a real hole still refuses — the pole recovery is not a blanket gap-filler', () => {
+  // The recovery only closes a gap the surface collapses across. If it closed
   // any gap at all it would manufacture faces over real holes, which is exactly
   // the "valid but quietly wrong" outcome this path exists to avoid.
   const rec = results.union.record;

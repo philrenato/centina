@@ -5,10 +5,9 @@ import { makeArc, makeLine, makeCircle, revolve, extrude } from '../kernel/primi
 import { extractIsocurveU, extractIsocurveV } from '../kernel/isocurve.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
 
-// The bilinear fixture curve-surface.test.mjs already proved surfacePoint
-// against directly — reused here so a grid test isolates divideSrfGrid's
-// own placement logic from surface evaluation correctness (already proven
-// elsewhere).
+// The bilinear fixture curve-surface.test.mjs checks surfacePoint against
+// directly — reused here so a grid test isolates divideSrfGrid's own
+// placement logic from surface evaluation correctness (tested elsewhere).
 const bilinearSrf = {
   degU: 1, degV: 1,
   knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1],
@@ -18,11 +17,10 @@ const bilinearSrf = {
   ],
 };
 
-// A fully RATIONAL surface (both U and V direction have non-unit
-// alternating weights), the SAME stress fixture isocurve.test.mjs already
-// uses — deliberately non-[0,1] domain (a 270deg-by-270deg revolve), so a
-// grid test that only happened to work for a domain that's already [0,1]
-// wouldn't be a real proof.
+// A fully rational surface (both U and V direction have non-unit
+// alternating weights), the same stress fixture isocurve.test.mjs
+// uses — deliberately a non-[0,1] domain (a 270deg-by-270deg revolve), so a
+// grid test cannot pass only because the domain is already [0,1].
 function makeTestSurface() {
   const profile = makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], 5, 0, 1.5 * Math.PI);
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, 1.5 * Math.PI);
@@ -39,7 +37,7 @@ test('divideSrfGrid on a bilinear surface lands on exact parameter-uniform grid 
   assert.ok(Math.abs(center.point[2] - 2.5) < 1e-10);
 });
 
-test('divideSrfGrid always returns (uCount+1)*(vCount+1) points including all FOUR exact corner points', () => {
+test('divideSrfGrid always returns (uCount+1)*(vCount+1) points including all four exact corner points', () => {
   const srf = makeTestSurface();
   const uCount = 4, vCount = 3;
   const grid = divideSrfGrid(srf, uCount, vCount);
@@ -67,7 +65,7 @@ test('divideSrfGrid every returned point matches a direct surfacePoint evaluatio
   }
 });
 
-test('divideSrfGrid U/V values are evenly spaced in PARAMETER space (the real point of a parameter-uniform grid, not arc-length)', () => {
+test('divideSrfGrid U/V values are evenly spaced in parameter space (a parameter-uniform grid, not arc-length)', () => {
   const srf = makeTestSurface();
   const uCount = 5, vCount = 4;
   const grid = divideSrfGrid(srf, uCount, vCount);
@@ -81,7 +79,7 @@ test('divideSrfGrid U/V values are evenly spaced in PARAMETER space (the real po
   for (let i = 1; i < vVals.length; i++) assert.ok(Math.abs((vVals[i] - vVals[i - 1]) - vStep) < 1e-9, `V step ${i} unequal`);
 });
 
-test('divideSrfGrid\'s own u=uMin column exactly reproduces extractIsocurveU(srf, uMin) at every grid V — a real cross-check against already-proven kernel machinery, not a self-consistency tautology', () => {
+test('divideSrfGrid\'s own u=uMin column exactly reproduces extractIsocurveU(srf, uMin) at every grid V — a cross-check against independently tested kernel code', () => {
   const srf = makeTestSurface();
   const grid = divideSrfGrid(srf, 3, 6);
   const uMin = srf.knotsU[0];
@@ -115,13 +113,13 @@ test('divideSrfGrid produces no NaN/Infinity anywhere across a full grid on the 
   for (const { point } of grid) assert.ok(point.every(Number.isFinite), JSON.stringify(point));
 });
 
-// A full 360deg revolve of an OPEN straight profile (a cylinder) wraps in
+// A full 360deg revolve of an open straight profile (a cylinder) wraps in
 // V (the sweep) but not U (the profile itself never wraps) — the surface
-// analog of divideByArcLength's own closed-curve seam case, now proven
-// per-direction: the closed V direction must place exactly vCount points
-// around the full loop (never repeating the v=vMin/v=vMax seam column),
-// while the open U direction is completely unaffected (still uCount+1).
-test('divideSrfGrid on a cylinder (closed in V, open in U) places exactly vCount DISTINCT angular columns, never the seam duplicate — U unaffected', () => {
+// analog of divideByArcLength's own closed-curve seam case, per direction:
+// the closed V direction must place exactly vCount points around the full
+// loop (never repeating the v=vMin/v=vMax seam column), while the open U
+// direction is unaffected (still uCount+1).
+test('divideSrfGrid on a cylinder (closed in V, open in U) places exactly vCount distinct angular columns, never the seam duplicate — U unaffected', () => {
   const profile = makeLine([5, 0, 0], [5, 0, 20]);
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -131,13 +129,13 @@ test('divideSrfGrid on a cylinder (closed in V, open in U) places exactly vCount
   const grid = divideSrfGrid(srf, uCount, vCount);
   assert.equal(grid.length, (uCount + 1) * vCount, `expected (uCount+1)*vCount = ${(uCount + 1) * vCount}, got ${grid.length}`);
   const uVals = [...new Set(grid.map((g) => Math.round(g.u * 1e6)))];
-  assert.equal(uVals.length, uCount + 1, 'U (open) direction still gets uCount+1 distinct values, unaffected by the V fix');
+  assert.equal(uVals.length, uCount + 1, 'U (open) direction still gets uCount+1 distinct values, unaffected by the V seam');
   const vVals = [...new Set(grid.map((g) => Math.round(g.v * 1e6)))];
   assert.equal(vVals.length, vCount, 'V (closed) direction gets exactly vCount distinct values, no seam duplicate');
-  // Every point genuinely lies on the cylinder wall (radius 5 from the Z axis).
+  // Every point lies on the cylinder wall (radius 5 from the Z axis).
   for (const { point } of grid) assert.ok(Math.abs(Math.hypot(point[0], point[1]) - 5) < 1e-9, JSON.stringify(point));
-  // No two grid points coincide (the old bug: a v=vMin and v=vMax column at
-  // the same U row were the SAME physical point on the cylinder wall).
+  // No two grid points coincide (a v=vMin and a v=vMax column at the same
+  // U row would be the same physical point on the cylinder wall).
   for (let i = 0; i < grid.length; i++) {
     for (let j = i + 1; j < grid.length; j++) {
       const d = Math.hypot(grid[i].point[0] - grid[j].point[0], grid[i].point[1] - grid[j].point[1], grid[i].point[2] - grid[j].point[2]);
@@ -146,11 +144,11 @@ test('divideSrfGrid on a cylinder (closed in V, open in U) places exactly vCount
   }
 });
 
-// The mirror case: an extrude of a CLOSED profile (a circle) is a tube,
+// The mirror case: an extrude of a closed profile (a circle) is a tube,
 // closed in U (the profile itself) and open in V (the straight extrude
-// direction) — proves the fix reacts to WHICHEVER direction is actually
-// closed, not a hardcoded "V is always the closed one" assumption.
-test('divideSrfGrid on a tube (closed in U, open in V) places exactly uCount DISTINCT angular rows, never the seam duplicate — V unaffected', () => {
+// direction) — the seam handling follows whichever direction is closed,
+// not a hardcoded "V is always the closed one" assumption.
+test('divideSrfGrid on a tube (closed in U, open in V) places exactly uCount distinct angular rows, never the seam duplicate — V unaffected', () => {
   const profile = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 4, 4);
   const srf = extrude(profile, [0, 0, 1], 15);
   const { closedU, closedV } = surfaceClosure(srf);
@@ -162,7 +160,7 @@ test('divideSrfGrid on a tube (closed in U, open in V) places exactly uCount DIS
   const uVals = [...new Set(grid.map((g) => Math.round(g.u * 1e6)))];
   assert.equal(uVals.length, uCount, 'U (closed) direction gets exactly uCount distinct values, no seam duplicate');
   const vVals = [...new Set(grid.map((g) => Math.round(g.v * 1e6)))];
-  assert.equal(vVals.length, vCount + 1, 'V (open) direction still gets vCount+1 distinct values, unaffected by the U fix');
+  assert.equal(vVals.length, vCount + 1, 'V (open) direction still gets vCount+1 distinct values, unaffected by the U seam');
   for (let i = 0; i < grid.length; i++) {
     for (let j = i + 1; j < grid.length; j++) {
       const d = Math.hypot(grid[i].point[0] - grid[j].point[0], grid[i].point[1] - grid[j].point[1], grid[i].point[2] - grid[j].point[2]);
@@ -171,10 +169,10 @@ test('divideSrfGrid on a tube (closed in U, open in V) places exactly uCount DIS
   }
 });
 
-// A torus (closed in BOTH directions) proves the fix composes cleanly
-// per-axis: both U and V drop their own seam duplicate independently,
+// A torus (closed in both directions): the seam handling composes
+// per axis — both U and V drop their own seam duplicate independently,
 // giving a plain uCount*vCount grid with zero coincident points anywhere.
-test('divideSrfGrid on a torus (closed in BOTH directions) gives a plain uCount*vCount grid, no seam duplicate in either direction', () => {
+test('divideSrfGrid on a torus (closed in both directions) gives a plain uCount*vCount grid, no seam duplicate in either direction', () => {
   const profile = makeCircle([5, 0, 0], [0, 0, 1], [1, 0, 0], 1, 4);
   const srf = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const { closedU, closedV } = surfaceClosure(srf);

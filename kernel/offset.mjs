@@ -1,32 +1,27 @@
-// OFFSET / THICKEN — general surface offset (distinct from Pipe's
+// Offset / Thicken — general surface offset (distinct from Pipe's
 // own tube-specific Thick/Hollow). Given a single, already-built, untrimmed
-// NURBS surface, produce a genuinely offset copy at a chosen distance along
+// NURBS surface, produce an offset copy at a chosen distance along
 // the surface's own local normal at every control point.
 //
-// HONEST FRAMING — this is an APPROXIMATE offset, and that is a real,
-// well-known CAD fact, not a shortcut. An EXACT offset of a general NURBS
-// surface is, in general, NOT itself an exact NURBS surface — real Rhino's
-// own OffsetSrf uses an approximating/refitting technique for exactly this
-// reason. This module implements the standard, simplest, most defensible
-// approximate-offset: move EVERY control point along the surface's own
+// This is an approximate offset. An exact offset of a general NURBS
+// surface is, in general, not itself a NURBS surface, which is why CAD
+// offsets approximate or refit. This module implements the simplest
+// approximate offset: move every control point along the surface's own
 // local normal at that control point's own Greville (u,v) parametric
-// position (the Greville-abscissa-based normal, reusing the already-proven
-// surfacePointAndPartials / Su x Sv machinery). The approximation is EXACT
-// only for a truly flat/developable-in-the-non-rational-sense surface,
-// where the true offset trivially agrees with the control-point-offset
-// (verified as the correctness anchor: a flat planar surface offset by d is
-// a parallel plane at distance d, to float precision). For a genuinely
-// curved surface the quality degrades with local curvature and offset
-// distance — the same honest "approximate, stated plainly, not oversold"
-// convention Taper/Twist already use.
+// position (the Greville-abscissa-based normal, from
+// surfacePointAndPartials / Su x Sv). The approximation is exact
+// only for a flat surface, where the true offset agrees with the
+// control-point offset (a flat planar surface offset by d is a parallel
+// plane at distance d, to float precision). For a curved surface the
+// quality degrades with local curvature and offset distance.
 
 import { surfacePointAndPartials } from './surface.mjs';
 
 // The Greville abscissa of each control point in one direction (its
 // parameter of maximum influence) — a copy of noise.mjs / pointedit.mjs's
 // own grevilleFromKnots. A control point's own offset normal is read at the
-// parameter that control point actually governs
-// (NOT a per-point independently-computed normal).
+// parameter that control point governs
+// (not a per-point independently-computed normal).
 function grevilleFromKnots(knots, p, count) {
   const g = [];
   for (let i = 0; i < count; i++) {
@@ -39,7 +34,7 @@ function grevilleFromKnots(knots, p, count) {
 }
 
 // The surface's local unit normal at (u,v) = normalize(Su x Sv), with the
-// same pole-nudge honest-degrade as noise.mjs's own surfaceNormalAtParam (a
+// same pole nudge as noise.mjs's own surfaceNormalAtParam (a
 // Greville abscissa can land on a degenerate pole where the cross product
 // collapses; nudge slightly toward the domain interior, and return null
 // only if even that fails).
@@ -64,7 +59,7 @@ function surfaceNormalAtParam(srf, u, v) {
 
 // The per-control-point outward unit normal grid, at each control point's
 // own Greville (u,v). A pole (null normal) contributes a zero vector — that
-// control point simply isn't offset, an honest no-op rather than a NaN.
+// control point is not offset, a no-op rather than a NaN.
 function normalGrid(srf) {
   const nu = srf.ctrlNet.length, nv = srf.ctrlNet[0].length;
   const gU = grevilleFromKnots(srf.knotsU, srf.degU, nu);
@@ -81,28 +76,26 @@ function normalGrid(srf) {
   return grid;
 }
 
-// SELF-INTERSECTION / DEGENERATE-OFFSET DETECTION — required, not optional.
+// Self-intersection / degenerate-offset detection.
 // A large enough offset distance relative to the surface's own local radius
 // of curvature (a concave region, or a small-radius Cylinder/Torus) can make
-// the offset surface fold back on itself. This is a real, well-known
-// geometric fact, not a bug to silently ignore. Detect it with a cheap,
-// honest v1 local proxy: for each pair of ADJACENT control points P_a, P_b,
+// the offset surface fold back on itself. Detected with a cheap local
+// proxy: for each pair of adjacent control points P_a, P_b,
 // the offset edge is e' = (P_b + d*n_b) - (P_a + d*n_a) = e + d*(n_b - n_a),
 // so exactly e'.e = |e|^2 + d*a with a = (n_b - n_a).e. e'.e starts strictly
 // positive at d=0 (=|e|^2) and, being linear in d, first reaches 0 (the edge
-// has CROSSED / reversed relative to its pre-offset order) at |d| = |e|^2/|a|
+// has crossed / reversed relative to its pre-offset order) at |d| = |e|^2/|a|
 // in whichever direction shrinks it. The largest safe |d| is the minimum of
-// that over every adjacent edge — a real, COMPUTED safe maximum, not a
-// guessed constant. Matches the shape of Pipe's own honest auto-clamp-and-
-// explain (cornerRadius floored to the tube radius, with a status message
-// naming why). A full global self-intersection test is genuinely harder,
-// separate scope; this local adjacent-neighbor-crossing check is the honest
-// cheap v1 signal.
+// that over every adjacent edge — a computed safe maximum, not a
+// guessed constant. Matches the shape of Pipe's own auto-clamp-and-explain
+// (cornerRadius floored to the tube radius, with a status message naming
+// why). Known limitation: this is a local adjacent-neighbor check, not a
+// global self-intersection test.
 const SELF_INTERSECT_SAFETY = 0.98; // stay just off the exact degenerate boundary (matches Pipe's own small margin), so the clamped result is provably fold-free, never sitting on the zero-area edge
 
 function safeOffsetMagnitude(srf, normals, signDir) {
   // signDir is +1 or -1 (the sign of the requested distance). Returns the
-  // largest |distance| in THAT direction for which no adjacent edge crosses,
+  // largest |distance| in that direction for which no adjacent edge crosses,
   // or Infinity if nothing constrains it (e.g. a flat plane: every
   // n_b - n_a is zero, a is zero, no edge can ever flip).
   const net = srf.ctrlNet, nu = net.length, nv = net[0].length;
@@ -131,7 +124,7 @@ function safeOffsetMagnitude(srf, normals, signDir) {
 }
 
 // offsetSurface(srf, distance) -> { surface, appliedDistance, clamped,
-// safeMaxDistance }. `surface` is a genuine NURBS surface with the SAME
+// safeMaxDistance }. `surface` is a NURBS surface with the same
 // degree/knots (and unchanged rational weights) as the input, its control
 // net moved along the per-control-point Greville normal. If the requested
 // distance would self-intersect by the adjacent-crossing check, it is
@@ -153,12 +146,12 @@ export function offsetSurface(srf, distance) {
   return { surface: { ...srf, ctrlNet: net }, appliedDistance: applied, clamped, safeMaxDistance: safeMax };
 }
 
-// Reverse a surface's U parametric direction: reverse the control ROW order
+// Reverse a surface's U parametric direction: reverse the control row order
 // and re-base knotsU onto the same domain (U'_j = a + b - U_{m-j}). The
 // geometry is bit-for-bit unchanged; only the parametrization direction (and
 // therefore the surface's normal orientation, Su x Sv) flips. Used by
-// thickenSolid so the offset cap's normal points the OPPOSITE way from the
-// original cap — a real, checkable requirement for a valid closed solid.
+// thickenSolid so the offset cap's normal points the opposite way from the
+// original cap, as a valid closed solid requires.
 export function reverseSurfaceU(srf) {
   const a = srf.knotsU[0], b = srf.knotsU[srf.knotsU.length - 1];
   const newKnotsU = srf.knotsU.map((k) => a + b - k).reverse();
@@ -169,10 +162,9 @@ export function reverseSurfaceU(srf) {
 // The closed loop of boundary control points, walked once around the four
 // parametric sides (each corner visited exactly once) — the rim's own base
 // ring. Returns plain [x,y,z] (weight dropped; the rim panels are flat
-// bilinear, weight 1, matching ruledLoftPanels' own convention). EXPORTED so
+// bilinear, weight 1, matching ruledLoftPanels' own convention). Exported so
 // shellSolid (below) can build a rim ring at a removed face's own opening
-// edge, exactly the way thickenSolid already uses it for its own outer
-// boundary — the same operation, applied at each opening's own loop.
+// edge, the way thickenSolid uses it for its own outer boundary.
 export function boundaryLoop(net) {
   const nu = net.length, nv = net[0].length;
   const loop = [];
@@ -184,116 +176,107 @@ export function boundaryLoop(net) {
   return loop;
 }
 
-// THICKEN — cap the offset result into a real closed solid, reusing the
-// exact "wall + rim panels" RuledLoft-container pattern this app already
-// uses (Cap, Extrude caps, Pipe Thick). Returns a `panels` array of {srf}
-// (the RuledLoft container shape): [ORIGINAL surface, OFFSET surface with
-// REVERSED winding, ...RIM panels bridging their shared boundary edges].
-// The rim reuses ruledLoftPanels (the same proven "ruled panel between two
-// corresponding boundary point rings" technique Cap/RuledLoft use) — direct
-// reuse, not new math. Same self-intersection clamp as offsetSurface.
+// Thicken — cap the offset result into a closed solid, using the
+// "wall + rim panels" RuledLoft-container pattern (Cap, Extrude caps, Pipe
+// Thick). Returns a `panels` array of {srf} (the RuledLoft container
+// shape): [original surface, offset surface with reversed winding,
+// ...rim panels bridging their shared boundary edges]. The rim uses
+// ruledLoftPanels (a ruled panel between two corresponding boundary point
+// rings, as in Cap/RuledLoft). Same self-intersection clamp as
+// offsetSurface.
 export function thickenSolid(srf, distance, ruledLoftPanelsFn) {
   const off = offsetSurface(srf, distance);
   const original = { ...srf, ctrlNet: srf.ctrlNet.map((row) => row.map((cp) => cp.slice())) };
   const offsetReversed = reverseSurfaceU(off.surface); // reversed so its normal points opposite the original's — a valid closed solid
   const origLoop = boundaryLoop(srf.ctrlNet);
   const offLoop = boundaryLoop(off.surface.ctrlNet);
-  // Rim ORDER matters for winding consistency: with the original cap keeping
-  // its natural normal and the offset cap reversed, both caps point the SAME
-  // way relative to the enclosed volume; the rim must match. Verified
-  // numerically (test/offset.test.mjs's divergence-theorem volume check) that
+  // Rim order matters for winding consistency: with the original cap keeping
+  // its natural normal and the offset cap reversed, both caps point the same
+  // way relative to the enclosed volume; the rim must match.
   // ruledLoftPanels(origLoop, offLoop, ...) — original ring as the base row,
   // offset ring as the far row — winds the rim consistently with the two
-  // caps (a swapped order left the rim outward while the caps were inward,
-  // halving the measured enclosed volume — the real bug this order fixes).
+  // caps (checked by a divergence-theorem volume); the swapped order winds
+  // the rim against the caps.
   const rim = ruledLoftPanelsFn(origLoop, offLoop, true).map((s) => ({ srf: s }));
   const panels = [{ srf: original }, { srf: offsetReversed }, ...rim];
   return { panels, appliedDistance: off.appliedDistance, clamped: off.clamped, safeMaxDistance: off.safeMaxDistance };
 }
 
-// ============================================================================
 // EXACT PLANAR SHELL — TWIN BLOCK BEGIN
-// (mirrored VERBATIM into the host app, which has no module loader; a gate
-//  regenerates this block from this file and requires the app to contain it)
-// ============================================================================
+// (mirrored verbatim into the host app, which has no module loader; the
+//  app's copy is regenerated from this block)
 //
-// SHELL (Rhino: Shell — 19_ADDENDA_RECONCILED.txt "SHELL — SCOPE DOWN").
-// Hollows a solid into a shell of ONE UNIFORM wall thickness, optionally
-// OPENING one or more of its own faces so the interior is reachable.
+// Shell (Rhino: Shell).
+// Hollows a solid into a shell of one uniform wall thickness, optionally
+// opening one or more of its own faces so the interior is reachable.
 //
-// WHY THIS IS A PLANE PROBLEM, NOT A SURFACE-OFFSET PROBLEM. The first
-// version of this command offset each remaining face along its OWN local
-// normals, independently of its neighbors. Every inner face therefore
-// shrank toward its own center, so at every inner corner the neighbors
-// missed each other — gapping in places, crossing in others — and the rim
-// at an opening was built by offsetting the REMOVED face inward, which for
-// a box puts the rim inside the plane of the wall beside it, buried and
-// invisible. The result looked like a shell and was not a solid.
+// This is a plane problem, not a surface-offset problem. Offsetting each
+// remaining face along its own local normals, independently of its
+// neighbors, shrinks every inner face toward its own center, so at every
+// inner corner the neighbors miss each other — gapping in places, crossing
+// in others — and a rim built by offsetting the removed face inward lies
+// inside the plane of the wall beside it, buried. The result is not a solid.
 //
-// For a PLANAR face there is nothing to approximate. An inner wall is that
-// face's own PLANE pushed inward by the wall thickness, and two adjacent
+// For a planar face there is nothing to approximate. An inner wall is that
+// face's own plane pushed inward by the wall thickness, and two adjacent
 // inner walls meet exactly where their two offset planes intersect. A
 // corner where three faces meet is one point: the intersection of three
 // offset planes. So the whole construction reduces to
 //
-//     for every corner of the solid, solve for the ONE point that lies on
+//     for every corner of the solid, solve for the one point that lies on
 //     every incident face's offset plane,
 //
 // which is a 3x3 linear system with an exact answer — no blending, no
 // tolerance, no iteration. The inner surface built from those points is
-// watertight and self-intersection-free BY CONSTRUCTION, because every
+// watertight and self-intersection-free by construction, because every
 // inner face shares its corners with its neighbors rather than computing
 // them independently.
 //
-// A corner touching a face that is being OPENED uses that face's ORIGINAL
-// plane instead of its offset one. That single rule is what makes the rim
-// correct: the inner wall stops exactly in the opening's own plane, so the
-// rim is the flat annulus between the outer opening edge and the inner one
-// — a real, visible lip — rather than a band buried inside the wall.
+// A corner touching a face that is being opened uses that face's original
+// plane instead of its offset one. That rule makes the rim correct: the
+// inner wall stops exactly in the opening's own plane, so the rim is the
+// flat annulus between the outer opening edge and the inner one — a
+// visible lip — rather than a band buried inside the wall.
 //
 // A corner may be incident to fewer than three distinct planes (a point in
 // the middle of a face, or on an edge between two). The general answer is
-// the MINIMUM-NORM displacement satisfying every incident plane
+// the minimum-norm displacement satisfying every incident plane
 // constraint, computed by Gram-Schmidt below: for three independent planes
 // it is exactly the triple intersection; for two it is the nearest point on
 // the offset edge line; for one it is a plain perpendicular offset. Same
 // code, no special cases.
 //
-// CURVED FACES ARE STILL REFUSED BY NAME, not approximated. A cylinder wall
+// Curved faces are refused by name, not approximated. A cylinder wall
 // meeting a flat cap has no exact junction in this kernel (the true offset
 // of a general NURBS surface is not itself a NURBS surface — see
 // offsetSurface's own header), and the junction blend that would make one
-// is real, separate work. A shell that is not a valid solid is worse than
-// no shell, so a solid with any CURVED (non-degree-1 or rational) face
-// refuses and says so. A MIXED solid (some planar faces, some curved)
+// is not implemented. A shell that is not a valid solid is worse than
+// no shell, so a solid with any curved (non-degree-1 or rational) face
+// refuses and says so. A mixed solid (some planar faces, some curved)
 // refuses for the same reason and names the curved faces — the curved/
-// planar junction is precisely the unsolved case, so meeting it halfway
-// would ship exactly the invalid result this rewrite exists to remove.
+// planar junction is the unsolved case.
 //
-// A WARPED BILINEAR FACE IS A DIFFERENT CASE, and this is where this
-// module generalizes past its original planar-only scope. Push-pull
-// deliberately allows a single vertex/edge drag to leave a box's own
-// adjacent quads non-planar (doc: "a bilinear patch represents the warped
-// quad exactly ... refusing would block legitimate direct modeling") — the
-// face is still degree-1 x degree-1 and non-rational, still a REAL, EXACT
-// NURBS surface, it simply no longer has ONE plane. But it still has a
-// TANGENT PLANE at every one of its four corners (spanned by that corner's
+// A warped bilinear face is a different case. Push-pull allows a single
+// vertex/edge drag to leave a box's own adjacent quads non-planar (a
+// bilinear patch represents the warped quad exactly) — the face is still
+// degree-1 x degree-1 and non-rational, still an exact NURBS surface,
+// without a single plane. But it still has a
+// tangent plane at every one of its four corners (spanned by that corner's
 // own two adjacent edges — for a bilinear patch this is exact, not an
 // approximation: Su and Sv at a corner of S(u,v) are literally the two
 // edge vectors meeting there). Offsetting each corner's own tangent plane
 // by the wall thickness and intersecting them with its neighbors' offset
-// tangent planes is the IDENTICAL Gram-Schmidt corner solve below — the
+// tangent planes is the same Gram-Schmidt corner solve below — the
 // planar case is the special case where all four corners share one
-// tangent plane (the face's own), so that path is untouched byte-for-byte
-// (shellFaceCornerNormals is only ever consulted for a face the decompose
-// step below actually found non-planar). What is NOT exact: the true
-// offset of a warped bilinear surface is not itself bilinear, so a
-// bilinear patch through the four offset corners is a real approximation
-// IN THE INTERIOR of a warped face — exact at every corner and edge
-// (shared with a neighbor, so still watertight), approximate only in
-// between. shellSolid measures that residual directly (interiorApprox on
-// its return value) rather than asserting it away.
-const SHELL_PLANAR_TOL = 1e-6;   // mm — these control points are coplanar BY CONSTRUCTION or not at all, never within a hand-drawn tolerance (matches the app's own PANEL_FLAT_TOL/SOLID_FACE_TOL)
+// tangent plane (the face's own), and shellFaceCornerNormals is consulted
+// only for a face the decompose step below found non-planar. What is not
+// exact: the true offset of a warped bilinear surface is not itself
+// bilinear, so a bilinear patch through the four offset corners is an
+// approximation in the interior of a warped face — exact at every corner
+// and edge (shared with a neighbor, so still watertight), approximate only
+// in between. shellSolid measures that residual (interiorApprox on its
+// return value).
+const SHELL_PLANAR_TOL = 1e-6;   // mm — these control points are coplanar by construction or not at all, never within a hand-drawn tolerance (matches the app's own PANEL_FLAT_TOL/SOLID_FACE_TOL)
 const SHELL_WELD_TOL = 1e-6;     // mm — same reasoning for "is this the same corner"
 const SHELL_CLAMP_SAFETY = 0.999; // stay just off the exact degenerate wall thickness, matching offsetSurface's own SELF_INTERSECT_SAFETY margin
 
@@ -302,9 +285,9 @@ function shellCross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0
 
 // Newell's method — correct for a non-convex loop, unlike a single cross
 // product of the first three points, and the same technique the app's own
-// capProfileNormal/solidLoopPlane already use for exactly that reason.
+// capProfileNormal/solidLoopPlane use for that reason.
 // Returns the loop's plane {n (unit, right-hand rule on the loop's own
-// winding), c = n.p}, plus its real area, or null for a degenerate loop.
+// winding), c = n.p}, plus its area, or null for a degenerate loop.
 function shellLoopPlane(pts) {
   let nx = 0, ny = 0, nz = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -319,10 +302,10 @@ function shellLoopPlane(pts) {
   return { n, c: shellDot(n, pts[0]), area: m / 2 };
 }
 // One flat bilinear (degree-1 x degree-1) panel from 4 corners given in
-// PERIMETER order — the same panel shape bilinearPanelArr/ruledLoftPanels
-// already produce everywhere else in this app, built directly here so this
-// block has no dependency to keep in sync. A 3-point loop repeats its last
-// corner, which is exactly how a fan triangle is already represented.
+// perimeter order — the same panel shape bilinearPanelArr/ruledLoftPanels
+// produce elsewhere in this app, built directly here so this block has no
+// dependency to keep in sync. A 3-point loop repeats its last corner, which
+// is how a fan triangle is represented.
 function shellFacePanel(loopPts) {
   const p = loopPts.length === 3 ? [loopPts[0], loopPts[1], loopPts[2], loopPts[2]] : loopPts;
   const w = (q) => [q[0], q[1], q[2], 1];
@@ -332,21 +315,21 @@ function shellFacePanel(loopPts) {
   } };
 }
 
-// Every panel cut into flat quads. A degree-1 x degree-1 surface IS exactly
+// Every panel cut into flat quads. A degree-1 x degree-1 surface is exactly
 // the union of the bilinear patches spanned by each 2x2 block of its own
 // control net (the defining property of a degree-1 tensor B-spline), so
-// this decomposition is lossless, not a tessellation — which is what lets
-// an extruded polygon (one degree-1 tube panel with N control columns)
-// take the exact path alongside a Box (six 2x2 panels).
-// HOW FAR A CURVED FACE BOWS OFF FLAT, as an upper bound.
-// The curvature test above is structural (degree, rationality), not a
-// threshold, so there is no gap to invert the way a tolerance refusal has.
-// The number a student actually needs is different: whether this face is a
-// real curve or a nearly-flat one they could rebuild as a plane and shell.
-// Measured over the CONTROL NET rather than the surface, deliberately — by
-// the convex-hull property the net bounds the surface, so this OVERSTATES the
-// true sagitta and never understates it, and the refusal says "at most" for
-// exactly that reason. Cheap, and it cannot claim a face is flatter than it is.
+// this decomposition is lossless, not a tessellation — which lets an
+// extruded polygon (one degree-1 tube panel with N control columns) take
+// the exact path alongside a Box (six 2x2 panels).
+//
+// How far a curved face bows off flat, as an upper bound.
+// The curvature test in shellDecomposeToQuads is structural (degree,
+// rationality), not a threshold. This number tells whether a refused face
+// is a real curve or a nearly-flat one that could be rebuilt as a plane
+// and shelled. Measured over the control net rather than the surface — by
+// the convex-hull property the net bounds the surface, so this overstates
+// the true sagitta and never understates it, and the refusal says "at
+// most" for that reason.
 function shellFaceFlatnessBound(srf) {
   const pts = [];
   for (const row of srf.ctrlNet) for (const cp of row) pts.push([cp[0], cp[1], cp[2]]);
@@ -383,15 +366,15 @@ function shellDecomposeToQuads(panels) {
     if (!srf || !Array.isArray(srf.ctrlNet) || !srf.ctrlNet.length) continue;
     let rational = false;
     for (const row of srf.ctrlNet) for (const cp of row) if (cp.length > 3 && Math.abs(cp[3] - 1) > 1e-9) rational = true;
-    // A rational or higher-degree panel is genuinely curved geometry (a
-    // revolve wall, a swept tube) — named, not silently flattened.
+    // A rational or higher-degree panel is curved geometry (a revolve wall,
+    // a swept tube) — named, not flattened.
     if (srf.degU !== 1 || srf.degV !== 1 || rational) { curved.push(i); curvature.set(i, shellFaceFlatnessBound(srf)); continue; }
     const net = srf.ctrlNet, nu = net.length, nv = net[0].length;
     for (let a = 0; a + 1 < nu; a++) for (let b = 0; b + 1 < nv; b++) {
       const pts = [net[a][b], net[a + 1][b], net[a + 1][b + 1], net[a][b + 1]].map((cp) => [cp[0], cp[1], cp[2]]);
       const pl = shellLoopPlane(pts);
       if (!pl) continue; // a zero-area span (a fan's own collapsed apex row) carries no wall — nothing to shell there
-      // A non-planar span is KEPT, not refused — see this module's own
+      // A non-planar span is kept, not refused — see this module's own
       // header for why a warped bilinear quad still has an exact tangent
       // plane at each of its own four corners. `warped` is read only by
       // shellSolid's own per-face corner-normal choice below; every other
@@ -429,12 +412,12 @@ function shellWeld(quads) {
     return vi;
   };
   // panelGrid[sourceIndex] = { nu, nv, grid } — grid[row][col] is the welded
-  // vertex id at that ORIGINAL (undecomposed) macro-panel position, filled in
-  // as each sub-quad is welded. This is what lets shellSolid later recognize
-  // "this welded vertex sits strictly INSIDE a single flat macro panel's own
-  // grid" (row/col away from every panel edge) — the exact case a plain
-  // single-plane offset gets geometrically wrong on a REBUILT (dense-grid)
-  // flat face; see shellCorrectFlatPanelInteriors' own header for why.
+  // vertex id at that original (undecomposed) macro-panel position, filled in
+  // as each sub-quad is welded. This lets shellSolid recognize "this welded
+  // vertex sits strictly inside a single flat macro panel's own grid"
+  // (row/col away from every panel edge) — the case a plain single-plane
+  // offset gets wrong on a rebuilt (dense-grid) flat face; see
+  // shellCorrectFlatPanelInteriors' own header for why.
   const panelGrid = new Map();
   const faces = [];
   for (const q of quads) {
@@ -457,13 +440,12 @@ function shellWeld(quads) {
   return { pts, faces, panelGrid };
 }
 
-// Consistent OUTWARD orientation, derived rather than guessed. Two faces
-// sharing an edge agree when they traverse that edge in OPPOSITE directions;
-// a breadth-first walk propagates that from one seed face, and the sign of
+// Consistent outward orientation, derived rather than guessed. Two faces
+// sharing an edge agree when they traverse that edge in opposite directions;
+// a depth-first walk (a stack) propagates that from one seed face, and the sign of
 // the component's own divergence-theorem volume then says whether the whole
-// component came out inside-in. This replaces the previous centroid-dot
-// heuristic, which is only reliable on a convex solid — "which way is out"
-// is a topological fact here, not a proximity guess.
+// component came out inside-in. A centroid-dot test would be reliable only
+// on a convex solid.
 function shellOrientOutward(pts, faces) {
   const ekey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
   const uses = new Map();
@@ -493,7 +475,7 @@ function shellOrientOutward(pts, faces) {
       for (const { u, k } of faceUses[fi]) {
         const pair = uses.get(k);
         const other = pair[0] === u ? pair[1] : pair[0];
-        // this face's ACTUAL traversal of the shared edge, after its own flip
+        // this face's actual traversal of the shared edge, after its own flip
         const fa = flip[fi] ? u.b : u.a, fb = flip[fi] ? u.a : u.b;
         // the neighbor must traverse it the other way round
         const wants = (other.a === fb && other.b === fa) ? false : true;
@@ -517,14 +499,14 @@ function shellOrientOutward(pts, faces) {
 }
 
 // The minimum-norm displacement d with n_i . d = b_i for every incident
-// plane, by Gram-Schmidt. Each constraint contributes ONLY in the direction
+// plane, by Gram-Schmidt. Each constraint contributes only in the direction
 // orthogonal to everything already satisfied, so nothing added earlier is
 // disturbed and no motion is added that no constraint asked for — which is
 // what makes rank 3 the exact triple-plane corner, rank 2 the nearest point
 // on the offset edge, and rank 1 a plain perpendicular offset, with no
 // branch. A repeated plane costs nothing (its residual is already zero); a
-// CONTRADICTORY one (the same plane wanted at two different offsets) is
-// detected and refused rather than silently satisfying only the last.
+// contradictory one (the same plane wanted at two different offsets) is
+// detected and refused rather than satisfying only the last.
 function shellSolveInner(v, constraints, maxMove) {
   let d = [0, 0, 0];
   const basis = [];
@@ -545,17 +527,17 @@ function shellSolveInner(v, constraints, maxMove) {
   return [v[0] + d[0], v[1] + d[1], v[2] + d[2]];
 }
 
-// THE TANGENT-PLANE GENERALIZATION. Every incident face contributes one
-// offset-PLANE constraint per corner (see shellInnerCorners just below) —
+// Per-corner tangent planes. Every incident face contributes one
+// offset-plane constraint per corner (see shellInnerCorners just below) —
 // for a planar face that plane is the same at all four corners, but a
-// warped bilinear quad has a genuinely different tangent plane at each of
+// warped bilinear quad has a different tangent plane at each of
 // its own four corners, spanned by that corner's own two adjacent edges
-// (exact for a bilinear surface: Su/Sv AT a corner of a bilinear patch
-// ARE its two adjacent edge vectors there, no derivative approximation
+// (exact for a bilinear surface: Su/Sv at a corner of a bilinear patch
+// are its two adjacent edge vectors there, no derivative approximation
 // involved). Returns one unit normal per loop position, oriented to agree
 // with `fallback` (the face's own best-fit Newell normal) so a corner
 // whose two edges are nearly collinear — or, at extreme warp, briefly
-// wound the "wrong" way — never silently flips which side is outward.
+// wound the "wrong" way — never flips which side is outward.
 function shellFaceCornerNormals(pts, fallback) {
   const n = pts.length;
   return pts.map((curr, k) => {
@@ -572,13 +554,12 @@ function shellFaceCornerNormals(pts, fallback) {
 }
 
 // Every corner's inner twin at wall thickness t. Constraint per incident
-// face: n . x = n . v - t for a KEPT face (its own corner tangent plane
-// moves inward), and n . x = n . v for a face being OPENED (the inner
-// wall stops in the opening's own corner tangent plane, which is exactly
-// what makes the rim a flat lip). `cornerNormals[fi][k]` is the SAME
-// value at every k for a planar face (byte-identical to the pre-
-// generalization single-plane-per-face version) and the real per-corner
-// tangent normal for a warped one — one formula, no branch either way.
+// face: n . x = n . v - t for a kept face (its own corner tangent plane
+// moves inward), and n . x = n . v for a face being opened (the inner
+// wall stops in the opening's own corner tangent plane, which is
+// what makes the rim a flat lip). `cornerNormals[fi][k]` is the same
+// value at every k for a planar face and the per-corner tangent normal
+// for a warped one — one formula, no branch either way.
 function shellInnerCorners(pts, loops, cornerNormals, kept, t, maxMove) {
   const cons = pts.map(() => []);
   loops.forEach((l, fi) => {
@@ -588,20 +569,20 @@ function shellInnerCorners(pts, loops, cornerNormals, kept, t, maxMove) {
   });
   return pts.map((v, i) => shellSolveInner(v, cons[i], maxMove));
 }
-// Is a wall of thickness t geometrically real on this solid? The test is
-// per EDGE, and it is the same one safeOffsetMagnitude already uses one
-// direction down: an inner edge that runs OPPOSITE to its own outer edge has
-// crossed over it, which is precisely a wall that has eaten through the
+// Is a wall of thickness t geometrically valid on this solid? The test is
+// per edge, and it is the same one safeOffsetMagnitude uses one
+// dimension down: an inner edge that runs opposite to its own outer edge has
+// crossed over it, which is a wall that has eaten through the
 // solid and come out the far side. It is exact (an edge reverses at one
 // value of t and stays reversed), local, and therefore strictly monotone in
-// t — which is what makes the bisection below well-posed rather than a
+// t — which makes the bisection below well-posed rather than a
 // search over a region that might not be an interval.
 //
-// A whole-face normal test is NOT enough and was tried first: pushing a box
-// wall past half its width mirrors each face in BOTH of its own in-plane
-// axes, which is a 180-degree rotation, so the face's normal comes back
-// UNCHANGED and a normal test happily accepts an inside-out solid. The edge
-// test catches it because each edge individually reverses.
+// A whole-face normal test is not enough: pushing a box wall past half its
+// width mirrors each face in both of its own in-plane axes, which is a
+// 180-degree rotation, so the face's normal comes back unchanged and a
+// normal test accepts an inside-out solid. The edge test catches it because
+// each edge individually reverses.
 function shellWallFits(pts, loops, cornerNormals, kept, t, maxMove) {
   const inner = shellInnerCorners(pts, loops, cornerNormals, kept, t, maxMove);
   if (inner.some((p) => !p)) return null;
@@ -622,65 +603,59 @@ function shellWallFits(pts, loops, cornerNormals, kept, t, maxMove) {
   return inner;
 }
 
-// A REBUILT (dense-grid) FLAT PANEL'S OWN NON-CORNER VERTICES — the one
-// case the per-vertex corner solve above still gets geometrically wrong,
-// and the fix for it. Only a panel's own FOUR TRUE CORNERS ever collect
-// enough incident planes for the Gram-Schmidt solve above to be fully
-// determined: a corner where 3 faces meet solves all 3 axes; a genuine
-// 2x2 (un-rebuilt) Box has ONLY corners, which is exactly why that case is
-// already correct (item 7's own "standard 2x2 Box panels are unaffected").
-// Rebuild a face to a dense N x N grid and two NEW kinds of point appear
-// that the un-rebuilt box never had: an EDGE-INTERIOR point (partway along
-// a real box edge, touched by exactly the SAME 2 planes as every other
-// point on that edge — correct perpendicular to both, but the direction
-// ALONG the edge is left completely unconstrained by a 2-plane solve, so
-// it silently keeps its ORIGINAL un-shrunk position instead of sliding
-// toward the edge's own two now-correctly-inset endpoints), and a
-// genuinely 2D-INTERIOR point (touched by only its own ONE face plane,
-// correct perpendicular to it but left at its original in-plane position
-// entirely). Both are the same underlying gap — an under-constrained
-// per-vertex solve leaving a whole extra degree of freedom exactly where
-// it needs to shrink toward the panel's own (already-correct) corners —
-// and both have the same fix: since the panel is flat and was built as a
-// straight-edged bilinear grid over its own four corners
+// A rebuilt (dense-grid) flat panel's own non-corner vertices — the one
+// case the per-vertex corner solve above gets wrong, and the correction.
+// Only a panel's own four true corners collect enough incident planes for
+// the Gram-Schmidt solve above to be fully determined: a corner where 3
+// faces meet solves all 3 axes; a 2x2 (un-rebuilt) Box has only corners,
+// so that case is already correct. Rebuild a face to a dense N x N grid and
+// two new kinds of point appear: an edge-interior point (partway along a
+// box edge, touched by the same 2 planes as every other point on that edge
+// — correct perpendicular to both, but the direction along the edge is
+// unconstrained by a 2-plane solve, so it keeps its original un-shrunk
+// position instead of sliding toward the edge's own two inset endpoints),
+// and a 2D-interior point (touched by only its own one face plane, correct
+// perpendicular to it but left at its original in-plane position). Both
+// are the same gap — an under-constrained per-vertex solve leaving an extra
+// degree of freedom where it needs to shrink toward the panel's own
+// corners — and both have the same fix: since the panel is flat and was
+// built as a straight-edged bilinear grid over its own four corners
 // (boxPanelsWithResolution / bilinearPanelGridArr's own construction), and
 // each of those corners' own true offset is already exact (the 3-plane —
 // or fewer, for an opened/boundary case — solve above), the true inset
-// surface at EVERY other grid position is exactly the bilinear
-// interpolation of those same four corners at that position's own
-// original (row,col) grid fraction: an edge-interior point's fraction has
-// one coordinate at 0 or 1, so the bilinear formula degenerates to plain
-// LINEAR interpolation between that edge's own two corners, which is
-// exactly the missing "slide along the edge" component; a 2D-interior
-// point gets the full bilinear surface. Not an approximation for this
-// case — a bilinear map of a straight-edged planar quad by a per-edge
-// AFFINE displacement field (true here: a box's own perpendicular offset
-// is literally constant along a whole straight edge) is itself bilinear.
-// Panels with no true interior (nu<=2 or nv<=2 — every point already IS a
-// corner or lies on a 2-point edge) are untouched, and so is every one of
-// the four true corners themselves.
+// surface at every other grid position is the bilinear interpolation of
+// those four corners at that position's own original (row,col) grid
+// fraction: an edge-interior point's fraction has one coordinate at 0 or
+// 1, so the bilinear formula degenerates to linear interpolation between
+// that edge's own two corners, which is the missing "slide along the edge"
+// component; a 2D-interior point gets the full bilinear surface. Not an
+// approximation for this case — a bilinear map of a straight-edged planar
+// quad by a per-edge affine displacement field (true here: a box's own
+// perpendicular offset is constant along a whole straight edge) is itself
+// bilinear. Panels with no true interior (nu<=2 or nv<=2 — every point is
+// a corner or lies on a 2-point edge) are untouched, and so are the four
+// true corners themselves.
 //
-// GUARDED to only the case this reasoning actually holds for: a genuinely
-// ONE-PLANE macro panel. A single "panel" entry is not always literally one
-// flat quad — a closed-profile Extrude/Pipe wall is one degree-1 panel with
-// N columns wrapping a WHOLE polygon (several distinct facet planes stitched
-// into one control net, its own "row 0" and "row N-1" both landing on the
-// SAME physical seam point) — there, "the four corners of the grid" are not
-// four distinct real corners at all (two of them coincide at the seam), and
-// bilinear interpolation between a degenerate pair collapses the interior to
-// nonsense. Guarded against directly: every one of the panel's own OUTER
-// (pre-shell) points must lie on one common plane (the same SHELL_PLANAR_TOL
-// this module already uses to decide "is this quad warped"), and the four
-// corners must be four genuinely DISTINCT welded points — exactly true for a
-// rebuilt Box's own macro face, and false for a wrapped multi-facet tube.
+// Guarded to the case this reasoning holds for: a one-plane macro panel.
+// A single "panel" entry is not always one flat quad — a closed-profile
+// Extrude/Pipe wall is one degree-1 panel with N columns wrapping a whole
+// polygon (several distinct facet planes stitched into one control net,
+// its own "row 0" and "row N-1" both landing on the same physical seam
+// point) — there, "the four corners of the grid" are not four distinct
+// corners (two of them coincide at the seam), and bilinear interpolation
+// between a degenerate pair collapses the interior. So every one of the
+// panel's own outer (pre-shell) points must lie on one common plane (the
+// same SHELL_PLANAR_TOL that decides "is this quad warped"), and the four
+// corners must be four distinct welded points — true for a rebuilt Box's
+// own macro face, and false for a wrapped multi-facet tube.
 function shellCorrectFlatPanelInteriors(inner, outerPts, panelGrid, removed) {
   const fixed = inner.slice();
   for (const [source, { nu, nv, grid }] of panelGrid) {
     if (removed.has(source)) continue;             // an opened face's own interior never feeds any output panel
-    if (nu <= 2 && nv <= 2) continue;               // every point already IS one of the four corners — nothing to correct
+    if (nu <= 2 && nv <= 2) continue;               // every point is one of the four corners — nothing to correct
     const c00 = grid[0][0], c10 = grid[nu - 1][0], c11 = grid[nu - 1][nv - 1], c01 = grid[0][nv - 1];
     if (c00 == null || c10 == null || c11 == null || c01 == null) continue; // a degenerate/skipped corner — leave this panel alone
-    if (new Set([c00, c10, c11, c01]).size !== 4) continue; // a wrapped/closed panel's own "corners" coincide — not a real single quad
+    if (new Set([c00, c10, c11, c01]).size !== 4) continue; // a wrapped/closed panel's own "corners" coincide — not a single quad
     const p00 = inner[c00], p10 = inner[c10], p11 = inner[c11], p01 = inner[c01];
     if (!p00 || !p10 || !p11 || !p01) continue;
     const outerLoopPlane = shellLoopPlane([outerPts[c00], outerPts[c10], outerPts[c11], outerPts[c01]]);
@@ -691,7 +666,7 @@ function shellCorrectFlatPanelInteriors(inner, outerPts, panelGrid, removed) {
       if (vi == null) continue;
       if (Math.abs(shellDot(outerLoopPlane.n, outerPts[vi]) - outerLoopPlane.c) > SHELL_PLANAR_TOL) { onePlane = false; break outer; }
     }
-    if (!onePlane) continue; // several real facets stitched into one panel (e.g. a wrapped tube) — this correction does not apply
+    if (!onePlane) continue; // several facets stitched into one panel (e.g. a wrapped tube) — this correction does not apply
     for (let a = 0; a < nu; a++) {
       const u = a / (nu - 1);
       for (let b = 0; b < nv; b++) {
@@ -723,10 +698,10 @@ export function shellSolid(panels, removedIndices, distance) {
 
   const dec = shellDecomposeToQuads(panels);
   if (dec.curved.length) {
-    // NAMED AND MEASURED. Which faces are curved is not enough to act on —
-    // a face bowing 0.02mm is one a student would rebuild flat and shell,
-    // and one bowing 40mm is not. The flattest of them is reported because
-    // that is the one closest to being fixable.
+    // Named and measured. Which faces are curved is not enough to act on —
+    // a face bowing 0.02mm can be rebuilt flat and shelled, and one bowing
+    // 40mm cannot. The flattest of them is reported because it is the one
+    // closest to being fixable.
     const bows = dec.curved.map((i) => dec.curvature.get(i)).filter((v) => v != null);
     const flattest = bows.length ? Math.min(...bows) : null;
     const bowNote = flattest != null
@@ -745,19 +720,15 @@ export function shellSolid(panels, removedIndices, distance) {
   }
   const loops = oriented.loops;
   // planes[fi] is still every face's own best-fit (Newell) normal — the
-  // exact plane for a planar face, a sensible "which way is outward"
-  // reference for a warped one (shellFaceCornerNormals' own fallback/sign
-  // check) and the degenerate-face guard just below, unchanged from
-  // before this generalization.
+  // exact plane for a planar face, the "which way is outward" reference
+  // for a warped one (shellFaceCornerNormals' own fallback/sign check), and
+  // the degenerate-face guard just below.
   const planes = loops.map((l) => shellLoopPlane(l.map((v) => welded.pts[v])));
   if (planes.some((p) => !p)) throw new Error('shellSolid: a face lost its plane after welding — refused rather than guessed at');
-  // cornerNormals[fi] is ONE normal repeated at every corner for a planar
-  // face (byte-identical to the pre-generalization single-plane path) and
-  // a real per-corner TANGENT PLANE normal for a warped one. This is the
-  // one new piece of math this generalization adds — everything below it
-  // (shellInnerCorners' Gram-Schmidt solve, the bisection, the output
-  // assembly) is completely unchanged, just fed a per-corner normal
-  // instead of a per-face one.
+  // cornerNormals[fi] is one normal repeated at every corner for a planar
+  // face and a per-corner tangent-plane normal for a warped one. Everything
+  // below (shellInnerCorners' Gram-Schmidt solve, the bisection, the output
+  // assembly) takes a per-corner normal either way.
   const warpedFace = welded.faces.map((f) => !!f.warped);
   const cornerNormals = loops.map((l, fi) => {
     const loopPts = l.map((v) => welded.pts[v]);
@@ -774,7 +745,7 @@ export function shellSolid(panels, removedIndices, distance) {
   const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1;
   const maxMove = diag * 4;
 
-  // THE SAFE MAXIMUM, computed not guessed: bisect for the largest wall
+  // The safe maximum, computed not guessed: bisect for the largest wall
   // thickness whose inner surface still exists and still faces outward. For a
   // Box of half-extent h this converges on exactly h — the wall that closes
   // the cavity to a point — and any request under it is passed through
@@ -788,29 +759,24 @@ export function shellSolid(panels, removedIndices, distance) {
       if (shellWallFits(welded.pts, loops, cornerNormals, kept, mid, maxMove)) safeLo = mid; else safeHi = mid;
     }
   }
-  /* AN UNMEASURABLE SAFE MAXIMUM IS NOT A SAFE MAXIMUM OF ZERO. `shellWallFits`
-     succeeds TRIVIALLY at t = 0: the inner surface is then the outer surface,
+  /* An unmeasurable safe maximum is not a safe maximum of zero. `shellWallFits`
+     succeeds trivially at t = 0: the inner surface is then the outer surface,
      every edge still runs the same way, nothing has moved. So a bisection that
-     fails at every probed thickness leaves safeLo at its STARTING BOUND of 0,
+     fails at every probed thickness leaves safeLo at its starting bound of 0,
      the clamp below takes the wall to 0, the confirmation call gets that trivial
-     success back, and a ZERO-THICKNESS shell — two coincident skins, no volume,
-     not a solid — is built and committed, announced as "auto-clamped to 0.00mm".
-     Shipping a degenerate body silently is worse than refusing. An unmeasured
-     bisection is therefore normalized to null ("no thickness is known to fit")
-     and refuses BY NAME.
+     success back, and a zero-thickness shell — two coincident skins, no volume,
+     not a solid — would be built. An unmeasured bisection is therefore
+     normalized to null ("no thickness is known to fit") and refuses by name.
 
-     THE FLOOR IS SHELL_WELD_TOL, NOT AN ARBITRARY EPSILON, and it is what makes
-     this reachable rather than theoretical. Two ANTI-PARALLEL incident planes at
-     one welded corner (opposite faces of a sliver that met) put contradictory
-     demands on `shellSolveInner`, which refuses them once their residual passes
-     1e-6 — so the bisection converges on 5e-7mm, an absolute constant carrying no
-     information about the solid, and the panel then reports "auto-clamped to
-     0.00mm (the computed safe maximum for this solid is 0.00mm)" while committing
-     a shell half a millionth of a millimetre thick. A wall thinner than the
-     tolerance at which this same module calls two points THE SAME CORNER is not a
-     wall: its two skins are, by this kernel's own measure, one surface. Scaled up
-     for a very large solid, where a billionth of the diagonal is the coarser of
-     the two. */
+     The floor is SHELL_WELD_TOL, not an arbitrary epsilon. Two anti-parallel
+     incident planes at one welded corner (opposite faces of a sliver that met)
+     put contradictory demands on `shellSolveInner`, which refuses them once
+     their residual passes 1e-6 — so the bisection converges on 5e-7mm, an
+     absolute constant carrying no information about the solid. A wall thinner
+     than the tolerance at which this module calls two points the same corner
+     is not a wall: its two skins are, by this kernel's own measure, one
+     surface. Scaled up for a very large solid, where a billionth of the
+     diagonal is the coarser of the two. */
   const shellFloor = Math.max(SHELL_WELD_TOL, diag * 1e-9);
   const safeMaxDistance = safeLo > shellFloor ? safeLo : null;
   if (safeMaxDistance === null) throw new Error(`shellSolid: the largest safe wall thickness for this solid could not be measured — nothing thicker than ${shellFloor.toExponential(1)}mm, which is this kernel's own corner-weld tolerance, leaves an inner surface distinguishable from the outer one. Refused rather than building a shell with no thickness in it.`);
@@ -818,29 +784,29 @@ export function shellSolid(panels, removedIndices, distance) {
   if (requested > safeMaxDistance * SHELL_CLAMP_SAFETY) { applied = safeMaxDistance * SHELL_CLAMP_SAFETY; clamped = true; }
   const solvedInner = shellWallFits(welded.pts, loops, cornerNormals, kept, applied, maxMove);
   if (!solvedInner) throw new Error(`shellSolid: no wall thickness fits inside this solid (its own safe maximum computed as ${safeMaxDistance.toFixed(4)}mm)`);
-  // Post-process ONLY — the bisection/validity search above is untouched and
-  // still runs against the plain per-vertex solve (a conservative, already-
-  // proven check); this correction is applied once, to the FINAL accepted
-  // inner array, fixing up exactly the genuinely-interior vertices of a
-  // rebuilt flat panel that the per-vertex solve leaves un-inset in-plane.
+  // Post-process only — the bisection/validity search above runs against
+  // the plain per-vertex solve (a conservative check); this correction is
+  // applied once, to the final accepted inner array, fixing up the interior
+  // vertices of a rebuilt flat panel that the per-vertex solve leaves
+  // un-inset in-plane.
   const inner = shellCorrectFlatPanelInteriors(solvedInner, welded.pts, welded.panelGrid, removed);
 
-  // OUTPUT ORDER is load-bearing and unchanged from the previous version:
-  // [every kept face's OUTER panel, then every kept face's INNER panel in the
-  // SAME order, then the rim]. out[i] and out[keptCount + i] are one face's
+  // Output order is load-bearing:
+  // [every kept face's outer panel, then every kept face's inner panel in the
+  // same order, then the rim]. out[i] and out[keptCount + i] are one face's
   // outer/inner pair, which is what makes the wall-thickness check a direct
   // index lookup rather than a search.
   const keptIdx = [];
   for (let fi = 0; fi < loops.length; fi++) if (kept[fi]) keptIdx.push(fi);
   const out = [];
   for (const fi of keptIdx) out.push(shellFacePanel(loops[fi].map((v) => welded.pts[v])));
-  // The inner twin is the same loop REVERSED, so its normal points back at
+  // The inner twin is the same loop reversed, so its normal points back at
   // the outer face across the wall — a consistently wound closed wall.
   for (const fi of keptIdx) out.push(shellFacePanel(loops[fi].slice().reverse().map((v) => inner[v])));
-  // THE RIM. Every edge that borders exactly one KEPT face is an opening
+  // The rim. Every edge that borders exactly one kept face is an opening
   // boundary, and each one gets the quad bridging its outer edge to the same
-  // edge's inner twin. Because that inner twin lies in the opening's OWN
-  // plane, this rim is the flat lip a real shell has — and because it is
+  // edge's inner twin. Because that inner twin lies in the opening's own
+  // plane, this rim is the flat lip a shell has — and because it is
   // built from the shared welded edge, it meets both the outer wall and the
   // inner wall exactly, with nothing left to close.
   const ekey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -860,13 +826,12 @@ export function shellSolid(panels, removedIndices, distance) {
     }
   }
 
-  // THE HONEST NUMBER. Exact at every corner (and therefore every shared
-  // edge — the whole solid is still watertight, this is not a validity
-  // concern) is proven by construction above; the INTERIOR of a warped
+  // Interior error of warped faces. Exact at every corner (and therefore
+  // every shared edge — the whole solid is still watertight, this is not a
+  // validity concern) by construction above; the interior of a warped
   // face is where a bilinear patch through four offset corners can only
-  // approximate the true offset surface. Measured here, not asserted:
-  // sample each warped face's own outer/inner bilinear patches away from
-  // the corners (a 3x3 interior grid; the four corners are excluded
+  // approximate the true offset surface. Measured here: sample each warped
+  // face's own outer/inner bilinear patches away from the corners (a 3x3 interior grid; the four corners are excluded
   // because those are already exact) and report the worst deviation from
   // the nominal wall thickness, in mm and as a fraction of it.
   const warpedIdx = keptIdx.filter((fi) => warpedFace[fi]);
@@ -900,6 +865,4 @@ export function shellSolid(panels, removedIndices, distance) {
     warpedFaceCount: warpedIdx.length, interiorApprox,
   };
 }
-// ============================================================================
 // EXACT PLANAR SHELL — TWIN BLOCK END
-// ============================================================================

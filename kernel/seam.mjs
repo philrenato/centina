@@ -1,117 +1,88 @@
-// SURFACE CUTTING / SEAM STAGE — turn a non-disk triangulation into a disk
-// so that kernel/flatten.mjs's LSCM can accept it.
+// Surface cutting — turn a non-disk triangulation into a disk so that
+// kernel/flatten.mjs's LSCM can accept it.
 //
-// ================================================================
-// WHY THIS FILE EXISTS, AND WHY IT IS NOT INSIDE flatten.mjs
-// ================================================================
-// flatten.mjs is a PARAMETRIZATION module: every function in it is about
-// mapping a disk into the plane and measuring how much that map lied. Its
-// honest-refusal gate `validateFlattenMesh` correctly rejects anything that
-// is not a topological disk, via an exact Euler-characteristic test — and
-// the finding that motivates it is that this app's Revolve routinely produces
-// exactly those refusals: a full 360-degree revolve of an open profile
-// welds shut at its seam into a topological ANNULUS, and a full revolve of
-// a CLOSED profile into a TORUS. So the flattener was correct and nearly
-// unusable at the same time.
+// flatten.mjs's `validateFlattenMesh` rejects anything that is not a
+// topological disk, via an exact Euler-characteristic test. A full 360-degree
+// revolve of an open profile welds shut at its seam into a topological
+// annulus, and a full revolve of a closed profile into a torus; both are
+// refused there.
 //
-// What closes that gap is a purely TOPOLOGICAL operation with no geometry
-// in it at all: duplicate the vertices along a chosen seam so the two sides
-// of the seam become distinct boundary vertices, and re-index the faces.
-// Not one coordinate moves. That is a different kind of work from solving a
-// sparse conformal system, it has its own citations and its own failure
-// modes, and it is useful on its own (any consumer that needs a disk, not
-// just LSCM). It gets its own module. The dependency runs ONE WAY —
-// seam.mjs imports flatten.mjs's already-proven `buildMeshTopology` and
-// `weldTriangulation` rather than re-deriving them; flatten.mjs is
-// untouched by this file.
+// The cut is a purely topological operation: duplicate the vertices along a
+// chosen seam so the two sides of the seam become distinct boundary vertices,
+// and re-index the faces. No coordinate moves. It is useful to any consumer
+// that needs a disk, not just LSCM. The dependency runs one way: seam.mjs
+// imports flatten.mjs's `buildMeshTopology` and `weldTriangulation`;
+// flatten.mjs does not import this file.
 //
-// ================================================================
-// WHAT IS SUPPORTED, STATED PLAINLY, SCOPED TO WHAT THIS APP MAKES
-// ================================================================
-// For a connected, edge-manifold triangulation with b boundary components
-// and (if orientable) genus g, the Euler characteristic is
+// Scope. For a connected, edge-manifold triangulation with b boundary
+// components and (if orientable) genus g, the Euler characteristic is
 //   chi = V - E + F = 2 - 2g - b.
 // A disk is g=0, b=1, chi=1. This module supports exactly:
 //
-//   * ALREADY A DISK (chi=1, b=1) — returned unchanged, zero cuts. Not an
+//   * Already a disk (chi=1, b=1) — returned unchanged, zero cuts. Not an
 //     error; an untrimmed partial revolve is already flattenable.
 //
-//   * GENUS 0 WITH b >= 2 BOUNDARIES — the common case, and the priority.
-//     A full-revolve cylinder or cone frustum is exactly this (b=2, an
-//     annulus). Each cut is a shortest interior-edge path between two
-//     DIFFERENT boundary components; b-1 cuts reduce it to a disk. On a
-//     revolve's own grid tessellation that shortest path IS a parametric
-//     ruling — the natural, correct seam — and it falls out of the geometry
-//     rather than needing the surface's parameter domain to be threaded
-//     through the mesh (see `shortestInteriorPathBetween`).
+//   * Genus 0 with b >= 2 boundaries. A full-revolve cylinder or cone
+//     frustum is exactly this (b=2, an annulus). Each cut is a shortest
+//     interior-edge path between two different boundary components; b-1 cuts
+//     reduce it to a disk. On a revolve's own grid tessellation that shortest
+//     path is a parametric ruling, found from the geometry without threading
+//     the surface's parameter domain through the mesh (see
+//     `shortestInteriorPathBetween`).
 //
-//   * GENUS 1 CLOSED (chi=0, b=0) — a torus. Two cuts: first a
+//   * Genus 1 closed (chi=0, b=0) — a torus. Two cuts: first a
 //     non-separating cycle (which opens the handle, leaving an annulus),
-//     then the annulus cut above. Real, reachable here (revolve a closed
-//     profile through 360 degrees), and materially harder than the case
-//     above — see the citations below for exactly which piece is borrowed
-//     and which guarantee is deliberately NOT claimed.
+//     then the annulus cut above. Reachable by revolving a closed profile
+//     through 360 degrees. See the citations below for which piece is
+//     borrowed and which guarantee is not claimed.
 //
-// REFUSED BY NAME, not attempted:
-//   * A CLOSED GENUS-0 surface (a sphere, chi=2). This is not a scope cut
-//     for convenience — no single cut turns a sphere into ONE disk. Cutting
-//     a closed genus-0 surface along any closed curve separates it into TWO
-//     disks; getting one disk requires deleting area, which is a splitting
-//     operation, not a seam.
-//   * GENUS >= 2, and any genus >= 1 that still has boundary. Both need a
+// Refused with a reason:
+//   * A closed genus-0 surface (a sphere, chi=2). No single cut turns a
+//     sphere into one disk: cutting a closed genus-0 surface along any closed
+//     curve separates it into two disks; getting one disk requires deleting
+//     area, which is a splitting operation, not a seam.
+//   * Genus >= 2, and any genus >= 1 that still has boundary. Both need a
 //     general cut-graph, which this module does not build.
 //   * Non-manifold, disconnected, or inconsistently-oriented input.
 //
-// ================================================================
-// CITATIONS — WHAT IS ACTUALLY USED, AND WHAT IS NOT
-// ================================================================
-// USED, for the genus-1 handle cut: the TREE-COTREE decomposition —
+// Citations. Used, for the genus-1 handle cut: the tree-cotree decomposition —
 // Eppstein, "Dynamic generators of topologically embedded graphs," SODA
 // 2003. Build a spanning tree T of the vertex graph and a spanning tree C
-// of the DUAL graph using only edges outside T; the edges in neither are
+// of the dual graph using only edges outside T; the edges in neither are
 // exactly 2g in number, and each one closes a non-separating cycle with the
 // tree path between its endpoints (each is a nonzero class in H_1, and a
 // cycle separates iff it is null-homologous).
 //
-// NOT CLAIMED: Erickson & Whittlesey, "Greedy optimal homotopy and homology
-// generators," SODA 2005, computes the genuinely SHORTEST non-trivial cycle
-// on a surface. This module does not. It takes the shortest of the 2g
-// tree-cotree generators, which is a real cut but a weaker guarantee — the
-// resulting seam is valid and exact, just not provably the shortest one
-// available. Stated rather than implied, because on a torus the difference
-// is visible: a poor generator gives a longer seam than necessary.
+// Not claimed: Erickson & Whittlesey, "Greedy optimal homotopy and homology
+// generators," SODA 2005, computes the shortest non-trivial cycle on a
+// surface. This module does not. It takes the shortest of the 2g
+// tree-cotree generators: a valid, exact cut, but not provably the shortest
+// available. On a torus a poor generator gives a longer seam than necessary.
 //
-// NOT USED AT ALL: Sheffer & Hart, "Seamster: Inconspicuous Low-Distortion
-// Texture Seam Layout," IEEE Visualization 2002, generates a cut graph by
-// seeding at high-Gaussian-curvature vertices and growing a minimum
-// spanning structure, specifically to hide seams where they will be least
-// visible. That is the right reference for a general arbitrary-genus cut,
-// and it is exactly the machinery this module deliberately does not build.
-// Named here so a future reader knows where to start, not to decorate this
-// one.
+// Not used: Sheffer & Hart, "Seamster: Inconspicuous Low-Distortion Texture
+// Seam Layout," IEEE Visualization 2002, generates a cut graph by seeding at
+// high-Gaussian-curvature vertices and growing a minimum spanning structure,
+// to place seams where they are least visible. It is the reference for a
+// general arbitrary-genus cut, which this module does not build.
 //
-// ================================================================
-// WHAT "GEOMETRY-PRESERVING" MEANS HERE, EXACTLY
-// ================================================================
-// A cut duplicates vertex indices. Every duplicate is a fresh copy of the
-// SAME three numbers (`positions[v].slice()`), and every face keeps its own
-// three corner positions in its own original order — only the integers
-// naming them change. So the triangle-area sum over the cut mesh is
-// BIT-FOR-BIT identical to the sum over the input, not merely close, and
-// test/seam.test.mjs asserts exact equality rather than a tolerance. A cut
-// that moves geometry is a bug, and that is the check that would catch it.
+// Geometry preservation. A cut duplicates vertex indices. Every duplicate is
+// a fresh copy of the same three numbers (`positions[v].slice()`), and every
+// face keeps its own three corner positions in its own original order — only
+// the integers naming them change. So the triangle-area sum over the cut mesh
+// is bit-for-bit identical to the sum over the input, and test/seam.test.mjs
+// asserts exact equality rather than a tolerance.
 
 import { buildMeshTopology, weldTriangulation, flattenLSCM, dropDegenerateFaces } from './flatten.mjs';
 import { tessellateTrimmedSurface } from './trimtess.mjs';
 
-// ---------------------------------------------------------------- helpers
+// Helpers
 
 function edgeKey(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
 function keyEnds(key) { const i = key.indexOf('|'); return [Number(key.slice(0, i)), Number(key.slice(i + 1))]; }
 function dist3(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
 
-// A minimal binary min-heap. Written here rather than pulled in because
-// this kernel has no dependencies; Dijkstra below is the only consumer.
+// A minimal binary min-heap (the kernel has no dependencies); Dijkstra below
+// is the only consumer.
 class MinHeap {
   constructor() { this.a = []; }
   get size() { return this.a.length; }
@@ -147,11 +118,11 @@ class MinHeap {
   }
 }
 
-// ------------------------------------------------------- mesh description
+// Mesh description
 
-// The BOUNDARY COMPONENTS of a mesh: each is the set of vertices belonging
-// to one connected piece of the boundary. Deliberately computed as
-// CONNECTED COMPONENTS of the boundary-edge graph rather than by walking
+// The boundary components of a mesh: each is the set of vertices belonging
+// to one connected piece of the boundary. Computed as connected components
+// of the boundary-edge graph rather than by walking
 // ordered loops — a walk has to make an arbitrary choice at a vertex with
 // more than two incident boundary edges (an edge-manifold mesh can still be
 // pinched at a vertex), and nothing downstream here needs the cyclic order,
@@ -173,11 +144,10 @@ export function boundaryComponents(topo) {
   return [...groups.values()];
 }
 
-// Is every interior edge traversed in OPPOSITE directions by its own two
-// faces? For a closed surface this is what distinguishes an orientable
-// torus from a Klein bottle — and, honestly, it also fails for a mesh that
-// IS orientable but was handed to us wound inconsistently. The refusal
-// message below names both readings rather than asserting the first.
+// Is every interior edge traversed in opposite directions by its own two
+// faces? For a closed surface this distinguishes an orientable torus from a
+// Klein bottle; it also fails for an orientable mesh wound inconsistently.
+// The refusal message in cutToDisk names both readings.
 function isConsistentlyOriented(faces, edgeFaces) {
   const seen = new Set();
   for (const [a, b, c] of faces) {
@@ -195,11 +165,10 @@ function isConsistentlyOriented(faces, edgeFaces) {
   return true;
 }
 
-// The full topological picture a cut decision needs. Deliberately does NOT
-// check triangle AREA — a zero-area triangle is a real problem, but it is
-// flatten.mjs's own problem (its `validateFlattenMesh` already refuses it by
-// name), and cutting neither cares about it nor makes it worse. Keeping the
-// two gates separate means neither has to be relaxed for the other.
+// The full topological picture a cut decision needs. Does not check triangle
+// area: a zero-area triangle is refused by flatten.mjs's
+// `validateFlattenMesh`, and cutting neither depends on it nor makes it
+// worse.
 export function describeMeshTopology(positions, faces) {
   if (!Array.isArray(positions) || !Array.isArray(faces)) {
     throw new Error('seam: expected {positions, faces} arrays');
@@ -239,24 +208,23 @@ export function describeMeshTopology(positions, faces) {
   };
 }
 
-// -------------------------------------------------- the cut itself
+// The cut
 
-// CUT the mesh open along a set of interior edges. This is the whole
-// operation the rest of the file exists to feed: everything else only ever
-// DECIDES which edges, this is what actually opens them.
+// Cut the mesh open along a set of interior edges. The rest of the file
+// decides which edges; this opens them.
 //
 // The rule, stated generally so it is correct for an open path, a closed
 // cycle, several cuts at once, and a vertex where two cuts meet, without
 // special-casing any of them: for each vertex touched by a cut edge,
 // partition its incident faces into groups that are still connected to each
-// other through its remaining (UNCUT) incident edges. Each group beyond the
+// other through its remaining (uncut) incident edges. Each group beyond the
 // first gets its own copy of the vertex. A vertex whose faces remain in one
-// group is left alone — which is exactly right for a cut that dead-ends at
-// an interior vertex (a slit that does not actually open the surface there).
+// group is left alone, which is correct for a cut that dead-ends at an
+// interior vertex (a slit that does not open the surface there).
 //
-// Every cut edge must be INTERIOR (shared by exactly 2 faces). Cutting an
-// edge that is already on the boundary is a no-op that would silently
-// return an unchanged mesh, so it is refused by name instead.
+// Every cut edge must be interior (shared by exactly 2 faces). Cutting an
+// edge that is already on the boundary would return an unchanged mesh, so it
+// is refused.
 export function cutMeshAlongEdges(positions, faces, cutEdgeKeys) {
   const cut = cutEdgeKeys instanceof Set ? cutEdgeKeys : new Set(cutEdgeKeys);
   if (!cut.size) throw new Error('cutMeshAlongEdges: no edges given to cut');
@@ -295,16 +263,16 @@ export function cutMeshAlongEdges(positions, faces, cutEdgeKeys) {
   for (const v of touched) {
     const inc = facesAt.get(v);
     // Union-find over this vertex's incident faces, joined by any incident
-    // edge at v that was NOT cut.
+    // edge at v that was not cut.
     const idxOf = new Map(inc.map((f, i) => [f, i]));
     const parent = inc.map((_, i) => i);
     const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
     for (const f of inc) {
-      // Read adjacency from the ORIGINAL faces, never the partly-rewritten
-      // `outFaces` — an earlier vertex's split may already have renamed a
+      // Read adjacency from the original faces, never the partly-rewritten
+      // `outFaces`: an earlier vertex's split may already have renamed a
       // corner of this same face, and `edgeFaces` is keyed by the input's
-      // own indices. Splitting one vertex must never change how the NEXT
-      // vertex's own neighborhood reads.
+      // own indices. Splitting one vertex must not change how the next
+      // vertex's neighborhood reads.
       const tri = faces[f];
       for (let k = 0; k < 3; k++) {
         const a = tri[k], b = tri[(k + 1) % 3];
@@ -331,7 +299,7 @@ export function cutMeshAlongEdges(positions, faces, cutEdgeKeys) {
     const copies = [v];
     for (let g = 1; g < groupList.length; g++) {
       const nv = outPositions.length;
-      // The duplicate is the SAME three numbers, not a recomputed point.
+      // The duplicate is the same three numbers, not a recomputed point.
       outPositions.push([positions[v][0], positions[v][1], positions[v][2]]);
       vertexOrigin.push(v);
       copies.push(nv);
@@ -346,17 +314,17 @@ export function cutMeshAlongEdges(positions, faces, cutEdgeKeys) {
   return { positions: outPositions, faces: outFaces, vertexOrigin, duplicatedGroups };
 }
 
-// ------------------------------------------------ choosing where to cut
+// Choosing where to cut
 
-// SHORTEST INTERIOR-EDGE PATH from one vertex set to another, weighted by
-// true 3D edge length (Dijkstra, multi-source). Only INTERIOR edges are
-// traversable, for two reasons that both matter: a boundary edge cannot be
-// cut at all (`cutMeshAlongEdges` refuses it), and a path allowed to run
-// ALONG a boundary would produce a seam that opens nothing.
+// Shortest interior-edge path from one vertex set to another, weighted by
+// true 3D edge length (Dijkstra, multi-source). Only interior edges are
+// traversable: a boundary edge cannot be cut (`cutMeshAlongEdges` refuses
+// it), and a path running along a boundary would produce a seam that opens
+// nothing.
 //
 // On a revolve's own grid tessellation this returns a parametric ruling —
 // the natural seam — without any knowledge of the surface's parameter
-// domain, because a ruling genuinely IS the shortest way across. On a
+// domain, because a ruling is the shortest way across. On a
 // full-revolve cylinder every ruling is the same length, so which one comes
 // back is arbitrary and, by the surface's own rotational symmetry, produces
 // an identical unrolled result either way.
@@ -404,13 +372,12 @@ export function shortestInteriorPathBetween(positions, faces, topo, sources, tar
   return { edgeKeys: keys, vertices: verts, length: dist.get(hit) };
 }
 
-// A NON-SEPARATING CYCLE on a CLOSED mesh, via the tree-cotree
-// decomposition (Eppstein 2003 — see the header for exactly what is and is
-// not claimed here). Returns the shortest of the 2g generators.
+// A non-separating cycle on a closed mesh, via the tree-cotree
+// decomposition (Eppstein 2003 — see the header for what is and is not
+// claimed). Returns the shortest of the 2g generators.
 export function handleCycle(positions, faces, topo) {
-  // Exported, so it has to defend its own precondition rather than trust
-  // that `cutToDisk` is the only caller: the tree-cotree argument counts
-  // 2g leftover edges only on a CLOSED surface.
+  // The tree-cotree argument counts 2g leftover edges only on a closed
+  // surface.
   if (topo.boundaryEdges.length) {
     throw new Error(`handleCycle: requires a CLOSED mesh — this one has ${topo.boundaryEdges.length} boundary edge(s), so the tree-cotree edge count would not be 2g`);
   }
@@ -439,7 +406,7 @@ export function handleCycle(positions, faces, topo) {
     }
   }
 
-  // Dual spanning tree over FACES, using only edges outside the primal tree.
+  // Dual spanning tree over faces, using only edges outside the primal tree.
   const dualAdj = new Map();
   for (let f = 0; f < faces.length; f++) dualAdj.set(f, []);
   for (const [key, fs] of topo.edgeFaces) {
@@ -493,19 +460,17 @@ export function handleCycle(positions, faces, topo) {
   return best;
 }
 
-// ------------------------------------------------------------- the driver
+// The driver
 
-// CUT a triangulation open until it is a topological disk, then hand it
-// back ready for `flattenLSCM`. Refuses by name for everything outside the
-// scope stated in this file's header, rather than returning a plausible
-// mesh that is not actually a disk.
+// Cut a triangulation open until it is a topological disk, ready for
+// `flattenLSCM`. Throws for everything outside the scope stated in this
+// file's header rather than returning a mesh that is not a disk.
 //
 // Returns { positions, faces, vertexOrigin, duplicatedGroups, cuts,
 //           chiBefore, chiAfter, note } — `vertexOrigin[i]` is the index in
-// the ORIGINAL mesh that vertex i came from (identity for anything the cut
-// did not touch), which is what lets a caller relate a flattened layout
-// back to the surface it came from, and lets a test check that every twin
-// sits at exactly the position of the vertex it was split from.
+// the original mesh that vertex i came from (identity for anything the cut
+// did not touch), which relates a flattened layout back to the surface it
+// came from.
 export function cutToDisk(positions, faces, opts = {}) {
   const maxCuts = opts.maxCuts != null ? opts.maxCuts : 32;
   const info0 = describeMeshTopology(positions, faces);
@@ -521,7 +486,7 @@ export function cutToDisk(positions, faces, opts = {}) {
     };
   }
 
-  // Refuse everything out of scope BEFORE touching the mesh, by name.
+  // Refuse everything out of scope before touching the mesh.
   if (!info0.orientable) {
     throw new Error('cutToDisk: refusing to cut — the mesh is not consistently oriented. Either it is genuinely NON-ORIENTABLE (a Mobius strip or Klein bottle, which this stage does not support), or it is an orientable mesh whose triangles were handed over wound inconsistently; either way the handle/seam analysis below would be meaningless on it.');
   }
@@ -547,7 +512,7 @@ export function cutToDisk(positions, faces, opts = {}) {
     const r = cutMeshAlongEdges(pos, fac, edgeKeys);
     pos = r.positions;
     fac = r.faces;
-    // Compose the origin map so it always points back at the ORIGINAL mesh.
+    // Compose the origin map so it always points back at the original mesh.
     vertexOrigin = r.vertexOrigin.map((i) => vertexOrigin[i]);
     for (const g of r.duplicatedGroups) duplicatedGroups.push(g);
     cuts.push({
@@ -556,18 +521,18 @@ export function cutToDisk(positions, faces, opts = {}) {
     });
   };
 
-  // CUT 1 (genus 1 only): open the handle with a non-separating cycle. A
+  // Cut 1 (genus 1 only): open the handle with a non-separating cycle. A
   // torus becomes an annulus — chi is unchanged (a closed cycle of n
-  // vertices duplicates n vertices AND splits n edges), but the surface now
-  // has two boundaries for the boundary cuts below to work with.
+  // vertices duplicates n vertices and splits n edges), but the surface then
+  // has two boundaries for the boundary cuts below.
   if (info0.genus === 1) {
     const info = describeMeshTopology(pos, fac);
     const cyc = handleCycle(pos, fac, info.topo);
     applyCut(cyc.edgeKeys, 'handle-cycle', cyc.length);
   }
 
-  // CUT 2..N: connect boundary components until only one remains. Each cut
-  // is a shortest interior path between two DIFFERENT boundaries, which
+  // Cuts 2..N: connect boundary components until only one remains. Each cut
+  // is a shortest interior path between two different boundaries, which
   // raises chi by exactly 1 per cut on the ordinary case (k edges split,
   // k+1 vertices duplicated).
   for (let iter = 0; iter < maxCuts; iter++) {
@@ -578,9 +543,8 @@ export function cutToDisk(positions, faces, opts = {}) {
     applyCut(path.edgeKeys, 'boundary-path', path.length);
   }
 
-  // The gate. Nothing above is trusted: the result is re-derived from
-  // scratch and must be a genuine disk, or this throws rather than handing
-  // a caller a mesh LSCM would fold over.
+  // The result is re-derived from scratch and must be a disk, or this throws
+  // rather than handing a caller a mesh LSCM would fold over.
   const after = describeMeshTopology(pos, fac);
   if (!after.isDisk) {
     throw new Error(`cutToDisk: the cut did not produce a topological disk (V-E+F = ${after.chi}, ${after.boundaryCount} boundary component(s) after ${cuts.length} cut(s)) — refusing to return it.`);
@@ -593,32 +557,27 @@ export function cutToDisk(positions, faces, opts = {}) {
   };
 }
 
-// ---------------------------------------------------------- NURBS entry
+// NURBS entry
 
-// The end-to-end payoff, and the reason this stage exists: tessellate a
-// NURBS surface with this kernel's OWN already-proven tessellator, weld it,
-// CUT it open if it is not already a disk, and flatten it with the
-// already-proven LSCM. A full 360-degree Revolve now flattens.
+// Tessellate a NURBS surface with this kernel's tessellator, weld it, cut it
+// open if it is not already a disk, and flatten it with LSCM.
 //
-// Deliberately takes no trim loop. Measured while building this: the
-// trimmed output of `tessellateTrimmedSurface` does NOT weld into an
-// edge-manifold mesh in general (independently clipped neighboring cells
-// leave T-junctions along their shared edge, and the ear-clipper's own
-// residual warnings fire), so a trimmed patch is refused upstream by
-// `describeMeshTopology` as non-manifold rather than silently mis-cut. That
-// is a real, separate gap in the tessellator, named here rather than worked
-// around with a weld tolerance that would paper over it.
+// Takes no trim loop. Known limitation: the trimmed output of
+// `tessellateTrimmedSurface` does not in general weld into an edge-manifold
+// mesh (independently clipped neighboring cells leave T-junctions along
+// their shared edge), so a trimmed patch would be refused by
+// `describeMeshTopology` as non-manifold. A weld tolerance would hide the
+// T-junctions rather than remove them.
 export function cutAndFlattenNurbsSurface(srf, opts = {}) {
   if (!srf || !srf.ctrlNet) throw new Error('cutAndFlattenNurbsSurface: expected a NURBS surface with a control net');
   const uRes = opts.uRes != null ? opts.uRes : 24;
   const vRes = opts.vRes != null ? opts.vRes : 24;
   const tris = tessellateTrimmedSurface(srf, null, uRes, vRes);
   if (!tris.length) throw new Error('cutAndFlattenNurbsSurface: the surface tessellated to zero triangles — nothing to flatten');
-  // dropDegenerateFaces: a POLE (a revolve profile touching the axis) welds
-  // the whole pole row to one point, so the tessellator's own unconditional
-  // two-triangles-per-cell emission leaves a repeated-vertex face there —
-  // zero area, no topology, and refused by name downstream if kept. See
-  // that function's own comment in kernel/flatten.mjs.
+  // dropDegenerateFaces: a pole (a revolve profile touching the axis) welds
+  // the whole pole row to one point, so the tessellator's two-triangles-per-
+  // cell emission leaves a repeated-vertex face there — zero area, no
+  // topology, and refused downstream if kept. See kernel/flatten.mjs.
   const mesh = dropDegenerateFaces(weldTriangulation(tris, opts.weldTolerance));
   const cut = cutToDisk(mesh.positions, mesh.faces, opts);
   const result = flattenLSCM({ positions: cut.positions, faces: cut.faces }, opts);

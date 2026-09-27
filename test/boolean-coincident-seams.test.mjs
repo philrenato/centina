@@ -8,34 +8,32 @@ import { trivialTrimLoop } from '../kernel/trim.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 import { surfacePoint, closestPointOnSurface } from '../kernel/surface.mjs';
 
-// ---------------------------------------------------------------------------
-// THE FIXTURE: two revolved balls offset ALONG THEIR OWN SEAM MERIDIANS, so
+// The fixture: two revolved balls offset along their own seam meridians, so
 // the cut circle crosses both operands' seams at one and the same 3D point.
 //
-// That coincidence is the whole case. A seam crossing is a CORNER of a face's
-// boundary, and each face used to derive it by interpolating linearly between
-// the two curve samples straddling its own domain edge, in its own parameters.
-// Two faces deriving the same corner that way get two different answers — 1.3e-2
+// That coincidence is the case under test. A seam crossing is a corner of a
+// face's boundary. If each face derives it by interpolating linearly between
+// the two curve samples straddling its own domain edge, in its own parameters,
+// two faces deriving the same corner get two different answers — 1.3e-2
 // apart here, against a 1e-4 weld — and the shell comes back with a four-edge
 // sliver quad joining the two corners through the samples either side.
 //
 // It is not exotic. Two solids of revolution translated apart put each one's
 // seam meridian straight through the other, and this is simply the alignment
-// where both happen at the same place. Swept over azimuth, a ball pair closes
-// at eleven of thirteen and fails at the two where a seam runs through the
-// cut.
+// where both happen at the same place. Swept over azimuth, per-face
+// interpolation closes a ball pair at eleven of thirteen and fails at the two
+// where a seam runs through the cut.
 //
-// REFINING THE MARCH DOES NOT FIX IT, which is what makes it a defect in the
+// Refining the march does not fix it, which makes it a defect in the
 // construction rather than a tolerance to be tuned. Swept from stepLen 1 down
 // to 0.0625 the sliver shrinks linearly with the sample spacing and the naked
 // count stays at exactly 4 — two independent interpolations do not converge on
 // each other at any density.
-// ---------------------------------------------------------------------------
 
 const R = 15;
 const CENTRE_A = [0, 0, 20];
 // Purely in the y = 0 half-plane the seams live in, and short enough that the
-// two balls genuinely interpenetrate. Both are measured below.
+// two balls interpenetrate. Both are measured below.
 const OFFSET = [Math.hypot(9, 3), 0, 5];
 
 function tess(faces, res) {
@@ -48,7 +46,7 @@ function tess(faces, res) {
   return tris;
 }
 
-// TRANSLATE WITHOUT THE WEIGHT. The control net stores EUCLIDEAN xyz beside a
+// Translate without the weight. The control net stores Euclidean xyz beside a
 // separate weight, so a rigid shift is `x + cx`. The homogeneous spelling
 // `x + cx*w` moves a revolve's rational columns (w = sqrt(2)/2) only 0.707 as
 // far, and a "radius 15 ball" then measures as something else entirely. The
@@ -78,8 +76,8 @@ const domV = (srf) => [srf.knotsV[0], srf.knotsV[srf.knotsV.length - 1]];
 
 test('the operands are what this file claims: two radius-15 balls that overlap, with both seams in the same half-plane', () => {
   const A = ball([0, 0, 0]), B = ball(OFFSET);
-  // Read off the SURFACE over a (u,v) grid, about each body's OWN center — the
-  // only reading that tells a real ball from a distorted control net.
+  // Read off the surface over a (u,v) grid, about each body's own center — the
+  // only reading that tells a true ball from a distorted control net.
   for (const X of [A, B]) {
     let lo = Infinity, hi = -Infinity;
     const uK = X.srf.knotsU, vK = X.srf.knotsV;
@@ -96,9 +94,9 @@ test('the operands are what this file claims: two radius-15 balls that overlap, 
     assert.ok(lo > R - 0.05 && hi < R + 0.05, `ball at [${X.centre}] spans radius ${lo.toFixed(4)}..${hi.toFixed(4)}`);
   }
   const apart = dist(A.centre, B.centre);
-  assert.ok(apart > 0 && apart < 2 * R, `centers ${apart.toFixed(4)} apart — the balls must genuinely interpenetrate`);
+  assert.ok(apart > 0 && apart < 2 * R, `centers ${apart.toFixed(4)} apart — the balls must interpenetrate`);
 
-  // BOTH SEAMS IN THE PLANE y = 0. A revolve started at angle 0 puts its seam
+  // Both seams in the plane y = 0. A revolve started at angle 0 puts its seam
   // meridian on +x, and B is translated within that plane, so B's seam is a
   // copy of A's shifted along it. Measured on the surfaces rather than argued
   // from the construction.
@@ -119,18 +117,17 @@ test('the operands are what this file claims: two radius-15 balls that overlap, 
   assert.ok(curves[0].samples.length > 50, 'the cut must be a well-sampled curve, not a graze');
 });
 
-test('the cut really does cross BOTH operands\' seams at one and the same place — the coincidence this file is about', () => {
+test('the cut crosses both operands\' seams at one and the same place — the coincidence this file is about', () => {
   const A = ball([0, 0, 0]), B = ball(OFFSET);
   const curves = cutCurves(A, B);
   const samples = curves[0].samples;
 
-  // ASSERTED AT THE DATA'S OWN RESOLUTION, and that is the point rather than a
-  // compromise. Interpolating the crossing off the chord between two samples
-  // reproduces exactly the error this file exists to describe — measured at
-  // 1.8e-3 here — so an assertion resting on such a point would be testing the
-  // defect with the defect. What the curve genuinely knows is WHICH SEGMENT it
-  // crosses each seam in, and the claim "both seams, one place" is precisely
-  // the claim that it is the SAME segment.
+  // Asserted at the data's own resolution. Interpolating the crossing off the
+  // chord between two samples reproduces exactly the error this file
+  // describes — 1.8e-3 here — so an assertion resting on such a point would
+  // test the defect with the defect. What the curve knows is which segment it
+  // crosses each seam in, and the claim "both seams, one place" is the claim
+  // that it is the same segment.
   const seamSegments = (X) => {
     const [vMin, vMax] = domV(X.srf);
     const span = vMax - vMin;
@@ -145,7 +142,7 @@ test('the cut really does cross BOTH operands\' seams at one and the same place 
   assert.equal(segA[0], segB[0], `the two seams are crossed in different segments (${segA[0]} vs ${segB[0]}) — they do not coincide, and this fixture has no coincidence to test`);
 
   // And that shared segment straddles the y = 0 half-plane both seams live in,
-  // on the far side of B's center where BOTH meridians run — so the coincidence
+  // on the far side of B's center where both meridians run — so the coincidence
   // is the geometric one claimed and not two unrelated crossings that happen to
   // fall in one sample step.
   const a = samples[segA[0]], b = samples[segA[0] + 1];
@@ -161,7 +158,7 @@ test('the cut really does cross BOTH operands\' seams at one and the same place 
   }
 });
 
-test('coincident seams: the pair UNIONS into one closed solid, and the shared corner is what closes it', () => {
+test('coincident seams: the pair unions into one closed solid, and the shared corner is what closes it', () => {
   const A = ball([0, 0, 0]), B = ball(OFFSET);
   const curves = cutCurves(A, B);
   const res = booleanSolids(A, B, curves, 'union');
@@ -170,13 +167,13 @@ test('coincident seams: the pair UNIONS into one closed solid, and the shared co
   assert.equal(res.stats.nonManifoldEdgeCount, 0);
   assert.equal(res.stats.chi, 2, 'a sphere, topologically');
   assert.equal(res.stats.shellCount, 1);
-  // NOT VACUOUS: the sharing pass has to have done something here, or the test
+  // Not vacuous: the sharing pass has to have done something here, or the test
   // would pass just as well with the machinery removed. Two corners — one per
   // operand's seam — landing on the same place.
   assert.ok(res.seamPoints > 0, `expected the seam-crossing pass to insert a corner, it inserted ${res.seamPoints}`);
 });
 
-test('coincident seams: INTERSECT and DIFFERENCE close on the same pair', () => {
+test('coincident seams: intersect and difference close on the same pair', () => {
   for (const op of ['intersect', 'difference']) {
     const A = ball([0, 0, 0]), B = ball(OFFSET);
     const res = booleanSolids(A, B, cutCurves(A, B), op);
@@ -186,9 +183,9 @@ test('coincident seams: INTERSECT and DIFFERENCE close on the same pair', () => 
   }
 });
 
-test('the SAME pair with its seams rotated off the cut still closes, and the pass leaves an untouched face alone', () => {
-  // The control, and it is doing two jobs. It says the fix did not buy the
-  // coincident case at the expense of the ordinary one; and because a revolve's
+test('the same pair with its seams rotated off the cut still closes, and the pass leaves an untouched face alone', () => {
+  // The control, and it is doing two jobs. It shows the coincident case is not
+  // handled at the expense of the ordinary one; and because a revolve's
   // seam always points somewhere, it pins that "somewhere" as the only variable
   // between this and the test above.
   const rot = (deg) => {
@@ -206,11 +203,10 @@ test('the SAME pair with its seams rotated off the cut still closes, and the pas
   }
 });
 
-test('a pair with NO closed direction anywhere is untouched by the seam pass — it cannot have a seam to share', () => {
+test('a pair with no closed direction anywhere is untouched by the seam pass — it cannot have a seam to share', () => {
   // Two boxes. Nothing here is closed in u or v, so the pass must decline
-  // before it projects anything, and the boolean must be exactly what it always
-  // was. This is the guard on the early-out being a real skip rather than a
-  // silent behavior change for every planar face in the suite.
+  // before it projects anything and add no seam corners. This guards that the
+  // early-out is a skip rather than a behavior change for every planar face.
   const quad = (p00, p10, p11, p01) => {
     const w = (p) => [p[0], p[1], p[2], 1];
     return { degU: 1, degV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1], ctrlNet: [[w(p00), w(p01)], [w(p10), w(p11)]] };
@@ -234,7 +230,7 @@ test('a pair with NO closed direction anywhere is untouched by the seam pass —
       for (const c of r.components) if (c.samples.length >= 2) curves.push({ samples: c.samples.map((s) => s.point), faceA: i, faceB: j });
     }
   }
-  assert.ok(curves.length > 0, 'the two boxes must genuinely cut each other');
+  assert.ok(curves.length > 0, 'the two boxes must cut each other');
   const res = booleanSolids(P, Q, curves, 'union');
   assert.ok(res.ok, res.reason || res.verdict);
   assert.equal(res.seamPoints, 0, 'a pair with no closed direction must contribute no seam corners');

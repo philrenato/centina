@@ -1,21 +1,20 @@
-// ANALYTIC CURVE KINDS ACROSS A REAL .3dm ROUND TRIP.
+// Analytic curve kinds across a .3dm round trip.
 //
 // A Circle, an Arc, a Line and a Polyline are four different objects in this
-// app and were one thing in the file: every curve went out as a plain
-// NurbsCurve, so a circle came back as a freeform SketchCurve whose center and
-// radius no longer existed anywhere. The geometry was never wrong — the KIND
-// was gone, in our file and in Rhino's reading of it too.
+// app. Written as a plain NurbsCurve, a circle comes back as a freeform
+// SketchCurve with no center or radius: the geometry survives but the kind
+// does not, in our reading of the file or in Rhino's.
 //
-// ⚠ EVERY FIXTURE HERE IS DELIBERATELY AWKWARD. A circle at the origin on the
+// Every fixture here is deliberately awkward. A circle at the origin on the
 // world XY plane is symmetric under exactly the transforms a plane/basis bug
 // gets wrong, so the circle and the arc sit at an oblique center on a tilted
 // orthonormal frame, and the polylines are irregular and non-planar. A
 // straight-edged, axis-aligned fixture would pass with the plane discarded.
 //
-// ⚠ AN ARC IS A CIRCLE WITH A SWEEP. The app stores both as one `Circle`
+// An arc is a circle with a sweep. The app stores both as one `Circle`
 // object and lets circleStart/circleEnd be the only difference, so the two
 // directions of that mistake — a partial sweep written as a closed circle, a
-// full turn written as an arc — are asserted explicitly and from the FILE, not
+// full turn written as an arc — are asserted explicitly and from the file, not
 // only from the payload.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,7 +38,7 @@ const ARC_SWEEP = 1.8;
 const LINE_A = [1.3, -4.2, 0.75];
 const LINE_B = [6.1, 2.4, -3.05];
 
-// Irregular spacing, no two segments parallel, and genuinely non-planar.
+// Irregular spacing, no two segments parallel, and non-planar.
 const POLY_PTS = [
   [0.3, -1.2, 0.7],
   [2.9, 0.4, -1.1],
@@ -71,7 +70,7 @@ function roundTrip(objects) {
   return { bytes, result };
 }
 
-// What a SECOND reader sees in the bytes — the claim "the kind is in the file"
+// What a second reader sees in the bytes — the claim "the kind is in the file"
 // is about OpenNURBS's own object class, not about our payload.
 function fileGeometryClasses(bytes) {
   const doc = rhino.File3dm.fromByteArray(bytes);
@@ -109,7 +108,7 @@ test('a circle round-trips as a circle: the analytic kind survives, and the NURB
   nearPoint(crv.circleAxes.yAxis, YAXIS, 1e-9, 'circle yAxis');
   near(crv.circleEnd - crv.circleStart, Math.PI * 2, 1e-9, 'circle sweep is a full turn');
 
-  // And it is a circle IN THE FILE, not only in our reading of it.
+  // And it is a circle in the file, not only in our reading of it.
   const geo = fileGeometryClasses(bytes).get('Circle01');
   assert.equal(geo.constructor.name, 'ArcCurve');
   assert.equal(geo.isCompleteCircle, true, 'a full turn must be written closed');
@@ -129,11 +128,11 @@ test('an arc round-trips as an arc, never as a closed circle', () => {
   near(crv.circleRadius, RADIUS, 1e-9, 'arc radius');
   near(crv.circleEnd - crv.circleStart, ARC_SWEEP, 1e-9, 'arc sweep');
   assert.ok(Math.abs((crv.circleEnd - crv.circleStart) - Math.PI * 2) > 1e-6,
-    'an arc must NOT come back reporting a full turn');
+    'an arc must not come back reporting a full turn');
 
   /* The recovered frame is OpenNURBS's own canonical one (see the module: the
      start angle is absorbed into a rotated in-plane basis), so the oracle is
-     the GEOMETRY, not the angle numbers. Rebuild the arc from what came back
+     the geometry, not the angle numbers. Rebuild the arc from what came back
      and it must be the arc that was sent, end for end. */
   const rebuilt = makeArc(crv.circleCenter, crv.circleAxes.xAxis, crv.circleAxes.yAxis,
     crv.circleRadius, crv.circleStart, crv.circleEnd - crv.circleStart);
@@ -145,7 +144,7 @@ test('an arc round-trips as an arc, never as a closed circle', () => {
 
   const geo = fileGeometryClasses(bytes).get('Arc01');
   assert.equal(geo.constructor.name, 'ArcCurve');
-  assert.equal(geo.isCompleteCircle, false, 'a partial sweep must NOT be written as a closed circle');
+  assert.equal(geo.isCompleteCircle, false, 'a partial sweep must not be written as a closed circle');
   assert.equal(geo.isClosed, false);
 });
 
@@ -190,7 +189,7 @@ test('a closed polyline round-trips closed, and its points do not grow a duplica
 
   assert.equal(crv.curveKind, 'polyline');
   assert.equal(crv.polylineClosed, true);
-  /* The closing repeat is a fact about the CONTROL POLYGON, not about the
+  /* The closing repeat is a fact about the control polygon, not about the
      point list — the app stores a closed Polyline's points once and appends
      the repeat when it builds the curve. Handing back the repeat would grow
      one duplicate vertex per save/open cycle. */
@@ -202,7 +201,7 @@ test('a closed polyline round-trips closed, and its points do not grow a duplica
   assert.equal(geo.isClosed, true);
 });
 
-test('a freeform curve is reported as having NO analytic kind, rather than the field simply being absent', () => {
+test('a freeform curve is reported as having no analytic kind, rather than the field simply being absent', () => {
   const free = globalCurveInterp([[0, 0, 0], [1.3, 2.7, -0.4], [3.9, 1.1, 2.2], [5.5, -2.4, 0.8], [7.1, 3.3, -1.9]], 3);
   const { bytes, result } = roundTrip([{ kind: 'curve', layerId: 0, name: 'Sketch01', ...free }]);
   const crv = result.objects[0];
@@ -243,9 +242,9 @@ test('four kinds in one document keep their four kinds', () => {
   );
 });
 
-test('a curve that is only NEARLY a circle is not promoted to one', () => {
-  /* The detector's tolerance is nanometres, not the document tolerance. This
-     dent is well INSIDE the 0.001 mm the document declares — so a detector
+test('a curve that is only nearly a circle is not promoted to one', () => {
+  /* The detector's tolerance is nanometers, not the document tolerance. This
+     dent is well inside the 0.001 mm the document declares — so a detector
      handed the model tolerance calls it a circle, rewrites it as one, and
      hands back a center and a radius nobody drew. It must stay freeform. */
   const circle = makeCircle(CENTER, XAXIS, YAXIS, RADIUS);

@@ -1,10 +1,10 @@
-// EXTEND — three kinds, three different promises, each checked against the thing
+// Extend — three kinds, three different promises, each checked against the thing
 // it actually claims rather than "the curve got longer".
 //
-//   · LINE   leaves along the real end tangent          -> G1 at the join
-//   · ARC    leaves on the osculating circle            -> G2 at the join
-//   · SMOOTH continues the curve's own polynomial       -> the original portion
-//     is unchanged to the last bit, because it is the SAME function
+//   · line   leaves along the real end tangent          -> G1 at the join
+//   · arc    leaves on the osculating circle            -> G2 at the join
+//   · smooth continues the curve's own polynomial       -> the original portion
+//     is unchanged to the last bit, because it is the same function
 //
 // That last one is the strongest claim in the file and the easiest to get wrong,
 // so it is measured two ways: the original span must come back bit-identical, and
@@ -13,10 +13,9 @@ import { strict as assert } from 'node:assert';
 import { extendCurve, EXTEND_REFUSAL } from '../kernel/extend.mjs';
 import { curvePoint, rationalCurveDerivs, curveLength } from '../kernel/curve.mjs';
 
-let passed = 0, failed = 0;
+const failures = [];
 function t(name, fn) {
-  try { fn(); passed++; console.log(`  PASS: ${name}`); }
-  catch (e) { failed++; console.log(`  FAIL: ${name} — ${e.message}`); }
+  try { fn(); } catch (e) { failures.push(`${name} — ${e.message}`); }
 }
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -46,7 +45,7 @@ const curvatureAt = (c, u) => {
   return s > 1e-12 ? len(cross(d[1], d[2])) / (s * s * s) : 0;
 };
 
-t('LINE: the extension starts exactly where the curve ended', () => {
+t('Line: the extension starts exactly where the curve ended', () => {
   const c = arch();
   const r = extendCurve(c, { kind: 'line', length: 20 });
   assert.equal(r.ok, true, r.reason);
@@ -60,7 +59,7 @@ t('LINE: the extension starts exactly where the curve ended', () => {
   assert.ok(best < 1e-6, `old endpoint should still lie on the curve, closest ${best}`);
 });
 
-t('⭐ LINE: it leaves along the curve\'s REAL end tangent, not a chord', () => {
+t('Line: it leaves along the curve\'s real end tangent, not a chord', () => {
   const c = arch();
   const wanted = tangentAt(c, endOf(c));
   const r = extendCurve(c, { kind: 'line', length: 25 });
@@ -70,7 +69,7 @@ t('⭐ LINE: it leaves along the curve\'s REAL end tangent, not a chord', () => 
   assert.ok(ang < 1e-6, `the extension should run along the end tangent, off by ${ang} deg`);
 });
 
-t('LINE: the curve genuinely gets longer, by about what was asked', () => {
+t('Line: the curve gets longer, by about what was asked', () => {
   const c = arch();
   const before = curveLength(c, startOf(c), endOf(c), 1e-7);
   const r = extendCurve(c, { kind: 'line', length: 20 });
@@ -78,7 +77,7 @@ t('LINE: the curve genuinely gets longer, by about what was asked', () => {
   assert.ok(Math.abs((after - before) - 20) < 0.5, `expected about +20, got ${(after - before).toFixed(4)}`);
 });
 
-t('⭐ ARC: curvature is continuous across the join — G2, not just G1', () => {
+t('Arc: curvature is continuous across the join — G2, not just G1', () => {
   const c = arch();
   const kEnd = curvatureAt(c, endOf(c));
   const r = extendCurve(c, { kind: 'arc', length: 15 });
@@ -90,18 +89,18 @@ t('⭐ ARC: curvature is continuous across the join — G2, not just G1', () => 
     `arc extension curvature ${kJust} should match the end curvature ${kEnd}`);
 });
 
-t('⛔ ARC: a straight end has no osculating circle, and says so', () => {
+t('Arc: a straight end has no osculating circle, and says so', () => {
   const r = extendCurve(straight(), { kind: 'arc', length: 10 });
   assert.equal(r.ok, false);
   assert.equal(r.kind, EXTEND_REFUSAL.STRAIGHT);
   assert.match(r.reason, /straight|line extension/);
 });
 
-t('⭐⭐ SMOOTH: the original portion is unchanged, because it is the same polynomial', () => {
+t('Smooth: the original portion is unchanged, because it is the same polynomial', () => {
   const c = arch();
   const r = extendCurve(c, { kind: 'smooth', length: 12 });
   assert.equal(r.ok, true, r.reason);
-  // Where the joined curve covers the original's domain, it must BE the original.
+  // Where the joined curve covers the original's domain, it must be the original.
   const oldEnd = curvePoint(c, endOf(c));
   let uJoin = null, best = Infinity;
   for (let i = 0; i <= 2000; i++) {
@@ -120,7 +119,7 @@ t('⭐⭐ SMOOTH: the original portion is unchanged, because it is the same poly
   assert.ok(worst < 1e-7, `the original portion must be untouched, worst ${worst}`);
 });
 
-t('⭐⭐ SMOOTH: curvature is continuous across the join', () => {
+t('Smooth: curvature is continuous across the join', () => {
   const c = arch();
   const kEnd = curvatureAt(c, endOf(c));
   const r = extendCurve(c, { kind: 'smooth', length: 10 });
@@ -131,8 +130,8 @@ t('⭐⭐ SMOOTH: curvature is continuous across the join', () => {
     `smooth extension curvature ${kJust} should stay near the end curvature ${kEnd}`);
 });
 
-t('⛔ SMOOTH: refuses to run so far that it describes its leading term', () => {
-  // A polynomial extrapolates fast and badly; past its own span it is no longer a
+t('Smooth: refuses to run so far that it describes its leading term', () => {
+  // A polynomial extrapolates fast and badly; past its own span it is not a
   // reading of the curve. The refusal names the distance it would accept.
   const r = extendCurve(arch(), { kind: 'smooth', length: 100000 });
   assert.equal(r.ok, false);
@@ -140,7 +139,7 @@ t('⛔ SMOOTH: refuses to run so far that it describes its leading term', () => 
   assert.match(r.reason, /leading term|Extend by less/);
 });
 
-t('the START end extends too, and does not disturb the far end', () => {
+t('the start end extends too, and does not disturb the far end', () => {
   const c = arch();
   const farEnd = curvePoint(c, endOf(c));
   const r = extendCurve(c, { kind: 'line', at: 'start', length: 18 });
@@ -152,7 +151,7 @@ t('the START end extends too, and does not disturb the far end', () => {
   assert.ok(after > before + 15, `should have grown, ${before} -> ${after}`);
 });
 
-t('⛔ a non-positive or non-finite length is refused', () => {
+t('a non-positive or non-finite length is refused', () => {
   for (const bad of [0, -5, NaN, undefined]) {
     const r = extendCurve(arch(), { kind: 'line', length: bad });
     assert.equal(r.ok, false, `length ${bad} should be refused`);
@@ -160,7 +159,7 @@ t('⛔ a non-positive or non-finite length is refused', () => {
   }
 });
 
-t('⛔ an unknown kind is refused rather than defaulting to one', () => {
+t('an unknown kind is refused rather than defaulting to one', () => {
   const r = extendCurve(arch(), { kind: 'wiggly', length: 5 });
   assert.equal(r.ok, false);
   assert.match(r.reason, /line, arc or smooth/);
@@ -175,5 +174,4 @@ t('the input curve is never mutated', () => {
   assert.deepEqual(c, copy);
 });
 
-console.log(`\n${passed}/${passed + failed} checks passed.`);
-if (failed) process.exit(1);
+assert.equal(failures.length, 0, `${failures.length} failed:\n${failures.join('\n')}`);

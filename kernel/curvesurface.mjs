@@ -1,20 +1,19 @@
-// CURVE / SURFACE INTERSECTION — every point where a NURBS curve crosses a
+// Curve/surface intersection — every point where a NURBS curve crosses a
 // NURBS surface, not just the nearest one.
 //
-// Named as its own primitive by both the trimming and the boolean specs
-// (Patrikalakis & Maekawa
-// 5.7). It is a strictly SMALLER problem than surface-surface intersection
+// A primitive of both trimming and booleans (Patrikalakis & Maekawa
+// 5.7). It is a strictly smaller problem than surface-surface intersection
 // and worth having on its own terms: one parameter along the curve, two on
 // the surface, three equations, three unknowns. Unlike SSI's own seed snap
-// — which is 3 equations in 4 unknowns and therefore RANK-DEFICIENT along
+// — which is 3 equations in 4 unknowns and therefore rank-deficient along
 // the intersection curve's own tangent, the reason that one needs
 // Levenberg-Marquardt damping — this system is square and generically
 // well-conditioned, so a plain Newton solves it.
 //
-// WHY IT EXISTS HERE: SSI seeds from a coarse grid over one surface and
-// keeps whichever point is globally closest, so it finds ONE component. A
+// SSI seeds from a coarse grid over one surface and keeps whichever point
+// is globally closest, so it finds one component. A
 // boolean needs all of them. Sederberg & Meyers 1988 gives the completeness
-// argument in two halves — every branch that reaches a patch BOUNDARY is
+// argument in two halves — every branch that reaches a patch boundary is
 // found by intersecting that boundary against the opposing surface (this
 // module), and a normal-cone test decides whether any branch could avoid
 // every boundary by closing into an interior loop. This is the first half.
@@ -36,22 +35,21 @@ function surfaceDomain(srf) {
 
 // Signed side of the surface at the curve's own sample: positive on the
 // side the surface normal points to, negative on the other. A crossing is a
-// SIGN CHANGE between consecutive samples, which is what lets this find
+// sign change between consecutive samples, which is what lets this find
 // several crossings along one curve instead of only the closest approach.
 //
-// The sign is only meaningful when the closest point is genuinely INTERIOR
+// The sign is only meaningful when the closest point is interior
 // to the surface — at a clamped boundary the "closest point" is an edge, and
 // which side of the edge's normal the curve sits on says nothing about
 // whether it pierces the patch. Those samples report `side: 0`, which
 // brackets nothing, and the near-distance test below is what covers them.
 //
-// A CLOSED direction has no such edge. Its domain ends are one internal
+// A closed direction has no such edge. Its domain ends are one internal
 // seam, so a sample landing there is as interior as any other and must keep
-// its sign — found by fixture: a line through a full-revolve cylinder had
-// its closest point land on the seam (v=0 on one side of the crossing,
-// v=vMax on the other, the SAME place), which discarded the sign across the
-// whole far half and left one of the two crossings unbracketed. Same
-// distinction extractBorderCurves and SSI's own wrapParam already make.
+// its sign: a line through a full-revolve cylinder can have its closest
+// point land on the seam (v=0 on one side of the crossing, v=vMax on the
+// other, the same place), and discarding the sign there leaves a crossing
+// unbracketed. Same distinction extractBorderCurves and SSI's wrapParam make.
 function sampleSide(crv, srf, t, dom, closed) {
   const P = curvePoint(crv, t);
   const cp = closestPointOnSurface(srf, P);
@@ -94,7 +92,7 @@ function refine(crv, srf, t, u, v, cd, sd) {
 
 // Every parameter where `crv` crosses `srf`, as
 // `[{ t, u, v, point, residual }, ...]` sorted by t. `tolerance` is the
-// distance below which a refined candidate counts as a genuine hit — a
+// distance below which a refined candidate counts as a hit — a
 // candidate that refines to a still-large residual is a near miss and is
 // dropped rather than reported as an intersection.
 export function curveSurfaceIntersections(crv, srf, opts = {}) {
@@ -105,7 +103,7 @@ export function curveSurfaceIntersections(crv, srf, opts = {}) {
   const tolerance = opts.tolerance ?? 1e-6;
   // A hit is the same point as a previous one when their curve parameters
   // are within this fraction of the curve's own domain — parameter space,
-  // not 3D space, so a curve that genuinely returns to the same spot in
+  // not 3D space, so a curve that returns to the same spot in
   // space at a different parameter still reports both.
   const dedupeFrac = opts.dedupeFrac ?? 1e-4;
 

@@ -25,7 +25,7 @@ test('an open curve crossing a face end to end splits it into exactly two fragme
   assert.ok(Math.abs(totalArea(r.fragments) - 100) < 1e-6, 'area is conserved by the split');
 });
 
-test('a CLOSED interior loop splits the face into the disk it encloses and the annulus around it — the loop becomes a real hole, not a second overlapping region', () => {
+test('a closed interior loop splits the face into the disk it encloses and the annulus around it — the loop becomes a hole, not a second overlapping region', () => {
   const loop = [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]];
   const r = splitFaceByCurves({ outer: SQUARE }, [loop]);
   assert.ok(r.ok, r.reason);
@@ -33,7 +33,7 @@ test('a CLOSED interior loop splits the face into the disk it encloses and the a
   const areas = sortedAreas(r.fragments);
   assert.ok(Math.abs(areas[0] - 4) < 1e-6, `disk area ${areas[0]}, expected 4`);
   assert.ok(Math.abs(areas[1] - 96) < 1e-6, `annulus area ${areas[1]}, expected 96`);
-  // The annulus must carry the loop as a genuine HOLE. Without that it would
+  // The annulus must carry the loop as a hole. Without that it would
   // be a full square overlapping the disk, and the areas would not add up.
   const annulus = r.fragments.find((f) => fragArea(f) > 50);
   assert.equal(annulus.holes.length, 1, 'the annulus has exactly one hole');
@@ -42,7 +42,7 @@ test('a CLOSED interior loop splits the face into the disk it encloses and the a
   assert.equal(disk.holes.length, 0);
 });
 
-test('EDGE PROVENANCE: the cut edge is tagged as intersection and the original boundary as trim — the distinction Phase 7 and 8 both need', () => {
+test('edge provenance: the cut edge is tagged as intersection and the original boundary as trim', () => {
   const r = splitFaceByCurves({ outer: SQUARE }, [[[4, 0], [4, 10]]]);
   assert.ok(r.ok, r.reason);
   for (const f of r.fragments) {
@@ -53,11 +53,11 @@ test('EDGE PROVENANCE: the cut edge is tagged as intersection and the original b
     // one cut side, so exactly one edge may claim the intersection.
     const cut = tags.filter((t) => t.includes(SRC_INTERSECTION));
     assert.equal(cut.length, 1, `expected exactly one intersection edge per fragment, got ${cut.length}`);
-    assert.ok(!cut[0].includes(SRC_TRIM), 'the cut edge is not also a trim edge — it is genuinely interior');
+    assert.ok(!cut[0].includes(SRC_TRIM), 'the cut edge is not also a trim edge — it is interior');
   }
 });
 
-test('a face WITH A HOLE splits correctly: the hole is respected, and its own interior never comes back as a fragment', () => {
+test('a face with a hole splits correctly: the hole is respected, and its own interior never comes back as a fragment', () => {
   const face = { outer: SQUARE, holes: [[[4, 4], [6, 4], [6, 6], [4, 6]]] };
   // The cut runs straight through the hole, so the hole is bisected too —
   // and both halves of it must be dropped, not returned as regions.
@@ -71,7 +71,7 @@ test('a face WITH A HOLE splits correctly: the hole is respected, and its own in
   assert.ok(Math.abs(totalArea(r.fragments) - 96) < 1e-6, 'the hole stays subtracted from the total');
 });
 
-test('a NON-CONVEX face splits correctly — the case a centroid-based interior test would get wrong', () => {
+test('a non-convex face splits correctly — the case a centroid-based interior test would get wrong', () => {
   // An L: a 10x10 square with a 6x6 notch taken out of the top right.
   const L = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]];
   assert.ok(Math.abs(area(L) - 64) < 1e-9, 'the L fixture is 100 minus a 36 notch');
@@ -83,7 +83,7 @@ test('a NON-CONVEX face splits correctly — the case a centroid-based interior 
   assert.ok(Math.abs(areas[1] - 44) < 1e-6, `upper L ${areas[1]}, expected 64-20=44`);
 });
 
-test('a curve that DANGLES inside the face splits nothing, and says so rather than silently returning an unchanged face', () => {
+test('a curve that dangles inside the face splits nothing, and says so rather than silently returning an unchanged face', () => {
   const r = splitFaceByCurves({ outer: SQUARE }, [[[3, 3], [7, 7]]]);
   assert.ok(r.ok, r.reason);
   assert.equal(r.fragments.length, 1, 'a curve reaching no boundary cannot divide the face');
@@ -92,16 +92,16 @@ test('a curve that DANGLES inside the face splits nothing, and says so rather th
   assert.ok(allTags(r.fragments[0]).every((t) => !t.includes(SRC_INTERSECTION)));
 });
 
-test('a curve lying exactly ALONG a trim boundary is reported as coincident, and does not split the face', () => {
+test('a curve lying exactly along a trim boundary is reported as coincident, and does not split the face', () => {
   const r = splitFaceByCurves({ outer: SQUARE }, [[[0, 0], [10, 0]]]);
   assert.ok(r.ok, r.reason);
   assert.equal(r.fragments.length, 1, 'running along an existing edge adds no new region');
   assert.ok(r.alongBoundary > 0, 'the coincidence is reported rather than passing as an ordinary split');
   const both = allTags(r.fragments[0]).filter((t) => t.includes(SRC_TRIM) && t.includes(SRC_INTERSECTION));
-  assert.ok(both.length > 0, 'the shared edge carries BOTH tags rather than one silently winning');
+  assert.ok(both.length > 0, 'the shared edge carries both tags rather than one silently winning');
 });
 
-test('TWO curves crossing each other inside the face produce four fragments, and area is still conserved', () => {
+test('two curves crossing each other inside the face produce four fragments, and area is still conserved', () => {
   const r = splitFaceByCurves({ outer: SQUARE }, [[[5, 0], [5, 10]], [[0, 5], [10, 5]]]);
   assert.ok(r.ok, r.reason);
   assert.equal(r.fragments.length, 4);
@@ -111,7 +111,7 @@ test('TWO curves crossing each other inside the face produce four fragments, and
   assert.ok(Math.abs(totalArea(r.fragments) - 100) < 1e-6);
 });
 
-test('the fragments are a genuine PARTITION — no two of them overlap, which conserved area alone would not prove', () => {
+test('the fragments are a partition — no two of them overlap, which conserved area alone would not prove', () => {
   const r = splitFaceByCurves({ outer: SQUARE }, [[[5, 0], [5, 10]], [[0, 5], [10, 5]]]);
   assert.ok(r.ok, r.reason);
   const probes = r.fragments.map((f) => representativeInteriorPoint(f.outer, f.holes));
@@ -128,7 +128,7 @@ test('the fragments are a genuine PARTITION — no two of them overlap, which co
   }
 });
 
-test('a curve running PAST the face boundary still splits it correctly — the overshoot is dropped, not treated as geometry', () => {
+test('a curve running past the face boundary still splits it correctly — the overshoot is dropped, not treated as geometry', () => {
   // Extends well beyond the square at both ends, as a marched intersection
   // curve clipped only approximately to a face would.
   const r = splitFaceByCurves({ outer: SQUARE }, [[[4, -5], [4, 15]]]);
@@ -140,7 +140,7 @@ test('a curve running PAST the face boundary still splits it correctly — the o
   assert.ok(Math.abs(totalArea(r.fragments) - 100) < 1e-6, 'nothing outside the face leaked into the total');
 });
 
-test('SCALE INDEPENDENCE: the same split at 1000x behaves identically, so no tolerance here is secretly absolute', () => {
+test('scale independence: the same split at 1000x behaves identically, so no tolerance here is absolute', () => {
   const big = SQUARE.map(([x, y]) => [x * 1000, y * 1000]);
   const r = splitFaceByCurves({ outer: big }, [[[4000, 0], [4000, 10000]]]);
   assert.ok(r.ok, r.reason);
@@ -150,7 +150,7 @@ test('SCALE INDEPENDENCE: the same split at 1000x behaves identically, so no tol
   assert.ok(Math.abs(areas[1] / 1e6 - 60) < 1e-3);
 });
 
-test('CURVE ORDER does not change the result — the cheapest order-dependence detector there is', () => {
+test('curve order does not change the result', () => {
   const a = splitFaceByCurves({ outer: SQUARE }, [[[5, 0], [5, 10]], [[0, 5], [10, 5]]]);
   const b = splitFaceByCurves({ outer: SQUARE }, [[[0, 5], [10, 5]], [[5, 0], [5, 10]]]);
   assert.ok(a.ok && b.ok);
@@ -164,12 +164,12 @@ test('a face with no curves at all comes back as itself, unsplit and area-exact'
   assert.ok(Math.abs(fragArea(r.fragments[0]) - 100) < 1e-6);
 });
 
-test('a degenerate face refuses by name, and the two degenerate cases refuse DIFFERENTLY rather than sharing one vague message', () => {
+test('a degenerate face refuses by name, and the two degenerate cases refuse differently rather than sharing one vague message', () => {
   // Too few points to close a loop at all.
   const noLoop = splitFaceByCurves({ outer: [[0, 0], [10, 0]] }, [[[4, 0], [4, 10]]]);
   assert.equal(noLoop.ok, false);
   assert.match(noLoop.reason, /outer trim loop/i);
-  // A real closed loop, but collinear — enough points, zero area.
+  // A closed loop, but collinear — enough points, zero area.
   const flat = splitFaceByCurves({ outer: [[0, 0], [10, 0], [5, 0], [0, 0]] }, [[[4, 0], [4, 10]]]);
   assert.equal(flat.ok, false);
   assert.match(flat.reason, /area/i);
@@ -180,15 +180,15 @@ test('a degenerate face refuses by name, and the two degenerate cases refuse DIF
   assert.match(eaten.reason, /area/i);
 });
 
-test('a SELF-INTERSECTING trim loop refuses by naming that, not by reporting a lost region — the cause, not the symptom', () => {
-  // A bowtie. Its signed area partly cancels (-20) while its two real lobes
-  // total 42.5, so the area backstop WOULD catch this; the point of the
-  // explicit check is that the message names what is actually wrong.
+test('a self-intersecting trim loop refuses by naming that, not by reporting a lost region — the cause, not the symptom', () => {
+  // A bowtie. Its signed area partly cancels (-20) while its two lobes
+  // total 42.5, so the area backstop would catch this; the point of the
+  // explicit check is that the message names what is wrong.
   const bowtie = [[0, 0], [10, 10], [10, 0], [0, 6]];
   const r = splitFaceByCurves({ outer: bowtie }, [[[4, -5], [4, 15]]]);
   assert.equal(r.ok, false);
   assert.match(r.reason, /intersects itself/i);
-  // A self-intersecting HOLE is caught the same way and says which loop.
+  // A self-intersecting hole is caught the same way and says which loop.
   const h = splitFaceByCurves({ outer: SQUARE, holes: [bowtie] }, []);
   assert.equal(h.ok, false);
   assert.match(h.reason, /hole 1/i);

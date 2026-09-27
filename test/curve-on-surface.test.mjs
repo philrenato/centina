@@ -1,14 +1,14 @@
-// A CURVE THAT LIVES IN A SURFACE'S PARAMETER SPACE — the geometry behind
+// A curve that lives in a surface's parameter space — the geometry behind
 // "draw on a surface and have the line update when the surface changes".
 //
 // Three claims, and each has a control:
-//   1. Every sample is ON the surface, and the stroke BETWEEN samples does not
+//   1. Every sample is on the surface, and the stroke between samples does not
 //      cut corners across it. The samples are on-surface by construction, so
-//      measuring them proves nothing — the chord deviation is the real number.
-//   2. A stroke near a seam takes the SHORT way round. Interpolating in raw
+//      measuring them proves nothing — the chord deviation is the measure.
+//   2. A stroke near a seam takes the short way round. Interpolating in raw
 //      parameters sends it the long way across the whole model to reach a point
 //      millimeters away, and the control below measures exactly that.
-//   3. Change the surface, re-evaluate the SAME stations, and the stroke
+//   3. Change the surface, re-evaluate the same stations, and the stroke
 //      follows — which is the entire point of storing (u,v) rather than 3-D.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,18 +16,18 @@ import { surfacePoint, surfaceClosure } from '../kernel/surface.mjs';
 import { makeArc, revolve } from '../kernel/primitives.mjs';
 import { curveOnSurfacePoints, curveOnSurfaceUV, chordDeviation, unwrapStations } from '../kernel/curveonsurface.mjs';
 
-// A real sphere: a half-circle profile revolved a full turn, so it is CLOSED in
+// A sphere: a half-circle profile revolved a full turn, so it is closed in
 // v and carries poles at both ends of u — not a flat plate, which would make
 // every claim here trivially true.
 function sphere(radius = 50) {
   // A meridian: a half-circle in the XZ plane running pole to pole, revolved a
   // full turn about Z. Angles are radians here, and the profile must lie in a
-  // plane CONTAINING the axis or the revolve sweeps a torus instead.
+  // plane containing the axis or the revolve sweeps a torus instead.
   const profile = makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], radius, -Math.PI / 2, Math.PI);
   return revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
 }
 
-// STATIONS ARE IN THE SURFACE'S OWN DOMAIN, not in 0..1 — that is what
+// Stations are in the surface's own domain, not in 0..1 — that is what
 // closestPointOnSurface hands back from a click, so it is what the stored
 // stations are. A revolve's u domain is its knot range, not the unit interval.
 const domainOf = (knots, degree) => [knots[degree], knots[knots.length - 1 - degree]];
@@ -44,10 +44,10 @@ const polylineLength = (pts) => {
   return L;
 };
 
-test('a sphere fixture is genuinely closed in v — otherwise the seam tests prove nothing', () => {
+test('a sphere fixture is closed in v — otherwise the seam tests prove nothing', () => {
   const s = sphere();
   const closure = surfaceClosure(s);
-  // MEASURED, not assumed: the revolve sweeps in V (the profile is U), so the
+  // Measured, not assumed: the revolve sweeps in V (the profile is U), so the
   // seam every test below crosses is a v seam. Asserting the wrong direction
   // would leave the seam tests running down a direction that cannot wrap, where
   // they would pass by never being tested.
@@ -69,13 +69,13 @@ test('every sample lies on the surface, and the chords between them hug it', () 
     const p = surfacePoint(s, res.uv[i][0], res.uv[i][1]);
     worstOff = Math.max(worstOff, dist(p, res.points[i]));
   }
-  assert.ok(worstOff < 1e-9, `samples must BE surface evaluations, worst off by ${worstOff}`);
+  assert.ok(worstOff < 1e-9, `samples must be surface evaluations, worst off by ${worstOff}`);
 
-  // The real measurement: how far the drawn polyline strays between samples.
+  // The measurement: how far the drawn polyline strays between samples.
   const dev = chordDeviation(s, res.uv);
   assert.ok(dev < 0.5, `the stroke should hug a 50mm sphere, worst chord deviation ${dev.toFixed(4)}mm`);
 
-  // AND IT IS THE SAMPLING THAT BUYS THAT. A coarse run must be measurably
+  // The sampling is what buys that. A coarse run must be measurably
   // worse, or the tolerance above is just loose enough to pass anything.
   const coarse = curveOnSurfacePoints(s, stations, { degree: 3, samplesPerSpan: 2 });
   const coarseDev = chordDeviation(s, coarse.uv);
@@ -83,7 +83,7 @@ test('every sample lies on the surface, and the chords between them hug it', () 
     `denser sampling must actually reduce deviation (coarse ${coarseDev.toFixed(4)} vs fine ${dev.toFixed(4)})`);
 });
 
-test('a stroke across the seam takes the SHORT way round, not across the whole sphere', () => {
+test('a stroke across the seam takes the short way round, not across the whole sphere', () => {
   const s = sphere(50);
   // Two stations either side of the V seam: 0.97 -> 0.03 is a step of +0.06 the
   // short way and -0.94 the long way. Held at the equator in u, so the hop is a
@@ -97,8 +97,8 @@ test('a stroke across the seam takes the SHORT way round, not across the whole s
   assert.ok(short < equator * 0.15,
     `crossing the seam should be a short hop, got ${short.toFixed(2)}mm against an equator of ${equator.toFixed(2)}mm`);
 
-  // THE CONTROL: the same two stations interpolated in RAW parameters, which is
-  // what the unwrapping exists to avoid. It must be dramatically longer, or the
+  // The control: the same two stations interpolated in raw parameters, which is
+  // what the unwrapping exists to avoid. It must be much longer, or the
   // assertion above is not testing the unwrap at all.
   const rawPts = [];
   for (let i = 0; i <= 32; i++) {
@@ -111,7 +111,7 @@ test('a stroke across the seam takes the SHORT way round, not across the whole s
   assert.ok(long > short * 5,
     `CONTROL: raw-parameter interpolation must go the long way (${long.toFixed(2)}mm vs ${short.toFixed(2)}mm)`);
 
-  // And the unwrapped station really did leave the domain — the mechanism, not
+  // And the unwrapped station did leave the domain — the mechanism, not
   // just its effect.
   const path = unwrapStations(s, stations);
   const [, vMax] = domainOf(s.knotsV, s.degV);
@@ -119,20 +119,20 @@ test('a stroke across the seam takes the SHORT way round, not across the whole s
     `the second station should unwrap past the v domain end ${vMax}, got ${path[1][1]}`);
 });
 
-test('the stroke REFLOWS when the surface changes, from the same stations', () => {
+test('the stroke reflows when the surface changes, from the same stations', () => {
   const small = sphere(50);
   const stations = stationsFor(small, [[0.1, 0.3], [0.35, 0.5], [0.6, 0.42]]);
   const before = curveOnSurfacePoints(small, stations, { degree: 3 });
 
   // The same surface, twice the size — a real host edit, not a nudge. Its
-  // domain is identical (same profile shape, same revolve), so the SAME
+  // domain is identical (same profile shape, same revolve), so the same
   // stations address the same places on it, which is exactly the reflow claim.
   const big = sphere(100);
   const after = curveOnSurfacePoints(big, stations, { degree: 3 });
 
   assert.equal(before.points.length, after.points.length, 'the same stations must give the same station count');
 
-  // It moved, and it moved BY THE RIGHT FACTOR — a curve that merely changed
+  // It moved, and it moved by the right factor — a curve that merely changed
   // would pass a "did it move" check while sitting nowhere near the surface.
   const rBefore = before.points.map((p) => Math.hypot(...p));
   const rAfter = after.points.map((p) => Math.hypot(...p));

@@ -1,22 +1,18 @@
-// THE TORUS PAIR THAT WOULD NOT SEW — the banked .3dm, run through the real
-// boolean, with its own operands measured first.
+// A torus pair read from a .3dm, run through the real boolean, with its own
+// operands measured first.
 //
-// Two tori that BOTH straddle their seams reach a state no sphere-pair fixture
-// can: each surface is closed in u AND v, so a fragment covering the whole
-// domain is a punctured torus rather than a punctured sphere. The union sewed
-// to DEGENERATE, then to an OPEN SHELL with 35 naked edges, then 28, and this
-// file is what keeps those numbers from drifting back up unnoticed.
+// Two tori that both straddle their seams reach a state no sphere-pair fixture
+// can: each surface is closed in u and v, so a fragment covering the whole
+// domain is a punctured torus rather than a punctured sphere.
 //
-// ALL THREE OPERATORS NOW CLOSE, and the Euler characteristic each one lands
+// All three operators close, and the Euler characteristic each one lands
 // on is asserted rather than accepted. chi is the check that catches a shell
 // which closed by welding the wrong things together: a count of naked edges
 // alone cannot tell a correct solid from one that sewed itself into the wrong
 // topology.
 //
-// THE OPERANDS ARE MEASURED BEFORE ANYTHING IS ASSERTED ABOUT THEM. A fixture
-// nobody measures is a free variable in every result resting on it — this
-// project has already shipped a "radius 20 ball" that spanned 17.73 to 22.42
-// and passed five assertions on it.
+// The operands are measured before anything is asserted about them. A fixture
+// nobody measures is a free variable in every result resting on it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,7 +52,7 @@ function evaluatedBox(srf, n = 40) {
   return { lo, hi, size: hi.map((v, k) => v - lo[k]) };
 }
 
-test('THE FIXTURE ITSELF: two tori, each closed in BOTH directions, at the size the file says', () => {
+test('The fixture itself: two tori, each closed in both directions, at the size the file says', () => {
   assert.equal(solids.length, 2, 'the fixture holds exactly two NURBS surfaces');
   for (const s of solids) {
     const { srf } = s.faces[0];
@@ -66,7 +62,7 @@ test('THE FIXTURE ITSELF: two tori, each closed in BOTH directions, at the size 
     assert.equal(srf.degV, 3);
     const box = evaluatedBox(srf);
     // A torus is as wide as it is deep, and much flatter than either. These
-    // bounds are wide enough to survive an honest re-export and tight enough
+    // bounds are wide enough to survive a faithful re-export and tight enough
     // to catch an operand silently deformed by a bad conversion.
     assert.ok(box.size[0] > 400 && box.size[0] < 520, `${s.name} spans ${box.size[0].toFixed(1)} in x`);
     assert.ok(box.size[1] > 400 && box.size[1] < 520, `${s.name} spans ${box.size[1].toFixed(1)} in y`);
@@ -81,7 +77,7 @@ const curves = ssi && ssi.ok
   ? ssi.components.map((c) => ({ samples: c.samples.map((s) => s.point), faceA: 0, faceB: 0 }))
   : [];
 
-test('THE INPUT LANDS: SSI finds the single intersection component the boolean is fed', () => {
+test('The input lands: SSI finds the single intersection component the boolean is fed', () => {
   // An SSI that refused looks exactly like a boolean that failed, three stages
   // downstream. Nothing below means anything without this.
   assert.ok(ssi && ssi.ok, `SSI refused: ${ssi ? ssi.reason : 'null'}`);
@@ -89,10 +85,10 @@ test('THE INPUT LANDS: SSI finds the single intersection component the boolean i
   assert.ok(curves[0].samples.length > 100, 'the component is sampled densely enough to trim with');
 });
 
-// EACH chi IS DERIVED, NOT OBSERVED. A solid torus is a handlebody of genus 1,
+// Each chi is derived, not observed. A solid torus is a handlebody of genus 1,
 // so chi(solid) = 1 - g = 0 for each operand, and their overlap here is a
 // single ball, chi = 1. Inclusion-exclusion gives chi(A u B) = 0 + 0 - 1 = -1,
-// a genus-2 handlebody, whose BOUNDARY surface is chi = 2 - 2g = -2. Intersect
+// a genus-2 handlebody, whose boundary surface is chi = 2 - 2g = -2. Intersect
 // is that ball, boundary chi = 2. Difference is A with a dent that does not
 // reach through its tube, so it stays genus 1 and its boundary stays chi = 0.
 for (const [op, chi, faces] of [['union', -2, 18], ['intersect', 2, 6], ['difference', 0, 12]]) {

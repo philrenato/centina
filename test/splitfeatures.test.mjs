@@ -1,20 +1,19 @@
-// SPLITS AS AN ORDERED FEATURE LIST ON THE SURFACE.
+// Splits as an ordered feature list on the surface.
 //
 // A surface carries a list of `{ direction, frac }` entries instead of being
 // wrapped in a container per split. The properties worth testing are not "it
-// produces pieces" — it obviously does — but the two that made the list the
-// right shape:
-//   · every fraction is measured on the ORIGINAL, so entries are INDEPENDENT
-//     (moving one does not move another) and each piece is exactly ONE refit
+// produces pieces" but the two that make the list the right shape:
+//   · every fraction is measured on the original, so entries are independent
+//     (moving one does not move another) and each piece is exactly one refit
 //     deep however many entries there are;
-//   · the pieces still lie ON the original surface, which is the whole claim.
+//   · the pieces still lie on the original surface, which is the whole claim.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applySplitFeatures } from '../kernel/splitfeatures.mjs';
 import { surfacePoint } from '../kernel/surface.mjs';
 import { revolve, makeLine } from '../kernel/primitives.mjs';
 
-// ⚠ A CURVED FIXTURE, not a plane. A flat surface is reproduced exactly by any
+// A curved fixture, not a plane. A flat surface is reproduced exactly by any
 // refit, so every accuracy claim below would pass on a bug — the approximation
 // this design exists to bound would be invisible.
 const SADDLE = (() => {
@@ -37,7 +36,7 @@ const SADDLE = (() => {
 
 const near = (a, b, tol) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= tol;
 // How far a piece strays from the surface it was cut from, sampled over the
-// piece's own domain and compared against the ORIGINAL at the same parameters.
+// piece's own domain and compared against the original at the same parameters.
 function worstDeviation(piece, srf, n = 9) {
   const u0 = piece.knotsU[0], u1 = piece.knotsU[piece.knotsU.length - 1];
   const v0 = piece.knotsV[0], v1 = piece.knotsV[piece.knotsV.length - 1];
@@ -52,21 +51,21 @@ function worstDeviation(piece, srf, n = 9) {
   return worst;
 }
 
-test('NO ENTRIES IS THE SURFACE ITSELF, not a refusal and not a rebuild', () => {
+test('No entries is the surface itself, not a refusal and not a rebuild', () => {
   const r = applySplitFeatures(SADDLE, []);
   assert.ok(r.ok, r.reason);
   assert.equal(r.pieces.length, 1);
   assert.deepEqual(r.pieces[0].ctrlNet, SADDLE.ctrlNet, 'an unsplit surface is handed back untouched');
 });
 
-test('ONE ENTRY CUTS IN TWO, and both halves lie on the original', () => {
+test('One entry cuts in two, and both halves lie on the original', () => {
   const r = applySplitFeatures(SADDLE, [{ direction: 'u', frac: 0.4 }]);
   assert.ok(r.ok, r.reason);
   assert.equal(r.pieces.length, 2);
   for (const p of r.pieces) assert.ok(worstDeviation(p, SADDLE) < 0.05, `a piece strayed ${worstDeviation(p, SADDLE)}`);
 });
 
-test('TWO ENTRIES IN ONE DIRECTION GIVE THREE STRIPS; CROSSED GIVE A GRID', () => {
+test('Two entries in one direction give three strips; crossed give a grid', () => {
   const strips = applySplitFeatures(SADDLE, [{ direction: 'u', frac: 0.3 }, { direction: 'u', frac: 0.7 }]);
   assert.ok(strips.ok, strips.reason);
   assert.equal(strips.pieces.length, 3);
@@ -79,10 +78,10 @@ test('TWO ENTRIES IN ONE DIRECTION GIVE THREE STRIPS; CROSSED GIVE A GRID', () =
   assert.equal(wide.pieces.length, 6, 'three cuts, 3x2');
 });
 
-test('⭐ ENTRIES ARE INDEPENDENT — adding one does not move the pieces the others make', () => {
+test('Entries are independent — adding one does not move the pieces the others make', () => {
   // The property the list exists for: "can the split location be dragged
   // differently later" only means anything if the entries do not define each
-  // other. Cut at u=0.3; then cut at u=0.3 AND v=0.6 and check the first cut
+  // other. Cut at u=0.3; then cut at u=0.3 and v=0.6 and check the first cut
   // still lands in exactly the same place.
   const one = applySplitFeatures(SADDLE, [{ direction: 'u', frac: 0.3 }]);
   const two = applySplitFeatures(SADDLE, [{ direction: 'u', frac: 0.3 }, { direction: 'v', frac: 0.6 }]);
@@ -94,11 +93,11 @@ test('⭐ ENTRIES ARE INDEPENDENT — adding one does not move the pieces the ot
     two.pieces[0].knotsU[two.pieces[0].knotsU.length - 1]);
 });
 
-test('⭐⭐ EVERY PIECE IS ONE REFIT DEEP, however many entries there are', () => {
-  // The reason fractions are measured on the ORIGINAL. `splitSurface` resamples
+test('Every piece is one refit deep, however many entries there are', () => {
+  // The reason fractions are measured on the original. `splitSurface` resamples
   // and refits, so cutting an already-cut piece would compound. If this were
   // implemented by repeated splitting, accuracy would decay with entry count;
-  // measured against the ORIGINAL it must not.
+  // measured against the original it must not.
   const one = applySplitFeatures(SADDLE, [{ direction: 'u', frac: 0.5 }]);
   const many = applySplitFeatures(SADDLE, [
     { direction: 'u', frac: 0.2 }, { direction: 'u', frac: 0.5 }, { direction: 'u', frac: 0.8 },
@@ -112,7 +111,7 @@ test('⭐⭐ EVERY PIECE IS ONE REFIT DEEP, however many entries there are', () 
     `five entries must not be LESS accurate than one (${worstMany} vs ${worstOne}) — that would mean pieces are being re-split`);
 });
 
-test('COINCIDENT AND OUT-OF-RANGE ENTRIES COLLAPSE rather than making zero-width pieces', () => {
+test('Coincident and out-of-range entries collapse rather than making zero-width pieces', () => {
   const r = applySplitFeatures(SADDLE, [
     { direction: 'u', frac: 0.5 }, { direction: 'u', frac: 0.5 },   // the same cut twice
     { direction: 'u', frac: 0 }, { direction: 'u', frac: 1 },        // on the boundary: not cuts
@@ -123,23 +122,23 @@ test('COINCIDENT AND OUT-OF-RANGE ENTRIES COLLAPSE rather than making zero-width
   assert.equal(r.stats.dropped, 3);
 });
 
-test('A CLOSED DIRECTION REFUSES BY NAME rather than offering a dead cut', () => {
+test('A closed direction refuses by name rather than offering a dead cut', () => {
   // A full revolve is closed in its swept direction: cutting a closed loop at
-  // ONE parameter unrolls it into a single open piece, not two. The same
+  // one parameter unrolls it into a single open piece, not two. The same
   // refusal `splitSurface` already makes, at the list level.
   const cylinder = revolve(makeLine([10, 0, -20], [10, 0, 20]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
   const closedDir = cylinder.knotsU.length > cylinder.knotsV.length ? 'u' : 'v';
   const refused = applySplitFeatures(cylinder, [{ direction: closedDir, frac: 0.5 }]);
   assert.equal(refused.ok, false, 'a closed direction must refuse');
   assert.match(refused.reason, /CLOSED/);
-  // ...and the OTHER direction still works on the same surface, so the refusal
+  // ...and the other direction still works on the same surface, so the refusal
   // is about the direction and not about the object.
   const open = applySplitFeatures(cylinder, [{ direction: closedDir === 'u' ? 'v' : 'u', frac: 0.5 }]);
   assert.ok(open.ok, `the open direction must still split: ${open.reason}`);
   assert.equal(open.pieces.length, 2);
 });
 
-test('A MALFORMED CALL REFUSES rather than throwing', () => {
+test('A malformed call refuses rather than throwing', () => {
   for (const bad of [null, {}, { ctrlNet: [] }]) {
     let out = null;
     assert.doesNotThrow(() => { out = applySplitFeatures(bad, [{ direction: 'u', frac: 0.5 }]); });

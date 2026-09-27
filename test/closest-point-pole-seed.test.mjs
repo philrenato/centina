@@ -5,19 +5,19 @@ import { refineClosestPointOnSurface } from '../kernel/trim.mjs';
 import { globalCurveInterp } from '../kernel/interpolate.mjs';
 import { revolve, makeArc, makeCircle, makeLine, extrude } from '../kernel/primitives.mjs';
 
-// A REVOLVE WHOSE PROFILE STARTS ON THE AXIS HAS A POLE, and a pole is where a
+// A revolve whose profile starts on the axis has a pole, and a pole is where a
 // closest-point search can be seeded into a place it can never leave: the
 // partials collapse there, so the Gauss-Newton step has a singular Jacobian and
 // the loop's own degenerate-matrix guard returns the seed untouched. On a
-// strongly shaped profile the pole is also, genuinely, the nearest sample of a
+// strongly shaped profile the pole is also the nearest sample of a
 // coarse parameter grid — the true minimum sits inside the first cell beside it,
 // where the surface expands fastest per unit of u — so the search picks the one
 // seed that cannot move and reports a point over a millimeter away from a target
 // that is ON the surface.
 //
-// These fixtures are the ones that produced that failure in a real boolean: two
-// interpolated-profile revolves whose intersection curve was refused with "sample
-// 0 is 1.496296 away" while lying 3e-14 from the surface it was said to miss.
+// The fixtures are two interpolated-profile revolves. A pole-seeded search on
+// them refuses their intersection curve with "sample 0 is 1.496296 away" while
+// the curve lies 3e-14 from the surface it is said to miss.
 const blobSurface = (profile) =>
   revolve(globalCurveInterp(profile, 3), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 
@@ -32,7 +32,7 @@ const SPHERE = revolve(makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], 15, -Math.PI / 2
 const TORUS = revolve(makeCircle([20, 0, 0], [1, 0, 0], [0, 0, 1], 6), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 const DISC = revolve(makeLine([0, 0, 0], [10, 0, 0]), [0, 0, 0], [0, 0, 1], 0, Math.PI * 2);
 
-// The honest answer, at a resolution no shipped call would pay for: a dense grid
+// The reference answer, at a resolution no production call would pay for: a dense grid
 // followed by the same refinement. Slow, and only ever used as the thing the
 // real search is scored against.
 function referenceDistance(srf, target, n = 240) {

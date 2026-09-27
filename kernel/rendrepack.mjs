@@ -1,4 +1,4 @@
-// THE PATH TRACER'S BUFFERS, PACKED THE WAY ITS SHADER READS THEM.
+// The path tracer's buffers, packed the way its shader reads them.
 //
 // Everything the trace shader binds as geometry or material is `array<vec4f>`
 // or `array<u32>` — never a WGSL struct. That is deliberate on the shader's
@@ -7,40 +7,37 @@
 // disagree with, and the only rule left is that every stride is a whole number
 // of 16-byte `vec4`.
 //
-// Three layouts live here, and each one has a failure that produces a PLAUSIBLE
+// Three layouts live here, and each one has a failure that produces a plausible
 // picture rather than an error:
 //
-//   tris   3 vec4 / triangle   v0.w carries the owning part index, AS U32 BITS
+//   tris   3 vec4 / triangle   v0.w carries the owning part index, as u32 bits
 //   norms  3 vec4 / triangle   per-corner shading normals, .w unused
 //   mats  13 vec4 / material   52 floats — see MAT_STRIDE_FLOATS below
 //
 // plus `partMats`, one `u32` per part, and the BVH nodes from `bvh.mjs` in
 // their GPU form (2 vec4 / node).
 //
-// ⚠⚠ THE PERMUTATION MUST REACH ALL THREE ARRAYS. Triangles are stored in BVH
+// The permutation must reach all three arrays. Triangles are stored in BVH
 // order so a leaf is a contiguous run, which means positions, normals and the
 // per-triangle part index are all permuted by the same `order`. Permuting two
-// of the three is the classic way to get a picture that is right in every
-// respect a silhouette can show and wrong in every material: objects wearing
-// each other's finishes, no error anywhere.
+// of the three gives a picture that is right in every respect a silhouette can
+// show and wrong in every material: objects wearing each other's finishes, no
+// error anywhere.
 //
-// ⚠⚠ AND THE INDEX FIELDS ARE U32 BITS SITTING IN FLOAT SLOTS. The shader reads
-// them with `bitcast<u32>`, so a part index written as the FLOAT 3.0 arrives as
+// The index fields are u32 bits sitting in float slots. The shader reads them
+// with `bitcast<u32>`, so a part index written as the float 3.0 arrives as
 // 1077936128. WGSL clamps that out-of-range read instead of faulting, so every
-// triangle in the scene resolves to the same clamped material row — which reads
-// as "materials aren't working at all" rather than as an index bug, and sends
-// the search to the material table. Every index below is written through a
-// `Uint32Array` aliased on the same ArrayBuffer.
+// triangle in the scene resolves to the same clamped material row, which reads
+// as "materials aren't working at all" rather than as an index bug. Every index
+// below is written through a `Uint32Array` aliased on the same ArrayBuffer.
 
 import { buildBVH, packBVHForGPU } from './bvh.mjs';
 
-/* MATERIAL STRIDE, MEASURED FROM THE SHADER RATHER THAN FROM PROSE.
+/* Material stride, taken from the shader's loads.
    `getMat` loads `mats[i*13u]` through `mats[i*13u+12u]` — thirteen vec4, so
-   52 floats / 208 bytes per row. The buffer's own binding comment says 12 vec4
-   and is stale; it drifted when the struct grew for thin-film interference and
-   nothing forced it to move. Taking 48 from that comment leaves row 0 correct
-   and every later row shifted four floats further wrong, which reads as "some
-   materials are broken" and never points at the stride. */
+   52 floats / 208 bytes per row. The shader's binding comment for this buffer
+   says 12 vec4 and is stale. A stride of 48 leaves row 0 correct and every
+   later row shifted four floats further wrong. */
 export const MAT_STRIDE_FLOATS = 52;
 
 /** Floats per triangle in `tris` and in `norms`: 3 vec4. */
@@ -63,13 +60,13 @@ export const GRID_SHAPE = { square: 0, circular: 1, diamond: 2 };
 /**
  * Write one material into `f` at float offset `o`.
  *
- * ⚠ THE ROW MUST BE ZERO BEFORE THIS RUNS. Unwritten floats are meaningful —
+ * The row must be zero before this runs. Unwritten floats are meaningful —
  * every default in the table is "whatever a fresh Float32Array holds" for the
  * fields this does not touch — so a row is packed into fresh storage and never
  * patched in place over an older material.
  *
- * ⚠⚠ THE PATTERN FAMILIES ARE MUTUALLY EXCLUSIVE AND ORDERED. marble, woven,
- * grain, grid and mottle all reuse the SAME sixteen floats with different
+ * The pattern families are mutually exclusive and ordered. marble, woven,
+ * grain, grid and mottle all reuse the same sixteen floats with different
  * meanings, selected by `kind`. A material carrying two of them must resolve to
  * exactly one, in this order, or the sub-fields are read under the wrong names
  * and the surface gets a plausible wrong texture.
@@ -77,21 +74,21 @@ export const GRID_SHAPE = { square: 0, circular: 1, diamond: 2 };
 export function matPack(f, o, m) {
   f[o] = m.base[0]; f[o + 1] = m.base[1]; f[o + 2] = m.base[2]; f[o + 3] = m.metallic || 0;
   f[o + 4] = m.rough != null ? m.rough : 0.4; f[o + 5] = m.ior || 1.5; f[o + 6] = m.trans || 0; f[o + 7] = m.alpha != null ? m.alpha : 1;
-  /* emis is PRE-MULTIPLIED by its strength here. The shader adds `T * m.emis`
+  /* emis is pre-multiplied by its strength here. The shader adds `T * m.emis`
      with no second multiply, so leaving the multiply to the shader would make
      every emitter unit-bright. */
   const es = m.emisStr || 0;
   f[o + 8] = (m.emis ? m.emis[0] : 0) * es; f[o + 9] = (m.emis ? m.emis[1] : 0) * es; f[o + 10] = (m.emis ? m.emis[2] : 0) * es;
   f[o + 11] = m.sheen || 0;
   f[o + 12] = m.coat || 0; f[o + 13] = m.coatRough != null ? m.coatRough : 0.05;
-  /* Beer-Lambert absorption density, written for EVERY material and not only
+  /* Beer-Lambert absorption density, written for every material and not only
      for glass: 1 = the base tint at one scene unit, 0 = perfectly clear. A
      transmissive material that never had this field authored still needs the
      default, and zero here would make every tinted glass colorless. */
   f[o + 31] = m.absorb != null ? m.absorb : 1.0;
   f[o + 32] = m.aniso || 0; f[o + 33] = m.sss || 0;
   /* Spectral dispersion on the transmission lobe, 0 = achromatic glass.
-     Rendre also accepts an authored ABBE NUMBER here and converts it, but that
+     Rendre also accepts an authored Abbe number here and converts it, but that
      conversion is not part of the extracted source and no material in the
      library carries one — so `dispersion` is taken as authored, and a caller
      that wants to work in Abbe numbers must resolve one to a dispersion
@@ -103,15 +100,15 @@ export function matPack(f, o, m) {
   f[o + 40] = m.phantom ? 1 : 0; f[o + 41] = m.frontOp != null ? m.frontOp : 0.08; f[o + 42] = m.edgeOp != null ? m.edgeOp : 0.70; f[o + 43] = m.falloff != null ? m.falloff : 3.0;
   f[o + 44] = m.filmIor != null ? m.filmIor : 1.4; f[o + 45] = m.thicknessNm || 0;
   f[o + 46] = m.isolate || 0;
-  /* A DISTANCE in world units, not a strength — this is how far the surface is
-     carved DOWN. Deliberately not derived from `bump`, which is a dimensionless
+  /* A distance in world units, not a strength — this is how far the surface is
+     carved down. Deliberately not derived from `bump`, which is a dimensionless
      shading amount: deriving one from the other would silently carve every
      bumped material in the library. */
   f[o + 48] = m.relief || 0;
 
-  /* A participating medium REPLACES the surface material outright, so it
+  /* A participating medium replaces the surface material outright, so it
      outranks every pattern rather than joining the tail of the chain. The
-     volume machinery is not part of this transplant and the shader's medium
+     volume machinery is not part of this module and the shader's medium
      arms are starved rather than removed, so `kind` is clamped to <= 5 here and
      kind 6 is never emitted. The medium still suppresses the pattern families
      below it — dropping it from the chain instead would pack a medium
@@ -153,7 +150,7 @@ export function matPack(f, o, m) {
     f[o + 23] = gd.thickness != null ? gd.thickness : 0.5;
     f[o + 29] = gd.hue != null ? gd.hue : 0; f[o + 30] = gd.seed != null ? gd.seed : 0;
   } else if (mt) {
-    // Mottle is the one family that needed a real THIRD color, and takes
+    // Mottle is the one family that needs a third color, and takes
     // marble's clast slot for it — the slot woven, grain and grid leave alone.
     const t2 = mt.tone2 || [0.3, 0.3, 0.2], t3 = mt.tone3 || [0.15, 0.15, 0.1];
     f[o + 16] = t2[0]; f[o + 17] = t2[1]; f[o + 18] = t2[2]; f[o + 19] = mt.scale != null ? mt.scale : 2.5;
@@ -181,11 +178,11 @@ export function packMaterials(materials) {
 /**
  * `partMats[i] = (row & 0x7fffffff) | (visible ? 0 : 0x80000000)`.
  *
- * This is the CHEAP buffer, and keeping it separate from the geometry is what
+ * This is the cheap buffer, and keeping it separate from the geometry is what
  * makes hiding a part or reassigning its material a few hundred bytes of
  * upload instead of a BVH rebuild.
  *
- * ⚠ NEVER ZERO-LENGTH. A zero-length storage buffer is a WebGPU validation
+ * Never zero-length. A zero-length storage buffer is a WebGPU validation
  * error, so an empty scene still gets one entry — the same reason
  * `gatherGeometry` synthesizes a degenerate triangle.
  */
@@ -204,12 +201,12 @@ export function packPartMats(parts) {
  * part each triangle came from.
  *
  * `parts[i]` supplies `pos` and `nrm` as `Float32Array(n*9)` — three corners of
- * three components, already in world space — and the ARRAY POSITION of a part
+ * three components, already in world space — and the array position of a part
  * is its part index, which is also how `partMats` is indexed. The two orders
  * are the same order by construction; keeping two independent orderings is how
  * the material index and the geometry come apart.
  *
- * ⚠ AN EMPTY SCENE STILL PRODUCES ONE TRIANGLE. A degenerate, never-hit
+ * An empty scene still produces one triangle. A degenerate, never-hit
  * triangle keeps the buffer, the bind group and the traversal on their normal
  * paths; the alternative is a zero-length buffer, which WebGPU rejects, and
  * three special cases downstream to avoid it.
@@ -238,7 +235,7 @@ export function gatherGeometry(parts) {
  * Positions, normals and part indices permuted into BVH order and widened to
  * the shader's 3-vec4 stride.
  *
- * `order[i]` is the ORIGINAL index of the triangle that now lives at slot `i`,
+ * `order[i]` is the original index of the triangle that now lives at slot `i`,
  * so every read is `order[i]` and every write is `i`. Reading and writing
  * through the same index is a permutation that silently does nothing on an
  * already-sorted scene and scrambles a real one.
@@ -246,7 +243,7 @@ export function gatherGeometry(parts) {
 export function reorderToGPU(pos, nrm, mp, nT, order) {
   const tris = new Float32Array(nT * TRI_STRIDE_FLOATS);
   const norms = new Float32Array(nT * TRI_STRIDE_FLOATS);
-  // Aliased on the SAME ArrayBuffer: this is the only way the part index
+  // Aliased on the same ArrayBuffer: this is the only way the part index
   // reaches the shader as u32 bits rather than as a float of that value.
   const triU = new Uint32Array(tris.buffer);
   for (let i = 0; i < nT; i += 1) {
@@ -270,7 +267,7 @@ export function reorderToGPU(pos, nrm, mp, nT, order) {
  * fields as u32 bits; `bvh` is the CPU-side tree kept alongside for querying
  * the same structure from JS.
  *
- * ⚠ THE TRAVERSAL STACK IS 40 DEEP on the shader side and a deeper tree loses a
+ * The traversal stack is 40 deep on the shader side and a deeper tree loses a
  * subtree with nothing said, so `maxDepth` comes back for the caller to check.
  * With a leaf target of four and a split that always separates, depth is
  * logarithmic and 40 is a very long way off — but it is a fixed number in the

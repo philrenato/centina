@@ -6,10 +6,8 @@ import {
   tessellateCells, normalizeTessParams,
 } from '../kernel/tessellate.mjs';
 
-// --------------------------------------------------------------------------
-// QUAD / TRIANGULAR — exact cell counts, the irregularity-0 regular-grid
+// Quad / triangular: exact cell counts, the irregularity-0 regular-grid
 // identity, and a measurable jitter at irregularity>0.
-// --------------------------------------------------------------------------
 test('quad: MxN grid produces exactly M*N cells, each a 4-corner loop', () => {
   const cells = quadCells(6, 4, 0, 1);
   assert.equal(cells.length, 24);
@@ -22,7 +20,7 @@ test('triangular: MxN grid produces exactly 2*M*N triangles', () => {
   for (const c of cells) assert.equal(c.length, 3);
 });
 
-test('irregularity=0 is a PERFECTLY regular grid (checkable identity)', () => {
+test('irregularity=0 is a regular grid (checkable identity)', () => {
   const V = gridVertices(5, 5, 0, 7);
   for (let i = 0; i <= 5; i++) for (let j = 0; j <= 5; j++) {
     assert.ok(Math.abs(V[i][j][0] - i / 5) < 1e-15, `vertex ${i},${j} u`);
@@ -38,7 +36,7 @@ test('irregularity>0 measurably jitters interior grid intersections (and never c
     maxDev = Math.max(maxDev, Math.hypot(V1[i][j][0] - V0[i][j][0], V1[i][j][1] - V0[i][j][1]));
   }
   assert.ok(maxDev > 0.01, `interior jitter should be measurable, got ${maxDev}`);
-  // Boundary vertices are NEVER jittered (clean domain edge + seam).
+  // Boundary vertices are never jittered (clean domain edge + seam).
   for (let i = 0; i <= 6; i++) {
     assert.ok(Math.abs(V1[i][0][1]) < 1e-15 && Math.abs(V1[i][6][1] - 1) < 1e-15);
     assert.ok(Math.abs(V1[0][i][0]) < 1e-15 && Math.abs(V1[6][i][0] - 1) < 1e-15);
@@ -50,9 +48,7 @@ test('irregularity>0 measurably jitters interior grid intersections (and never c
   }
 });
 
-// --------------------------------------------------------------------------
-// DETERMINISM — same seed = same tessellation, different seed = different.
-// --------------------------------------------------------------------------
+// Determinism: same seed = same tessellation, different seed = different.
 test('determinism: same seed reproduces bit-identical cells; different seed differs', () => {
   const a = JSON.stringify(quadCells(6, 6, 0.5, 42));
   const b = JSON.stringify(quadCells(6, 6, 0.5, 42));
@@ -67,9 +63,7 @@ test('determinism: same seed reproduces bit-identical cells; different seed diff
   assert.notEqual(va, vc);
 });
 
-// --------------------------------------------------------------------------
-// VORONOI — the real correctness proof: EQUIDISTANCE on interior edges.
-// --------------------------------------------------------------------------
+// Voronoi correctness: equidistance on interior edges.
 test('circumcenter is equidistant from all three triangle vertices', () => {
   const a = [0, 0], b = [4, 0], c = [1, 3];
   const cc = circumcenter(a, b, c);
@@ -94,9 +88,9 @@ test('Delaunay: every triangle circumcircle contains no other point (empty-circl
   }
 });
 
-// The DEFINING Voronoi property, proven numerically on several non-trivial
-// point sets: every point on an INTERIOR cell-boundary edge is genuinely
-// EQUIDISTANT from its own generator and its nearest OTHER generator.
+// The defining Voronoi property, checked numerically on several non-trivial
+// point sets: every point on an interior cell-boundary edge is equidistant
+// from its own generator and its nearest other generator.
 function checkEquidistance(generators) {
   const cells = voronoiCells(generators);
   let interiorEdgesChecked = 0;
@@ -129,30 +123,28 @@ function checkEquidistance(generators) {
   return interiorEdgesChecked;
 }
 
-test('Voronoi EQUIDISTANCE proof — hex lattice, irregularity 0', () => {
+test('Voronoi equidistance — hex lattice, irregularity 0', () => {
   const gens = hexGenerators(60, 0, 1, null);
   const n = checkEquidistance(gens);
   assert.ok(n > 20, `should have checked many interior edge points, got ${n}`);
 });
 
-test('Voronoi EQUIDISTANCE proof — jittered lattice, irregularity 0.6', () => {
+test('Voronoi equidistance — jittered lattice, irregularity 0.6', () => {
   const gens = hexGenerators(60, 0.6, 9, null);
   const n = checkEquidistance(gens);
   assert.ok(n > 20, `should have checked many interior edge points, got ${n}`);
 });
 
-test('Voronoi EQUIDISTANCE proof — a small hand-built point set', () => {
+test('Voronoi equidistance — a small hand-built point set', () => {
   const gens = [[0.2, 0.2], [0.8, 0.2], [0.5, 0.7], [0.5, 0.35], [0.25, 0.75], [0.75, 0.75]];
   const n = checkEquidistance(gens);
   assert.ok(n > 5, `should have checked interior edge points, got ${n}`);
 });
 
-// --------------------------------------------------------------------------
-// VORONOI — irregularity increases the cell-size distribution variance
-// (a real statistical property, not eyeballed), and cells are valid
+// Voronoi: irregularity increases the cell-size distribution variance
+// (a statistical property, not eyeballed), and cells are valid
 // (non-self-intersecting, positive area) at the domain edge.
-// --------------------------------------------------------------------------
-test('Voronoi irregularity increases cell-SIZE variance (regular -> irregular)', () => {
+test('Voronoi irregularity increases cell-size variance (regular -> irregular)', () => {
   const areasCV = (irr) => {
     const cells = voronoiTessellate({ count: 80, irregularity: irr, seed: 4 }).cells;
     const areas = cells.map((c) => Math.abs(polygonArea2D(c.polygon))).filter((a) => a > 1e-9);
@@ -171,22 +163,20 @@ test('Voronoi boundary clipping produces valid, non-degenerate cells at the doma
   let edgeCells = 0;
   for (const c of cells) {
     const poly = c.polygon;
-    assert.ok(poly.length >= 3, 'a cell must be a real polygon');
+    assert.ok(poly.length >= 3, 'a cell must be a polygon');
     // Positive area (non-degenerate, consistent winding after clip).
-    assert.ok(Math.abs(polygonArea2D(poly)) > 1e-9, 'cell must have real area');
+    assert.ok(Math.abs(polygonArea2D(poly)) > 1e-9, 'cell must have nonzero area');
     // Every vertex is inside the unit square (clipped).
     for (const [u, v] of poly) {
       assert.ok(u >= -1e-9 && u <= 1 + 1e-9 && v >= -1e-9 && v <= 1 + 1e-9, `vertex ${u},${v} in domain`);
     }
     if (poly.some(([u, v]) => u < 1e-6 || u > 1 - 1e-6 || v < 1e-6 || v > 1 - 1e-6)) edgeCells++;
   }
-  assert.ok(edgeCells > 0, 'some cells should genuinely touch the clipped domain boundary');
+  assert.ok(edgeCells > 0, 'some cells should touch the clipped domain boundary');
 });
 
-// --------------------------------------------------------------------------
-// PAINT-DRIVEN DENSITY — denser Voronoi where the painted field is higher.
-// --------------------------------------------------------------------------
-test('paint-driven density: MORE generators where the field is higher', () => {
+// Paint-driven density: denser Voronoi where the painted field is higher.
+test('paint-driven density: more generators where the field is higher', () => {
   // Field = 1 on the left half (u<0.5), 0 on the right.
   const field = (u, v) => (u < 0.5 ? 1 : 0);
   const gens = hexGenerators(120, 0, 1, paintKeepPredicate(field, 0.2));
@@ -195,9 +185,7 @@ test('paint-driven density: MORE generators where the field is higher', () => {
   assert.ok(left > right * 1.5, `left (high paint) should be denser: left ${left} vs right ${right}`);
 });
 
-// --------------------------------------------------------------------------
 // normalizeTessParams + tessellateCells dispatch.
-// --------------------------------------------------------------------------
 test('normalizeTessParams clamps and defaults sanely; irregularity always present', () => {
   const p = normalizeTessParams({ type: 'bogus', nu: 1000, irregularity: 5 });
   assert.equal(p.type, 'voronoi');

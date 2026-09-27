@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { ruledLoftPanels } from '../kernel/loft.mjs';
 import { surfacePoint, isFiniteNet } from '../kernel/surface.mjs';
 
-// CLOSED case (a triangle-like 3-vertex profile, small enough to hand-check
-// every panel's own corners) — 3 panels, one per edge, each an EXACT
+// Closed case (a triangle-like 3-vertex profile, small enough to hand-check
+// every panel's own corners) — 3 panels, one per edge, each an exact
 // bilinear patch reproducing its own 2 input points on each side.
 test('ruledLoftPanels (closed): N panels for N vertices, each panel\'s 4 corners exactly match the real input points', () => {
   const a = [[0, 0, 0], [10, 0, 0], [5, 10, 0]];
@@ -30,7 +30,7 @@ test('ruledLoftPanels (closed): N panels for N vertices, each panel\'s 4 corners
   }
 });
 
-// OPEN case — N-1 panels (no wraparound edge), same exactness check.
+// Open case — N-1 panels (no wraparound edge), same exactness check.
 test('ruledLoftPanels (open): N-1 panels for N vertices, no wraparound edge, corners still exact', () => {
   const a = [[0, 0, 0], [10, 0, 0], [20, 0, 0], [30, 0, 0]];
   const b = [[0, 0, 10], [10, 0, 10], [20, 0, 10], [30, 0, 10]];
@@ -47,7 +47,7 @@ test('ruledLoftPanels (open): N-1 panels for N vertices, no wraparound edge, cor
   }
 });
 
-// Every panel is genuinely FLAT (a real ruled/bilinear patch, not an
+// Every panel is flat (a real ruled/bilinear patch, not an
 // approximation) — the midpoint of a panel must sit exactly at the average
 // of its 4 corners, the defining property of a bilinear surface.
 test('ruledLoftPanels: each panel is exactly flat/bilinear (midpoint = average of the 4 corners)', () => {
@@ -65,9 +65,9 @@ test('ruledLoftPanels: each panel is exactly flat/bilinear (midpoint = average o
   }
 });
 
-// Defensive refusals — never actually reachable from the app layer's own
+// Defensive refusals — never reachable from the app layer's own
 // eligibility gate (loftRuledEligible), but the kernel function itself
-// should refuse honestly on its own, not just trust its caller.
+// should refuse on its own, not just trust its caller.
 test('ruledLoftPanels refuses a mismatched vertex count with a clear, named error', () => {
   assert.throws(() => ruledLoftPanels([[0, 0, 0], [1, 0, 0]], [[0, 0, 1], [1, 0, 1], [2, 0, 1]], false), /same vertex count/);
 });

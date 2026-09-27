@@ -1,17 +1,16 @@
-// THE ENVIRONMENT, PACKED THE WAY THE TRACE SHADER READS IT.
+// The environment, packed the way the trace shader reads it.
 //
 // Two GPU resources come out of one equirectangular HDR: an `rgba16float`
-// texture the shader samples for radiance, and ONE flat `array<f32>` — `envAux`
+// texture the shader samples for radiance, and one flat `array<f32>` — `envAux`
 // — holding the importance-sampling distribution as three tables laid end to
 // end. `envmap.mjs` builds the distribution; this module lays it out for the
 // binding and reports the offsets the shader is told about.
 //
-// ⚠⚠ THE OFFSETS ARE COMPUTED ONCE AND HANDED TO THE SHADER. `condOff` and
-// `pdfOff` travel in the frame uniform; the shader does NOT re-derive them from
-// `cdfW`/`cdfH`. Re-deriving them on the shader side is the obvious
-// simplification and it is exactly how the two sides drift apart — and the
-// drift is silent. A wrong `condOff` makes the conditional binary search walk
-// numbers that are not that row's CDF; the search still terminates, because a
+// The offsets are computed once and handed to the shader. `condOff` and
+// `pdfOff` travel in the frame uniform; the shader does not re-derive them from
+// `cdfW`/`cdfH`, because a second derivation lets the two sides drift apart
+// silently. A wrong `condOff` makes the conditional binary search walk numbers
+// that are not that row's CDF; the search still terminates, because a
 // bisection always does, and directions still come out. The result is a
 // plausible image lit from slightly the wrong place that converges at the
 // normal rate. Nothing in the picture says anything is wrong.
@@ -20,27 +19,24 @@
 // filled at the offsets it returns and the uniform is given the offsets it
 // returns, and there is no second expression for either.
 //
-// ⚠ THE PDF IS NORMALIZED TO THE UNIT SQUARE, in `buildEnvDistribution`, by the
-// `cw*ch/total` factor. Losing it makes every render off by ONE CONSTANT
-// FACTOR — which reads as the exposure being wrong, gets compensated for in the
-// exposure, and after that nothing is ever right again. A white furnace walked
-// through these packed tables is the only check that catches it.
+// The pdf is normalized to the unit square, in `buildEnvDistribution`, by the
+// `cw*ch/total` factor. Losing it makes every render off by one constant
+// factor, which reads as an exposure error. A white furnace walked through
+// these packed tables catches it.
 //
-// ⚠⚠ AND A WHITE FURNACE CANNOT CATCH A WRONG `condOff`. It is worth knowing
-// which instrument sees which failure, because the obvious one sees only half.
-// With `condOff` off by a row, a sample in row y draws its column from row
-// y+1's conditional, picking up a factor P(x|y+1)/P(x|y). The pdf is read at
-// the SAME cell and is proportional to that row's weighted luminance, so the
-// row's own normalization cancels and the estimator stays EXACTLY unbiased:
-// the total energy is right and only the directions are wrong. That is the
-// whole reason the failure reads as "lit from slightly the wrong place" rather
-// than as an exposure error. Catching it takes a check on WHERE the samples
-// land — the sampled cell histogram against the pdf table the walk reports —
-// and it needs a coarse, high-contrast environment to have the resolution to
-// see it. The two guards are complementary, not redundant: the furnace owns
-// `pdfOff` and the normalization, the histogram owns `condOff`.
+// A white furnace cannot catch a wrong `condOff`. With `condOff` off by a row,
+// a sample in row y draws its column from row y+1's conditional, picking up a
+// factor P(x|y+1)/P(x|y). The pdf is read at the same cell and is proportional
+// to that row's weighted luminance, so the row's own normalization cancels and
+// the estimator stays exactly unbiased: the total energy is right and only the
+// directions are wrong, so the failure reads as "lit from slightly the wrong
+// place" rather than as an exposure error. Catching it takes a check on where
+// the samples land — the sampled cell histogram against the pdf table the walk
+// reports — and it needs a coarse, high-contrast environment to have the
+// resolution to see it. The two guards are complementary, not redundant: the
+// furnace owns `pdfOff` and the normalization, the histogram owns `condOff`.
 //
-// ⚠ `envRot` IS NOT PACKED HERE. It lives in the frame uniform, in TURNS: the
+// `envRot` is not packed here. It lives in the frame uniform, in turns: the
 // shader subtracts it directly from a `[0,1]` texture coordinate, so degrees or
 // radians rotate the dome dozens of times. The tables themselves are
 // rotation-independent — the sampler draws `(fu, fv)` in texture space and
@@ -53,7 +49,7 @@ import { buildEnvDistribution } from './envmap.mjs';
 export const HALF_FLOAT_MAX = 65504;
 
 /**
- * The layout of `envAux`, and the ONLY expression of it.
+ * The layout of `envAux`, and the only expression of it.
  *
  * ```
  * [ marginal CDF   ch+1 floats ] at 0
@@ -61,7 +57,7 @@ export const HALF_FLOAT_MAX = 65504;
  * [ per-texel pdf  ch*cw       ] at pdfOff
  * ```
  *
- * ⚠ THE MARGINAL'S OFFSET IS STRUCTURALLY ZERO and is never communicated: the
+ * The marginal's offset is structurally zero and is never communicated: the
  * shader indexes `envAux[mid]` bare while bisecting for the row. It is returned
  * as a field anyway so the fill loop reads it from here like the other two,
  * rather than from a literal that could disagree with the shader.
@@ -93,10 +89,10 @@ export function envAuxLayout(cw, ch) {
  * `cdfW`, returned so a CPU-side walk of the same buffer takes them from here
  * instead of restating them.
  *
- * The three regions are COPIED region by region, read at the source's own
+ * The three regions are copied region by region, read at the source's own
  * offsets and written at this layout's. A source laid out differently still
- * lands correctly, and — the point — the written offsets and the reported
- * offsets cannot be two different numbers.
+ * lands correctly, and the written offsets and the reported offsets cannot be
+ * two different numbers.
  */
 export function packEnvAux(D) {
   const cw = D.cw, ch = D.ch;
@@ -134,7 +130,7 @@ const _u32 = new Uint32Array(_f32.buffer);
 /**
  * One non-negative float as `f16` bits, round-to-nearest-even.
  *
- * ⚠ ANYTHING ABOVE 65504 IS CLAMPED, NOT ROUNDED TO INFINITY. A sun in an HDR
+ * Anything above 65504 is clamped, not rounded to infinity. A sun in an HDR
  * reaches five and six figures, and an `Inf` texel does not stay in its texel:
  * the sampler filters linearly, so `Inf` bleeds into its neighbors, and
  * `Inf * 0` or `Inf - Inf` anywhere downstream is `NaN`. The accumulation
@@ -180,12 +176,11 @@ export function halfFromFloat(v) {
  * `HALF_FLOAT_MAX` — a large count on a normal HDR means the source is scaled
  * far outside the range `f16` can carry, not that it has a bright sun.
  *
- * ⚠ ALPHA IS FORCED TO 1.0 (`0x3c00`), not left at zero. The shader reads
- * `.rgb` and never looks at alpha, so a zero there costs nothing today — but a
- * zero-alpha float texture is the kind of thing a later premultiply or a
- * different sampler quietly multiplies the sky away by.
+ * Alpha is forced to 1.0 (`0x3c00`), not left at zero. The shader reads
+ * `.rgb` and never looks at alpha, but a premultiply or a different sampler
+ * would multiply a zero-alpha sky away.
  *
- * ⚠ `bytesPerRow` HAS NO 256-BYTE ALIGNMENT HERE. That requirement belongs to
+ * `bytesPerRow` has no 256-byte alignment here. That requirement belongs to
  * `copyBufferToTexture`; `queue.writeTexture` from a typed array takes the
  * tight `width * 8`. Padding it to 256 would shift every row.
  *
@@ -238,9 +233,9 @@ export function packEnvForGPU(img, opts = {}) {
 }
 
 /**
- * Dome rotation in TURNS, from degrees.
+ * Dome rotation in turns, from degrees.
  *
- * ⚠ THE SHADER SUBTRACTS THIS FROM A `[0,1]` TEXTURE COORDINATE. Feeding it
+ * The shader subtracts this from a `[0,1]` texture coordinate. Feeding it
  * degrees rotates the dome ninety times for a quarter turn; feeding it radians
  * rotates it π times. This belongs in the frame uniform, not in the packed
  * tables — the distribution is built in texture space and the sampler applies
@@ -256,7 +251,7 @@ const clamp01 = (t) => (t < 0 ? 0 : (t > 1 ? 1 : t));
 
 /**
  * The shader's `dirToUV`, walked on the CPU: dome pitch, then equirectangular
- * longitude minus the rotation, then latitude with `v = 0` straight UP.
+ * longitude minus the rotation, then latitude with `v = 0` straight up.
  *
  * `opts.rot` is in turns and `opts.height` is the dome pitch, both as they sit
  * in the frame uniform.
@@ -271,16 +266,16 @@ export function envDirToUVPacked(dir, opts = {}) {
 }
 
 /**
- * Draw a direction by walking the PACKED buffer exactly as the shader walks it:
+ * Draw a direction by walking the packed buffer exactly as the shader walks it:
  * bisect the marginal for a row, bisect that row's conditional for a column,
  * interpolate inside the found cell, and convert to a world direction.
  *
  * Returns `{ dir, u, v, pdf, row, col }` with `pdf` in solid angle, because
  * `dω = 2π · π · sinθ · du dv`.
  *
- * ⚠ THIS READS `pack.condOff` AND `pack.pdfOff` — the numbers that go into the
- * uniform — and NOT the layout it could recompute from `cdfW`/`cdfH`. That is
- * the whole value of it as a check: if the buffer were ever filled at offsets
+ * This reads `pack.condOff` and `pack.pdfOff` — the numbers that go into the
+ * uniform — and not the layout it could recompute from `cdfW`/`cdfH`, so it
+ * works as a check: if the buffer were ever filled at offsets
  * other than the ones reported, this walk reads the wrong table and a furnace
  * driven through it goes red. Recomputing the offsets here would make it agree
  * with the packer by construction and catch nothing.
@@ -327,10 +322,10 @@ export function envSamplePacked(pack, r1, r2, opts = {}) {
  * The solid-angle pdf of a direction the sampler did not produce, read from the
  * packed table — the shader's `envPdfDir`.
  *
- * ⚠⚠ THIS AND `envSamplePacked` ARE ONE EXPRESSION SPLIT IN TWO, and the
+ * This and `envSamplePacked` are one expression split in two, and the
  * tracer weights them against each other on every path that reaches the
  * environment without being aimed at it. Disagreement errors nowhere: the image
- * comes out subtly too bright or too dim IN THE SPECULAR HIGHLIGHTS ONLY, and
+ * comes out subtly too bright or too dim in the specular highlights only, and
  * stays that way. A change to either mapping has to move both.
  */
 export function envPdfDirPacked(pack, dir, opts = {}) {

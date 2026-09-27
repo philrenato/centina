@@ -7,7 +7,7 @@ import { loft } from '../kernel/loft.mjs';
 // A clamped tensor-product global-interpolation surface always touches its
 // own 4 corner control points exactly at the domain's own min/max U and V
 // (standard B-spline endpoint-interpolation property, compounded across
-// both directions) — and each CORNER control point is, in turn, exactly
+// both directions) — and each corner control point is, in turn, exactly
 // the corresponding section's own first/last sampled point (global
 // interpolation's own first/last-control-point-equals-first/last-
 // through-point property). So for a 2-section loft, all 4 corners are
@@ -33,7 +33,7 @@ test('loft of two straight-line profiles reproduces an exact ruled (flat) patch 
   }
   // Both input profiles have Y=0 identically — every control point solved
   // from purely-Y=0 input data must itself be exactly Y=0 (the linear
-  // system's Y right-hand-side is the zero vector), so the WHOLE surface
+  // system's Y right-hand-side is the zero vector), so the whole surface
   // stays in the Y=0 plane exactly, not just at the 4 corners.
   for (let u = 0; u <= 1; u += 0.13) {
     for (let v = 0; v <= 1; v += 0.27) {
@@ -43,7 +43,7 @@ test('loft of two straight-line profiles reproduces an exact ruled (flat) patch 
   }
 });
 
-test('loft between two circles of different radii stays close to a true circle at both ends (a real, honest reconstruction-from-samples approximation, not exact)', () => {
+test('loft between two circles of different radii stays close to a true circle at both ends (a reconstruction-from-samples approximation, not exact)', () => {
   const c0 = makeCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 5);
   const c1 = makeCircle([0, 0, 20], [1, 0, 0], [0, 1, 0], 12);
   const srf = loft([c0, c1], 32);
@@ -53,7 +53,7 @@ test('loft between two circles of different radii stays close to a true circle a
   // At v=vMin (section 0, radius 5, z=0) and v=vMax (section 1, radius 12,
   // z=20) — dense-sampled reconstruction, so a small tolerance (not exact
   // like the straight-line case above, which has zero reconstruction
-  // error by construction) but tight enough to prove this is genuinely
+  // error by construction) but tight enough to prove this is
   // modeling the two circles, not something wildly off.
   for (let t = 0; t <= 1; t += 0.05) {
     const u = uMin + t * (uMax - uMin);
@@ -75,7 +75,7 @@ test('loft across 4 sections (more than 2) still produces a finite, well-formed 
   assert.equal(srf.ctrlNet[0].length, 4, 'one V control point per section');
 });
 
-test('loft throws honestly on fewer than 2 sections rather than producing a degenerate surface', () => {
+test('loft throws on fewer than 2 sections rather than producing a degenerate surface', () => {
   const profile = { degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 0, 1], [10, 0, 0, 1]] };
   assert.throws(() => loft([profile]));
 });

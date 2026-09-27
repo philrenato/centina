@@ -1,32 +1,26 @@
-// FIT A NURBS CURVE THROUGH SAMPLED POINTS, TO A STATED TOLERANCE
-// ================================================================
-// Piegl & Tiller §9.4.1, "Global Curve Approximation to within a Bound"
-// (Algorithm A9.6's shape: least-squares with a control-point count raised
+// Fit a NURBS curve through sampled points, to a stated tolerance.
+// Piegl & Tiller §9.4.4, "Approximation to Within a Specified Accuracy"
+// (least-squares with a control-point count raised
 // until the measured deviation clears the bound), with the endpoints
 // interpolated exactly (P&T Eq. 9.63-9.67).
 //
-// WHY THIS EXISTS. This kernel's boolean produces its cut curves by MARCHING
-// — an SSI component arrives as a few hundred sampled points, and every trim
-// boundary downstream of it is a POLYLINE of those samples. That is fine for
-// tessellating and for classifying, and it is not fine as geometry: a
-// half-edge here reserves a `pcurve` slot and an edge reserves `curve3d` +
-// `tolerance`, which map one-to-one onto a B-rep trim and its edge, and both
-// sit empty. Until something fills them, the exact form of a boolean's own
-// boundary does not exist anywhere in this kernel — measured on the banked
-// torus pair, a union carries 526 edges and not one of them has a curve.
+// Purpose: this kernel's boolean produces its cut curves by marching — an SSI
+// component arrives as a few hundred sampled points, and every trim boundary
+// downstream of it is a polyline of those samples. That suffices for
+// tessellating and classifying, but not as geometry: a half-edge reserves a
+// `pcurve` slot and an edge reserves `curve3d` + `tolerance`, which map
+// one-to-one onto a B-rep trim and its edge. This module fills them.
 //
-// ⚠ THIS DOES NOT REPLACE THE POLYLINE. The polyline is what trims, sews and
-// tessellates; a fitted curve is the EXACT RECORD ALONGSIDE it, which is
-// exactly what the nullable `curve3d` slot was reserved for. Swapping the
-// working representation would put a fit in the path of every operation that
-// currently succeeds.
+// It does not replace the polyline. The polyline is what trims, sews and
+// tessellates; a fitted curve is the exact record alongside it, which is what
+// the nullable `curve3d` slot is for.
 //
-// ⚠ AND A FIT IS NOT A MEASUREMENT OF ITSELF. `fitCircle` reports its own
-// residual, and a least-squares solve reports nothing at all; neither answers
-// "how far is the worst input point from the curve I am about to return".
-// So every path here measures the returned curve against the ORIGINAL points
-// by the same conservative rule (see `maxDeviationFromCurve`) and refuses
-// rather than returning a curve that misses its bound.
+// A fit is not a measurement of itself. `fitCircle` reports its own residual,
+// and a least-squares solve reports nothing; neither answers "how far is the
+// worst input point from the curve about to be returned". So every path here
+// measures the returned curve against the original points by the same
+// conservative rule (see `maxDeviationFromCurve`) and refuses rather than
+// return a curve that misses its bound.
 import { findSpan, basisFuns } from './basis.mjs';
 import { chordLengthParams, solveLinearSystem, averagingKnotVector, interpAtParams } from './interpolate.mjs';
 import { curvePoint, reverseCurve } from './curve.mjs';
@@ -34,38 +28,31 @@ import { fitLine, fitCircle, fitEllipse } from './refit.mjs';
 import { extractSubCurve, rescaleCurveDomain } from './knots.mjs';
 import { makeLine, makeCircle, makeEllipse } from './primitives.mjs';
 
-// DEVIATION, MEASURED SO IT CAN ONLY OVER-REPORT, AND WITHOUT A RESOLUTION
-// FLOOR. Two stages, and the second is what makes the first usable:
-//   1. BRACKET on a sampled polyline — which segment is nearest.
-//   2. REFINE by ternary search on |C(t) - Q| over that bracket, evaluating
-//      the CURVE, so the answer is the distance to a real point on the curve.
+// Deviation, measured so it can only over-report, and without a resolution
+// floor. Two stages:
+//   1. Bracket on a sampled polyline — which segment is nearest.
+//   2. Refine by ternary search on |C(t) - Q| over that bracket, evaluating
+//      the curve, so the answer is the distance to a point on the curve.
 //
-// ⚠ STAGE 2 IS NOT OPTIONAL, and the reason is the same inscribed-polygon
-// effect this project has now paid for twice. A polyline sampled through a
-// curve is INSIDE it, so distances measured to that polyline are too large by
-// the sagitta of the sampling — on a radius-25 circle at 960 segments that is
-// 1.3e-4, which is a floor no amount of asking for 1e-6 can get under. A
-// measure whose own discretization dominates the quantity it reports cannot
-// certify a tolerance at all; it just reports its own step size.
+// Stage 2 is required because a polyline sampled through a curve is inscribed
+// in it, so distances measured to that polyline are too large by the sagitta
+// of the sampling — on a radius-25 circle at 960 segments that is 1.3e-4, a
+// floor no request for 1e-6 can get under. A measure dominated by its own
+// discretization reports its step size, not the deviation.
 //
-// The conservative property survives refinement for free: whatever t the
-// search lands on, |C(t) - Q| is the distance to an ACTUAL point of the
-// curve, so it is never less than the true minimum distance. The search
-// makes the bound tighter, never optimistic.
-// ⚠⚠ AND IT IS ONE-SIDED ON PURPOSE — samples to curve, never curve back to
-// the input polyline. The two-sided (Hausdorff) version was tried and is
-// WRONG for this job: the polyline is INSCRIBED in the shape its samples came
-// from, so a perfectly smooth curve is necessarily about one sagitta away from
-// those chords. An exact circle through 120 samples of radius 25 scores
-// 8.6e-3 against itself that way — the measure punishing the fit for being
-// smoother than the data, which is the entire thing it was asked to be. Third
-// appearance of the same inscribed-polygon effect in this project: once in the
-// geometry, once in the ruler, once in the reference.
-// The real risk that motivated it — a curve threading its samples and swinging
-// between them — is real, and it is answered by `corridorExcess` below, which
-// measures the other direction with the sagitta the data itself implies
-// SUBTRACTED. That is the correction the plain Hausdorff version lacks, and it
-// is what lets the second measurement exist without rejecting good fits.
+// The conservative property survives refinement: whatever t the search lands
+// on, |C(t) - Q| is the distance to an actual point of the curve, so it is
+// never less than the true minimum distance. The search tightens the bound and
+// never makes it optimistic.
+// It is one-sided on purpose — samples to curve, never curve back to the input
+// polyline. A two-sided (Hausdorff) measure is wrong for this job: the
+// polyline is inscribed in the shape its samples came from, so a smooth curve
+// is necessarily about one sagitta away from those chords. An exact circle
+// through 120 samples of radius 25 scores 8.6e-3 against itself that way — the
+// measure penalizing the fit for being smoother than the data.
+// The risk a two-sided measure addresses — a curve threading its samples and
+// swinging between them — is handled by `corridorExcess` below, which measures
+// the other direction with the sagitta the data implies subtracted.
 export function maxDeviationFromCurve(points, crv, opts = {}) {
   const samplesPerPoint = opts.samplesPerPoint ?? 4;
   const p = crv.degree, U = crv.knots;
@@ -104,32 +91,28 @@ function pointSegmentDistanceSq(q, a, b) {
   return dx * dx + dy * dy + dz * dz;
 }
 
-// HOW FAR THE CURVE MAY WANDER BETWEEN TWO SAMPLES, WITHOUT INVENTING A
-// CONSTANT TO SAY SO.
+// How far the curve may wander between two samples, derived from the data.
 //
-// `maxDeviationFromCurve` is one-sided by necessity and its own note explains
-// why: the data polyline is INSCRIBED in the shape it was sampled from, so a
-// two-sided (Hausdorff) measure punishes a fit for being smoother than its
-// chords, by about one sagitta of the sampling. That objection is correct, and
-// it is an objection to an UNCORRECTED two-sided measure — not to measuring the
-// other direction at all. The sagitta it names is a property of the DATA, and
-// the data can be asked for it.
+// `maxDeviationFromCurve` is one-sided because the data polyline is inscribed
+// in the shape it was sampled from, so an uncorrected two-sided (Hausdorff)
+// measure penalizes a fit for being smoother than its chords by about one
+// sagitta of the sampling. That sagitta is a property of the data, and can be
+// computed from it.
 //
-// So: for each chord Q_i..Q_{i+1}, take the circle through it and each of its
-// two neighboring points, and keep the larger of the two sagittas that circle
-// cuts over that chord. That is the ordinary second-order reconstruction of
-// what the samples imply happens between them — zero where three points are
-// collinear, and exactly the shape's own bulge where they are not. The curve is
-// then allowed to sit `tolerance + h_i` from chord i and no further.
+// For each chord Q_i..Q_{i+1}, take the circle through it and each of its two
+// neighboring points, and keep the larger of the two sagittas that circle cuts
+// over that chord. That is the second-order reconstruction of what the samples
+// imply happens between them — zero where three points are collinear, and the
+// shape's own bulge where they are not. The curve is then allowed to sit
+// `tolerance + h_i` from chord i and no further.
 //
-// Both halves of that bound are given: `tolerance` is the caller's, and `h_i`
-// is measured off the caller's own points. Nothing here is chosen.
+// `tolerance` is the caller's, and `h_i` is measured off the caller's points;
+// there is no tuned constant.
 //
-// ⚠ WHAT THIS CATCHES IS THE ONE THING THE DEVIATION CANNOT. An adaptive
-// sampler puts its points far apart where the shape is straight, so the longest
-// chords are the ones with no sample in the middle to hold the curve down — and
-// a fit that swings out there scores a perfect deviation while drawing a
-// letter's straight stem as a banana.
+// This catches what the deviation cannot. An adaptive sampler puts its points
+// far apart where the shape is straight, so the longest chords have no sample
+// in the middle to hold the curve down — and a fit that swings out there scores
+// a perfect deviation while bowing a straight stem.
 function chordSagittas(points, closed) {
   const n = points.length;
   const count = closed ? n : n - 1;
@@ -164,8 +147,8 @@ function sagitta(a, b, c) {
 }
 
 // How far outside that corridor the curve gets, at its worst. Zero or negative
-// is inside. Sampled on the CURVE, because the excursion is a fact about the
-// curve at parameters no data point owns.
+// is inside. Sampled on the curve, because the excursion happens at parameters
+// no data point owns.
 function corridorExcess(points, crv, closed, tolerance) {
   const n = points.length;
   const segs = closed ? n : n - 1;
@@ -188,24 +171,22 @@ function corridorExcess(points, crv, closed, tolerance) {
   return worst;
 }
 
-// THE SPACING OF THE SAMPLES IS NOT THE SHAPE OF THE SAMPLES, and a fit has
-// to decide which of the two it believes. Chord-length parametrization (P&T
-// Eq. 9.5) spends parameter in proportion to distance. That is right when the
-// points are evenly spread and wrong when they are not — and the samplers this
-// kernel actually has are ADAPTIVE, which means they put their points far
-// apart exactly where the shape is straight. A marched intersection takes long
-// steps through low curvature; a Douglas-Peucker simplification deletes every
-// interior point of a straight run. Either way one leg of the data can carry
-// most of the parameter domain while all the shape change is crowded into the
-// rest, so the curve has to turn inside a sliver of parameter — which it can
-// only do by throwing a control point a long way out, and the bulge that
-// leaves lands on the long straight leg, where there is no sample to object.
+// The spacing of the samples is not the shape of the samples. Chord-length
+// parametrization (P&T Eq. 9.5) spends parameter in proportion to distance.
+// That is right when the points are evenly spread and wrong when they are not —
+// and this kernel's samplers are adaptive: they put their points far apart
+// where the shape is straight. A marched intersection takes long steps through
+// low curvature; a Douglas-Peucker simplification deletes every interior point
+// of a straight run. Either way one leg of the data can carry most of the
+// parameter domain while all the shape change is crowded into the rest, so the
+// curve has to turn inside a sliver of parameter — which it can only do by
+// throwing a control point far out, and the resulting bulge lands on the long
+// straight leg, where there is no sample to constrain it.
 //
-// CENTRIPETAL parametrization (P&T Eq. 9.6, after Lee, CAGD 6(2), 1989) takes
-// the SQUARE ROOT of each chord. It is the standard answer to exactly this
-// case: it damps the ratio between the longest and the shortest leg without
-// throwing the spacing information away, which is what uniform parametrization
-// would do.
+// Centripetal parametrization (P&T Eq. 9.6, after Lee, Computer-Aided Design 21(6), 1989) takes
+// the square root of each chord. It is the standard answer to this case: it
+// damps the ratio between the longest and the shortest leg without discarding
+// the spacing information, as uniform parametrization would.
 export function centripetalParams(points) {
   const n = points.length - 1;
   const ubar = new Array(points.length).fill(0);
@@ -231,23 +212,20 @@ export function centripetalParams(points) {
   return ubar;
 }
 
-// WHICH PARAMETRIZATION SUITS THIS DATA IS A QUESTION ABOUT THIS DATA, so it
-// is measured rather than declared. Every fit below is built BOTH ways against
-// the same bound, and of the candidates that MEET the bound the SHORTER curve
-// is returned.
+// Which parametrization suits the data is decided by measurement. Every fit
+// below is built both ways against the same bound, and of the candidates that
+// meet the bound the shorter curve is returned.
 //
-// ⚠ THAT IS A COMPARISON, NOT A THRESHOLD. No length is ever tested against a
-// constant; nothing here has a number in it to tune. Two curves that each sit
-// within `tolerance` of every sample agree with the data equally well, and
-// differ only in what they do BETWEEN the samples — which the samples cannot
-// settle, for either curve. The shorter of the two is the one that added no
-// shape the data never asked for, which is the ordinary fairness argument for
-// preferring the lower-energy curve when the residual does not separate them.
+// That is a comparison, not a threshold: no length is tested against a
+// constant. Two curves that each sit within `tolerance` of every sample agree
+// with the data equally well and differ only between the samples, which the
+// samples cannot settle. The shorter one adds no shape the data does not ask
+// for — the fairness argument for preferring the lower-energy curve when the
+// residual does not separate them.
 //
-// It is also the one comparison that can see the failure `maxDeviationFromCurve`
-// structurally cannot. Deviation is one-sided, sample to curve, and it has to
-// be (see its own note); an excursion between two samples moves no sample and
-// therefore costs it nothing. An excursion always costs ARC LENGTH.
+// It also sees the failure `maxDeviationFromCurve` cannot. Deviation is
+// one-sided, sample to curve; an excursion between two samples moves no sample
+// and costs it nothing, but it always costs arc length.
 function sampledLength(crv, samples = 256) {
   const p = crv.degree, U = crv.knots;
   const t0 = U[p], t1 = U[U.length - 1 - p];
@@ -260,18 +238,16 @@ function sampledLength(crv, samples = 256) {
   return L;
 }
 
-// The two are ordered so that chord-length is asked first and therefore wins
-// an exact tie: it is P&T's own default and the one every other fit and loft
-// in this kernel parametrizes with, so a change of answer is always a change
-// this comparison actually paid for.
+// Chord-length is asked first and therefore wins an exact tie: it is P&T's
+// default and the parametrization every other fit and loft in this kernel
+// uses.
 const PARAMETRISATIONS = [chordLengthParams, centripetalParams];
 
-// A9.1's three ingredients assembled against a STATED parametrization rather
-// than a derived one — which is what `interpAtParams` was factored out of
-// `globalCurveInterp` to allow. With `chordLengthParams` this is
-// `globalCurveInterp` exactly; the point of writing it out is that the closed
-// and open interpolations below can then be run under either parametrization
-// through one code path instead of two that could drift apart.
+// A9.1's three ingredients assembled against a stated parametrization rather
+// than a derived one, via `interpAtParams`. With `chordLengthParams` this is
+// `globalCurveInterp` exactly; writing it out lets the closed and open
+// interpolations below run under either parametrization through one code
+// path.
 function interpolateWith(points, requestedDegree, paramsOf) {
   const n = points.length - 1;
   if (n < 1) throw new Error('interpolation needs at least 2 points');
@@ -281,10 +257,10 @@ function interpolateWith(points, requestedDegree, paramsOf) {
   return { degree: p, knots, ctrlPts: interpAtParams(points, p, ubar, knots), paramsUsed: ubar };
 }
 
-// The closed counterpart, `closedCurveInterp`'s own construction: wrap `k`
+// The closed counterpart, `closedCurveInterp`'s construction: wrap `k`
 // points cyclically off each end, interpolate the padded sequence openly, and
 // keep the middle sub-range, so the clamped-end artifacts land in the padding
-// and the seam carries a real tangent instead of a kink.
+// and the seam carries a tangent instead of a kink.
 function interpolateClosedWith(points, k, paramsOf) {
   const n = points.length;
   if (n < 3) throw new Error('closed interpolation needs at least 3 points');
@@ -294,13 +270,12 @@ function interpolateClosedWith(points, k, paramsOf) {
   return { crv, uStart: crv.paramsUsed[k], uEnd: crv.paramsUsed[k + n] };
 }
 
-// THE APPROXIMATION KNOT VECTOR IS NOT THE INTERPOLATION ONE. P&T Eq. 9.68-
+// The approximation knot vector is not the interpolation one. P&T Eq. 9.68-
 // 9.69: with n+1 control points spread over m+1 points, interior knots are
-// taken by averaging the parameters at evenly spaced FRACTIONAL positions
-// through the parameter list, so each knot span ends up covering a similar
-// number of samples. `averagingKnotVector` (interpolate.mjs) solves the
-// different problem where those counts are equal, and produces a singular
-// system here.
+// taken by averaging the parameters at evenly spaced fractional positions
+// through the parameter list, so each knot span covers a similar number of
+// samples. `averagingKnotVector` (interpolate.mjs) solves the different
+// problem where those counts are equal, and produces a singular system here.
 function approximationKnotVector(ubar, p, n) {
   const m = ubar.length - 1;
   const U = new Array(n + p + 2);
@@ -317,11 +292,11 @@ function approximationKnotVector(ubar, p, n) {
   return U;
 }
 
-// P&T Eq. 9.63-9.67. The two end control points are FIXED to the first and
-// last input point rather than solved for, so a fitted boundary still meets
-// its neighbors exactly at the corners the topology already agreed on —
-// which matters more here than a marginally lower residual, because a gap at
-// a shared corner is a naked edge.
+// P&T Eq. 9.63-9.67. The two end control points are fixed to the first and
+// last input point rather than solved for, so a fitted boundary meets its
+// neighbors exactly at the corners the topology already agreed on — a gap at
+// a shared corner is a naked edge, which outweighs a marginally lower
+// residual.
 export function leastSquaresFit(points, p, n, ubar) {
   const m = points.length - 1;
   const U = approximationKnotVector(ubar, p, n);
@@ -363,12 +338,11 @@ export function leastSquaresFit(points, p, n, ubar) {
   return { degree: p, knots: U, ctrlPts };
 }
 
-// A CLOSED LOOP IS FITTED BY WRAPPING, the same device closedCurveInterp
-// already uses and for the same reason: an open fit's clamped end behavior
-// lands in padding that is then discarded, so the kept range behaves as if
-// the curve continues periodically instead of showing a kink at the seam.
-// Genuinely periodic B-spline approximation (P&T §9.4.2) is machinery this
-// kernel does not have, and this reaches the same practical result.
+// A closed loop is fitted by wrapping, as closedCurveInterp does and for the
+// same reason: an open fit's clamped end behavior lands in padding that is
+// then discarded, so the kept range behaves as if the curve continues
+// periodically instead of showing a kink at the seam. This kernel has no
+// periodic B-spline approximation; wrapping reaches the same result.
 function wrapClosed(points, pad) {
   const n = points.length;
   const out = [];
@@ -378,32 +352,27 @@ function wrapClosed(points, pad) {
   return out;
 }
 
-// LEAST-SQUARES DOES NOT INTERPOLATE THE SEAM, so trimming the wrap padding
-// leaves a loop whose two ends are near each other rather than at each other —
-// measured on a 24-point closed superellipse of perimeter 72.30, a residual
-// 8.90e-2, which is 0.29% of the bbox diagonal and 18% of the fit tolerance
-// that produced it. That is small and it is not zero, and `isCurveClosed`
-// answers a yes/no question at 1e-6: a nominally open loop makes a renderer
-// draw a closing chord, and it makes every downstream extrude, offset and
-// trim treat a closed profile as an open one.
+// Least-squares does not interpolate the seam, so trimming the wrap padding
+// leaves a loop whose two ends are near each other rather than at each other
+// (on a 24-point closed superellipse of perimeter 72.30, a residual of 8.90e-2
+// — 0.29% of the bbox diagonal, 18% of the fit tolerance). `isCurveClosed`
+// answers at 1e-6: a nominally open loop makes a renderer draw a closing
+// chord, and makes downstream extrude, offset and trim treat a closed profile
+// as open.
 //
-// THE TWO ENDS ARE MOVED TO THEIR MIDPOINT, NOT TO THE DATA POINT AT THE
-// SEAM. Both are the same size of movement (measured on that superellipse:
-// arc length ends at 1.00129x the data perimeter snapping to the midpoint,
-// 1.00114x snapping to the sample, against 1.00252x with no snap at all), so
-// the choice is not about magnitude. It is about what the seam then MEANS.
-// Snapping to the sample would make that one point the only exactly
-// interpolated sample on an otherwise least-squares loop — the seam becomes
-// special, biased onto a single possibly-noisy measurement, which is the
-// exact asymmetry `wrapClosed` exists to remove. The midpoint of the two
-// computed ends is still a least-squares answer, so the seam keeps being an
-// ordinary point of the loop.
+// The two ends are moved to their midpoint, not to the data point at the seam.
+// Both moves are the same size (on that superellipse: arc length ends at
+// 1.00129x the data perimeter snapping to the midpoint, 1.00114x snapping to
+// the sample, against 1.00252x with no snap), so the choice is about what the
+// seam means. Snapping to the sample would make it the only exactly
+// interpolated sample on an otherwise least-squares loop, biased onto a single
+// possibly noisy measurement — the asymmetry `wrapClosed` exists to remove.
+// The midpoint of the two computed ends is still a least-squares answer.
 //
-// ⚠ THE MOVE HAPPENS BEFORE THE DEVIATION IS MEASURED, deliberately. The
-// caller's tolerance is a claim about the curve that is RETURNED, so a
-// snapped curve that no longer meets its bound must fail the test and let the
-// loop raise the control point count — which shortens the gap it then has to
-// close. Snapping after the measurement would certify a curve nobody measured.
+// The move happens before the deviation is measured. The caller's tolerance is
+// a claim about the curve that is returned, so a snapped curve that misses its
+// bound must fail the test and let the loop raise the control point count,
+// which shortens the gap it then has to close.
 function closeSeamExactly(crv) {
   const cp = crv.ctrlPts;
   const n = cp.length;
@@ -416,14 +385,12 @@ function closeSeamExactly(crv) {
   return { ...crv, ctrlPts: out };
 }
 
-// EXACT WHERE THE SHAPE IS ACTUALLY EXACT. A plane cutting a cylinder or a
-// sphere gives a genuine circle or ellipse, and the commonest booleans a
-// student runs are exactly those. Recognizing one and emitting the RATIONAL
-// primitive is not an optimization — it is the difference between a boundary
-// Rhino re-reads as a circle and one it re-reads as a spline that happens to
-// look round. The recognizer's own residual is not trusted for this: the
-// primitive is built and then measured against the original points like any
-// other candidate.
+// Exact where the shape is exact. A plane cutting a cylinder or a sphere gives
+// a circle or ellipse, and those are the commonest boolean cuts. Emitting the
+// rational primitive means Rhino re-reads the boundary as a circle rather than
+// as a spline that looks round. The recognizer's own residual is not trusted:
+// the primitive is built and then measured against the original points like
+// any other candidate.
 function tryPrimitive(points, tolerance, closed, opts = {}) {
   const out = [];
   if (closed) {
@@ -442,14 +409,14 @@ function tryPrimitive(points, tolerance, closed, opts = {}) {
   let best = null;
   for (let cand of out) {
     if (!cand.curve || !cand.curve.ctrlPts) continue;
-    // ⚠ A PRIMITIVE DOES NOT INTERPOLATE ITS ENDPOINTS. fitLine returns the
-    // input projected ONTO the fitted line, so an open fit can move the first
-    // and last points by the residual — harmless for a display curve and fatal
-    // for a TRIM, whose ends must meet its neighbors exactly. Measured as
-    // u = -0.000754 on a pcurve that should have started at 0: outside the
-    // domain, and OpenNURBS rejects the loop for not joining. So a primitive
-    // that moves an endpoint is rejected here and the least-squares path takes
-    // over, which fixes its endpoints by construction.
+    // A primitive does not interpolate its endpoints. fitLine returns the
+    // input projected onto the fitted line, so an open fit can move the first
+    // and last points by the residual — harmless for a display curve, but a
+    // trim's ends must meet its neighbors exactly: a pcurve starting at
+    // u = -0.000754 instead of 0 is outside the domain, and OpenNURBS rejects
+    // the loop for not joining. A primitive that moves an endpoint is rejected
+    // here and the least-squares path, which fixes its endpoints by
+    // construction, takes over.
     if (!closed && opts.exactEndpoints) {
       const q0 = points[0], qn = points[points.length - 1];
       const ends = (crv) => {
@@ -458,16 +425,11 @@ function tryPrimitive(points, tolerance, closed, opts = {}) {
         return Math.hypot(a[0] - q0[0], a[1] - q0[1], a[2] - q0[2])
           + Math.hypot(b[0] - qn[0], b[1] - qn[1], b[2] - qn[2]);
       };
-      // ⚠ A PRIMITIVE CAN COME BACK RUNNING THE OTHER WAY, and rejecting it for
-      // that discards an exact answer over a convention. `fitLine`
-      // CANONICALIZES its direction (largest component positive) so that
-      // near-identical input cannot flicker between opposite directions — a
-      // property worth having, and one that means a run traveling in -x
-      // returns start and end swapped. Measured: two of a square's four sides,
-      // every one of them perfectly straight, fell through to a 6-control-point
-      // least-squares spline purely because of which way the loop happened to
-      // run around them. Reversal is exact and its own inverse, so the fix is
-      // to turn the candidate round rather than to give up on it.
+      // A primitive can come back running the other way; it is reversed rather
+      // than rejected. `fitLine` canonicalizes its direction (largest
+      // component positive) so that near-identical input cannot flicker
+      // between opposite directions, which means a run traveling in -x returns
+      // start and end swapped. Reversal is exact and its own inverse.
       if (ends(cand.curve) > 1e-12) {
         const flipped = reverseCurve(cand.curve);
         if (ends(flipped) > 1e-12) continue;
@@ -482,8 +444,8 @@ function tryPrimitive(points, tolerance, closed, opts = {}) {
   return best && best.maxDeviation <= tolerance ? best : null;
 }
 
-// THE ENTRY POINT.
-//   points     — ordered [x,y,z]; for a closed loop do NOT repeat the first
+// Entry point.
+//   points     — ordered [x,y,z]; for a closed loop do not repeat the first
 //   tolerance  — the bound the returned curve is guaranteed to meet, measured
 //                conservatively (see maxDeviationFromCurve)
 //   degree     — requested; clamped down when there are too few points
@@ -509,16 +471,15 @@ export function fitCurveToPoints(points, opts = {}) {
   const m = work.length - 1;
   const ubars = PARAMETRISATIONS.map((paramsOf) => paramsOf(work));
 
-  // RAISE THE COUNT UNTIL IT CLEARS, rather than guessing one. Growth is
+  // Raise the count until it clears, rather than guessing one. Growth is
   // geometric so a curve needing many spans is reached in a few solves, and
   // the ceiling is m (at which point the fit has as many freedoms as points
   // and any remaining error is the parametrization, not the count).
-  // ⚠ THE CEILING IS n < m, NOT n <= m, and it is a conditioning limit rather
-  // than a formality. As the free control points approach the interior point
-  // count the normal equations lose rank — neighboring samples share a
-  // parameter to within the solver's pivot threshold — and the solve throws.
-  // Stopping one short keeps every refusal a statement about the DATA instead
-  // of about the matrix.
+  // The ceiling is n < m, not n <= m, as a conditioning limit. As the free
+  // control points approach the interior point count the normal equations lose
+  // rank — neighboring samples share a parameter to within the solver's pivot
+  // threshold — and the solve throws. Stopping one short keeps every refusal a
+  // statement about the data rather than about the matrix.
   const nMax = Math.max(p + 1, m - 1);
   const triedCounts = [];
   let n = Math.max(p + 1, Math.min(nMax, p + 2));
@@ -532,20 +493,13 @@ export function fitCurveToPoints(points, opts = {}) {
       let candidate = null;
       try { candidate = leastSquaresFit(work, p, n, ubar); }
       catch { singularAt = n + 1; continue; }
-      /* ⚠⚠ THE PADDING HAS TO BE CUT OFF AGAIN, AND FOR A LONG TIME IT WAS NOT.
-         `wrapClosed` prepends `p` points and appends `p+1` so the fit's clamped
-         ends land outside the loop; the comment on it says the padding "is then
-         discarded" and this branch never discarded it. The returned curve
-         therefore ran past its own start and RETRACED — measured on a drawn
-         letter O, back at its starting point at 84% of its domain and still
-         going, ending 40% of the glyph's diagonal away, with three
-         self-crossings. A closed superellipse of perimeter 72.358 came back at
-         arc length 91.734: 27% too long.
-         ⚠ AND THE TOLERANCE COULD NOT SEE IT. Deviation is measured from the
-         DATA to the curve, and every point of a retrace is still on the shape —
-         so the fit reported 2.46e-1 against a tolerance of 0.5 and called itself
-         good. The interpolation branch below already did this trim; this one
-         never did, which is why round glyphs broke and cornered ones did not. */
+      /* The wrap padding is cut off again. `wrapClosed` prepends `p` points
+         and appends `p+1` so the fit's clamped ends land outside the loop;
+         without the trim the returned curve runs past its own start and
+         retraces (a closed superellipse of perimeter 72.358 comes back at arc
+         length 91.734, 27% too long).
+         The tolerance cannot detect this: deviation is measured from the data
+         to the curve, and every point of a retrace is still on the shape. */
       const trimmed = closed
         ? closeSeamExactly(rescaleCurveDomain(extractSubCurve(candidate, ubar[p], ubar[p + points.length]), 0, 1))
         : candidate;
@@ -568,36 +522,32 @@ export function fitCurveToPoints(points, opts = {}) {
     if (n >= nMax) break;
     n = Math.min(nMax, Math.max(n + 1, Math.ceil(n * 1.6)));
   }
-  // LAST RESORT: INTERPOLATE. Least-squares is capped at n < m for
-  // conditioning, so a SHORT, COARSELY SAMPLED chain can never reach the one
-  // curve that certainly passes through its points — measured on the torus
-  // pair, nine chains of 6-9 points spanning ~300 units and turning 30 degrees
-  // a step, where six control points cannot follow seven samples. Interpolation
-  // is exactly determined and uses the averaging knot vector, so it is
-  // well-conditioned precisely where the least-squares normal equations are
-  // not, and it is where P&T's own bounded approximation converges anyway.
+  // Last resort: interpolate. Least-squares is capped at n < m for
+  // conditioning, so a short, coarsely sampled chain (e.g. 6-9 points spanning
+  // ~300 units and turning 30 degrees a step, where six control points cannot
+  // follow seven samples) can never reach the curve that passes through its
+  // points. Interpolation is exactly determined and uses the averaging knot
+  // vector, so it is well-conditioned where the least-squares normal equations
+  // are not, and it is where P&T's bounded approximation converges anyway.
   //
-  // ⚠ ITS DEVIATION AT THE SAMPLES IS ZERO BY CONSTRUCTION, so this branch
-  // buys no reduction and proves nothing about the curve BETWEEN samples —
-  // which is unknowable from the samples alone, for any method. It is
-  // reported as its own kind so a caller can tell a genuine fit from a curve
-  // that simply threaded the points.
+  // Its deviation at the samples is zero by construction, so this branch
+  // proves nothing about the curve between samples — which is unknowable from
+  // the samples alone, for any method. It is reported as its own kind so a
+  // caller can tell a fit from a curve that threaded the points.
   //
-  // ⚠⚠ AND IT IS BOUNDED TO SHORT CHAINS, which is the guard that makes the
-  // whole tolerance mean something again. Interpolation always scores zero at
-  // the samples, so an unbounded fallback would certify ANY bound on ANY data
-  // — including 60 points of noise at 1e-9 — and the tolerance would stop
-  // being a claim. A handful of points spanning a long chord is the case that
-  // genuinely needs it; a long chain that least-squares cannot fit is telling
-  // you something about the data, and threading it is not an answer.
+  // It is bounded to short chains. Interpolation always scores zero at the
+  // samples, so an unbounded fallback would certify any bound on any data —
+  // including 60 points of noise at 1e-9 — and the tolerance would stop being
+  // a claim. A long chain that least-squares cannot fit says something about
+  // the data, and threading it is not an answer.
   //
-  // ⚠⚠⚠ BUT A SHORT CHAIN IS NOT A SAFE ONE. The count bounds how much
-  // oscillation can be spent; it does not bound an EXCURSION, and the spacing
-  // does. Four points off a letter's stem — three of them a fraction of a unit
-  // apart and the fourth seventeen units away — interpolate under chord-length
-  // parametrization into a curve 2.10x the length of its own data, swinging
-  // fourteen units clear of a run that is very nearly straight. So this branch
-  // builds both parametrizations too, and answers with the shorter.
+  // A short chain can still overshoot. The count bounds how much oscillation
+  // can be spent; it does not bound an excursion, and the spacing does. Four
+  // points off a letter's stem — three a fraction of a unit apart and the
+  // fourth seventeen units away — interpolate under chord-length
+  // parametrization into a curve 2.10x the length of its data, swinging
+  // fourteen units clear of a nearly straight run. So this branch builds both
+  // parametrizations too, and answers with the shorter.
   const INTERP_MAX_POINTS = 12;
   const interpolants = [];
   let wanderingInterp = null;
@@ -605,15 +555,11 @@ export function fitCurveToPoints(points, opts = {}) {
     for (const paramsOf of PARAMETRISATIONS) {
       let interp = null;
       try {
-        /* ⚠⚠ THE OPEN AND CLOSED INTERPOLATIONS DO NOT RETURN THE SAME SHAPE,
-           and the guard below is what made that matter. The open one returns a
-           curve; the closed one returns `{ crv, uStart, uEnd }` — a PERIODIC
-           curve plus the sub-domain that is the closed loop — so
-           `interp.ctrlPts` was undefined on the closed branch and the guard was
-           always false. The closed interpolation therefore never once fired:
-           every closed contour silently fell through to the least-squares path
-           above. Normalized here exactly as `conform.mjs` normalizes the same
-           call, so the two consumers cannot disagree about what it returns. */
+        /* The open and closed interpolations return different shapes: the
+           open one returns a curve; the closed one returns
+           `{ crv, uStart, uEnd }` — a periodic curve plus the sub-domain that
+           is the closed loop. Normalized here as `conform.mjs` normalizes the
+           same call, so the two consumers agree on what it returns. */
         const raw = closed ? interpolateClosedWith(points, p, paramsOf) : interpolateWith(points, p, paramsOf);
         interp = (closed && raw && raw.crv)
           ? rescaleCurveDomain(extractSubCurve(raw.crv, raw.uStart, raw.uEnd), 0, 1)
@@ -635,17 +581,17 @@ export function fitCurveToPoints(points, opts = {}) {
     for (const cand of interpolants) if (cand.length < best.length) best = cand;
     return { ok: true, kind: 'interpolated', curve: best.curve, maxDeviation: best.maxDeviation, ctrlPtCount: best.curve.ctrlPts.length, triedCounts };
   }
-  // NOTHING STAYED INSIDE THE CORRIDOR — so the corridor has run out of things
-  // to steer towards, and the answer is the shortest curve that DID meet the
-  // caller's bound rather than a refusal.
+  // Nothing stayed inside the corridor, so the answer is the shortest curve
+  // that did meet the caller's bound rather than a refusal.
   //
-  // ⚠ THE CORRIDOR STEERS THE SEARCH; IT IS NOT A SECOND TOLERANCE. It is built
-  // on a three-point circle, which is a second-order reading of data that may be
-  // sampled far too coarsely for second order to hold: a seven-point chain
-  // spanning a hundred units and turning thirty degrees a step has a legitimate
-  // interpolation sitting 2.36 outside its own corridor, and refusing that would
-  // reject the exact case the interpolation fallback exists to serve. So a
-  // candidate that leaves the corridor is deprioritized, never rejected.
+  // The corridor steers the search; it is not a second tolerance. It is built
+  // on a three-point circle, a second-order reading of data that may be
+  // sampled too coarsely for second order to hold: a seven-point chain
+  // spanning a hundred units and turning thirty degrees a step has a
+  // legitimate interpolation sitting 2.36 outside its own corridor, and
+  // refusing it would reject the case the interpolation fallback exists to
+  // serve. So a candidate that leaves the corridor is deprioritized, never
+  // rejected.
   const strayed = wandering && wanderingInterp
     ? (wandering.length <= wanderingInterp.length ? { c: wandering, k: 'nurbs' } : { c: wanderingInterp, k: 'interpolated' })
     : wandering ? { c: wandering, k: 'nurbs' } : wanderingInterp ? { c: wanderingInterp, k: 'interpolated' } : null;
@@ -653,11 +599,10 @@ export function fitCurveToPoints(points, opts = {}) {
     return { ok: true, kind: strayed.k, curve: strayed.c.curve, maxDeviation: strayed.c.maxDeviation, ctrlPtCount: strayed.c.curve.ctrlPts.length, triedCounts };
   }
 
-  // A BOUND BELOW THE SAMPLES' OWN ACCURACY CANNOT BE MET BY ANY CURVE, and
-  // saying so is the useful half of the refusal. These points came from
-  // somewhere — a marched intersection, a projected boundary — and asking a
-  // fit to sit closer to them than that process was accurate is asking it to
-  // reproduce the noise, which costs control points without buying fidelity.
+  // A bound below the samples' own accuracy cannot be met by any curve, and
+  // the refusal says so. These points came from a process — a marched
+  // intersection, a projected boundary — and asking a fit to sit closer to
+  // them than that process was accurate asks it to reproduce the noise.
   const best = triedCounts.length ? Math.min(...triedCounts.map((t) => t.deviation)) : null;
   return {
     ok: false,

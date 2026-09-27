@@ -23,11 +23,9 @@ import { decimateOpenToCount } from '../kernel/simplify.mjs';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-// ===========================================================================
-// L-SYSTEM
-// ===========================================================================
+// L-system
 
-test('L-system Koch: segment count is EXACTLY 4^iterations (checkable growth law)', () => {
+test('L-system Koch: segment count is exactly 4^iterations (checkable growth law)', () => {
   const { axiom, rules } = LSYSTEM_PRESETS.koch;
   for (let n = 0; n <= 5; n++) {
     const expected = Math.pow(4, n); // each F -> F+F--F+F has exactly 4 F's
@@ -39,7 +37,7 @@ test('L-system Koch: segment count is EXACTLY 4^iterations (checkable growth law
   }
 });
 
-test('L-system Dragon: segment count is EXACTLY 2^iterations', () => {
+test('L-system Dragon: segment count is exactly 2^iterations', () => {
   const { axiom, rules, angle } = LSYSTEM_PRESETS.dragon;
   for (let n = 0; n <= 8; n++) {
     const expected = Math.pow(2, n);
@@ -62,23 +60,23 @@ test('L-system Koch shape sanity: axiom+1 iteration reproduces the classic F+F--
   assert.ok(dist(polyline[0], [0, 0, 0]) < 1e-9, 'starts at origin');
   const end = polyline[polyline.length - 1];
   assert.ok(dist(end, [3, 0, 0]) < 1e-9, `Koch generator ends at (3,0), got ${end}`);
-  // The middle bump genuinely rises above the baseline (the peak has y>0).
+  // The middle bump rises above the baseline (the peak has y>0).
   const maxY = Math.max(...polyline.map((p) => p[1]));
   assert.ok(maxY > 0.5, `Koch bump rises above baseline, peak y=${maxY}`);
 });
 
-test('L-system branching stack: push-then-pop returns the turtle to the EXACT pushed state (position AND heading)', () => {
+test('L-system branching stack: push-then-pop returns the turtle to the exact pushed state (position and heading)', () => {
   // "F[+F]F": draw a unit F (0,0)->(1,0); push at (1,0) heading +X; +F draws
   // a turned branch; pop back to (1,0) heading +X; final F must then run
-  // (1,0)->(2,0). If the pop failed to restore POSITION, segment 3 would not
-  // start at (1,0). If it failed to restore HEADING, segment 3 would not run
+  // (1,0)->(2,0). If the pop failed to restore position, segment 3 would not
+  // start at (1,0). If it failed to restore heading, segment 3 would not run
   // along +X. Both are checked.
   const { segments } = lSystemTurtle('F[+F]F', { angle: 90, stepLength: 1 });
   assert.equal(segments.length, 3, 'three F draws');
   const third = segments[2];
   assert.ok(dist(third[0], [1, 0, 0]) < 1e-9, `3rd segment starts at pushed position, got ${third[0]}`);
   assert.ok(dist(third[1], [2, 0, 0]) < 1e-9, `3rd segment runs along restored heading, got ${third[1]}`);
-  // The branch segment (2nd F, after +90) genuinely went in a different (turned) direction.
+  // The branch segment (2nd F, after +90) went in a different (turned) direction.
   const branch = segments[1];
   const bdir = [branch[1][0] - branch[0][0], branch[1][1] - branch[0][1], branch[1][2] - branch[0][2]];
   assert.ok(Math.abs(bdir[1]) > 0.5, `branch turned off the baseline, dir=${bdir}`);
@@ -95,7 +93,7 @@ test('L-system plant preset uses the branch stack and produces a real figure', (
   assert.ok(polyline.every((p) => p.every(Number.isFinite)), 'no NaN/Inf');
 });
 
-test('L-system sanity cap: an over-cap iteration count refuses honestly (throws), does not build', () => {
+test('L-system sanity cap: an over-cap iteration count refuses (throws), does not build', () => {
   const { axiom, rules } = LSYSTEM_PRESETS.koch; // 4^n grows fast
   // 4^8 = 65536 > MAX_LSYSTEM_SEGMENTS (8000) -> must refuse.
   assert.ok(Math.pow(4, 8) > MAX_LSYSTEM_SEGMENTS);
@@ -110,15 +108,13 @@ test('L-system polyline feeds cleanly into globalCurveInterp (degree 1, exact po
   const crv = globalCurveInterp(polyline, 1);
   assert.equal(crv.degree, 1);
   assert.ok(crv.ctrlPts.every((p) => p.every(Number.isFinite)), 'finite control net');
-  // Degree-1 interpolation IS the polyline: control points equal the input points.
+  // Degree-1 interpolation is the polyline: control points equal the input points.
   assert.equal(crv.ctrlPts.length, polyline.length);
 });
 
-// ===========================================================================
-// LORENZ
-// ===========================================================================
+// Lorenz
 
-test('Lorenz RK4: trajectory stays BOUNDED within the classic attractor region', () => {
+test('Lorenz RK4: trajectory stays bounded within the classic attractor region', () => {
   const pts = lorenzTrajectory({ ...LORENZ_DEFAULTS, steps: 5000, dt: 0.01 });
   // Skip the initial transient (first 200 steps) as the point spirals onto
   // the attractor; then it stays inside the well-known butterfly bounds.
@@ -133,13 +129,13 @@ test('Lorenz RK4: trajectory stays BOUNDED within the classic attractor region',
   assert.ok(maxX < 30, `|x| stays bounded (<30), got ${maxX}`);
   assert.ok(maxY < 40, `|y| stays bounded (<40), got ${maxY}`);
   assert.ok(minZ > -1 && maxZ < 60, `z in ~[0,50] region, got [${minZ},${maxZ}]`);
-  // It genuinely explores the attractor (not a fixed point): real spread.
-  assert.ok(maxX > 10 && maxZ > 25, 'trajectory genuinely explores the butterfly');
+  // It explores the attractor (not a fixed point): real spread.
+  assert.ok(maxX > 10 && maxZ > 25, 'trajectory explores the butterfly');
 });
 
 test('Lorenz: RK4 stays bounded where naive forward-Euler visibly blows up (the integrator choice matters)', () => {
-  // At a coarse dt the naive Euler scheme (built from the SAME shared
-  // derivative) genuinely diverges to infinity while RK4 stays bounded on
+  // At a coarse dt the naive Euler scheme (built from the same shared
+  // derivative) diverges to infinity while RK4 stays bounded on
   // the true attractor.
   const { sigma, rho, beta } = LORENZ_DEFAULTS;
   const dt = 0.03, steps = 4000, start = [0.1, 0, 0];
@@ -159,15 +155,15 @@ test('Lorenz: RK4 stays bounded where naive forward-Euler visibly blows up (the 
   assert.ok(!Number.isFinite(eulerMax), `naive Euler blows up (diverges to infinity), max coord ${eulerMax}`);
 });
 
-test('Lorenz: two different start points (seeds) produce genuinely different trajectories (chaos)', () => {
+test('Lorenz: two different start points (seeds) produce different trajectories (chaos)', () => {
   const a = lorenzTrajectory({ ...LORENZ_DEFAULTS, start: [0.1, 0, 0], steps: 3000 });
   const b = lorenzTrajectory({ ...LORENZ_DEFAULTS, start: [5, 5, 5], steps: 3000 });
   assert.equal(a.length, b.length);
   assert.notEqual(JSON.stringify(a), JSON.stringify(b), 'different starts give different curves');
   const endGap = dist(a[a.length - 1], b[b.length - 1]);
-  assert.ok(endGap > 1, `trajectories are genuinely different (end gap ${endGap})`);
+  assert.ok(endGap > 1, `trajectories are different (end gap ${endGap})`);
 
-  // Sensitive dependence: even a TINY (1e-5) perturbation grows to attractor
+  // Sensitive dependence: even a tiny (1e-5) perturbation grows to attractor
   // scale given enough time (~50 time units) — the defining chaos property.
   const base = lorenzTrajectory({ ...LORENZ_DEFAULTS, start: [0.1, 0, 0], steps: 6000 });
   const pert = lorenzTrajectory({ ...LORENZ_DEFAULTS, start: [0.10001, 0, 0], steps: 6000 });
@@ -185,25 +181,23 @@ test('Lorenz: dense trajectory decimates + feeds cleanly into globalCurveInterp'
   assert.ok(crv.ctrlPts.every((p) => p.every(Number.isFinite)), 'finite control net from Lorenz curve');
 });
 
-// ===========================================================================
-// RANDOM WALK
-// ===========================================================================
+// Random walk
 
-test('Random Walk: same seed twice produces a BIT-IDENTICAL curve (determinism)', () => {
+test('Random Walk: same seed twice produces a bit-identical curve (determinism)', () => {
   const a = randomWalkCurve({ seed: 7, stepCount: 150, stepLength: 2, roughness: 0.6 });
   const b = randomWalkCurve({ seed: 7, stepCount: 150, stepLength: 2, roughness: 0.6 });
   assert.equal(JSON.stringify(a), JSON.stringify(b), 'bit-identical for the same seed');
 });
 
-test('Random Walk: different seeds produce genuinely different curves', () => {
+test('Random Walk: different seeds produce different curves', () => {
   const a = randomWalkCurve({ seed: 1, stepCount: 150, stepLength: 2, roughness: 0.6 });
   const b = randomWalkCurve({ seed: 2, stepCount: 150, stepLength: 2, roughness: 0.6 });
   assert.notEqual(JSON.stringify(a), JSON.stringify(b), 'different seeds differ');
   const endGap = dist(a[a.length - 1], b[b.length - 1]);
-  assert.ok(endGap > 1e-6, `end points genuinely differ (${endGap})`);
+  assert.ok(endGap > 1e-6, `end points differ (${endGap})`);
 });
 
-test('Random Walk: roughness 0 is a straight line; roughness 1 is genuinely jagged', () => {
+test('Random Walk: roughness 0 is a straight line; roughness 1 is jagged', () => {
   const straight = randomWalkCurve({ seed: 3, stepCount: 100, stepLength: 1, roughness: 0 });
   // roughness 0 keeps the initial heading exactly -> a dead-straight line.
   const total = dist(straight[0], straight[straight.length - 1]);
@@ -222,9 +216,7 @@ test('Random Walk: feeds cleanly into globalCurveInterp', () => {
   assert.ok(crv.ctrlPts.every((p) => p.every(Number.isFinite)), 'finite control net from random walk');
 });
 
-// ===========================================================================
-// DISTANCE
-// ===========================================================================
+// Distance
 
 test('pointDistance: correct Euclidean distance (3-4-5)', () => {
   assert.ok(Math.abs(pointDistance([0, 0, 0], [3, 4, 0]) - 5) < 1e-12);
@@ -232,12 +224,10 @@ test('pointDistance: correct Euclidean distance (3-4-5)', () => {
   assert.ok(Math.abs(pointDistance([0, 0, 0], [0, 0, 10]) - 10) < 1e-12);
 });
 
-// ===========================================================================
-// WAVE CURVE
-// ===========================================================================
+// Wave curve
 
 // A sampled family is only as trustworthy as the one period it repeats, so the
-// unit shape is pinned at its own known stations BEFORE any placement, phase or
+// unit shape is pinned at its own known stations before any placement, phase or
 // damping machinery is allowed near it.
 test('waveUnit: every waveform stays within -1..1 across a dense sweep', () => {
   for (const form of WAVE_FORMS) {
@@ -248,23 +238,23 @@ test('waveUnit: every waveform stays within -1..1 across a dense sweep', () => {
   }
 });
 
-/* ⭐ THE PHASE ALIGNMENT IS THE LOFT-CRITICAL PROPERTY, not a tidiness one.
+/* The phase alignment is what a loft between two forms depends on.
    The whole point of four waveforms sharing one parameter block is that a
    reader can loft a sine section to a triangle section and get the surface the
    two profiles imply. If one form starts a quarter period out of step with the
    others, that surface twists and nothing on screen explains why. So every form
-   is pinned to the SAME phase convention: rising through zero at u=0, peak at
+   is pinned to the same phase convention: rising through zero at u=0, peak at
    u=0.25, falling through zero at u=0.5. */
-test('waveUnit: all four forms rise through zero at u=0 (the loft-critical alignment)', () => {
-  // The three continuous forms genuinely pass through zero at u=0.
+test('waveUnit: all four forms rise through zero at u=0 (the alignment a loft depends on)', () => {
+  // The three continuous forms pass through zero at u=0.
   for (const form of ['sine', 'triangle', 'sawtooth']) {
     assert.ok(Math.abs(waveUnit(form, 0)) < 1e-12, `${form} should start at zero, got ${waveUnit(form, 0)}`);
   }
-  // Square is discontinuous, so "rising through zero at 0" is its rising EDGE:
+  // Square is discontinuous, so "rising through zero at 0" is its rising edge:
   // high immediately after u=0, low immediately before it.
   assert.equal(waveUnit('square', 0), 1);
   assert.equal(waveUnit('square', 0.999), -1);
-  // Each form rises INTO its first half rather than falling out of it — the
+  // Each form rises into its first half rather than falling out of it — the
   // property that actually stops a loft between two forms from twisting.
   for (const form of WAVE_FORMS) {
     assert.ok(waveUnit(form, 0.01) > 0, `${form} should be rising just after u=0`);
@@ -272,11 +262,11 @@ test('waveUnit: all four forms rise through zero at u=0 (the loft-critical align
   }
 });
 
-/* WHERE EACH FORM PEAKS IS A PROPERTY OF THE FORM, and flattening all four into
+/* Where each form peaks is a property of the form, and flattening all four into
    one rule would be a false claim rather than a tidy one. A sine and a triangle
-   turn over at the quarter point. A SAWTOOTH ramps all the way to its
+   turn over at the quarter point. A sawtooth ramps all the way to its
    discontinuity, so its peak is approached at u -> 0.5 from below and is never
-   attained at 0.25 (it sits at exactly half height there). A SQUARE is at full
+   attained at 0.25 (it sits at exactly half height there). A square is at full
    height across its whole first half. Each is pinned as what it is. */
 test('waveUnit: each form reaches full height where its own shape says it does', () => {
   for (const form of ['sine', 'triangle']) {
@@ -307,12 +297,12 @@ test('waveUnit: one period exactly — u and u+1 agree for every form', () => {
   }
 });
 
-/* THE ORACLE FOR THE PLACED CURVE: with one cycle across the run and a sample
-   landing exactly on the quarter point, the extreme y is EXACTLY the amplitude
+/* The oracle for the placed curve: with one cycle across the run and a sample
+   landing exactly on the quarter point, the extreme y is exactly the amplitude
    — not approximately. `samples` is chosen so (n-1)/4 is a whole number, which
    is what puts a sample on the peak; at any other count the curve is still
    correct and the measured peak is merely the nearest sample to it. */
-test('waveCurve: cycles=1 reaches EXACTLY +/- amplitude where the form allows it', () => {
+test('waveCurve: cycles=1 reaches exactly +/- amplitude where the form allows it', () => {
   // `samples: 201` puts a sample exactly on the quarter point ((n-1)/4 whole),
   // which is what makes these exact rather than nearly-exact.
   for (const form of ['sine', 'triangle', 'square']) {
@@ -320,10 +310,10 @@ test('waveCurve: cycles=1 reaches EXACTLY +/- amplitude where the form allows it
     assert.ok(Math.abs(Math.max(...ys) - 25) < 1e-9, `${form} max ${Math.max(...ys)}`);
     assert.ok(Math.abs(Math.min(...ys) + 25) < 1e-9, `${form} min ${Math.min(...ys)}`);
   }
-  /* SAWTOOTH IS THE HONEST EXCEPTION, asserted rather than excused: its peak
-     lives at a discontinuity it never lands on, so the highest SAMPLE sits one
+  /* Sawtooth is the exception, asserted rather than excused: its peak
+     lives at a discontinuity it never lands on, so the highest sample sits one
      step below full amplitude and gets closer as the sampling gets denser. The
-     trough IS attained, because the step lands on it exactly. */
+     trough is attained, because the step lands on it exactly. */
   const coarse = waveCurve({ form: 'sawtooth', cycles: 1, amplitude: 25, samples: 201 }).map((q) => q[1]);
   const fine = waveCurve({ form: 'sawtooth', cycles: 1, amplitude: 25, samples: 2001 }).map((q) => q[1]);
   assert.ok(Math.max(...coarse) < 25, 'sawtooth never overshoots its amplitude');
@@ -347,7 +337,7 @@ test('waveCurve: phase 360 is one whole period — identical to phase 0', () => 
   const a = waveCurve({ phase: 0, samples: 101 });
   const b = waveCurve({ phase: 360, samples: 101 });
   for (let i = 0; i < a.length; i++) assert.ok(dist(a[i], b[i]) < 1e-9, `phase wrap differs at ${i}`);
-  // ...and a quarter-turn of phase genuinely moves the curve, so the param is
+  // ...and a quarter-turn of phase moves the curve, so the param is
   // not silently inert.
   const q = waveCurve({ phase: 90, samples: 101 });
   assert.ok(a.some((pt, i) => dist(pt, q[i]) > 1e-6), 'phase 90 should change the curve');
@@ -360,10 +350,10 @@ test('waveCurve: damping decays later peaks, and damping 0 does nothing', () => 
   const firstHalf = Math.max(...damped.slice(0, 200).map((q) => q[1]));
   const lastHalf = Math.max(...damped.slice(200).map((q) => q[1]));
   assert.ok(lastHalf < firstHalf, `damped wave should shrink along the run (${firstHalf} -> ${lastHalf})`);
-  assert.ok(firstHalf <= 10 + 1e-9, 'damping never AMPLIFIES');
+  assert.ok(firstHalf <= 10 + 1e-9, 'damping never amplifies');
 });
 
-/* SKEW CHANGES SHAPE WITHOUT CHANGING FREQUENCY. That is the claim waveCurve's
+/* Skew changes shape without changing frequency. That is the claim waveCurve's
    own comment makes, and it is the one worth pinning: a skew that quietly
    altered the period would read as a broken frequency slider. Counting zero
    crossings is the frequency measurement that does not depend on the shape. */
@@ -376,7 +366,7 @@ test('waveCurve: skew reshapes the wave but preserves its period', () => {
   const even = waveCurve({ form: 'triangle', skew: 0.5, cycles: 3, samples: 601 });
   const lean = waveCurve({ form: 'triangle', skew: 0.15, cycles: 3, samples: 601 });
   assert.equal(zeroCrossings(lean), zeroCrossings(even), 'skew must not change the period');
-  assert.ok(even.some((pt, i) => dist(pt, lean[i]) > 1e-6), 'skew should genuinely reshape the wave');
+  assert.ok(even.some((pt, i) => dist(pt, lean[i]) > 1e-6), 'skew should reshape the wave');
 });
 
 test('waveWantsSmoothFit: only the continuous forms are fitted smooth', () => {
@@ -402,11 +392,9 @@ test('waveCurve: defaults are sane and it feeds cleanly into globalCurveInterp',
   assert.ok(crv.ctrlPts.every((q) => q.every(Number.isFinite)), 'finite control net from wave');
 });
 
-// ===========================================================================
-// NOISE CURVE (fBm)
-// ===========================================================================
+// Noise curve (fBm)
 
-/* ⭐ THE CONVENTION OF THE NOISE WE ARE HANDED, ASSERTED RATHER THAN ASSUMED.
+/* The convention of the noise we are handed, asserted rather than assumed.
    kernel/noise.mjs's latticeVal is `2 * hash01 - 1`, so valueNoise2D already
    returns -1..1. The habitual `* 2 - 1` on top of a [0,1] noise would push the
    fBm sum to -3..1 and bias every curve downward -- which reads as "that is
@@ -419,13 +407,13 @@ test('valueNoise2D returns -1..1, which is the convention fbm1D is built on', ()
     lo = Math.min(lo, v); hi = Math.max(hi, v);
   }
   assert.ok(lo >= -1 - 1e-12 && hi <= 1 + 1e-12, `valueNoise2D out of -1..1: ${lo}..${hi}`);
-  // ...and it genuinely USES the negative half. A [0,1] noise would pass the
+  // ...and it uses the negative half. A [0,1] noise would pass the
   // bound above and fail this, which is the discrimination that matters.
   assert.ok(lo < -0.2, `valueNoise2D never goes meaningfully negative (min ${lo}) -- it is not a -1..1 field`);
   assert.ok(hi > 0.2, `valueNoise2D never goes meaningfully positive (max ${hi})`);
 });
 
-test('fbm1D stays within -1..1 at EVERY octave count, and stays centered', () => {
+test('fbm1D stays within -1..1 at every octave count, and stays centered', () => {
   for (let oct = 1; oct <= 8; oct++) {
     let lo = Infinity, hi = -Infinity, sum = 0, n = 0;
     for (let i = 0; i < 2000; i++) {
@@ -433,7 +421,7 @@ test('fbm1D stays within -1..1 at EVERY octave count, and stays centered', () =>
       lo = Math.min(lo, v); hi = Math.max(hi, v); sum += v; n++;
     }
     assert.ok(lo >= -1 - 1e-12 && hi <= 1 + 1e-12, `fbm1D octaves=${oct} out of range: ${lo}..${hi}`);
-    // THE DOWNWARD BIAS IS THE ACTUAL DEFECT THIS GUARDS. A stray `* 2 - 1`
+    // The downward bias is the actual defect this guards. A stray `* 2 - 1`
     // leaves the mean near -0.5 while the range check above can still pass.
     assert.ok(Math.abs(sum / n) < 0.25, `fbm1D octaves=${oct} is biased off-center (mean ${(sum / n).toFixed(3)})`);
   }
@@ -456,11 +444,11 @@ test('noiseCurve: deterministic from its seed, and seed-sensitive', () => {
   assert.ok(a.some((p, i) => dist(p, c[i]) > 1e-9), 'a different seed must give a different curve');
 });
 
-test('noiseCurve: refuses honestly when handed no noise function', () => {
+test('noiseCurve: refuses when handed no noise function', () => {
   assert.throws(() => noiseCurve({ samples: 10 }), /needs a 2D noise function/);
 });
 
-test('noiseCurve OPEN: spans `length`, and amplitude bounds the displacement', () => {
+test('noiseCurve open: spans `length`, and amplitude bounds the displacement', () => {
   const amp = 12;
   const pts = noiseCurve({ samples: 200, length: 100, amplitude: amp, start: [5, 2, -1] }, valueNoise2D);
   assert.ok(Math.abs(pts[0][0] - 5) < 1e-12, 'starts at start.x');
@@ -469,24 +457,24 @@ test('noiseCurve OPEN: spans `length`, and amplitude bounds the displacement', (
     assert.ok(Math.abs(q[1] - 2) <= amp + 1e-9, `displacement ${q[1] - 2} exceeds amplitude ${amp}`);
     assert.ok(Math.abs(q[2] + 1) < 1e-12, 'stays in its own plane');
   }
-  // ...and genuinely USES the amplitude, in BOTH directions -- a downward bias
+  // ...and uses the amplitude, in both directions -- a downward bias
   // would keep it in range while never rising above the baseline.
   const ys = pts.map((q) => q[1] - 2);
   assert.ok(Math.max(...ys) > 0.2 * amp, `noise never rises (max ${Math.max(...ys).toFixed(2)})`);
   assert.ok(Math.min(...ys) < -0.2 * amp, `noise never falls (min ${Math.min(...ys).toFixed(2)}) -- the -1..1 convention is not holding`);
 });
 
-/* ⭐ THE WRAP SEGMENT IS PRESENT AND THE SEAM IS INVISIBLE. Two different
+/* The wrap segment is present and the seam is invisible. Two different
    claims, and a closed curve can fail either one alone: dropping the closing
    point leaves a gap that looks like a rendering artifact, and sampling the
-   noise along a LINE instead of around a CIRCLE closes the geometry while
+   noise along a line instead of around a circle closes the geometry while
    leaving a visible crease in the shape exactly at the join. */
-test('noiseCurve CLOSED: the ring closes exactly, and the noise closes with it', () => {
+test('noiseCurve closed: the ring closes exactly, and the noise closes with it', () => {
   const pts = noiseCurve({ samples: 240, closed: true, radius: 40, amplitude: 8, seed: 11 }, valueNoise2D);
   const first = pts[0], last = pts[pts.length - 1];
   assert.ok(dist(first, last) < 1e-12, `the wrap segment is missing (gap ${dist(first, last)})`);
   assert.equal(pts.length, 241, 'n samples plus the explicit closing repeat');
-  /* THE SEAM IS NOT SPECIAL. If the noise were sampled along a line, the step
+  /* The seam is not special. If the noise were sampled along a line, the step
      across the join would be far larger than a typical step. Comparing the
      seam step against the median step is what makes this sensitive to a crease
      rather than merely to a gap. */
@@ -496,7 +484,7 @@ test('noiseCurve CLOSED: the ring closes exactly, and the noise closes with it',
   const median = sorted[Math.floor(sorted.length / 2)];
   const seamStep = dist(pts[pts.length - 2], pts[0]);
   assert.ok(seamStep < median * 3, `the seam step ${seamStep.toFixed(4)} is far larger than the median ${median.toFixed(4)} -- the noise does not close`);
-  // ...and the radius genuinely varies, or this is just a circle.
+  // ...and the radius varies, or this is just a circle.
   const radii = pts.map((q) => Math.hypot(q[0], q[1]));
   assert.ok(Math.max(...radii) - Math.min(...radii) > 1, 'a closed noise ring must actually be noisy');
   assert.ok(Math.max(...radii) <= 48 + 1e-9 && Math.min(...radii) >= 32 - 1e-9, 'and stay within radius +/- amplitude');
@@ -512,23 +500,21 @@ test('noiseCurve: defaults are sane and it feeds cleanly into globalCurveInterp'
   assert.ok(crv.ctrlPts.every((q) => q.every(Number.isFinite)), 'finite control net from noise');
 });
 
-// ===========================================================================
-// HARMONIC SERIES
-// ===========================================================================
+// Harmonic series
 
-test('harmonicCurve: ONE term is exactly a sine of the requested amplitude', () => {
+test('harmonicCurve: one term is exactly a sine of the requested amplitude', () => {
   const pts = harmonicCurve({ terms: 1, cycles: 1, amplitude: 25, samples: 201, phase: 0 });
   const ys = pts.map((q) => q[1]);
   assert.ok(Math.abs(Math.max(...ys) - 25) < 1e-9, `one-term max ${Math.max(...ys)}`);
   assert.ok(Math.abs(Math.min(...ys) + 25) < 1e-9, `one-term min ${Math.min(...ys)}`);
-  // ...and it IS the sine, sample for sample, not merely the same height.
+  // ...and it is the sine, sample for sample, not merely the same height.
   const sine = waveCurve({ form: 'sine', cycles: 1, amplitude: 25, samples: 201, phase: 0 });
   for (let i = 0; i < pts.length; i++) assert.ok(dist(pts[i], sine[i]) < 1e-9, `one-term harmonic differs from a sine at ${i}`);
 });
 
-/* ⭐ THE TEACHING CLAIM, MEASURED. "Adding odd harmonics at 1/n walks visibly
+/* The teaching claim, measured. "Adding odd harmonics at 1/n walks visibly
    toward a square wave" is the reason this family exists, so it is asserted
-   rather than described: the mean distance from a unit square must DECREASE
+   rather than described: the mean distance from a unit square must decrease
    monotonically as terms are added. A curve that merely got taller, or noisier,
    would fail this. */
 test('harmonicCurve: odd harmonics at 1/n converge toward a square wave', () => {
@@ -551,7 +537,7 @@ test('harmonicCurve: odd harmonics at 1/n converge toward a square wave', () => 
   assert.ok(errs[errs.length - 1] < errs[0] * 0.6, `15 terms should be markedly squarer than 1 (${errs[0].toFixed(3)} -> ${errs[errs.length - 1].toFixed(3)})`);
 });
 
-test('harmonicCurve: oddOnly and falloff both genuinely change the shape', () => {
+test('harmonicCurve: oddOnly and falloff both change the shape', () => {
   const base = harmonicCurve({ terms: 6, samples: 101 });
   const even = harmonicCurve({ terms: 6, oddOnly: false, samples: 101 });
   const steep = harmonicCurve({ terms: 6, falloff: 2, samples: 101 });
@@ -560,9 +546,7 @@ test('harmonicCurve: oddOnly and falloff both genuinely change the shape', () =>
   assert.equal(HARMONIC_DEFAULTS.oddOnly, true);
 });
 
-// ===========================================================================
-// ROULETTE
-// ===========================================================================
+// Roulette
 
 test('rouletteClosingTurns: the classical ratios close in the turns they should', () => {
   assert.equal(rouletteClosingTurns(40, 10), 1, 'R = 4r closes in one turn');
@@ -571,12 +555,12 @@ test('rouletteClosingTurns: the classical ratios close in the turns they should'
   assert.equal(rouletteClosingTurns(0, 10), 0, 'a degenerate ratio reports "cannot say"');
 });
 
-/* ⭐ AN EXACT CLOSED FORM, NOT A RESEMBLANCE. A hypotrochoid with R = 4r and
-   d = r IS the astroid: expanding cos3t/sin3t collapses the two terms to
+/* An exact closed form, not a resemblance. A hypotrochoid with R = 4r and
+   d = r is the astroid: expanding cos3t/sin3t collapses the two terms to
    x = R cos^3 t, y = R sin^3 t, whose points satisfy
    |x|^(2/3) + |y|^(2/3) = R^(2/3) identically. Checking that identity at every
    sample is a real oracle; checking "it has four cusps" would not be. */
-test('rouletteCurve: R = 4r with d = r is EXACTLY an astroid', () => {
+test('rouletteCurve: R = 4r with d = r is exactly an astroid', () => {
   const R = 40;
   const pts = rouletteCurve({ mode: 'hypotrochoid', R, r: 10, d: 10, turns: 1, samples: 720 });
   const p23 = Math.pow(R, 2 / 3);
@@ -586,8 +570,8 @@ test('rouletteCurve: R = 4r with d = r is EXACTLY an astroid', () => {
   }
 });
 
-/* AND THE DEGENERATE CASE IS REAL GEOMETRY, not a failure to guard: a
-   hypotrochoid with R = 2r and d = r collapses to a STRAIGHT LINE through the
+/* And the degenerate case is real geometry, not a failure to guard: a
+   hypotrochoid with R = 2r and d = r collapses to a straight line through the
    center (the Tusi couple). Worth pinning because a "that looks broken" guard
    added later would destroy a correct result. */
 test('rouletteCurve: R = 2r with d = r is exactly a straight line (the Tusi couple)', () => {
@@ -597,13 +581,12 @@ test('rouletteCurve: R = 2r with d = r is exactly a straight line (the Tusi coup
   assert.ok(Math.abs(Math.max(...xs) - 20) < 1e-9 && Math.abs(Math.min(...xs) + 20) < 1e-9, 'and span exactly +/-R');
 });
 
-/* THE CARDIOID, FROM ITS OWN CLOSED FORM RATHER THAN FROM A GUESS. For an
+/* The cardioid, from its own closed form rather than from a guess. For an
    epitrochoid the distance from the center satisfies
      rho^2 = (R+r)^2 + d^2 - 2(R+r)d*cos((R/r)*t)
    so with R = r = d the radius runs between |(R+r)-d| and (R+r)+d -- that is
-   20..60 here, NOT 0..80. A first draft of this test asserted the cusp sat at
-   the ORIGIN; it does not, it sits on the fixed circle at distance R, and the
-   test was wrong rather than the curve. The cusp is pinned by what actually
+   20..60 here, not 0..80. The cusp is not at the origin; it sits on the fixed
+   circle at distance R. The cusp is pinned by what
    makes it a cusp: the tracing point comes momentarily to rest, so the step
    between samples collapses there. */
 test('rouletteCurve: an epitrochoid with R = r = d is a cardioid, with a real cusp', () => {
@@ -619,22 +602,20 @@ test('rouletteCurve: an epitrochoid with R = r = d is a cardioid, with a real cu
   assert.ok(Math.min(...steps) < median * 0.05, `no cusp found (min step ${Math.min(...steps).toFixed(5)} vs median ${median.toFixed(5)})`);
 });
 
-test('rouletteCurve: a closing ratio returns to its start; both modes are honoured', () => {
+test('rouletteCurve: a closing ratio returns to its start; both modes are honored', () => {
   const closed = rouletteCurve({ R: 40, r: 10, d: 7, turns: 0, samples: 360 });
   assert.ok(dist(closed[0], closed[closed.length - 1]) < 1e-9, 'turns:0 walks exactly as far as closure needs');
   const hypo = rouletteCurve({ mode: 'hypotrochoid', R: 40, r: 10, d: 7, turns: 1, samples: 90 });
   const epi = rouletteCurve({ mode: 'epitrochoid', R: 40, r: 10, d: 7, turns: 1, samples: 90 });
-  assert.ok(hypo.some((p, i) => dist(p, epi[i]) > 1), 'the two modes must trace genuinely different curves');
+  assert.ok(hypo.some((p, i) => dist(p, epi[i]) > 1), 'the two modes must trace different curves');
   assert.deepEqual(ROULETTE_MODES, ['hypotrochoid', 'epitrochoid']);
   assert.equal(ROULETTE_DEFAULTS.turns, 0);
 });
 
-// ===========================================================================
-// SUPERFORMULA (Gielis)
-// ===========================================================================
+// Superformula (Gielis)
 
-/* ⭐ THE CLOSED FORM AGAIN: n1 = n2 = n3 = 2 with a = b = 1 reduces the radius
-   to (cos^2 + sin^2)^(-1/2) = 1 for EVERY theta and every m, so the curve is an
+/* The closed form again: n1 = n2 = n3 = 2 with a = b = 1 reduces the radius
+   to (cos^2 + sin^2)^(-1/2) = 1 for every theta and every m, so the curve is an
    exact circle of `scale`. This is the strongest oracle in the family and it
    does not depend on m at all, which is itself worth asserting. */
 test('superformulaRadius: n1=n2=n3=2 with a=b=1 is exactly 1 at every angle, for every m', () => {
@@ -654,26 +635,24 @@ test('superformulaCurve: the same settings give an exact circle of `scale`', () 
   assert.equal(pts.length, 361, 'n samples plus the explicit closing repeat');
 });
 
-/* ⚠⚠ THE CIRCLE ORACLE ABOVE CANNOT SEE `n1` AT ALL, and that is not a
-   quibble: with n1=n2=n3=2 and a=b=1 the bracket is cos^2+sin^2 = 1, and 1
-   raised to ANY power is 1 -- so the exponent could be `-1/n1`, `+1/n1` or
-   anything else and every assertion above would still pass. Flipping that sign
-   in the kernel was tried directly and reddened NOTHING. The fixture was
-   sitting on the one symmetry that cancels the defect.
-   So the exponent is pinned somewhere the bracket is NOT 1. With m=4 and
+/* The circle oracle above cannot see `n1` at all: with n1=n2=n3=2 and a=b=1
+   the bracket is cos^2+sin^2 = 1, and 1 raised to any power is 1 -- so the
+   exponent could be `-1/n1`, `+1/n1` or anything else and every assertion
+   above would still pass. That fixture sits on the one symmetry that cancels
+   a wrong sign.
+   So the exponent is pinned somewhere the bracket is not 1. With m=4 and
    n2=n3=4 at theta=pi/4 both terms are (sqrt(2)/2)^4 = 1/4, so the bracket is
-   exactly 1/2 and the radius is exactly 2^(1/(2*... )) -- written below as the
-   closed form 0.5^(-1/n1), which is >1 for the correct sign and <1 for the
-   flipped one. */
+   exactly 1/2 and the radius is exactly 0.5^(-1/n1) = 2^(1/n1), which is >1
+   for the correct sign and <1 for the flipped one. */
 test('superformulaRadius: the n1 exponent is pinned where the bracket is not 1', () => {
   const th = Math.PI / 4;
   for (const n1 of [0.5, 1, 2, 4]) {
     const r = superformulaRadius(th, { a: 1, b: 1, m: 4, n1, n2: 4, n3: 4 });
     const expected = Math.pow(0.5, -1 / n1);   // the bracket is exactly 1/2 here
     assert.ok(Math.abs(r - expected) < 1e-12, `n1=${n1}: r=${r}, expected ${expected}`);
-    assert.ok(r > 1, `n1=${n1}: the correct exponent bulges OUTWARD here (r=${r}); a flipped sign gives ${Math.pow(0.5, 1 / n1)}`);
+    assert.ok(r > 1, `n1=${n1}: the correct exponent bulges outward here (r=${r}); a flipped sign gives ${Math.pow(0.5, 1 / n1)}`);
   }
-  // ...and n1 genuinely moves the shape, so the parameter is not inert.
+  // ...and n1 moves the shape, so the parameter is not inert.
   const a = superformulaRadius(th, { a: 1, b: 1, m: 4, n1: 1, n2: 4, n3: 4 });
   const b = superformulaRadius(th, { a: 1, b: 1, m: 4, n1: 4, n2: 4, n3: 4 });
   assert.ok(Math.abs(a - b) > 0.1, `n1 must change the radius (${a} vs ${b})`);
@@ -691,7 +670,7 @@ test('superformulaRadius: a and b scale their own axes, and n2/n3 are not interc
 });
 
 test('superformulaCurve: m controls the symmetry — the shape repeats m times around', () => {
-  // A 5-lobed form must be invariant under a 1/5 turn, and NOT under 1/4.
+  // A 5-lobed form must be invariant under a 1/5 turn, and not under 1/4.
   const m = 5;
   const rAt = (th) => superformulaRadius(th, { a: 1, b: 1, m, n1: 0.3, n2: 1.7, n3: 1.7 });
   for (let i = 0; i < 50; i++) {
@@ -703,7 +682,7 @@ test('superformulaCurve: m controls the symmetry — the shape repeats m times a
     const th = (i / 50) * 2 * Math.PI;
     if (Math.abs(rAt(th) - rAt(th + 2 * Math.PI / 4)) > 1e-6) { differs = true; break; }
   }
-  assert.ok(differs, 'a 5-lobed form must NOT also be 4-fold symmetric');
+  assert.ok(differs, 'a 5-lobed form must not also be 4-fold symmetric');
 });
 
 test('superformulaCurve: a degenerate radius is refused as 0 rather than NaN', () => {
@@ -715,9 +694,7 @@ test('superformulaCurve: a degenerate radius is refused as 0 rather than NaN', (
   assert.equal(SUPERFORMULA_DEFAULTS.m, 6);
 });
 
-// ===========================================================================
-// SPIRAL — archimedean / logarithmic / fermat
-// ===========================================================================
+// Spiral — archimedean / logarithmic / fermat
 
 /* Sample the radius at the exact turn boundaries. `turns * perTurn + 1`
    samples put a point on theta = 2*pi*k for every whole k, so the per-turn
@@ -734,12 +711,12 @@ const turnRadii = (params, turns, perTurn = 720) => {
 };
 const spreadRatio = (xs) => Math.max(...xs) / Math.min(...xs);
 
-/* ⭐ THE EXACT LAW, AND THE ONE THAT SEPARATES THE KINDS. An Archimedean
-   spiral gains EXACTLY 2*pi*b of radius per turn — r(theta+2pi) - r(theta) =
+/* The exact law, and the one that separates the kinds. An Archimedean
+   spiral gains exactly 2*pi*b of radius per turn — r(theta+2pi) - r(theta) =
    b*2*pi identically, independent of theta. Nothing else in the family does
    that, which is why the same fixture is then run against the ratio law and
-   required to FAIL it. */
-test('spiralCurve archimedean: successive turns differ by EXACTLY 2*pi*growth', () => {
+   required to fail it. */
+test('spiralCurve archimedean: successive turns differ by exactly 2*pi*growth', () => {
   const a = 5, b = 2;
   const r = turnRadii({ kind: 'archimedean', startRadius: a, growth: b }, 5);
   assert.equal(r.length, 6);
@@ -748,16 +725,16 @@ test('spiralCurve archimedean: successive turns differ by EXACTLY 2*pi*growth', 
   for (let k = 1; k < r.length; k++) {
     assert.ok(Math.abs((r[k] - r[k - 1]) - expected) < 1e-9, `turn ${k}: gained ${r[k] - r[k - 1]}, expected ${expected}`);
   }
-  // ...and it is NOT the logarithmic law: the RATIOS are all over the place.
+  // ...and it is not the logarithmic law: the ratios are all over the place.
   const ratios = r.slice(1).map((v, i) => v / r[i]);
   assert.ok(spreadRatio(ratios) > 2, `an Archimedean spiral must NOT have a constant ratio (ratios ${ratios.map((x) => x.toFixed(2)).join(', ')})`);
 });
 
-/* ⭐ AND THE MIRROR CLAIM. A logarithmic spiral is self-similar, so each turn
+/* And the mirror claim. A logarithmic spiral is self-similar, so each turn
    multiplies the radius by exactly e^(2*pi*b). Run against the spacing law
    above it must fail — the two tests together are what make either of them
-   evidence about WHICH kind was built, rather than merely that a spiral was. */
-test('spiralCurve logarithmic: successive turns differ by a constant RATIO e^(2*pi*growth)', () => {
+   evidence about which kind was built, rather than merely that a spiral was. */
+test('spiralCurve logarithmic: successive turns differ by a constant ratio e^(2*pi*growth)', () => {
   const a = 5, b = 0.15;
   const r = turnRadii({ kind: 'logarithmic', startRadius: a, growth: b }, 5);
   assert.ok(Math.abs(r[0] - a) < 1e-9, `starts at startRadius, got ${r[0]}`);
@@ -765,13 +742,13 @@ test('spiralCurve logarithmic: successive turns differ by a constant RATIO e^(2*
   for (let k = 1; k < r.length; k++) {
     assert.ok(Math.abs(r[k] / r[k - 1] - expected) < 1e-9, `turn ${k}: ratio ${r[k] / r[k - 1]}, expected ${expected}`);
   }
-  // ...and it is NOT the Archimedean law: the per-turn GAINS grow without bound.
+  // ...and it is not the Archimedean law: the per-turn gains grow without bound.
   const gains = r.slice(1).map((v, i) => v - r[i]);
   assert.ok(spreadRatio(gains) > 2, `a logarithmic spiral must NOT have constant spacing (gains ${gains.map((x) => x.toFixed(2)).join(', ')})`);
 });
 
 /* Fermat's own closed form, which is neither of the other two: r^2 = a^2 *
-   theta, so r^2 is LINEAR in theta. Checked at the turn boundaries where
+   theta, so r^2 is linear in theta. Checked at the turn boundaries where
    theta is known exactly, and required to fail both other laws. */
 test('spiralCurve fermat: r^2 is exactly linear in theta, and it starts at the origin', () => {
   const a = 8;
@@ -782,7 +759,7 @@ test('spiralCurve fermat: r^2 is exactly linear in theta, and it starts at the o
     assert.ok(Math.abs(r[k] * r[k] - a * a * theta) < 1e-9, `turn ${k}: r^2 ${r[k] * r[k]}, expected ${a * a * theta}`);
   }
   /* Neither of the other two laws holds, and the exact reason is available:
-     r_k = a*sqrt(2*pi*k), so the per-turn RATIO is sqrt((k+1)/k) — a real
+     r_k = a*sqrt(2*pi*k), so the per-turn ratio is sqrt((k+1)/k) — a real
      closed form, decreasing, and therefore not the constant the logarithmic
      spiral has. The gains sqrt(k+1) - sqrt(k) shrink for the same reason. */
   const gains = r.slice(1).map((v, i) => v - r[i]);
@@ -792,7 +769,7 @@ test('spiralCurve fermat: r^2 is exactly linear in theta, and it starts at the o
   }
   assert.ok(spreadRatio(gains) > 1.5, 'a Fermat spiral has neither constant spacing...');
   assert.ok(spreadRatio(ratios) > 1.2, '...nor a constant ratio');
-  // `growth` is genuinely unread by this kind, which the formula says: r = a*sqrt(theta).
+  // `growth` is unread by this kind, which the formula says: r = a*sqrt(theta).
   const other = turnRadii({ kind: 'fermat', startRadius: a, growth: 99 }, 2);
   assert.ok(Math.abs(other[1] - r[1]) < 1e-9, 'r = a*sqrt(theta) has no b in it');
 });
@@ -806,13 +783,13 @@ test('spiralCurve: `height` makes it conical, and z is linear over the run', () 
   for (let i = 0; i < cone.length; i++) {
     assert.ok(Math.abs(cone[i][2] - (7 + 30 * i / 100)) < 1e-12, `z is linear in the parameter at ${i}`);
   }
-  // The radius still grows, so this really is a cone rather than a cylinder.
+  // The radius still grows, so this is a cone rather than a cylinder.
   assert.ok(Math.hypot(cone[100][0], cone[100][1]) > Math.hypot(cone[0][0], cone[0][1]) + 1, 'a conical spiral still opens out');
 });
 
 test('spiralCurve: an overflowing logarithmic spiral is refused by name, not emitted as Infinity', () => {
   assert.throws(() => spiralCurve({ kind: 'logarithmic', turns: 40, growth: 3, startRadius: 5 }), /overflows/);
-  // The neighboring case that DOES fit is not refused, so the guard is not just "big numbers are scary".
+  // The neighboring case that does fit is not refused, so the guard is not just "big numbers are scary".
   const ok = spiralCurve({ kind: 'logarithmic', turns: 40, growth: 1, startRadius: 5, samples: 200 });
   assert.ok(ok.every((q) => q.every(Number.isFinite)), 'e^251 is representable and must be produced');
   assert.deepEqual(SPIRAL_KINDS, ['archimedean', 'logarithmic', 'fermat']);
@@ -824,16 +801,14 @@ test('spiralCurve: an overflowing logarithmic spiral is refused by name, not emi
   assert.ok(Number.isFinite(spiralRadius('archimedean', 0, 5, 2)));
 });
 
-// ===========================================================================
-// LISSAJOUS
-// ===========================================================================
+// Lissajous
 
-/* ⭐ THE DEGENERATE 1:1 CASE, WHICH IS A REAL RESULT AND NOT A FAILURE. With
-   equal frequencies and zero phase both coordinates are the SAME sinusoid, so
+/* The degenerate 1:1 case, which is a real result and not a failure. With
+   equal frequencies and zero phase both coordinates are the same sinusoid, so
    the figure collapses to the straight diagonal y/B = x/A traced back and
    forth. Worth pinning precisely because a later "the curve is degenerate,
    guard it" instinct would destroy a correct answer. */
-test('lissajousCurve: equal frequencies at phase 0 are EXACTLY the straight diagonal', () => {
+test('lissajousCurve: equal frequencies at phase 0 are exactly the straight diagonal', () => {
   const A = 40, B = 25;
   const pts = lissajousCurve({ freqX: 1, freqY: 1, phase: 0, ampX: A, ampY: B, ampZ: 0, samples: 360 });
   for (const q of pts) {
@@ -842,7 +817,7 @@ test('lissajousCurve: equal frequencies at phase 0 are EXACTLY the straight diag
   }
   const xs = pts.map((q) => q[0]);
   assert.ok(Math.abs(Math.max(...xs) - A) < 1e-6 && Math.abs(Math.min(...xs) + A) < 1e-6, 'and spans exactly +/-ampX');
-  // THE ORACLE IS NOT VACUOUS: a non-zero phase opens the line into an ellipse
+  // The oracle is not vacuous: a non-zero phase opens the line into an ellipse
   // and the same identity fails hard.
   const opened = lissajousCurve({ freqX: 1, freqY: 1, phase: 10, ampX: A, ampY: B, ampZ: 0, samples: 360 });
   assert.ok(opened.some((q) => Math.abs(q[1] * A - q[0] * B) > 100), 'phase must open the diagonal');
@@ -850,7 +825,7 @@ test('lissajousCurve: equal frequencies at phase 0 are EXACTLY the straight diag
 
 /* The same 1:1 pair at a quarter-turn of phase is an exact ellipse:
    x = A*sin(t + pi/2) = A*cos t, y = B*sin t, so (x/A)^2 + (y/B)^2 = 1 for
-   every t. An exact closed form that reads BOTH amplitudes and the phase. */
+   every t. An exact closed form that reads both amplitudes and the phase. */
 test('lissajousCurve: 1:1 at phase 90 is exactly the ellipse (x/A)^2 + (y/B)^2 = 1', () => {
   const A = 40, B = 25;
   const pts = lissajousCurve({ freqX: 1, freqY: 1, phase: 90, ampX: A, ampY: B, ampZ: 0, samples: 512 });
@@ -858,15 +833,15 @@ test('lissajousCurve: 1:1 at phase 90 is exactly the ellipse (x/A)^2 + (y/B)^2 =
     const v = (q[0] / A) ** 2 + (q[1] / B) ** 2;
     assert.ok(Math.abs(v - 1) < 1e-12, `off the ellipse: ${v}`);
   }
-  // ...and A != B, so this is genuinely an ellipse and not a circle in disguise.
+  // ...and A != B, so this is an ellipse and not a circle in disguise.
   assert.ok(Math.abs(Math.max(...pts.map((q) => q[0])) - A) < 1e-9);
   assert.ok(Math.abs(Math.max(...pts.map((q) => q[1])) - B) < 1e-9);
 });
 
-/* ⭐ THE FIGURE-EIGHT, FROM ITS IMPLICIT EQUATION. With a 1:2 ratio at phase 0,
+/* The figure-eight, from its implicit equation. With a 1:2 ratio at phase 0,
    y = B*sin(2t) = 2B*sin(t)*cos(t) = 2B*(x/A)*cos(t), and cos^2 = 1 - sin^2,
    so every point satisfies (y/B)^2 = 4*(x/A)^2*(1 - (x/A)^2) identically. This
-   is a real oracle for the SHAPE; "it looks like an eight" would not be. */
+   is a real oracle for the shape; "it looks like an eight" would not be. */
 test('lissajousCurve: a 1:2 ratio satisfies the figure-eight identity exactly, and crosses the origin exactly twice', () => {
   const A = 30, B = 20;
   const pts = lissajousCurve({ freqX: 1, freqY: 2, phase: 0, ampX: A, ampY: B, ampZ: 0, samples: 720 });
@@ -880,38 +855,38 @@ test('lissajousCurve: a 1:2 ratio satisfies the figure-eight identity exactly, a
   const body = pts.slice(0, -1);   // drop the wrap repeat, or t = 0 counts twice
   const atOrigin = body.filter((q) => Math.hypot(q[0], q[1]) < 1e-9);
   assert.equal(atOrigin.length, 2, `a figure-eight touches the origin exactly twice, found ${atOrigin.length}`);
-  // NOT VACUOUS: a 1:3 curve is a different figure and fails the same identity.
+  // Not vacuous: a 1:3 curve is a different figure and fails the same identity.
   const three = lissajousCurve({ freqX: 1, freqY: 3, phase: 0, ampX: A, ampY: B, ampZ: 0, samples: 720 });
   assert.ok(three.some((q) => Math.abs((q[1] / B) ** 2 - 4 * (q[0] / A) ** 2 * (1 - (q[0] / A) ** 2)) > 0.1), '1:3 is not a figure-eight');
 });
 
-test('lissajousCurve: a rational ratio closes over its OWN period; an irrational one is emitted OPEN', () => {
+test('lissajousCurve: a rational ratio closes over its own period; an irrational one is emitted open', () => {
   assert.equal(lissajousPeriodTurns(3, 2, 0), 1, 'whole frequencies close in one turn');
   assert.equal(lissajousPeriodTurns(3, 2.5, 0), 2, '3 : 5/2 is 6 : 5, so it needs two turns');
   assert.equal(lissajousPeriodTurns(1.5, 2.5, 0), 2, '3/2 : 5/2 needs two turns');
-  /* (2,4,6) is (1,2,3) traced at double speed, so it closes in HALF a base
+  /* (2,4,6) is (1,2,3) traced at double speed, so it closes in half a base
      turn — a fractional period is a real answer, not a rounding failure. */
   assert.equal(lissajousPeriodTurns(2, 4, 6), 0.5);
   const fast = lissajousCurve({ freqX: 2, freqY: 4, freqZ: 6, ampZ: 10, phase: 40, samples: 300 });
-  assert.ok(dist(fast[0], fast[300]) < 1e-12, 'and half a turn really does close it');
+  assert.ok(dist(fast[0], fast[300]) < 1e-12, 'and half a turn does close it');
   assert.equal(lissajousPeriodTurns(0.5, 0.5, 0), 2, 'half frequencies take two turns, not one');
   assert.equal(lissajousPeriodTurns(3, Math.PI, 0), 0, 'an irrational ratio never returns');
   assert.equal(lissajousCloses(3, 2, 0), true);
   assert.equal(lissajousCloses(3, Math.PI, 0), false);
-  /* ⚠ THE HALF-INTEGER TRAP, PINNED. sin(2.5 * 2pi) = sin(5pi) = 0 = sin(0),
-     so at freq 2.5 the point at t = 2pi COINCIDES with the start while the
+  /* The half-integer trap, pinned. sin(2.5 * 2pi) = sin(5pi) = 0 = sin(0),
+     so at freq 2.5 the point at t = 2pi coincides with the start while the
      tangent is reversed — a half traversal that any first-point-equals-last
      test would call closed. It is the period, not the point, that decides. */
   const half = lissajousCurve({ freqX: 3, freqY: 2.5, ampZ: 0, samples: 400 });
   const mid = half[200];   // t = 2pi, where the naive reading would have stopped
-  assert.ok(dist(mid, half[0]) < 1e-9, 'the point at one turn really does coincide with the start');
+  assert.ok(dist(mid, half[0]) < 1e-9, 'the point at one turn does coincide with the start');
   assert.ok(half.length === 401 && dist(half[0], half[400]) < 1e-12, 'and the chain runs the full two turns and closes');
-  // The two halves are genuinely different curves, which is why one turn is not enough.
+  // The two halves are different curves, which is why one turn is not enough.
   assert.ok(half.slice(0, 200).some((q, i) => dist(q, half[200 + i]) > 1), 'the second turn is not a retrace of the first');
   const closed = lissajousCurve({ freqX: 3, freqY: 2, freqZ: 0, samples: 360 });
   assert.equal(closed.length, 361, 'n samples plus the explicit closing repeat');
   assert.ok(dist(closed[0], closed[closed.length - 1]) < 1e-12, 'the wrap segment is missing');
-  /* AND THE SEAM IS NOT SPECIAL — a chain that merely repeats its first point
+  /* And the seam is not special — a chain that merely repeats its first point
      onto an unrelated last point would pass the gap test above. */
   const steps = [];
   for (let i = 1; i < closed.length; i++) steps.push(dist(closed[i - 1], closed[i]));
@@ -920,7 +895,7 @@ test('lissajousCurve: a rational ratio closes over its OWN period; an irrational
   // The irrational case never returns, so no closure is claimed.
   const open = lissajousCurve({ freqX: 3, freqY: Math.PI, samples: 360 });
   assert.equal(open.length, 361, 'the open form still returns samples+1 points');
-  assert.ok(dist(open[0], open[open.length - 1]) > 1, 'and does NOT pretend to close');
+  assert.ok(dist(open[0], open[open.length - 1]) > 1, 'and does not pretend to close');
 });
 
 test('lissajousCurve: the third axis is a real sinusoid, and freqZ is inert when ampZ is 0', () => {
@@ -929,8 +904,8 @@ test('lissajousCurve: the third axis is a real sinusoid, and freqZ is inert when
     const t = (i / 360) * 2 * Math.PI;
     assert.ok(Math.abs(pts[i][2] - 12 * Math.sin(5 * t)) < 1e-12, `z is not the requested sinusoid at ${i}`);
   }
-  assert.ok(Math.max(...pts.map((q) => Math.abs(q[2]))) > 11.9, 'and it genuinely leaves the plane');
-  /* ⚠ THE DOCUMENTED BLIND SPOT, ASSERTED SO NOBODY "FIXES" IT: with ampZ = 0
+  assert.ok(Math.max(...pts.map((q) => Math.abs(q[2]))) > 11.9, 'and it leaves the plane');
+  /* The documented blind spot, asserted so nobody "fixes" it: with ampZ = 0
      the curve cannot depend on freqZ, so any fixture at the default ampZ is
      unable to test freqZ at all. */
   const a = lissajousCurve({ freqZ: 4, ampZ: 0, samples: 90 });
@@ -939,13 +914,11 @@ test('lissajousCurve: the third axis is a real sinusoid, and freqZ is inert when
   assert.equal(LISSAJOUS_DEFAULTS.ampZ, 0, 'which is the default, so freqZ needs its own fixture');
 });
 
-// ===========================================================================
-// ROSE (rhodonea)
-// ===========================================================================
+// Rose (rhodonea)
 
-/* ⭐ THE PETAL COUNT, COUNTED. r = a*cos(k*theta) sweeps out one petal between
+/* The petal count, counted. r = a*cos(k*theta) sweeps out one petal between
    consecutive zeros of r, so the number of sign changes of r over one full
-   traversal IS the petal count. It is read off the emitted geometry (radius
+   traversal is the petal count. It is read off the emitted geometry (radius
    from x,y with the sign recovered from which side of the origin the point
    lies) rather than from the formula, and compared against the textbook rule
    written out independently here. */
@@ -978,23 +951,23 @@ test('roseCurve: the rational generalization n/d gives the petals the same rule 
   /* For n/d in lowest terms the traversal is d*pi when n*d is odd and 2*d*pi
      otherwise, and r = cos(n*theta/d) has one zero every pi/(n/d) of theta —
      so the petal count is n*d / gcd, i.e. n if n*d is odd and 2n otherwise
-     once reduced. Spot-checked on ratios that are NOT integers. */
+     once reduced. Spot-checked on ratios that are not integers. */
   assert.equal(countPetals({ n: 7, d: 2, amplitude: 40 }), 14, '7/2 rose');
   assert.equal(countPetals({ n: 3, d: 2, amplitude: 40 }), 6, '3/2 rose');
   assert.equal(countPetals({ n: 2, d: 3, amplitude: 40 }), 4, '2/3 rose');
   assert.equal(countPetals({ n: 5, d: 3, amplitude: 40 }), 5, '5/3 rose (n*d odd -> the odd rule)');
-  // roseThetaMax reduces n/d first: 4/2 IS 2/1 and must not be given twice the span.
+  // roseThetaMax reduces n/d first: 4/2 is 2/1 and must not be given twice the span.
   assert.ok(Math.abs(roseThetaMax(4, 2) - roseThetaMax(2, 1)) < 1e-12, '4/2 reduces to 2/1');
   assert.ok(Math.abs(roseThetaMax(3, 1) - Math.PI) < 1e-12, 'an odd rose closes in pi');
   assert.ok(Math.abs(roseThetaMax(4, 1) - 2 * Math.PI) < 1e-12, 'an even rose needs 2pi');
 });
 
-/* ⚠ THE SIGNED-RADIUS TRAP, PINNED. Plotting |r| instead of r turns the
+/* The signed-radius trap, pinned. Plotting |r| instead of r turns the
    3-petal trefoil into a 6-petal flower — a change that looks like a nicer
    result and is a different curve. A 3-petal rose is invariant under a third
-   of a turn and NOT under a sixth; the 6-petal one made by |r| is invariant
+   of a turn and not under a sixth; the 6-petal one made by |r| is invariant
    under both, so this separates them. */
-test('roseCurve: a 3-petal rose has 3-fold symmetry and NOT 6-fold (signed r, not |r|)', () => {
+test('roseCurve: a 3-petal rose has 3-fold symmetry and not 6-fold (signed r, not |r|)', () => {
   const pts = roseCurve({ n: 3, d: 1, amplitude: 40, samples: 36000 }).slice(0, -1);
   const inSet = (p, ang) => {
     const c = Math.cos(ang), s = Math.sin(ang);
@@ -1005,7 +978,7 @@ test('roseCurve: a 3-petal rose has 3-fold symmetry and NOT 6-fold (signed r, no
   };
   const probes = [pts[500], pts[3000], pts[9000], pts[21000]];
   for (const p of probes) assert.ok(inSet(p, 2 * Math.PI / 3) < 0.01, `not invariant under a third turn (${inSet(p, 2 * Math.PI / 3)})`);
-  assert.ok(probes.some((p) => inSet(p, Math.PI / 3) > 0.5), 'a 3-petal rose must NOT be 6-fold symmetric');
+  assert.ok(probes.some((p) => inSet(p, Math.PI / 3) > 0.5), 'a 3-petal rose must not be 6-fold symmetric');
   // Amplitude is the petal length exactly.
   assert.ok(Math.abs(Math.max(...pts.map((q) => Math.hypot(q[0], q[1]))) - 40) < 1e-6, 'petal tips reach exactly `amplitude`');
 });
@@ -1020,14 +993,12 @@ test('roseCurve: it closes with an explicit wrap, and a non-integer ratio is ref
   assert.equal(ROSE_DEFAULTS.d, 1);
 });
 
-// ===========================================================================
-// HELIX
-// ===========================================================================
+// Helix
 
-/* ⭐ THREE EXACT PROPERTIES AT ONCE, none of which a wrong helix satisfies:
+/* Three exact properties at once, none of which a wrong helix satisfies:
    a constant radius, an arc length equal to turns*sqrt((2*pi*R)^2 + pitch^2),
    and a height equal to pitch*turns. The arc length is the discriminating one
-   — it reads radius, pitch AND turns together, so no single one of them can
+   — it reads radius, pitch and turns together, so no single one of them can
    be dropped without moving it. */
 test('helixCurve: taper 0 holds its radius to machine precision, and pitch*turns is the height', () => {
   const radius = 20, pitch = 10, turns = 5;
@@ -1051,14 +1022,14 @@ test('helixCurve: the polyline length converges on the closed-form helix arc len
     return L;
   };
   assert.ok(Math.abs(measure(40001) / exact - 1) < 1e-6, `measured ${measure(40001)} vs exact ${exact}`);
-  // A chord polyline is always SHORT of the true arc, and it converges: the
+  // A chord polyline is always short of the true arc, and it converges: the
   // deficit must shrink as the sampling refines, or the "exact" number is not
   // the thing being approached.
   const coarse = Math.abs(measure(401) / exact - 1);
   const fine = Math.abs(measure(4001) / exact - 1);
   assert.ok(measure(401) < exact && measure(4001) < exact, 'chords undercut the arc');
   assert.ok(fine < coarse / 50, `deficit must fall as O(1/n^2) (${coarse} -> ${fine})`);
-  // NOT VACUOUS: the closed form reads all three parameters.
+  // Not vacuous: the closed form reads all three parameters.
   assert.ok(helixArcLength(21, pitch, turns) > exact + 1, 'radius moves the arc length');
   assert.ok(helixArcLength(radius, 30, turns) > exact + 10, 'pitch moves the arc length');
   assert.ok(helixArcLength(radius, pitch, 6) > exact + 100, 'turns moves the arc length');
@@ -1073,7 +1044,7 @@ test('helixCurve: taper 1 closes the radius to exactly zero, and taper is monoto
   // Half taper leaves exactly half the radius at the top.
   const half = helixCurve({ radius: 20, pitch: 8, turns: 4, taper: 0.5, samples: 401 });
   assert.ok(Math.abs(rOf(half[400]) - 10) < 1e-12, `taper 0.5 ends at half radius, got ${rOf(half[400])}`);
-  /* ⚠ AND THE TAPER IS LINEAR IN BETWEEN, asserted at every station rather
+  /* And the taper is linear in between, asserted at every station rather
      than only at the two ends. Both endpoints and monotonicity hold just as
      well for a taper that runs as s^2 — a cone with curved sides — so an
      endpoint-only test cannot tell a straight-sided cone from a bell. */
@@ -1087,9 +1058,9 @@ test('helixCurve: taper 1 closes the radius to exactly zero, and taper is monoto
   assert.ok(over.every((q, i) => dist(q, cone[i]) < 1e-12), 'taper is clamped to [0,1]');
 });
 
-/* ⚠ pitch/turns/height ARE ONE PARAMETER TOO MANY, and the module's stated
+/* pitch/turns/height are one parameter too many, and the module's stated
    rule is that pitch drives unless height > 0. Both halves are asserted:
-   height genuinely overrides, and when it does, pitch is genuinely ignored. */
+   height overrides, and when it does, pitch is ignored. */
 test('helixCurve: `height` overrides pitch, and the resolved triple stays consistent', () => {
   const r = helixResolve({ pitch: 10, turns: 5, height: 0 });
   assert.equal(r.pitch, 10);
@@ -1117,11 +1088,9 @@ test('helixCurve: phase rotates the start exactly, and zero turns is refused', (
   assert.equal(HELIX_DEFAULTS.height, 0);
 });
 
-// ===========================================================================
-// CATENARY
-// ===========================================================================
+// Catenary
 
-/* The span/sag -> a inversion is TRANSCENDENTAL, so the solver is checked
+/* The span/sag -> a inversion is transcendental, so the solver is checked
    against its own defining equation rather than against a formula: whatever a
    it returns must reproduce the requested sag. Checked across four decades of
    sag/span ratio, because a bracket that only ever works near the seed is a
@@ -1138,7 +1107,7 @@ test('catenaryParameter: the returned a reproduces the requested sag exactly', (
   }
 });
 
-/* ⚠ AND IT IS NOT THE PARABOLA. The parabolic approximation a = span^2/(8*sag)
+/* And it is not the parabola. The parabolic approximation a = span^2/(8*sag)
    is the seed, so a solver that simply returned its seed would pass every
    "is it finite / does it scale" check. It is separated here by the number
    that distinguishes them. */
@@ -1153,7 +1122,7 @@ test('catenaryParameter: the answer is the catenary one, not the parabolic seed'
   assert.ok(Math.abs(seedSag / 25 - 1) > 0.08, `the parabola is off by ${(seedSag / 25 - 1) * 100}%`);
 });
 
-/* ⭐ y = a*cosh(x/a) AT EVERY SAMPLED STATION, with x measured from the vertex
+/* y = a*cosh(x/a) at every sampled station, with x measured from the vertex
    and the whole curve shifted so the two suspension points sit at start.y. */
 test('catenaryCurve: every point satisfies y = a*cosh(x/a), with the vertex exactly at the span midpoint', () => {
   const span = 100, sag = 25, sx = 7, sy = -3, sz = 2;
@@ -1170,19 +1139,19 @@ test('catenaryCurve: every point satisfies y = a*cosh(x/a), with the vertex exac
   // The two suspension points sit exactly at start.y, and span exactly `span`.
   assert.ok(Math.abs(pts[0][0] - sx) < 1e-12 && Math.abs(pts[120][0] - (sx + span)) < 1e-12, 'spans exactly `span`');
   assert.ok(Math.abs(pts[0][1] - sy) < 1e-9 && Math.abs(pts[120][1] - sy) < 1e-9, 'ends sit at start.y');
-  /* THE VERTEX IS A SAMPLE, because the default sample count is odd. Index 60
+  /* The vertex is a sample, because the default sample count is odd. Index 60
      of 121 is the exact midpoint. */
   assert.ok(Math.abs(pts[60][0] - (sx + span / 2)) < 1e-12, 'index 60 is the span midpoint');
   assert.ok(Math.abs(pts[60][1] - (sy - sag)) < 1e-9, `the vertex hangs exactly sag below, got ${pts[60][1] - sy}`);
   const ys = pts.map((q) => q[1]);
   assert.equal(ys.indexOf(Math.min(...ys)), 60, 'and it is the lowest point of the chain');
-  // NOT VACUOUS: the same identity with a WRONG a misses by a mile.
+  // Not vacuous: the same identity with a wrong a misses by a mile.
   const bad = a * 1.1;
   const badTop = bad * Math.cosh(span / (2 * bad));
   assert.ok(pts.some((q) => Math.abs(q[1] - (sy + bad * Math.cosh((q[0] - sx - span / 2) / bad) - badTop)) > 0.1), 'a 10% wrong a must show');
 });
 
-test('catenaryCurve: it is symmetric, convex, and NOT a parabola', () => {
+test('catenaryCurve: it is symmetric, convex, and not a parabola', () => {
   const span = 100, sag = 25;
   const pts = catenaryCurve({ span, sag, samples: 201 });
   for (let i = 0; i < pts.length; i++) {
@@ -1195,7 +1164,7 @@ test('catenaryCurve: it is symmetric, convex, and NOT a parabola', () => {
     assert.ok(d2 > 0, `not convex at ${i} (second difference ${d2})`);
   }
   /* The parabola through the same three points (both ends and the vertex) is a
-     DIFFERENT curve, and by a visible amount — 0.35% of the span here. This is
+     different curve, and by a visible amount — 0.35% of the span here. This is
      the claim that makes the family worth having at all rather than being a
      quadratic with a fancy name. */
   let worst = 0;
@@ -1214,11 +1183,9 @@ test('catenaryCurve: a degenerate span or sag is refused by name', () => {
   assert.equal(CATENARY_DEFAULTS.samples % 2, 1, 'an odd default puts a sample on the vertex');
 });
 
-// ===========================================================================
-// TORUS KNOT
-// ===========================================================================
+// Torus knot
 
-/* ⭐ THE IMPLICIT EQUATION OF THE TORUS, at every point:
+/* The implicit equation of the torus, at every point:
      (sqrt(x^2 + y^2) - R)^2 + z^2 = r^2
    This is the strongest oracle in the six because it reads R and r together
    and holds to machine precision for every (p,q). */
@@ -1231,16 +1198,16 @@ test('torusKnotCurve: every point lies exactly on the torus it is wound on', () 
       assert.ok(Math.abs(v - r * r) < 1e-9, `(${p},${q}) off the torus: ${v} vs ${r * r}`);
     }
   }
-  // NOT VACUOUS: the same test against the WRONG tube radius fails hard.
+  // Not vacuous: the same test against the wrong tube radius fails hard.
   const pts = torusKnotCurve({ p: 2, q: 3, R: 40, r: 12, samples: 200 });
   assert.ok(pts.some((s) => Math.abs((Math.hypot(s[0], s[1]) - 40) ** 2 + s[2] * s[2] - 169) > 1), 'r must be readable from the geometry');
   assert.ok(pts.some((s) => Math.abs((Math.hypot(s[0], s[1]) - 44) ** 2 + s[2] * s[2] - 144) > 1), 'R must be readable from the geometry');
 });
 
-/* ⭐ THE WINDING NUMBERS, WHICH ARE WHAT MAKE IT THE (p,q) KNOT AND NOT SOME
-   OTHER CURVE ON THE SAME TORUS. Unwrapping the two angles around the closed
+/* The winding numbers, which are what make it the (p,q) knot and not some
+   other curve on the same torus. Unwrapping the two angles around the closed
    loop must give exactly p turns about the main axis and exactly q turns about
-   the tube — and the curve must NOT return to its start before then, which is
+   the tube — and the curve must not return to its start before then, which is
    what "closes after exactly q turns" means. */
 const windings = (pts, R, start = [0, 0, 0]) => {
   const unwrap = (angs) => {
@@ -1267,12 +1234,12 @@ test('torusKnotCurve: the loop winds exactly p times around the ring and q times
   }
 });
 
-test('torusKnotCurve: it closes with an explicit wrap and does NOT close early', () => {
+test('torusKnotCurve: it closes with an explicit wrap and does not close early', () => {
   const p = 2, q = 3, n = 900;
   const pts = torusKnotCurve({ p, q, R: 40, r: 12, samples: n });
   assert.equal(pts.length, n + 1, 'n samples plus the explicit closing repeat');
   assert.ok(dist(pts[0], pts[pts.length - 1]) < 1e-12, 'the wrap segment is missing');
-  /* Closing EARLY is the failure mode a gcd > 1 would cause, so it is checked
+  /* Closing early is the failure mode a gcd > 1 would cause, so it is checked
      directly: after each of the q-1 intermediate whole turns of the tube the
      point must be nowhere near the start. */
   for (let k = 1; k < q; k++) {
@@ -1284,12 +1251,12 @@ test('torusKnotCurve: it closes with an explicit wrap and does NOT close early',
   assert.ok(Math.min(...body.map((s) => dist(s, pts[0]))) > 0.3, 'the curve is traced exactly once');
 });
 
-test('torusKnotCurve: a non-coprime (p,q) is refused as a LINK, and non-integers are refused too', () => {
+test('torusKnotCurve: a non-coprime (p,q) is refused as a link, and non-integers are refused too', () => {
   assert.throws(() => torusKnotCurve({ p: 2, q: 4 }), /LINK of 2 components/);
   assert.throws(() => torusKnotCurve({ p: 6, q: 9 }), /LINK of 3 components/);
   assert.throws(() => torusKnotCurve({ p: 0, q: 0 }), /LINK/);
   assert.throws(() => torusKnotCurve({ p: 2.5, q: 3 }), /INTEGER/);
-  // The neighboring coprime cases are NOT refused, so the guard is discriminating.
+  // The neighboring coprime cases are not refused, so the guard is discriminating.
   assert.doesNotThrow(() => torusKnotCurve({ p: 2, q: 5, samples: 50 }));
   assert.doesNotThrow(() => torusKnotCurve({ p: 6, q: 7, samples: 50 }));
   assert.doesNotThrow(() => torusKnotCurve({ p: 1, q: 0, samples: 50 }));
@@ -1297,16 +1264,13 @@ test('torusKnotCurve: a non-coprime (p,q) is refused as a LINK, and non-integers
   assert.equal(TORUS_KNOT_DEFAULTS.q, 3);
 });
 
-// ===========================================================================
-// CROSS-CUTTING: no inert parameter, real closure, finite everywhere
-// ===========================================================================
+// Cross-cutting: no inert parameter, real closure, finite everywhere
 
-/* ⚠⚠ AN EXACT ORACLE IS NOT AUTOMATICALLY A DISCRIMINATING ONE. The
-   superformula tests above carry the scar: a fixture that agreed to nine
-   decimals was completely blind to n1, because cos^2 + sin^2 = 1 and 1 raised
-   to any power is 1. The defense is mechanical rather than clever — every
+/* An exact oracle is not automatically a discriminating one. The superformula
+   circle fixture above agrees to nine decimals and is blind to n1, because
+   cos^2 + sin^2 = 1 and 1 raised to any power is 1. The defense is mechanical — every
    parameter of every family is perturbed from a fixture chosen so nothing
-   masks it, and the emitted chain must MOVE.
+   masks it, and the emitted chain must move.
 
    The fixtures below are therefore deliberately off every symmetry: no zero
    amplitudes (a zero-amplitude axis cannot see its own frequency), no zero
@@ -1340,7 +1304,7 @@ const PARAM_SWEEP = [
     { p: 5, q: 7, R: 55, r: 7, samples: 201, start: [4, 2, 3] }],
 ];
 
-test('NO INERT PARAMETER: perturbing any single parameter of any family moves the curve', () => {
+test('No inert parameter: perturbing any single parameter of any family moves the curve', () => {
   let checked = 0;
   for (const [name, fn, base, perturbed] of PARAM_SWEEP) {
     const baseline = fn(base);
@@ -1348,7 +1312,7 @@ test('NO INERT PARAMETER: perturbing any single parameter of any family moves th
       assert.ok(key in perturbed, `${name}: no perturbation supplied for ${key}`);
       assert.notDeepEqual(base[key], perturbed[key], `${name}: the perturbation of ${key} is not a change`);
       const moved = fn({ ...base, [key]: perturbed[key] });
-      assert.ok(chainDiffers(baseline, moved), `${name}: '${key}' is INERT at this fixture — the test cannot see it`);
+      assert.ok(chainDiffers(baseline, moved), `${name}: '${key}' is inert at this fixture — the test cannot see it`);
       checked++;
     }
   }
@@ -1365,7 +1329,7 @@ test('closure: the closed families carry a real wrap segment, the open ones do n
   for (const [name, pts] of closed) {
     assert.equal(pts.length, 241, `${name}: samples + 1 for the explicit repeat`);
     assert.ok(dist(pts[0], pts[pts.length - 1]) < 1e-12, `${name}: the wrap segment is missing`);
-    /* AND THE SEAM IS AN ORDINARY STEP. A chain that merely appends a copy of
+    /* And the seam is an ordinary step. A chain that merely appends a copy of
        its first point to an unrelated last point passes the gap test above and
        draws a chord across the picture. */
     const steps = [];
@@ -1373,12 +1337,11 @@ test('closure: the closed families carry a real wrap segment, the open ones do n
     const median = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)];
     assert.ok(steps[steps.length - 1] < median * 4, `${name}: the closing step ${steps[steps.length - 1]} dwarfs the median ${median}`);
   }
-  /* ⚠ `samples` MEANS TWO DIFFERENT THINGS, exactly as it already does in the
-     shipped families: for a CLOSED curve it is the number of DISTINCT samples
-     and the chain is samples+1 long (the last entry is the explicit repeat),
-     while for an OPEN curve it is the point count outright. noiseCurve and
-     waveCurve already split this way; the new families follow them rather than
-     inventing a third convention. */
+  /* `samples` means two different things: for a closed curve it is the number
+     of distinct samples and the chain is samples+1 long (the last entry is the
+     explicit repeat), while for an open curve it is the point count outright.
+     noiseCurve and waveCurve split this way, and every family here follows
+     them rather than inventing a third convention. */
   const open = [
     ['spiralCurve', spiralCurve({ turns: 3, samples: 241 })],
     ['helixCurve', helixCurve({ turns: 3, samples: 241 })],
@@ -1390,7 +1353,7 @@ test('closure: the closed families carry a real wrap segment, the open ones do n
   }
 });
 
-test('every new family is finite for its defaults and for extreme parameters', () => {
+test('spiral, Lissajous, rose, helix, catenary and torus-knot curves are finite for their defaults and for extreme parameters', () => {
   const finite = (name, pts) => {
     assert.ok(Array.isArray(pts) && pts.length >= 2, `${name}: a real chain came out`);
     assert.ok(pts.every((q) => Array.isArray(q) && q.length === 3 && q.every(Number.isFinite)), `${name}: NaN/Infinity in the chain`);
@@ -1422,7 +1385,7 @@ test('every new family is finite for its defaults and for extreme parameters', (
   finite('torusKnot 8 samples', torusKnotCurve({ samples: 1 }));   // clamped up to 8
 });
 
-test('the new families feed cleanly into globalCurveInterp, like the shipped ones', () => {
+test('spiral, helix and catenary chains feed cleanly into globalCurveInterp', () => {
   for (const [name, pts] of [
     ['spiral', spiralCurve({ turns: 4, height: 20, samples: 240 })],
     ['helix', helixCurve({ turns: 4, taper: 0.4, samples: 240 })],

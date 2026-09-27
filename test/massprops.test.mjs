@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { massProperties, volumeIdentityResidual } from '../kernel/massprops.mjs';
 
-// Every check below compares against a CLOSED-FORM answer for the same solid
+// Every check below compares against a closed-form answer for the same solid
 // — a box's own w*h*d, a tetrahedron's own det/6, a sphere's 4/3 pi r^3 — not
 // against a second run of the code under test. That is the whole point: the
 // oracle these feed is only worth anything if the measurement itself was
 // proven against something it cannot have derived from.
 
-// An axis-aligned box as six OUTWARD-wound quad loops.
+// An axis-aligned box as six outward-wound quad loops.
 function boxLoops(lo, hi) {
   const [x0, y0, z0] = lo, [x1, y1, z1] = hi;
   return [
@@ -51,12 +51,12 @@ test("massProperties: the box's inertia tensor about its centroid matches m/12*(
   }
   // A box aligned with the axes has no products of inertia at all — the
   // strongest single check that the parallel-axis translation is right, since
-  // the tensor about the ORIGIN (7,-13,3 away) has large off-diagonals.
+  // the tensor about the origin (7,-13,3 away) has large off-diagonals.
   for (const [r, q] of [[0, 1], [0, 2], [1, 2]]) {
     assert.ok(Math.abs(I[r * 3 + q]) < 1e-6, `off-diagonal I[${r}][${q}] should be 0, got ${I[r * 3 + q]}`);
     assert.ok(Math.abs(I[r * 3 + q] - I[q * 3 + r]) < 1e-9, 'the tensor must be symmetric');
   }
-  assert.ok(Math.abs(m.inertiaOrigin[1]) > 1, 'the ORIGIN tensor should have real products of inertia here');
+  assert.ok(Math.abs(m.inertiaOrigin[1]) > 1, 'the origin tensor should have nonzero products of inertia here');
 });
 
 test('massProperties: an arbitrary tetrahedron matches det/6, exactly', () => {
@@ -76,7 +76,7 @@ test('massProperties: an arbitrary tetrahedron matches det/6, exactly', () => {
   assert.ok(m.closureResidual < 1e-14, 'a closed tetrahedron must have ~zero closure residual');
 });
 
-test('massProperties: a NON-CONVEX planar face is measured correctly by the fan — convexity is not assumed', () => {
+test('massProperties: a non-convex planar face is measured correctly by the fan — convexity is not assumed', () => {
   // An L-shaped prism. If the fan from vertex 0 were only valid for a convex
   // loop, the escaping triangles would not cancel and this volume would be
   // wrong by exactly the notch.
@@ -96,7 +96,7 @@ test('massProperties: a NON-CONVEX planar face is measured correctly by the fan 
   assert.ok(m.closureResidual < 1e-14, 'the L-prism must still read as closed');
 });
 
-test('massProperties: a sphere tessellation CONVERGES on 4/3 pi r^3 from below, as an inscribed shell must', () => {
+test('massProperties: a sphere tessellation converges on 4/3 pi r^3 from below, as an inscribed shell must', () => {
   const R = 5;
   const build = (n) => {
     const P = [];
@@ -120,9 +120,9 @@ test('massProperties: a sphere tessellation CONVERGES on 4/3 pi r^3 from below, 
   const truth = (4 / 3) * Math.PI * R ** 3;
   const coarse = build(16), mid = build(32), fine = build(64);
   for (const m of [coarse, mid, fine]) {
-    assert.ok(m.volume < truth, 'an inscribed polyhedron is always SMALLER than the sphere it is inscribed in');
+    assert.ok(m.volume < truth, 'an inscribed polyhedron is always smaller than the sphere it is inscribed in');
   }
-  // The load-bearing claim is the convergence ORDER, not a magic percentage:
+  // The load-bearing claim is the convergence order, not a fixed percentage:
   // a second-order scheme divides its error by 4 on every doubling. A number
   // picked to fit one resolution would pass a first-order bug too.
   const e = [coarse, mid, fine].map((m) => (truth - m.volume) / truth);
@@ -132,7 +132,7 @@ test('massProperties: a sphere tessellation CONVERGES on 4/3 pi r^3 from below, 
       `doubling the bands must quarter the error (second order); got a ratio of ${ratio.toFixed(3)}`);
   }
   assert.ok(e[2] < 2e-3, `a 64-band sphere should already be within 0.2%, got ${(e[2] * 100).toFixed(4)}%`);
-  // The centroid is exact at ANY resolution — it is fixed by symmetry, not by
+  // The centroid is exact at any resolution — it is fixed by symmetry, not by
   // how finely the surface is cut, so this checks the weighting rather than
   // the discretization.
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(coarse.centroid[k]) < 1e-9);
@@ -144,7 +144,7 @@ test('massProperties: a sphere tessellation CONVERGES on 4/3 pi r^3 from below, 
   }
 });
 
-test('massProperties: an INSIDE-OUT shell reports a negative volume rather than hiding it', () => {
+test('massProperties: an inside-out shell reports a negative volume rather than hiding it', () => {
   const flipped = boxLoops([0, 0, 0], [2, 3, 4]).map((l) => l.slice().reverse());
   const m = massProperties(flipped);
   assert.ok(m.volume < 0, `an inside-out box must report a negative volume, got ${m.volume}`);
@@ -152,13 +152,13 @@ test('massProperties: an INSIDE-OUT shell reports a negative volume rather than 
   assert.ok(m.closureResidual < 1e-14, 'consistently reversed is still consistently wound, so still closed');
 });
 
-test('massProperties: closureResidual genuinely detects an OPEN shell and a SINGLE flipped face', () => {
+test('massProperties: closureResidual detects an open shell and a single flipped face', () => {
   const closed = boxLoops([0, 0, 0], [2, 3, 4]);
   assert.ok(massProperties(closed).closureResidual < 1e-14);
 
   const open = closed.slice(0, 5); // lid removed
   assert.ok(massProperties(open).closureResidual > 0.1,
-    'a box missing a face must fail the closed-surface theorem, loudly');
+    'a box missing a face must fail the closed-surface theorem by a wide margin');
 
   const oneFlipped = closed.map((l, i) => (i === 2 ? l.slice().reverse() : l));
   assert.ok(massProperties(oneFlipped).closureResidual > 0.1,
@@ -171,7 +171,7 @@ test('massProperties: refuses malformed input by name instead of measuring nonse
   assert.throws(() => massProperties([[[0, 0, 0], [1, 0, 0], [0, NaN, 0]]]), /non-finite/);
 });
 
-test('volumeIdentityResidual: passes a consistent set and CATCHES a plausible-but-wrong one', () => {
+test('volumeIdentityResidual: passes a consistent set and catches a plausible-but-wrong one', () => {
   // Two boxes overlapping at a corner: every volume is known in closed form.
   const A = 10 ** 3, B = 10 ** 3, I = 5 ** 3;
   const U = A + B - I, D = A - I;
