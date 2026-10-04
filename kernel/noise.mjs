@@ -135,9 +135,40 @@ export function bridgedWalk1D(seed, salt, n, closed) {
   return raw.map((v, k) => v - (k / (n - 1)) * drift);
 }
 
+// Where each control row and column sits along the net, in units of the net's
+// mean edge length: X[i] is the control polygon's length from row 0 to row i
+// (averaged over the columns), Y[j] the same across columns. A net whose edges
+// are all one length gets X[i] = i exactly, so a uniform net keeps the
+// index-keyed field; a net denser one way than the other (a Primitive torus:
+// about 8 mm between points around the tube, 47 mm around the ring) gets a
+// field that changes as fast per millimeter in both directions, rather than
+// six times faster across the tube. Degenerate (all points coincident): the
+// index.
+export function netArcCoords(net) {
+  const nu = net.length, nv = net[0].length;
+  const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const X = new Array(nu).fill(0), Y = new Array(nv).fill(0);
+  let total = 0, edges = 0;
+  for (let i = 1; i < nu; i++) {
+    let s = 0;
+    for (let j = 0; j < nv; j++) s += len(net[i][j], net[i - 1][j]);
+    X[i] = X[i - 1] + s / nv; total += s; edges += nv;
+  }
+  for (let j = 1; j < nv; j++) {
+    let s = 0;
+    for (let i = 0; i < nu; i++) s += len(net[i][j], net[i][j - 1]);
+    Y[j] = Y[j - 1] + s / nu; total += s; edges += nu;
+  }
+  const L = edges ? total / edges : 0;
+  if (!(L > 0) || !Number.isFinite(L)) return { X: X.map((_, i) => i), Y: Y.map((_, j) => j) };
+  return { X: X.map((x) => x / L), Y: Y.map((y) => y / L) };
+}
+
 // The per-control-point signed scalar (~[-1, 1]) each style produces,
 // precomputed for the whole grid so randomWalk's raster accumulator is
-// coherent (and cheap). Three distinct styles:
+// coherent (and cheap). value and sine are sampled at the net's arc-length
+// coordinates (netArcCoords), so frequency counts mean control-point steps
+// and the pattern is as fine one way as the other. Three distinct styles:
 //   value      — smooth pseudo-noise (valueNoise2D).
 //   sine       — a periodic tensor sinusoid, seed-phased (deterministic).
 //   randomWalk — a raster-order cumulative hash walk, tanh-bounded so it
@@ -153,14 +184,16 @@ export function bridgedWalk1D(seed, salt, n, closed) {
 // in one direction) and a Torus (closed in both) fall out of the same two
 // booleans, never a shape-specific branch. With neither set, every style
 // produces the open construction.
-function noiseScalarGrid(p, nu, nv, closedU, closedV) {
+function noiseScalarGrid(p, nu, nv, closedU, closedV, coords) {
   const g = Array.from({ length: nu }, () => new Array(nv).fill(0));
+  const X = coords ? coords.X : Array.from({ length: nu }, (_, i) => i);
+  const Y = coords ? coords.Y : Array.from({ length: nv }, (_, j) => j);
   if (p.style === 'sine') {
     const phaseA = hash01(p.seed, 11) * Math.PI * 2;
     const phaseB = hash01(p.seed, 22) * Math.PI * 2;
-    const freqI = closedU ? quantizeClosedFrequencySine(p.frequency, nu - 1) : p.frequency;
-    const freqJ = closedV ? quantizeClosedFrequencySine(p.frequency, nv - 1) : p.frequency;
-    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) g[i][j] = Math.sin(i * freqI + phaseA) * Math.cos(j * freqJ + phaseB);
+    const freqI = closedU ? quantizeClosedFrequencySine(p.frequency, X[nu - 1]) : p.frequency;
+    const freqJ = closedV ? quantizeClosedFrequencySine(p.frequency, Y[nv - 1]) : p.frequency;
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) g[i][j] = Math.sin(X[i] * freqI + phaseA) * Math.cos(Y[j] * freqJ + phaseB);
   } else if (p.style === 'randomWalk') {
     if (!closedU && !closedV) {
       // A single joint raster accumulator: an open surface needs no
@@ -178,11 +211,36 @@ function noiseScalarGrid(p, nu, nv, closedU, closedV) {
       for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) g[i][j] = Math.tanh((walkU[i] + walkV[j]) * p.frequency * 0.25);
     }
   } else { // 'value'
-    const wu = closedU ? quantizeClosedFrequencyLinear(p.frequency, nu - 1) : null;
-    const wv = closedV ? quantizeClosedFrequencyLinear(p.frequency, nv - 1) : null;
+    const wu = closedU ? quantizeClosedFrequencyLinear(p.frequency, X[nu - 1]) : null;
+    const wv = closedV ? quantizeClosedFrequencyLinear(p.frequency, Y[nv - 1]) : null;
     const freqI = wu ? wu.freq : p.frequency, freqJ = wv ? wv.freq : p.frequency;
     const wrapX = wu ? wu.cells : undefined, wrapY = wv ? wv.cells : undefined;
-    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) g[i][j] = valueNoise2D(i * freqI, j * freqJ, p.seed, wrapX, wrapY);
+    // BAND LIMIT. The net cannot carry a feature narrower than its own step,
+    // and on a net much sparser one way (the ring of a torus) a lattice finer
+    // than that step lands on the sparse rows as one unrelated value per row,
+    // which the surface draws as ridges along them. Along the dense direction
+    // the field is then averaged over the sparse step, so a lump is as wide one
+    // way as the other, and rescaled to the unfiltered field's RMS so the lumps
+    // keep their height. A net as dense both ways is never filtered.
+    const sU = nu > 1 ? X[nu - 1] / (nu - 1) : 1, sV = nv > 1 ? Y[nv - 1] / (nv - 1) : 1;
+    const taps = (own, other, freq) => (other > own * 1.25 && other * freq > 1 ? Math.min(33, 1 + 2 * Math.ceil(other * freq)) : 1);
+    const tU = taps(sU, sV, freqI), tV = taps(sV, sU, freqJ);
+    let rawSq = 0, outSq = 0;
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+      const raw = valueNoise2D(X[i] * freqI, Y[j] * freqJ, p.seed, wrapX, wrapY);
+      if (tU === 1 && tV === 1) { g[i][j] = raw; continue; }
+      let acc = 0;
+      for (let a = 0; a < tU; a++) for (let b = 0; b < tV; b++) {
+        const x = X[i] + (tU > 1 ? (a / (tU - 1) - 0.5) * sV : 0), y = Y[j] + (tV > 1 ? (b / (tV - 1) - 0.5) * sU : 0);
+        acc += valueNoise2D(x * freqI, y * freqJ, p.seed, wrapX, wrapY);
+      }
+      g[i][j] = acc / (tU * tV);
+      rawSq += raw * raw; outSq += g[i][j] * g[i][j];
+    }
+    if (outSq > 0) {
+      const k = Math.min(4, Math.sqrt(rawSq / outSq));
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) g[i][j] = Math.max(-1, Math.min(1, g[i][j] * k));
+    }
   }
   return g;
 }
@@ -399,7 +457,7 @@ export function noiseControlNet(srf, params, opts = {}) {
   // never changes which rows/columns coincide), not shape-specific. See
   // noiseScalarGrid for the per-style handling.
   const { closedU, closedV } = surfaceClosure(s);
-  const grid = noiseScalarGrid(p, nu, nv, closedU, closedV);
+  const grid = noiseScalarGrid(p, nu, nv, closedU, closedV, netArcCoords(s.ctrlNet));
   const useNormal = p.direction === 'normal';
   const axis = p.direction === 'world-x' ? [1, 0, 0] : p.direction === 'world-y' ? [0, 1, 0] : p.direction === 'world-z' ? [0, 0, 1] : null;
   // Greville abscissae are needed by the normal direction and by a weight

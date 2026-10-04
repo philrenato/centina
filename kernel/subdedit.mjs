@@ -17,6 +17,9 @@ import { add, sub, scale, length, cross, dot } from './vec3.mjs';
 import { edgeKey, buildTopology, subdivideCatmullClark } from './subd.mjs';
 import { oppositeEdgeInFace } from './subdselect.mjs';
 import { cubicHermiteSegment } from './interpolate.mjs';
+// A cycle with subdnetwork.mjs, which imports this module's hub builders; only
+// function declarations cross it, and they are bound before either module runs.
+import { cageCrossingFacePairs } from './subdnetwork.mjs';
 
 function lerp3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 
@@ -664,6 +667,22 @@ function vertexNormals(cage) {
 // are wound from the original's boundary direction, so every shared edge
 // is traversed once each way.
 //
+// The copy is offset on the miter, not along the averaged normal: each
+// vertex moves by the m that stands it `distance` off the plane of every
+// face it belongs to (m.n_f = 1 for each, least squares over them). At a box
+// corner the averaged normal leaves the wall 0.577 of the thickness; the
+// miter leaves it the whole. m is held to 3 (a fold whose faces turn back
+// on each other asks for an unbounded one).
+//
+// A wall grown past the form's own middle turns the copy inside out (an
+// open tube of radius 5 thickened 6 inward): the cage reads clean and its
+// limit crosses itself thousands of times. So the slab is tested for a copy
+// face turned against its original, for faces through each other on the
+// cage, and once subdivided; when the asked thickness fails, it is held at
+// the largest on the same side that passes (bisected to 1/4096 of the
+// asked) and `clamped` says so, `distance` what was used. A cage that
+// crosses itself before it is thickened is built as asked.
+//
 // A closed cage is refused. The rim is built from naked edges — one wall
 // quad per edge with a single owner face — and a closed cage has none, so
 // the result would be the original plus a reversed offset copy with nothing
@@ -672,24 +691,58 @@ function vertexNormals(cage) {
 // every later cage command would see two components. The message names the
 // way through: delete a face first, and the wall is built around that
 // opening.
-export function thickenCage(cage, distance) {
-  if (!Number.isFinite(distance) || Math.abs(distance) < 1e-9) throw new Error('thickenCage: distance must be a nonzero finite number');
-  const closedCheck = buildTopology(cage);
-  let nakedCount = 0;
-  for (const [, e] of closedCheck.edgeMap) if (e.faces.length === 1) nakedCount++;
-  if (nakedCount === 0) {
-    throw new Error('this cage is already closed, so there is no open edge for a wall to grow from — thickening it would leave an offset copy floating inside the original as a second, disconnected shell rather than one watertight object. Delete a face first to open it, then Thicken builds a real wall around that opening.');
-  }
-  const offset = offsetCage(cage, distance);
+function miterOffsets(cage) {
+  const normals = cage.faces.map((_, fi) => computeFaceNormal(cage, fi));
+  const at = cage.vertices.map(() => []);
+  cage.faces.forEach((face, fi) => { for (const vi of face) at[vi].push(normals[fi]); });
+  return at.map((ns) => {
+    ns = ns.filter((q) => length(q) > 0.5);
+    if (!ns.length) return null;
+    // An orthonormal basis of the directions the normals span: a direction
+    // whose residual is under 1e-3 is a tilt too small to steer the wall and
+    // is left out, so the solve below is never near singular.
+    const basis = [];
+    for (const q of ns) {
+      let r = q;
+      for (const e of basis) r = sub(r, scale(e, dot(r, e)));
+      const l = length(r);
+      if (l > 1e-3 && basis.length < 3) basis.push(scale(r, 1 / l));
+    }
+    // m = sum c_k e_k with m.n_f = 1 for every face, in least squares.
+    const k = basis.length, G = basis.map(() => new Array(k).fill(0)), h = new Array(k).fill(0);
+    for (const q of ns) {
+      const p = basis.map((e) => dot(q, e));
+      for (let a = 0; a < k; a++) { h[a] += p[a]; for (let b = 0; b < k; b++) G[a][b] += p[a] * p[b]; }
+    }
+    for (let a = 0; a < k; a++) {
+      let piv = a;
+      for (let r = a + 1; r < k; r++) if (Math.abs(G[r][a]) > Math.abs(G[piv][a])) piv = r;
+      [G[a], G[piv]] = [G[piv], G[a]]; [h[a], h[piv]] = [h[piv], h[a]];
+      if (!(Math.abs(G[a][a]) > 1e-12)) return null;
+      for (let r = a + 1; r < k; r++) { const f = G[r][a] / G[a][a]; for (let c = a; c < k; c++) G[r][c] -= f * G[a][c]; h[r] -= f * h[a]; }
+    }
+    const c = new Array(k).fill(0);
+    for (let a = k - 1; a >= 0; a--) { let t = h[a]; for (let b = a + 1; b < k; b++) t -= G[a][b] * c[b]; c[a] = t / G[a][a]; }
+    let m = [0, 0, 0];
+    basis.forEach((e, a) => { m = add(m, scale(e, c[a])); });
+    const l = length(m);
+    if (!(l > 1e-9)) return null;
+    return l > 3 ? scale(m, 3 / l) : m;
+  });
+}
+function thickenAt(cage, distance, miters, topology) {
   const n = cage.vertices.length;
-  const vertices = [...cage.vertices.map((v) => v.slice()), ...offset.vertices.map((v) => v.slice())];
+  const offsetVertices = cage.vertices.map((v, i) => {
+    if (!miters[i]) throw new Error(`thickenCage: vertex ${i} has no usable normal (its faces' own normals cancel, or it belongs to no face) — nothing to offset it along`);
+    return add(v, scale(miters[i], distance));
+  });
+  const vertices = [...cage.vertices.map((v) => v.slice()), ...offsetVertices];
   const faces = [
     ...cage.faces.map((f) => f.slice()),
     ...cage.faces.map((f) => f.slice().reverse().map((vi) => vi + n)),
   ];
   // Rim — one quad per naked edge, wound against the owner face's
   // traversal so it agrees with both sheets at once.
-  const topology = buildTopology(cage);
   const rimFaces = [];
   for (const [key, edge] of topology.edgeMap) {
     if (edge.faces.length !== 1) continue;
@@ -711,11 +764,14 @@ export function thickenCage(cage, distance) {
   // The shell must face out whichever way it grew. The construction above
   // can come out inside-out (a wall grown outward, distance > 0, on an open
   // box does), so the winding is set from the finished shell's signed
-  // volume rather than from the sign of distance.
+  // volume rather than from the sign of distance — taken about the shell's
+  // own centroid: about the origin, a 10 mm box a million away sums volumes
+  // of 1e18 and keeps the sign of the rounding.
   let allFaces = [...faces, ...rimFaces];
+  const o = scale(vertices.reduce((acc, v) => add(acc, v), [0, 0, 0]), 1 / vertices.length);
   let vol = 0;
   for (const f of allFaces) for (let i = 1; i + 1 < f.length; i++) {
-    const a = vertices[f[0]], b = vertices[f[i]], c = vertices[f[i + 1]];
+    const a = sub(vertices[f[0]], o), b = sub(vertices[f[i]], o), c = sub(vertices[f[i + 1]], o);
     vol += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
   }
   if (vol < 0) allFaces = allFaces.map((f) => f.slice().reverse());
@@ -724,6 +780,49 @@ export function thickenCage(cage, distance) {
     offsetFaceIndices: cage.faces.map((_, i) => cage.faces.length + i),
     rimFaceIndices: rimFaces.map((_, i) => 2 * cage.faces.length + i),
   };
+}
+// Whether a cage passes through itself, on the cage and once subdivided.
+function cageCrosses(cage) {
+  if (cageCrossingFacePairs(cage).length) return true;
+  return cageCrossingFacePairs(subdivideCatmullClark({ vertices: cage.vertices, faces: cage.faces, creases: cage.creases || {} })).length > 0;
+}
+// A copy face turned against its original, or a copy edge running back
+// along its own: the sheet went through itself. The edges are read too: an
+// open box grown inward past its middle mirrors its floor in both x and y,
+// which turns no normal.
+function copyTurned(cage, built) {
+  const n = cage.vertices.length, V = built.cage.vertices, sheet = { vertices: V.slice(n), faces: cage.faces };
+  return cage.faces.some((f, fi) => {
+    if (!(dot(computeFaceNormal(cage, fi), computeFaceNormal(sheet, fi)) > 0)) return true;
+    for (let k = 0; k < f.length; k++) {
+      const a = f[k], b = f[(k + 1) % f.length];
+      if (!(dot(sub(cage.vertices[b], cage.vertices[a]), sub(V[b + n], V[a + n])) > 0)) return true;
+    }
+    return false;
+  });
+}
+export function thickenCage(cage, distance) {
+  if (!Number.isFinite(distance) || Math.abs(distance) < 1e-9) throw new Error('thickenCage: distance must be a nonzero finite number');
+  const closedCheck = buildTopology(cage);
+  let nakedCount = 0;
+  for (const [, e] of closedCheck.edgeMap) if (e.faces.length === 1) nakedCount++;
+  if (nakedCount === 0) {
+    throw new Error('this cage is already closed, so there is no open edge for a wall to grow from — thickening it would leave an offset copy floating inside the original as a second, disconnected shell rather than one watertight object. Delete a face first to open it, then Thicken builds a real wall around that opening.');
+  }
+  const miters = miterOffsets(cage);
+  const build = (d) => thickenAt(cage, d, miters, closedCheck);
+  const fails = (b) => copyTurned(cage, b) || cageCrosses(b.cage);
+  const asked = build(distance);
+  if (!fails(asked) || cageCrosses({ vertices: cage.vertices, faces: cage.faces, creases: cage.creases })) {
+    return { ...asked, distance, requested: distance, clamped: false };
+  }
+  let lo = 0, hi = Math.abs(distance), best = null;
+  for (let it = 0; it < 12; it++) {
+    const mid = (lo + hi) / 2, b = build(Math.sign(distance) * mid);
+    if (fails(b)) hi = mid; else { lo = mid; best = b; }
+  }
+  if (!best) throw new Error(`thickenCage: no thickness on this side clears the form; thicken the other way`);
+  return { ...best, distance: Math.sign(distance) * lo, requested: distance, clamped: true };
 }
 
 // InsertEdge — insert a new edge loop parallel to and offset from a picked
@@ -2651,7 +2750,7 @@ export function bridgeOpenings(cage, openings, opts = {}) {
   // size, so a small reach is a wide junction close to the rims and a large
   // one is long necks meeting at a small core.
   const reach = opts.reach ?? FACE_HUB_REACH;
-  if (!(reach >= 0.05 && reach <= 0.95)) throw new Error('bridgeOpenings: reach must be between 0.05 and 0.95 of the way to the junction centre');
+  if (!(reach >= 0.05 && reach <= 0.95)) throw new Error('bridgeOpenings: reach must be between 0.05 and 0.95 of the way to the junction center');
   if (!Array.isArray(openings) || openings.some((o) => !o || (!(Array.isArray(o.faces) && o.faces.length) && typeof o.rim !== 'string'))) throw new Error('bridgeOpenings: each opening is a non-empty face list or the key of one edge on an open rim');
   const N = openings.length;
   if (N < 2) throw new Error(`bridgeOpenings: a bridge needs at least 2 openings (got ${N})`);

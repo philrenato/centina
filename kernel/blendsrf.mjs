@@ -20,8 +20,11 @@
 // blend straight, more lets it swell out along the neighbor before turning.
 //
 // Correspondence: both edges are walked by arc length, B in whichever
-// direction pairs its ends nearer to A's — the bridge's rule. A twisted pair
-// of edges is a valid shape a user can want; it is not searched for.
+// direction pairs its ends nearer to A's — the bridge's rule. Two closed
+// rims have no ends: B's direction and the point paired with A's seam are
+// the ones that minimize the summed distance between paired points. A
+// twisted pair of open edges is a valid shape a user can want; it is not
+// searched for.
 //
 // The result's V runs along the edges (degree 3) and its U across the blend
 // (degree 2k+1, a single Bezier span): U = 0 is edge A, U = 1 is edge B.
@@ -35,7 +38,8 @@ import { curvePoint, rationalCurveDerivs } from './curve.mjs';
 import { geometricBlend } from './blend.mjs';
 import { chordLengthParams, averagingKnotVector, interpAtParams } from './interpolate.mjs';
 import { surfaceDerivs2 } from './curvature.mjs';
-import { fitPatchToTolerance } from './patch.mjs';
+import { fitPatch, fitPatchToTolerance } from './patch.mjs';
+import { findSpan, basisFuns } from './basis.mjs';
 import { nSidedTangentPatch } from './tangentpatch.mjs';
 const blendSrfDerivs2 = surfaceDerivs2;
 
@@ -99,6 +103,36 @@ function blendSrfArcParam(pointAt, samples = 128) {
 
 export const BLEND_SURFACE_EDGES = ['u0', 'u1', 'v0', 'v1'];
 
+// The surface's own normal (Su x Sv, unnormalized) at a parameter fraction t
+// of one of its edges: the side a face built against that edge must agree
+// with, or the joined shell turns inside out across the seam.
+function blendSrfEdgeNormal(srf, edge, t) {
+  const u0 = srf.knotsU[srf.degU], u1 = srf.knotsU[srf.knotsU.length - 1 - srf.degU];
+  const v0 = srf.knotsV[srf.degV], v1 = srf.knotsV[srf.knotsV.length - 1 - srf.degV];
+  const u = edge === 'u0' ? u0 : edge === 'u1' ? u1 : u0 + t * (u1 - u0);
+  const v = edge === 'v0' ? v0 : edge === 'v1' ? v1 : v0 + t * (v1 - v0);
+  const P = surfacePointAndPartials(srf, u, v);
+  return bsCross(P.su, P.sv);
+}
+// Samples of a face, on an n x n grid inside its domain, whose Jacobian turns
+// against the face's own summed normal: a fold.
+function blendSrfFaceReversals(srf, n = 12) {
+  const u0 = srf.knotsU[srf.degU], u1 = srf.knotsU[srf.knotsU.length - 1 - srf.degU];
+  const v0 = srf.knotsV[srf.degV], v1 = srf.knotsV[srf.knotsV.length - 1 - srf.degV];
+  const J = [];
+  for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) {
+    const P = surfacePointAndPartials(srf, u0 + (u1 - u0) * (0.002 + 0.996 * i / n), v0 + (v1 - v0) * (0.002 + 0.996 * j / n));
+    J.push(bsCross(P.su, P.sv));
+  }
+  const sum = J.reduce((acc, x) => bsAdd(acc, x), [0, 0, 0]);
+  return J.filter((x) => bsDot(x, sum) < 0).length;
+}
+// A surface with its V run reversed: the same sheet, facing the other way.
+function blendSrfFlipV(srf) {
+  const K = srf.knotsV, a = K[0], b = K[K.length - 1];
+  return { ...srf, knotsV: K.map((x) => a + b - x).reverse(), ctrlNet: srf.ctrlNet.map((row) => row.slice().reverse()) };
+}
+
 /**
  * @param A {srf, edge}  the first surface (a NurbsSrf {degU, degV, knotsU, knotsV, ctrlNet}) and which of its four edges
  * @param B {srf, edge}  the second
@@ -123,8 +157,33 @@ export function blendSurfaceBetweenEdges(A, B, opts = {}) {
   // opts.flip = [a, b]: each reverses that edge's run against the pairing the
   // gap chooses (the ends that lie nearer each other).
   const flip = Array.isArray(opts.flip) ? opts.flip : [];
-  const reverseB = (flipped < straight) !== (!!flip[0] !== !!flip[1]);
-  const tB = (s) => (reverseB ? arcB(1 - s) : arcB(s));
+  const flipOne = !!flip[0] !== !!flip[1];
+  let reverseB = (flipped < straight) !== flipOne, shiftB = 0;
+  // Two closed rims have no ends to pair: their end distances tie and the
+  // seams can sit anywhere round them. B's direction and the point of B
+  // paired with A's seam are the ones that minimize the summed distance
+  // between paired points round the loop; any other pairing twists the blend
+  // through its own axis (two coaxial tubes run opposite ways pinch to a point).
+  const closedPair = blendSrfEdgeClosed(ea) && blendSrfEdgeClosed(eb);
+  if (closedPair) {
+    const n = 64, m = 256, wrap = (x) => x - Math.floor(x);
+    const PA = Array.from({ length: n }, (_, i) => ea.point(arcA(i / n)));
+    const PB = Array.from({ length: m }, (_, j) => eb.point(arcB(j / m)));
+    const best = [null, null]; // [forward, reversed]: { cost, k }
+    for (let d = 0; d < 2; d++) for (let k = 0; k < m; k++) {
+      let cost = 0;
+      for (let i = 0; i < n; i++) cost += bsLen(bsSub(PA[i], PB[((k + (d ? -1 : 1) * i * (m / n)) % m + m) % m]));
+      if (!best[d] || cost < best[d].cost) best[d] = { cost, k };
+    }
+    const d = (best[1].cost < best[0].cost) !== flipOne ? 1 : 0, sgn = d ? -1 : 1;
+    const costAt = (sh) => { let c = 0; for (let i = 0; i < n; i++) c += bsLen(bsSub(PA[i], eb.point(arcB(wrap(sh + sgn * i / n))))); return c; };
+    let lo = (best[d].k - 1) / m, hi = (best[d].k + 1) / m;
+    for (let it = 0; it < 40; it++) { const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3; if (costAt(a) < costAt(b)) hi = b; else lo = a; }
+    reverseB = d === 1; shiftB = wrap((lo + hi) / 2);
+  }
+  const tB = closedPair
+    ? (s) => { const x = shiftB + (reverseB ? -s : s); return arcB(x - Math.floor(x)); }
+    : (s) => (reverseB ? arcB(1 - s) : arcB(s));
 
   const sectionAt = (s) => {
     const fa = ea.frame(arcA(s)), fb = eb.frame(tB(s), true), chord = bsLen(bsSub(fb.point, fa.point));
@@ -158,28 +217,54 @@ export function blendSurfaceBetweenEdges(A, B, opts = {}) {
     const f = (s - built.sGrid[i]) / (built.sGrid[i + 1] - built.sGrid[i]);
     return built.vbar[i] + f * (built.vbar[i + 1] - built.vbar[i]);
   };
+  // How far the skin lies from the section family between stations: the
+  // exact section at s against the skin's isocurve at the v whose two ends
+  // lie nearest the section's (the chord-length v of s slides along the
+  // edges, which is no distance off the shape). The edges are measured
+  // apart: the skin's boundary rows against the edges themselves, which a
+  // join must meet.
   const deviationOf = (built) => {
-    let worst = 0;
+    let worst = 0, edge = 0;
+    // The boundary rows as curves along V: a curve evaluation where a surface
+    // one would rebuild the whole net per call (the search below makes ~130).
+    const sk = built.srf, uLo = sk.knotsU[sk.degU], uHi = sk.knotsU[sk.knotsU.length - 1 - sk.degU];
+    const rowA = extractIsocurveU(sk, uLo), rowB = extractIsocurveU(sk, uHi);
     for (let i = 0; i + 1 < built.sGrid.length; i++) for (const f of [0.25, 0.5, 0.75]) {
       const s = built.sGrid[i] + f * (built.sGrid[i + 1] - built.sGrid[i]), exact = sectionAt(s);
-      if (!exact.ok) return Infinity;
-      const v = vAt(built, s), u0 = exact.crv.knots[exact.crv.degree], u1 = exact.crv.knots[exact.crv.knots.length - 1 - exact.crv.degree];
-      for (const u of [0, 0.25, 0.5, 0.75, 1]) worst = Math.max(worst, bsLen(bsSub(surfacePoint(built.srf, u, v), curvePoint(exact.crv, u0 + u * (u1 - u0)))));
+      if (!exact.ok) return { worst: Infinity, edge: Infinity };
+      const u0 = exact.crv.knots[exact.crv.degree], u1 = exact.crv.knots[exact.crv.knots.length - 1 - exact.crv.degree];
+      const e0 = curvePoint(exact.crv, u0), e1 = curvePoint(exact.crv, u1);
+      const miss = (v) => bsLen(bsSub(curvePoint(rowA, v), e0)) + bsLen(bsSub(curvePoint(rowB, v), e1));
+      let lo = built.vbar[i], hi = built.vbar[i + 1];
+      for (let it = 0; it < 32; it++) { const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3; if (miss(a) < miss(b)) hi = b; else lo = a; }
+      const v = (lo + hi) / 2, across = extractIsocurveV(sk, v);
+      edge = Math.max(edge, bsLen(bsSub(curvePoint(rowA, v), e0)), bsLen(bsSub(curvePoint(rowB, v), e1)));
+      for (const u of [0, 0.25, 0.5, 0.75, 1]) worst = Math.max(worst, bsLen(bsSub(curvePoint(across, uLo + u * (uHi - uLo)), curvePoint(exact.crv, u0 + u * (u1 - u0)))));
     }
-    return worst;
+    return { worst, edge };
   };
 
   let built = build(stations);
   if (!built.ok) return built;
-  let deviation = deviationOf(built), refined = false;
+  let measured = deviationOf(built), refined = false;
+  // edgeTolerance: how near the boundary rows must lie to the edges (a join's
+  // tolerance); by default the shape's own.
   const tolerance = opts.tolerance ?? Math.max(1e-4, 1e-4 * built.chordMax), maxStations = Math.max(stations, Math.round(opts.maxStations ?? 97));
-  if (opts.adaptive === true) while (deviation > tolerance && stations < maxStations) {
+  const edgeTolerance = Math.min(tolerance, opts.edgeTolerance ?? tolerance);
+  const met = (m) => m.worst <= tolerance && m.edge <= edgeTolerance;
+  if (opts.adaptive === true) while (!met(measured) && stations < maxStations) {
     stations = Math.min(maxStations, 2 * (stations - 1) + 1);
     built = build(stations); if (!built.ok) return built;
-    deviation = deviationOf(built); refined = true;
+    measured = deviationOf(built); refined = true;
   }
-  if (opts.adaptive === true && deviation > tolerance) return { ok: false, reason: `the blend skin is ${deviation.toPrecision(3)}mm from its section family after ${stations} stations; it needs a looser tolerance than ${tolerance}mm` };
-  return { ok: true, srf: built.srf, stations, chordMin: built.chordMin, chordMax: built.chordMax, reverseB, continuity, deviation, tolerance, refined, toleranceMet: deviation <= tolerance };
+  const deviation = measured.worst, edgeDeviation = measured.edge;
+  // The blend faces the way A does along their shared edge.
+  let facing = 0;
+  for (const s of [0.25, 0.5, 0.75]) {
+    const P = surfacePointAndPartials(built.srf, built.srf.knotsU[built.srf.degU], vAt(built, s));
+    facing += Math.sign(bsDot(bsCross(P.su, P.sv), blendSrfEdgeNormal(A.srf, A.edge, arcA(s))));
+  }
+  return { ok: true, srf: facing < 0 ? blendSrfFlipV(built.srf) : built.srf, stations, chordMin: built.chordMin, chordMax: built.chordMax, reverseB, continuity, deviation, edgeDeviation, tolerance, edgeTolerance, refined, toleranceMet: met(measured) };
 }
 
 // A junction of three or more edges
@@ -260,14 +345,16 @@ function blendSrfSkin(frameA, frameB, stations, continuity, bulgeA, bulgeB) {
 //
 // Across a spoke the two quads share that field up to a multiple of the
 // spoke's own tangent, α(v)·E'(v), which keeps the tangent plane (G1) and is
-// what makes the center solvable: the 2N spokes arrive at C in a regular fan
-// in one tangent plane, all with zero second derivative and speed L, and the
-// cross fields there are the neighboring spokes' tangents — for which the
-// fan gives m_{i-1} + m_i ∥ e_i, so α(1) = 2 cos(π/N). A bounded third-row
-// solve then equalizes geometric transverse normal curvature along each seam
-// without moving its boundary or tangent plane. The twists are zero at C and
-// at the free-edge midpoints. One speed ratio g per sheet (the blend's
-// cross speed over the sheet's own) keeps a corner's curve and the ribbon's
+// what makes the center solvable: the 2N spokes arrive at C in one tangent
+// plane, each sheet's along its own line to C and each free spoke between
+// the corners beside it, all with zero second derivative, and the cross
+// fields there are the neighboring spokes' tangents — for which speeds
+// chosen round the fan give m_{i-1} + m_i ∥ e_i and α(1) per spoke (2cos(π/N)
+// on an even fan). A bounded third-row solve then equalizes geometric
+// transverse normal curvature along each seam without moving its boundary
+// or tangent plane. The twists are zero at C and at the free-edge splits. A
+// speed ratio g per sheet (the blend's cross speed over the sheet's own),
+// eased to each corner's own share, keeps a corner's curve and the ribbon's
 // cross derivative the same vector; the free edges are built at 2g because a
 // half of one, on [0,1], runs at half its speed.
 const bsGreville = (knots, p) => Array.from({ length: knots.length - p - 1 }, (_, i) => { let a = 0; for (let k = 1; k <= p; k++) a += knots[i + k]; return a / p; });
@@ -361,10 +448,10 @@ function blendSrfQuadRows(edge, far, fieldF, g, k) {
   const p = row0.degree, U = row0.knots, xi = bsGreville(U, p);
   const samples = Array.from({ length: k + 1 }, () => []);
   for (const u of xi) {
-    const f = edge.frameAt(u);
-    samples[0].push(f.point); samples[1].push(bsScale(f.d1, g));
-    if (k >= 2) samples[2].push(bsScale(f.d2, g * g));
-    if (k >= 3) samples[3].push(bsScale(f.d3, g * g * g));
+    const f = edge.frameAt(u), gu = typeof g === 'function' ? g(u) : g;
+    samples[0].push(f.point); samples[1].push(bsScale(f.d1, gu));
+    if (k >= 2) samples[2].push(bsScale(f.d2, gu * gu));
+    if (k >= 3) samples[3].push(bsScale(f.d3, gu * gu * gu));
   }
   const rows = samples.map((S) => interpAtParams(S, p, xi, U).map((q) => [q[0], q[1], q[2]]));
   return { rows, p, U, xi, farInBasis: rowFar, cfInBasis: cf };
@@ -596,25 +683,58 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
   for (let i = 0; i < N; i++) mids[i] = frameAt(order[i], 0.5);
   const g = new Array(N);
   order.forEach((kx, i) => { g[kx] = bulge * bsLen(bsSub(C, mids[i].point)) / bsLen(mids[i].d1); });
-  // A free edge joins two side edges the way a fillet would. Its handles are
-  // 2g times the sheet's cross speed; sized from the center alone they can
-  // pass the point where the two side edges' lines meet, and the edge hooks
-  // back on itself (two curvature reversals, a 0.3 mm radius at Bulge 1.4 on
-  // 40 mm sheets). So g is also held to 0.8 of the distance from each of the
-  // sheet's corners to that meeting point, in the junction plane; Bulge above 1
-  // cannot pass it.
+  // A free edge joins two side edges the way a fillet would: it leaves one
+  // side edge and meets the next tangentially, turning one way. Its handles
+  // start at 2g times the sheet's cross speed and are sized per corner (each
+  // quad corner takes the speed its half of the edge has, cornerG below).
+  //  - The side lines meet ahead of both corners: each handle is held to 0.8
+  //    of the distance from its corner to the meeting point, in the junction
+  //    plane, so the control polygon turns one way and so does the edge
+  //    (past it the edge hooks back on itself: two curvature reversals, a
+  //    0.3 mm radius at Bulge 1.4 on 40 mm sheets). Bulge above 1 cannot pass it.
+  //  - They meet behind a corner (a sheet set far closer in than its
+  //    neighbor), or at one: no edge leaving both side edges tangentially
+  //    can turn one way, since the chord lies outside the turn (at a corner,
+  //    only with no radius at all). The edge takes the one
+  //    reversal it must, with the handles that give its tightest bend the
+  //    largest radius.
+  const freeHandles = new Array(N);
+  const flatOf = (v) => bsSub(v, bsScale(nrm, bsDot(v, nrm)));
+  const bendOf = (crv) => { // reversals of the edge's turn about nrm, and its tightest radius
+    const K = crv.knots, lo = K[0], hi = K[K.length - 1], ks = [];
+    for (let j = 0; j <= 96; j++) { const [, d1, d2] = rationalCurveDerivs(crv, lo + (hi - lo) * j / 96, 2), sp = bsLen(d1); ks.push(sp > 0 ? bsDot(bsCross(d1, d2), nrm) / (sp * sp * sp) : 0); }
+    const kmax = Math.max(...ks.map(Math.abs));
+    let flips = 0, prev = 0; for (const x of ks) { if (!(Math.abs(x) > 1e-3 * kmax)) continue; const sg = Math.sign(x); if (prev && sg !== prev) flips++; prev = sg; }
+    return { flips, radius: kmax > 0 ? 1 / kmax : Infinity };
+  };
   for (let i = 0; i < N; i++) {
     const kx = order[i], kn = order[(i + 1) % N];
     const fe = frameAt(kx, tOf(kx, 1)), fs = frameAt(kn, tOf(kn, 0), true);
-    const flat = (v) => bsSub(v, bsScale(nrm, bsDot(v, nrm)));
-    const uA = bsNorm(flat(fe.d1)), uB = bsNorm(flat(fs.d1)), w = flat(bsSub(fs.point, fe.point));
-    const cr = bsDot(bsCross(uA, uB), nrm);
-    if (!(Math.abs(cr) > 1e-6)) continue;
-    const sA = bsDot(bsCross(w, uB), nrm) / cr, tB = bsDot(bsCross(w, uA), nrm) / cr; // X = A + sA uA = B + tB uB
-    if (!(sA > 0) || !(tB < 0)) continue; // the lines meet ahead of both corners, or no fillet is implied
-    g[kx] = Math.min(g[kx], 0.8 * Math.min(bulge, 1) * sA / bsLen(fe.d1));
-    g[kn] = Math.min(g[kn], 0.8 * Math.min(bulge, 1) * -tB / bsLen(fs.d1));
+    const kk = Math.max(kRows(kx), kRows(kn)), sp = bsLen(fe.d1), sq = bsLen(fs.d1);
+    let mA = 2 * g[kx] * sp, mB = 2 * g[kn] * sq;
+    const uA = bsNorm(flatOf(fe.d1)), uB = bsNorm(flatOf(fs.d1)), w = flatOf(bsSub(fs.point, fe.point));
+    const cr = bsDot(bsCross(uA, uB), nrm), chord = bsLen(bsSub(fs.point, fe.point));
+    if (Math.abs(cr) > 1e-6) {
+      const sA = bsDot(bsCross(w, uB), nrm) / cr, tB = bsDot(bsCross(w, uA), nrm) / cr; // X = A + sA uA = B + tB uB
+      if (sA > 0.02 * chord && -tB > 0.02 * chord) {
+        mA = Math.max(1e-3 * chord, Math.min(mA, 1.6 * Math.min(bulge, 1) * sA));
+        mB = Math.max(1e-3 * chord, Math.min(mB, 1.6 * Math.min(bulge, 1) * -tB));
+      } else {
+        let best = null;
+        for (const fa of [0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.05, 1.35]) for (const fb of [0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.05, 1.35]) {
+          const c = blend({ point: fe.point, d1: fe.d1, d2: fe.d2, d3: fe.d3 }, { point: fs.point, d1: fs.d1, d2: fs.d2, d3: fs.d3 }, { continuity: kk, startMagnitude: fa * chord, endMagnitude: fb * chord });
+          if (!c) continue;
+          const b = bendOf(c), score = (b.flips <= 1 ? 0 : -1e9 * b.flips) + b.radius;
+          if (!best || score > best.score) best = { score, mA: fa * chord, mB: fb * chord };
+        }
+        if (best) { mA = best.mA; mB = best.mB; }
+      }
+    }
+    freeHandles[i] = [mA, mB];
   }
+  // The sheet's cross speed is held to its slower corner's: a corner eased
+  // from a fast midpoint down to a tight fillet folds the quad beside it.
+  for (let i = 0; i < N; i++) { const kx = order[i], kn = order[(i + 1) % N]; g[kx] = Math.min(g[kx], freeHandles[i][0] / (2 * bsLen(frameAt(kx, tOf(kx, 1)).d1))); g[kn] = Math.min(g[kn], freeHandles[i][1] / (2 * bsLen(frameAt(kn, tOf(kn, 0), true).d1))); }
   // Square to the plane. Where every corner lies on one plane, each sheet
   // meets it square (its edge's tangent at the corner along the plane's
   // normal) and leaves its corners along it, the free edges lie in that plane
@@ -652,8 +772,59 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
       if (square !== false) squareNormal = nv;
     }
   }
-  // Free edges at 2g, split at their parameter midpoint.
-  const free = new Array(N), M = new Array(N), Mt = new Array(N);
+  // The fan at C: 2N directions in the junction plane, in ring order.
+  const dC = bsSub(mids[0].point, C);
+  const e1 = bsNorm(bsSub(dC, bsScale(nrm, bsDot(dC, nrm)))), e2 = bsCross(nrm, e1);
+  const angleOf = (q) => { const d = bsSub(q, C); return Math.atan2(bsDot(d, e2), bsDot(d, e1)); };
+  // The ring's sense about C, from every consecutive pair: one sheet straight
+  // across from the first reads as +180 or -180 and cannot decide it alone.
+  let turnSum = 0;
+  for (let i = 0; i < N; i++) turnSum += Math.sin(angleOf(mids[(i + 1) % N].point) - angleOf(mids[i].point));
+  const sense = turnSum < 0 ? -1 : 1;
+  // Each sheet's spoke arrives along its own line to C, and each free spoke
+  // through the window between the two corners beside it, as seen from C. A
+  // fan pressed regular under uneven arms turns a spoke as much as 30 degrees
+  // off its sheet (a T), and a free spoke on the bisector of the sheets
+  // passes behind the corner of a sheet set close in; either folds the quads.
+  //
+  // G1 across spoke j at C needs L_{j-1}d_{j-1} + L_{j+1}d_{j+1} = α_j L_j d_j.
+  // With x_i, y_i the angles from sheet spoke i to free spoke i and on to
+  // sheet spoke i+1, the speeds solve it round the ring exactly when
+  // Π sin x_i = Π sin y_i (the even and odd chains give the same condition):
+  // the free spokes are moved off their window centers by one shared
+  // multiplier until it holds. Even arms give the regular fan, α = 2cos(π/N).
+  const TAU = 2 * Math.PI;
+  const rel = (q, base) => { const g = sense * (angleOf(q) - base); return g - TAU * Math.floor(g / TAU); };
+  const theta = mids.map((m) => angleOf(m.point));
+  let gaps = theta.map((t, i) => rel(mids[(i + 1) % N].point, t));
+  if (!(Math.abs(gaps.reduce((a, b) => a + b, 0) - TAU) < 1e-6 && gaps.every((x) => x > 1e-3))) gaps = gaps.map(() => TAU / N);
+  const xWant = gaps.map((gi, i) => {
+    const kx = order[i], kn = order[(i + 1) % N];
+    const a = rel(pt(kx, tOf(kx, 1)), theta[i]), b = rel(pt(kn, tOf(kn, 0)), theta[i]);
+    return a < b && a > 0 && b < gi ? (a + b) / 2 : gi / 2;
+  });
+  const xAt = (lam) => xWant.map((x, i) => Math.max(0.05 * gaps[i], Math.min(0.95 * gaps[i], x + lam * gaps[i] * Math.sign(Math.sin(gaps[i])))));
+  const balance = (xs) => xs.reduce((acc, x, i) => acc + Math.log(Math.sin(x)) - Math.log(Math.sin(gaps[i] - x)), 0);
+  let xs = xAt(0);
+  if (Math.abs(balance(xs)) > 1e-12) {
+    let lo = -1, hi = 1;
+    for (let it = 0; it < 80; it++) { const m = (lo + hi) / 2; if (balance(xAt(m)) < 0) lo = m; else hi = m; }
+    xs = xAt((lo + hi) / 2);
+  }
+  const ys = xs.map((x, i) => gaps[i] - x);
+  const phi = new Array(2 * N);
+  for (let i = 0, a = 0; i < N; a += gaps[i], i++) { phi[2 * i] = sense * a; phi[2 * i + 1] = sense * (a + xs[i]); }
+  const dir = (j) => bsAdd(bsScale(e1, Math.cos(phi[j])), bsScale(e2, Math.sin(phi[j])));
+  // Free edges at 2g, each split at its point M nearest C (its parameter
+  // midpoint on a symmetric pair). A free edge from a sheet set close in to
+  // one set far out turns back on itself; split at the parameter midpoint,
+  // the half beside the near sheet ran out past its own corner and the quads
+  // either side folded over it. A half on [0,1] leaves its corner at 2g times
+  // its share of the edge's parameter, so the sheet's cross speed runs from g
+  // at its midpoint to that at each corner (cornerG, smoothstep along the
+  // half) and every quad corner stays compatible.
+  const subOn = (crv, a, b) => rescaleCurveDomain(extractSubCurve(crv, a, b), 0, 1);
+  const free = new Array(N), M = new Array(N), Mt = new Array(N), split = new Array(N), cornerG = order.map(() => [0, 0]);
   for (let i = 0; i < N; i++) {
     const kx = order[i], kn = order[(i + 1) % N];
     const fe = frameAt(kx, tOf(kx, 1)), fs = frameAt(kn, tOf(kn, 0), true);
@@ -667,26 +838,42 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
       const a = curvePoint(shared, shared.knots[0]);
       free[i] = bsLen(bsSub(a, fe.point)) < bsLen(bsSub(a, fs.point)) ? shared : reverseCrv(shared);
     } else free[i] = blend({ point: fe.point, d1: fe.d1, d2: fe.d2, d3: fe.d3 }, { point: fs.point, d1: fs.d1, d2: fs.d2, d3: fs.d3 },
-      { continuity: Math.max(kRows(kx), kRows(kn)), startMagnitude: 2 * g[kx] * bsLen(fe.d1), endMagnitude: 2 * g[kn] * bsLen(fs.d1) });
+      { continuity: Math.max(kRows(kx), kRows(kn)), startMagnitude: freeHandles[i][0], endMagnitude: freeHandles[i][1] });
     if (!free[i]) return { ok: false, reason: `no edge could join the corners of edges ${kx + 1} and ${kn + 1}` };
-    const [Mp, T] = rationalCurveDerivs(free[i], 0.5, 1);
+    const crv = free[i], dC = (t) => bsLen(bsSub(curvePoint(crv, t), C));
+    let tm = 0.5, dm = dC(0.5);
+    for (let k = 0; k <= 64; k++) { const t = 0.15 + 0.7 * k / 64, d = dC(t); if (d < dm - 1e-9 * dm) { dm = d; tm = t; } }
+    if (tm !== 0.5) { let lo = Math.max(0.15, tm - 0.7 / 64), hi = Math.min(0.85, tm + 0.7 / 64); for (let it = 0; it < 80; it++) { const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3; if (dC(a) < dC(b)) hi = b; else lo = a; } tm = (lo + hi) / 2; }
+    split[i] = tm;
+    const [Mp, T] = rationalCurveDerivs(crv, tm, 1);
     M[i] = Mp; Mt[i] = T;
+    // The edge's own speed at each corner, over the sheet's frame speed, as a share of its half.
+    cornerG[i][1] = tm * bsLen(crvDeriv(crv, 0, 1)) / bsLen(fe.d1);
+    cornerG[(i + 1) % N][0] = (1 - tm) * bsLen(crvDeriv(crv, 1, 1)) / bsLen(fs.d1);
   }
-  // The fan at C: 2N directions in the junction plane, in ring order, at one speed L.
-  const dC = bsSub(mids[0].point, C);
-  const e1 = bsNorm(bsSub(dC, bsScale(nrm, bsDot(dC, nrm)))), e2 = bsCross(nrm, e1);
-  const angleOf = (q) => { const d = bsSub(q, C); return Math.atan2(bsDot(d, e2), bsDot(d, e1)); };
-  const sense = angleOf(mids[1 % N].point) > 0 ? 1 : -1;
-  const delta = Math.PI / N;
-  const dir = (j) => bsAdd(bsScale(e1, Math.cos(sense * j * delta)), bsScale(e2, Math.sin(sense * j * delta)));
-  let L = 0; for (let i = 0; i < N; i++) L += bsLen(bsSub(C, mids[i].point)) + bsLen(bsSub(C, M[i])); L /= 2 * N;
-  const arrive = (j) => bsScale(dir(j), -L); // the tangent a spoke arrives at C with
+  // Relative speeds round the two chains, then one scale for each: the mean
+  // chord, held so no spoke arrives faster than its own chord to C — a
+  // quintic arriving at speed s with no second derivative puts its last two
+  // controls 0.2s and 0.4s back, and a short spoke at the fan's mean speed
+  // doubles back past its start.
+  const rE = [1], rM = [1];
+  for (let i = 0; i + 1 < N; i++) rE.push(rE[i] * Math.sin(xs[i]) / Math.sin(ys[i]));
+  for (let i = 1; i < N; i++) rM.push(rM[i - 1] * Math.sin(ys[i - 1]) / Math.sin(xs[i]));
+  let Lmean = 0; for (let i = 0; i < N; i++) Lmean += bsLen(bsSub(C, mids[i].point)) + bsLen(bsSub(C, M[i])); Lmean /= 2 * N;
+  const mean = (v) => v.reduce((acc, x) => acc + x, 0) / v.length;
+  const sE = Math.min(Lmean / mean(rE), ...mids.map((m, i) => bsLen(bsSub(C, m.point)) / rE[i]));
+  const sM = Math.min(Lmean / mean(rM), ...M.map((q, i) => bsLen(bsSub(C, q)) / rM[i]));
+  const LE = rE.map((r) => r * sE), LM = rM.map((r) => r * sM);
+  const alphaE = LE.map((l, i) => { const ip = (i + N - 1) % N; return (LM[i] * Math.cos(xs[i]) + LM[ip] * Math.cos(ys[ip])) / l; });
+  const alphaM = LM.map((l, i) => (LE[(i + 1) % N] * Math.cos(ys[i]) + LE[i] * Math.cos(xs[i])) / l);
+  const speed = (j) => (j % 2 ? LM[(j - 1) / 2] : LE[j / 2]);
+  const arrive = (j) => bsScale(dir(j), -speed(j)); // the tangent a spoke arrives at C with
   const spokeE = new Array(N), spokeM = new Array(N);
   for (let i = 0; i < N; i++) {
     const kx = order[i], f = mids[i];
     spokeE[i] = blend({ point: f.point, d1: f.d1, d2: f.d2, d3: f.d3 }, { point: C, d1: arrive(2 * i), d2: zero, d3: zero },
-      { continuity: Math.max(2, kRows(kx)), startMagnitude: g[kx] * bsLen(f.d1), endMagnitude: L });
-    if (!spokeE[i]) return { ok: false, reason: `no spoke could reach the centre from edge ${kx + 1}` };
+      { continuity: Math.max(2, kRows(kx)), startMagnitude: g[kx] * bsLen(f.d1), endMagnitude: LE[i] });
+    if (!spokeE[i]) return { ok: false, reason: `no spoke could reach the center from edge ${kx + 1}` };
     let n = bsSub(C, M[i]); const T = bsNorm(Mt[i]); n = bsSub(n, bsScale(T, bsDot(n, T)));
     if (!(bsLen(n) > 1e-9)) n = bsSub(C, M[i]);
     if (squareNormal) n = squareNormal;
@@ -702,10 +889,9 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
       if (bsLen(w) > 0) n = w;
     }
     spokeM[i] = blend({ point: M[i], d1: n, d2: zero, d3: zero }, { point: C, d1: arrive(2 * i + 1), d2: zero, d3: zero },
-      { continuity: Math.max(2, kRows(kx), kRows(order[(i + 1) % N])), startMagnitude: bsLen(bsSub(C, M[i])), endMagnitude: L });
-    if (!spokeM[i]) return { ok: false, reason: `no spoke could reach the centre from the edge between ${kx + 1} and ${order[(i + 1) % N] + 1}` };
+      { continuity: Math.max(2, kRows(kx), kRows(order[(i + 1) % N])), startMagnitude: bsLen(bsSub(C, M[i])), endMagnitude: LM[i] });
+    if (!spokeM[i]) return { ok: false, reason: `no spoke could reach the center from the edge between ${kx + 1} and ${order[(i + 1) % N] + 1}` };
   }
-  const alpha1 = 2 * Math.cos(delta);
   // Halves: a sheet edge from chain t a to b as a curve on [0,1] with its frames; a free edge's halves.
   const half = (kx, a, b) => {
     const ea = access[kx], crv = ea.alongCrv, lo = crv.knots[crv.degree], hi = crv.knots[crv.knots.length - 1 - crv.degree];
@@ -715,26 +901,31 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
     sub = rescaleCurveDomain(sub, 0, 1);
     return { crv: sub, frameAt: (u) => ea.frame(ta + u * (tb - ta), false) };
   };
-  const subOn = (crv, a, b) => rescaleCurveDomain(extractSubCurve(crv, a, b), 0, 1);
   const endTangent = (crv, atEnd) => crvDeriv(crv, atEnd ? crv.knots[crv.knots.length - 1] : crv.knots[0], 1);
   // Pass 1: the quads' rows. End quad of sheet i: mid → end corner; start quad: start corner → mid.
   const quads = [];
   for (let i = 0; i < N; i++) {
     const kx = order[i], ip = (i + N - 1) % N;
     const e_i = endTangent(spokeE[i], true), m_i = endTangent(spokeM[i], true), m_ip = endTangent(spokeM[ip], true);
-    const firstHalf = subOn(free[i], 0, 0.5), secondHalfRev = reverseCrv(subOn(free[ip], 0.5, 1));
+    const firstHalf = subOn(free[i], 0, split[i]), secondHalfRev = reverseCrv(subOn(free[ip], split[ip], 1));
     // The end quad's far field, C → M_i: from the spoke's tangent at C to the free half's tangent at M, zero twists.
     const cfEnd = bzHermite([e_i, zero], [endTangent(firstHalf, true), zero]);
     const kq = kRows(kx);
-    const start = { kind: 'start', kx, i, edge: half(kx, 0, 0.5), side0: secondHalfRev, side1: spokeE[i], far: spokeM[ip], g: g[kx], k: kq };
-    const end = { kind: 'end', kx, i, edge: half(kx, 0.5, 1), side0: spokeE[i], side1: firstHalf, far: reverseCrv(spokeM[i]), g: g[kx], k: kq, cf: cfEnd, e_i, m_i, m_ip };
+    const gS = cornerG[i][0], gE = cornerG[i][1];
+    const start = { kind: 'start', kx, i, edge: half(kx, 0, 0.5), side0: secondHalfRev, side1: spokeE[i], far: spokeM[ip], g: gS === g[kx] ? g[kx] : (u) => g[kx] + (gS - g[kx]) * (1 - u) * (1 - u) * (1 + 2 * u), k: kq };
+    const end = { kind: 'end', kx, i, edge: half(kx, 0.5, 1), side0: spokeE[i], side1: firstHalf, far: reverseCrv(spokeM[i]), g: gE === g[kx] ? g[kx] : (u) => g[kx] + (gE - g[kx]) * u * u * (3 - 2 * u), k: kq, cf: cfEnd, e_i, m_i, m_ip };
     quads.push(start, end);
   }
   // The start quad's far field is the previous end quad's, reversed, plus β·h·M' (β1 = α1).
   for (let i = 0; i < N; i++) {
     const start = quads[2 * i], ip = (i + N - 1) % N, endPrev = quads[2 * ip + 1];
     const revCf = [...endPrev.cf].reverse().map((v) => bsScale(v, -1));
-    start.cf = bzAdd(revCf, bzScalarTimes(H_RISE, bzScale(bzHodo(bzOf(spokeM[ip])), alpha1)));
+    // At M the two halves of the free edge may run at different speeds; the
+    // reversed field is scaled to the start quad's own half there, by a
+    // factor falling to 1 at C, which keeps it in the plane of the end
+    // quad's field and the spoke (G1) and leaves the fan untouched.
+    const w = (1 - split[ip]) / split[ip];
+    start.cf = bzAdd(bzScalarTimes([w, w, 1, 1, 1, 1], revCf), bzScalarTimes(H_RISE, bzScale(bzHodo(bzOf(spokeM[ip])), alphaM[ip])));
   }
   for (const q of quads) {
     try { q.uRows = blendSrfQuadRows(q.edge, q.far, q.cf, q.g, q.k); }
@@ -751,7 +942,7 @@ function blendSrfGuidedCap(access, arc, order, bulge, k, nrm, flips = [], square
     end.fieldA = A;
     end.fieldB = bzHermite(sheetConds(end, true), [endTangent(end.far, true), zero]);
     end.fieldF = end.cf;
-    start.fieldB = bzAdd(A, bzScalarTimes(H_RISE, bzScale(bzHodo(bzOf(spokeE[i])), alpha1)));
+    start.fieldB = bzAdd(A, bzScalarTimes(H_RISE, bzScale(bzHodo(bzOf(spokeE[i])), alphaE[i])));
     start.fieldA = bzHermite(sheetConds(start, false), [endTangent(start.far, false), zero]);
     start.fieldF = start.cf;
   }
@@ -864,7 +1055,7 @@ function blendSurfaceTubeJunction(parts, access, opts) {
     centre: [...top.centre, ...bottom.centre], centreTrims: [...(top.centreTrims || top.centre.map(() => null)), ...(bottom.centreTrims || bottom.centre.map(() => null))],
     spine: top.spine, faceUp: true, tube: true,
     squareFound: false, square: !!(top.square && bottom.square), halves,
-    patched: top.patched && bottom.patched ? { edgeGap: Math.max(top.patched.edgeGap, bottom.patched.edgeGap), edgeAngle: Math.max(top.patched.edgeAngle, bottom.patched.edgeAngle) } : null,
+    patched: top.patched && bottom.patched ? { edgeGap: Math.max(top.patched.edgeGap, bottom.patched.edgeGap), edgeAngle: Math.max(top.patched.edgeAngle, bottom.patched.edgeAngle), trimGap: top.patched.trimGap == null || bottom.patched.trimGap == null ? null : Math.max(top.patched.trimGap, bottom.patched.trimGap) } : null,
   };
 }
 
@@ -883,7 +1074,7 @@ export function blendSurfaceJunction(parts, opts = {}) {
   if (!Array.isArray(parts) || parts.length < 3) return { ok: false, reason: 'a junction needs three or more edges — two is a blend' };
   for (const X of parts) if (!X || !X.srf || !X.srf.ctrlNet || !BLEND_SURFACE_EDGES.includes(X.edge)) return { ok: false, reason: 'each part is a surface and one of its edges (u0, u1, v0, v1)' };
   const reach = opts.reach ?? JUNCTION_REACH;
-  if (!(reach >= 0.05 && reach <= 0.95)) return { ok: false, reason: 'reach must be between 0.05 and 0.95 of the way to the junction centre' };
+  if (!(reach >= 0.05 && reach <= 0.95)) return { ok: false, reason: 'reach must be between 0.05 and 0.95 of the way to the junction center' };
   const bulge = opts.bulge ?? 1;
   if (!(bulge > 0)) return { ok: false, reason: 'bulge must be positive' };
   const stations = Math.max(4, Math.round(opts.stations ?? 16));
@@ -899,11 +1090,22 @@ export function blendSurfaceJunction(parts, opts = {}) {
   // by angle about it.
   let nrm = [0, 0, 0], nrmLen = 0;
   for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) { const c = bsCross(bsSub(mids[i], centre), bsSub(mids[j], centre)); const L = bsLen(c); if (L > nrmLen) { nrm = c; nrmLen = L; } }
-  if (!(nrmLen > 1e-12)) return { ok: false, reason: 'the edges are in a line about their centre — there is no junction plane' };
+  if (!(nrmLen > 1e-12)) return { ok: false, reason: 'the edges are in a line about their center — there is no junction plane' };
   nrm = bsNorm(nrm);
-  const d0 = bsSub(mids[0], centre);
-  const e1 = bsNorm(bsSub(d0, bsScale(nrm, bsDot(d0, nrm)))), e2 = bsCross(nrm, e1);
-  const order = mids.map((_, i) => i).sort((a, b) => { const da = bsSub(mids[a], centre), db = bsSub(mids[b], centre); return Math.atan2(bsDot(da, e2), bsDot(da, e1)) - Math.atan2(bsDot(db, e2), bsDot(db, e1)); });
+  const ringOrder = (n) => {
+    const d0 = bsSub(mids[0], centre);
+    const e1 = bsNorm(bsSub(d0, bsScale(n, bsDot(d0, n)))), e2 = bsCross(n, e1);
+    return mids.map((_, i) => i).sort((a, b) => { const da = bsSub(mids[a], centre), db = bsSub(mids[b], centre); return Math.atan2(bsDot(da, e2), bsDot(da, e1)) - Math.atan2(bsDot(db, e2), bsDot(db, e1)); });
+  };
+  // Every face of the junction faces the way the sheets do: a cap turns with
+  // its ring, so the ring runs counterclockwise about the sheets' own side.
+  // The sheets' normals summed at their edge midpoints say which side that is.
+  {
+    let side = [0, 0, 0];
+    for (let k = 0; k < N; k++) side = bsAdd(side, bsNorm(blendSrfEdgeNormal(parts[k].srf, parts[k].edge, arc[k](0.5))));
+    if (bsDot(side, nrm) < 0) nrm = bsScale(nrm, -1);
+  }
+  let order = ringOrder(nrm);
 
   // Two kinds of junction, told apart by how the sheets lie to the junction
   // plane. Sheets edge-on to it (three walls meeting at a corner post) grow
@@ -930,7 +1132,10 @@ export function blendSurfaceJunction(parts, opts = {}) {
         (s) => { const p = ea.point(ak(s)); const q = portPoint[k](s); const d = bsSub(q, p); return { point: q, d1: d, d2: [0, 0, 0], d3: [0, 0, 0] }; },
         stations, continuity, bulge, 1);
       if (!skin.ok) return { ok: false, reason: `edge ${k + 1}: ${skin.reason}` };
-      arms[k] = skin.srf;
+      // The arm faces the way its sheet does at the edge they share.
+      const A0 = skin.srf, mid = A0.knotsV[A0.degV] + 0.5 * (A0.knotsV[A0.knotsV.length - 1 - A0.degV] - A0.knotsV[A0.degV]);
+      const P = surfacePointAndPartials(A0, A0.knotsU[A0.degU], mid);
+      arms[k] = bsDot(bsCross(P.su, P.sv), blendSrfEdgeNormal(parts[k].srf, parts[k].edge, ak(0.5))) < 0 ? blendSrfFlipV(A0) : A0;
     }
   }
   const armEnd = (k, rev, s) => surfacePointAndPartials(arms[k], 1, rev ? 1 - s : s); // U = 1 is the port
@@ -949,32 +1154,62 @@ export function blendSurfaceJunction(parts, opts = {}) {
     // Ribbons. The ports run the same way, so their starts share one end of
     // the spine and their ends the other.
     const dirOf = (k) => bsSub(armEnd(k, false, 1).point, armEnd(k, false, 0).point);
-    const d0dir = dirOf(order[0]);
-    for (let i = 1; i < N; i++) { const k = order[i]; rev[k] = bsDot(dirOf(k), d0dir) < 0; }
-    for (let k = 0; k < N; k++) if (flips[k]) rev[k] = !rev[k];
-    const ends = order.map((k) => ({ k, start: armEnd(k, rev[k], 0), end: armEnd(k, rev[k], 1) }));
-    const spineA = meanOf(ends.map((p) => p.start.point)), spineB = meanOf(ends.map((p) => p.end.point));
-    spine = [spineA, spineB];
-    const spineCrv = line(spineA, spineB);
-    for (const p of ends) {
-      const up = railTo(p.end.point, p.end.su, spineB), down = railTo(p.start.point, p.start.su, spineA);
-      if (!up || !down) return { ok: false, reason: `no rail could reach the spine from edge ${p.k + 1}` };
-      rails.push(up, down);
-      try { centreFaces.push(coonsPatch(portCurve(p.k, rev[p.k]), up, reverseCrv(spineCrv), reverseCrv(down))); }
-      catch (e) { return { ok: false, reason: `the centre would not fill at edge ${p.k + 1}: ${e.message}` }; }
+    // The ribbons run the spine one way or the other; the way that faces
+    // them as their arms face is kept.
+    for (const turn of [false, true]) {
+      const d0dir = bsScale(dirOf(order[0]), turn ? -1 : 1);
+      for (let i = 0; i < N; i++) { const k = order[i]; rev[k] = bsDot(dirOf(k), d0dir) < 0; }
+      for (let k = 0; k < N; k++) if (flips[k]) rev[k] = !rev[k];
+      const ends = order.map((k) => ({ k, start: armEnd(k, rev[k], 0), end: armEnd(k, rev[k], 1) }));
+      const spineA = meanOf(ends.map((p) => p.start.point)), spineB = meanOf(ends.map((p) => p.end.point));
+      spine = [spineA, spineB];
+      const spineCrv = line(spineA, spineB);
+      centreFaces.length = 0; rails.length = 0;
+      for (const p of ends) {
+        const up = railTo(p.end.point, p.end.su, spineB), down = railTo(p.start.point, p.start.su, spineA);
+        if (!up || !down) return { ok: false, reason: `no rail could reach the spine from edge ${p.k + 1}` };
+        rails.push(up, down);
+        try { centreFaces.push(coonsPatch(portCurve(p.k, rev[p.k]), up, reverseCrv(spineCrv), reverseCrv(down))); }
+        catch (e) { return { ok: false, reason: `the center would not fill at edge ${p.k + 1}: ${e.message}` }; }
+      }
+      const f = centreFaces[0], k0 = order[0], A0 = arms[k0];
+      const Pf = surfacePointAndPartials(f, (f.knotsU[f.degU] + f.knotsU[f.knotsU.length - 1 - f.degU]) / 2, (f.knotsV[f.degV] + f.knotsV[f.knotsV.length - 1 - f.degV]) / 2);
+      const Pa = surfacePointAndPartials(A0, A0.knotsU[A0.knotsU.length - 1 - A0.degU], (A0.knotsV[A0.degV] + A0.knotsV[A0.knotsV.length - 1 - A0.degV]) / 2);
+      if (bsDot(bsCross(Pf.su, Pf.sv), bsCross(Pa.su, Pa.sv)) >= 0) break;
     }
   } else if (opts.onePatch) {
     // One surface: the gap the edges bound, patched and trimmed, in place of
     // the web of quads — fitted rather than exact.
-    const pr = patchFromSurfaceEdges(parts, { maxCount: opts.patchCount });
+    // Fitted from the exact web (the n-sided fill sags toward the plane its
+    // corners share: a half-tube cross 8 mm off the web on 10 mm tubes).
+    const pr = patchFromSurfaceEdges(parts, { maxCount: opts.patchCount, bulge, web: true, seatRails: true, edgeTolerance: opts.edgeTolerance, webOpts: { square: opts.square, waist: opts.waist || null, continuities: opts.continuities, flips: opts.flips } });
     if (!pr.ok) return pr;
     centreFaces.push(pr.srf); centreTrims.push(pr.trimLoop); rails.push(...pr.rails);
     spine = [centre, centre];
-    patched = { edgeGap: pr.edgeGap, edgeAngle: pr.edgeAngleInner };
+    patched = { edgeGap: pr.edgeGap, edgeAngle: pr.edgeAngleInner, trimGap: pr.trimGap };
   } else {
     const ks = Array.isArray(opts.continuities) ? parts.map((_, kx) => { const c = opts.continuities[kx]; return c === 0 || c === 1 || c === 2 || c === 3 ? c : null; }) : null;
-    const cap = blendSrfGuidedCap(access, arc, order, bulge, continuity, nrm, flips, opts.square, ks, opts.waist || null);
+    let cap = blendSrfGuidedCap(access, arc, order, bulge, continuity, nrm, flips, opts.square, ks, opts.waist || null);
     if (!cap.ok) return cap;
+    // The first quad meets its sheet along the first half of its edge; a cap
+    // facing against it is built again round the ring the other way.
+    const q0 = cap.faces[0], k0 = order[0], t0 = cap.rev[k0] ? 0.75 : 0.25;
+    const P0 = surfacePointAndPartials(q0, (q0.knotsU[q0.degU] + q0.knotsU[q0.knotsU.length - 1 - q0.degU]) / 2, q0.knotsV[q0.degV]);
+    if (bsDot(bsCross(P0.su, P0.sv), blendSrfEdgeNormal(parts[k0].srf, parts[k0].edge, t0)) < 0) {
+      nrm = bsScale(nrm, -1); order = ringOrder(nrm);
+      cap = blendSrfGuidedCap(access, arc, order, bulge, continuity, nrm, flips, opts.square, ks, opts.waist || null);
+      if (!cap.ok) return cap;
+    }
+    // Sheets that overlap where they meet (a corner of one past the side of
+    // the next, as seen from C) leave the quads between them nowhere to go
+    // but over themselves. A folded cap is refused, never shipped. A Flip is
+    // the one exception: an edge run against the ring twists its quads by
+    // request, and the flipped cap is what was asked for.
+    const folded = flips.some(Boolean) ? -1 : cap.faces.findIndex((f) => blendSrfFaceReversals(f) > 0);
+    if (folded >= 0) {
+      const i = folded >> 1, j = (folded % 2 ? i + 1 : i + N - 1) % N, [a, b] = [order[i] + 1, order[j] + 1].sort((x, y) => x - y);
+      return { ok: false, reason: `edges ${a} and ${b} overlap at the junction — move them apart` };
+    }
     for (let k = 0; k < N; k++) rev[k] = cap.rev[k];
     centreFaces.push(...cap.faces); rails.push(...cap.free); spine = [cap.C, cap.C];
     squareFound = cap.squareFound; squared = cap.square;
@@ -997,8 +1232,10 @@ export function blendSurfaceJunction(parts, opts = {}) {
 // corner lies in both neighbors' plane. The fill is not a NURBS surface, so it
 // is sampled densely over its own polygon domain and fitted (kernel/patch.mjs,
 // given parameters), and the polygon is the trim. A fill that folds is retried
-// with shorter cross-tangents. A closed rim is refused: it has no ends to close
-// a boundary with, and whole tubes meet through Blend.
+// with shorter cross-tangents; a hole it folds over still is fitted from the
+// web Blend builds over the same edges, over their plane. A closed rim is
+// refused: it has no ends to close a boundary with, and whole tubes meet
+// through Blend.
 // Returns { ok, srf, trimLoop (u,v), rails (the free edges), edgeGap and
 // edgeAngle / edgeAngleInner (measured along the surface edges) } or a refusal.
 // The fill's cross-tangent length, as a share of each side's chord to the far
@@ -1006,9 +1243,17 @@ export function blendSurfaceJunction(parts, opts = {}) {
 // (a fitted net met the tubes at 15 degrees), 0.8 turns over the whole cap
 // (2 degrees at 32 x 32), 1.2 folds.
 export const PATCH_EDGE_TANGENT_SCALE = 0.8;
+// Seating the trim (patchFromSurfaceEdges): a trim vertex counts this many
+// times an interior sample, squared, in the refit; at most this many rounds of
+// refit and halving; the refit's net count, half as many again after the first
+// round (measured: a cross seats at 64 to 0.00015 mm, a T needs 96).
+export const PATCH_SEAT_WEIGHT = 30;
+export const PATCH_SEAT_ROUNDS = 3;
+export const PATCH_SEAT_COUNT = 64;
 export function patchFromSurfaceEdges(parts, opts = {}) {
   if (!Array.isArray(parts) || parts.length < 2) return { ok: false, reason: 'Patch on surfaces needs two or more surface edges' };
-  const N = parts.length;
+  const N = parts.length, bulge = opts.bulge ?? 1;
+  if (!(bulge > 0)) return { ok: false, reason: 'bulge must be positive' };
   const access = parts.map((X) => blendSrfEdgeAccess(X.srf, X.edge));
   if (access.some(blendSrfEdgeClosed)) return { ok: false, reason: 'a whole tube has no ends to close a patch with — Blend joins whole tubes' };
   const arc = access.map((ea) => blendSrfArcParam(ea.point));
@@ -1023,9 +1268,17 @@ export function patchFromSurfaceEdges(parts, opts = {}) {
   const e2 = bsCross(nrm, e1);
   const ang = (q) => { const d = bsSub(q, centre); return Math.atan2(bsDot(d, e2), bsDot(d, e1)); };
   const order = mids.map((_, i) => i).sort((a, b) => ang(mids[a]) - ang(mids[b]));
-  // Each edge runs the ring's way: its end lies ahead of its start about the center.
+  // Each edge runs the ring's way: its end lies ahead of its start about the
+  // center. Two edges need not have the center between them (two concentric
+  // arcs lie on one side of it, both turning the same way about it): the
+  // second runs from the end nearer the first one's end.
   const rev = access.map((ea) => bsDot(bsCross(bsSub(ea.point(0), centre), bsSub(ea.point(1), centre)), nrm) < 0);
+  if (N === 2) {
+    const [ka, kb] = order, aEnd = access[ka].point(rev[ka] ? 0 : 1);
+    rev[kb] = bsLen(bsSub(aEnd, access[kb].point(1))) < bsLen(bsSub(aEnd, access[kb].point(0)));
+  }
   const at = (kx, t) => access[kx].frame(arc[kx](rev[kx] ? 1 - t : t), false);
+  const edgePoint = (kx) => (t) => access[kx].point(arc[kx](rev[kx] ? 1 - t : t));
   // The loop's sides in ring order: each surface edge, then the free edge that
   // closes the gap to the next. A side is a curve on [0,1] and a cross-tangent
   // field: a surface edge's is the surface's own outward direction; a free
@@ -1044,7 +1297,7 @@ export function patchFromSurfaceEdges(parts, opts = {}) {
     const fe = at(kx, 1), fs = access[kn].frame(arc[kn](rev[kn] ? 1 : 0), true);
     const gap = bsLen(bsSub(fs.point, fe.point));
     if (!(gap > 1e-9)) continue;
-    const m = 0.6 * gap * (opts.bulge ?? 1);
+    const m = 0.6 * gap * bulge;
     const r2 = geometricBlend({ point: fe.point, d1: fe.d1, d2: [0, 0, 0], d3: [0, 0, 0] }, { point: fs.point, d1: fs.d1, d2: [0, 0, 0], d3: [0, 0, 0] }, { continuity: 1, startMagnitude: m, endMagnitude: m });
     if (!r2.ok) return { ok: false, reason: `no edge could close the gap between edges ${kx + 1} and ${kn + 1}` };
     rails.push(r2.crv);
@@ -1055,57 +1308,244 @@ export function patchFromSurfaceEdges(parts, opts = {}) {
   }
   // A fill that folds is tried again with shorter cross-tangents (a flatter
   // shoulder) before the gap is called too distorted for one surface.
+  // Bulge scales the cross-tangents (fuller or flatter over the gap), and the
+  // free edges' handles with them; a fuller fill that folds falls back to
+  // the plain ladder.
+  // Each step down the ladder turns the patch faster off its edges (a fitted
+  // net then meets them less squarely: 2.3 degrees at 0.75 on five tubes,
+  // 3.4 at 0.55), so it steps down in small rungs.
+  const ladder = [PATCH_EDGE_TANGENT_SCALE, 0.75, 0.7, 0.65, 0.55, 0.45, 0.35, 0.2];
   let fill = null;
-  for (const ts of opts.tangentScale != null ? [opts.tangentScale] : [PATCH_EDGE_TANGENT_SCALE, 0.55, 0.35, 0.2]) {
+  for (const ts of opts.web ? [] : opts.tangentScale != null ? [opts.tangentScale] : [...ladder.map((x) => x * bulge), ...(bulge > 1 ? ladder : [])]) {
     fill = nSidedTangentPatch({ boundary: sides.map((sd) => sd.point), tangent: sides.map((sd) => sd.tangent), tangentScale: ts, oriented: true });
     if (fill.ok) break;
   }
-  if (!fill.ok) return { ok: false, reason: fill.reason };
-  // The fill is exact but not a NURBS surface: it is sampled densely over its
-  // own polygon domain, laid in the patch's square, and fitted.
-  const V = fill.domain.vertices, pad = 0.03;
-  let lx = Infinity, ly = Infinity, hx = -Infinity, hy = -Infinity;
-  for (const [x, y] of V) { lx = Math.min(lx, x); ly = Math.min(ly, y); hx = Math.max(hx, x); hy = Math.max(hy, y); }
-  const sc = (1 - 2 * pad) / Math.max(hx - lx, hy - ly);
-  const toUV = (x, y) => [pad + (x - lx) * sc + (1 - 2 * pad - (hx - lx) * sc) / 2, pad + (y - ly) * sc + (1 - 2 * pad - (hy - ly) * sc) / 2];
-  const targets = [], params = [];
-  const G = Math.max(24, Math.round(opts.grid ?? 96));
-  for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) {
-    const x = lx + (hx - lx) * i / G, y = ly + (hy - ly) * j / G;
-    const q = fill.evaluateXY(x, y);
-    if (q) { targets.push(q); params.push(toUV(x, y)); }
-  }
   const S = Math.max(8, Math.round(opts.samplesPerEdge ?? 32));
-  const trimLoop = [], edgeSamples = [];
-  sides.forEach((sd, i) => {
-    const A = V[i], B = V[(i + 1) % V.length];
-    for (let k = 0; k < S; k++) {
-      const t = k / S, x = A[0] + (B[0] - A[0]) * t, y = A[1] + (B[1] - A[1]) * t, uv = toUV(x, y);
-      const q = sd.point(t);
-      // Twice: the boundary is worth more than any one interior sample.
-      targets.push(q, q); params.push(uv, uv);
-      trimLoop.push(uv);
-      if (sd.kx != null) edgeSamples.push({ point: q, kx: sd.kx, t, uv });
+  // trimSides: the loop's sides in order, each its exact model-space curve q(t)
+  // and the curve's place on the patch uv(t), t in [0, 1]; `seat`: the side is
+  // one a neighbor joins along (every surface edge, and the free edges when
+  // opts.seatRails says another face shares them).
+  const targets = [], params = [], trimSides = [], edgeSamples = [];
+  const pad = 0.03;
+  // Lays a box of the plane (lx..hx, ly..hy) in the patch's square, padded.
+  const square = (lx, ly, hx, hy) => { const sc = (1 - 2 * pad) / Math.max(hx - lx, hy - ly); return (x, y) => [pad + (x - lx) * sc + (1 - 2 * pad - (hx - lx) * sc) / 2, pad + (y - ly) * sc + (1 - 2 * pad - (hy - ly) * sc) / 2]; };
+  if (fill && fill.ok) {
+    // The fill is exact but not a NURBS surface: it is sampled densely over its
+    // own polygon domain, laid in the patch's square, and fitted.
+    const V = fill.domain.vertices;
+    let lx = Infinity, ly = Infinity, hx = -Infinity, hy = -Infinity;
+    for (const [x, y] of V) { lx = Math.min(lx, x); ly = Math.min(ly, y); hx = Math.max(hx, x); hy = Math.max(hy, y); }
+    const toUV = square(lx, ly, hx, hy);
+    const G = Math.max(24, Math.round(opts.grid ?? 96));
+    for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) {
+      const x = lx + (hx - lx) * i / G, y = ly + (hy - ly) * j / G;
+      const q = fill.evaluateXY(x, y);
+      if (q) { targets.push(q); params.push(toUV(x, y)); }
     }
-  });
+    sides.forEach((sd, i) => {
+      const A = V[i], B = V[(i + 1) % V.length];
+      trimSides.push({ seat: sd.kx != null || !!opts.seatRails, q: sd.kx == null ? sd.point : edgePoint(sd.kx), uv: (t) => toUV(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t) });
+      for (let k = 0; k < S; k++) {
+        const t = k / S, uv = trimSides[i].uv(t);
+        const q = sd.point(t);
+        // Twice: the boundary is worth more than any one interior sample.
+        targets.push(q, q); params.push(uv, uv);
+        if (sd.kx != null) edgeSamples.push({ point: q, kx: sd.kx, t, uv });
+      }
+    });
+  } else {
+    // A hole the fill folds over (a flat star: the side-vertex rays cross where
+    // the free edges bow in), or one asked for with opts.web, takes the web
+    // Blend builds over the same edges — the guided cap, or between two edges
+    // the two-edge blend — sampled and fitted, closed by the web's own free
+    // edges. opts.webOpts reaches the cap (a tube junction's waist).
+    let faces = null, webRails = null;
+    if (N >= 3) {
+      const j = blendSurfaceJunction(parts, { continuity: 2, bulge, ...(opts.webOpts || {}) });
+      if (j.ok && j.faceUp && !j.tube) { faces = j.centre; webRails = j.rails; }
+    } else {
+      const j = blendSurfaceBetweenEdges(parts[0], parts[1], { continuity: 2, bulgeA: bulge, bulgeB: bulge, adaptive: true, tolerance: 1e-3, maxStations: 97 });
+      if (j.ok) { const K = j.srf.knotsV, d = j.srf.degV; faces = [j.srf]; webRails = [extractIsocurveV(j.srf, K[d]), extractIsocurveV(j.srf, K[K.length - 1 - d])]; }
+    }
+    if (!faces) return { ok: false, reason: fill ? fill.reason : 'the gap has no web to fit' };
+    // Parameters by central projection from a point 0.4 of the ring radius
+    // below the web, on the side away from it (the walls spread most there of
+    // 0.25 to 1.5: rims met within 1.5 degrees on a T, a cross, five tubes): a flat web projects as its own plane,
+    // and a cap standing square to the plane at a tube junction's waist still
+    // spreads over the domain, where a projection along the normal would
+    // crush its walls to a line. The web must be a graph from that point.
+    const webSamples = [], webNormals = [];
+    for (const f of faces) {
+      const u0 = f.knotsU[f.degU], u1 = f.knotsU[f.knotsU.length - 1 - f.degU], v0 = f.knotsV[f.degV], v1 = f.knotsV[f.knotsV.length - 1 - f.degV];
+      for (let i = 0; i <= 32; i++) for (let k = 0; k <= 32; k++) {
+        const P = surfacePointAndPartials(f, u0 + (u1 - u0) * i / 32, v0 + (v1 - v0) * k / 32);
+        webSamples.push(P.point); webNormals.push(bsCross(P.su, P.sv));
+      }
+    }
+    // Measured from the corners' mean, where a cap over half tubes stands on its waist.
+    const ends = sides.flatMap((sd) => [sd.point(0), sd.point(1)]), base = bsScale(ends.reduce((acc, q) => bsAdd(acc, q), [0, 0, 0]), 1 / ends.length);
+    const rise = webSamples.reduce((acc, q) => acc + bsDot(bsSub(q, base), nrm), 0), up3 = rise < 0 ? bsScale(nrm, -1) : nrm;
+    const h = 0.4 * Math.max(1e-9, mids.reduce((acc, q) => acc + bsLen(bsSub(q, centre)), 0) / N), eye = bsSub(base, bsScale(up3, h));
+    const proj = (q) => { const d = bsSub(q, eye), z = bsDot(d, up3); return [h * bsDot(d, e1) / z, h * bsDot(d, e2) / z]; };
+    let up = 0, down = 0;
+    webSamples.forEach((q, i) => { const n = bsDot(webNormals[i], bsSub(q, eye)); if (n > 0) up++; else if (n < 0) down++; });
+    if ((up && down) || webSamples.some((q) => !(bsDot(bsSub(q, eye), up3) > 1e-9 * h))) return { ok: false, reason: fill ? fill.reason : 'the web is not a graph to fit over' };
+    // The loop: each surface edge in ring order, then the web's free edge from
+    // its end to the next edge's start.
+    const loop = [];
+    const tol = 1e-6 * Math.max(1, ...mids.map((q) => bsLen(bsSub(q, centre))));
+    for (let r = 0; r < N; r++) {
+      const sd = sides.find((x) => x.kx === order[r]), kn = order[(r + 1) % N];
+      trimSides.push({ seat: true, q: edgePoint(sd.kx) });
+      for (let k = 0; k < S; k++) loop.push({ q: sd.point(k / S), kx: sd.kx, t: k / S });
+      const from = sd.point(1), to = sides.find((x) => x.kx === kn).point(0);
+      if (!(bsLen(bsSub(to, from)) > tol)) continue;
+      const c = webRails.find((cv) => { const a = curvePoint(cv, cv.knots[0]), b = curvePoint(cv, cv.knots[cv.knots.length - 1]); return (bsLen(bsSub(a, from)) < 1e3 * tol && bsLen(bsSub(b, to)) < 1e3 * tol) || (bsLen(bsSub(b, from)) < 1e3 * tol && bsLen(bsSub(a, to)) < 1e3 * tol); });
+      if (!c) return { ok: false, reason: fill.reason };
+      const ka = c.knots[0], kb = c.knots[c.knots.length - 1], fwd = bsLen(bsSub(curvePoint(c, ka), from)) < bsLen(bsSub(curvePoint(c, kb), from));
+      const railAt = (t) => curvePoint(c, fwd ? ka + (kb - ka) * t : kb - (kb - ka) * t);
+      trimSides.push({ seat: !!opts.seatRails, q: railAt });
+      for (let k = 0; k < S; k++) loop.push({ q: railAt(k / S), kx: null });
+    }
+    let lx = Infinity, ly = Infinity, hx = -Infinity, hy = -Infinity;
+    for (const L of loop) { const [x, y] = proj(L.q); lx = Math.min(lx, x); ly = Math.min(ly, y); hx = Math.max(hx, x); hy = Math.max(hy, y); }
+    const toUV = square(lx, ly, hx, hy);
+    for (const sd of trimSides) { const seen = new Map(); sd.uv = (t) => { let w = seen.get(t); if (!w) { w = toUV(...proj(sd.q(t))); seen.set(t, w); } return w; }; }
+    for (const q of webSamples) { targets.push(q); params.push(toUV(...proj(q))); }
+    for (const L of loop) {
+      const uv = toUV(...proj(L.q));
+      targets.push(L.q, L.q); params.push(uv, uv);
+      if (L.kx != null) edgeSamples.push({ point: L.q, kx: L.kx, t: L.t, uv });
+    }
+    rails.length = 0; rails.push(...webRails);
+  }
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const q of targets) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q[k]); hi[k] = Math.max(hi[k], q[k]); }
   const span = bsLen(bsSub(hi, lo));
   const fit = fitPatchToTolerance(targets, { tolerance: opts.tolerance ?? 1e-3 * span, maxCount: opts.maxCount ?? 48, stiffness: opts.stiffness ?? 0.01, degree: 3, uCount: opts.uCount ?? Math.min(32, opts.maxCount ?? 48), params });
   if (!fit.ok) return fit;
+  // The trim on its edges. The fit meets the loop only as closely as its net
+  // allows, and a polygon trim through samples of a curved side cuts across
+  // its chords; either leaves the trimmed boundary hundredths of a millimetre
+  // off the edges it was built from, too far to join them. So the trim is
+  // first made dense enough that no chord bows across its side's own path by
+  // more than half of edgeTolerance, then the net is fitted again
+  // (PATCH_SEAT_COUNT, every trim vertex weighted PATCH_SEAT_WEIGHT) until
+  // every vertex and chord midpoint lies within edgeTolerance of its side's
+  // exact curve: the surface edges, and the free edges a neighbor shares (a
+  // free edge nothing shares is held at its corners only).
+  // Measured on the four-tube cross: 0.0003 mm on the trim, 0.27 degrees at
+  // the rims, 0.010 mm off the web it fits (0.031 before the refit).
+  const edgeTol = opts.edgeTolerance ?? 3e-4;
+  const ts = trimSides.map(() => Array.from({ length: S }, (_, k) => k / S));
+  const cache = trimSides.map(() => new Map());
+  // A vertex the refit still misses counts three times as heavily next round, to nine.
+  const heavier = trimSides.map(() => new Map());
+  const Q = (i, t) => { let p = cache[i].get(t); if (!p) { p = trimSides[i].q(t); cache[i].set(t, p); } return p; };
+  // A fitted net is polynomial (every weight 1): its point is the basis sum.
+  const pointOn = (f, u, v) => {
+    const nu = f.ctrlNet.length - 1, nv = f.ctrlNet[0].length - 1, su = findSpan(nu, f.degU, u, f.knotsU), sv = findSpan(nv, f.degV, v, f.knotsV);
+    const Nu = basisFuns(su, u, f.degU, f.knotsU), Nv = basisFuns(sv, v, f.degV, f.knotsV), out = [0, 0, 0];
+    for (let a = 0; a <= f.degU; a++) { const row = f.ctrlNet[su - f.degU + a]; for (let b = 0; b <= f.degV; b++) { const w = Nu[a] * Nv[b], P = row[sv - f.degV + b]; out[0] += w * P[0]; out[1] += w * P[1]; out[2] += w * P[2]; } }
+    return out;
+  };
+  const segDist = (p, A, B) => { const d = bsSub(B, A), L2 = bsDot(d, d); const t = L2 > 0 ? Math.max(0, Math.min(1, bsDot(bsSub(p, A), d) / L2)) : 0; return bsLen(bsSub(bsAdd(A, bsScale(d, t)), p)); };
+  // One pass over every chord on surface `on`: the largest distance of a
+  // vertex or chord midpoint from its side, and (with `halve`) each chord split
+  // in two whose midpoint lies off its side by more than edgeTol (`bowOnly`:
+  // whose polygon bows across the side's own path on the patch by more than
+  // edgeTol / 2 in model space, the patch's partials carrying it there).
+  const sweep = (on, halve, bowOnly) => {
+    let worst = 0, halved = false;
+    trimSides.forEach((sd, i) => {
+      const list = ts[i], next = [];
+      for (let k = 0; k < list.length; k++) {
+        const a = list[k], b = k + 1 < list.length ? list[k + 1] : 1, m = (a + b) / 2, ua = sd.uv(a), ub = sd.uv(b);
+        next.push(a);
+        // A free side is held only at its corner, where it meets a seated side.
+        if (!sd.seat) { if (k === 0 && !bowOnly) { const qa = Q(i, a), pa = pointOn(on, ua[0], ua[1]), ga = bsLen(bsSub(pa, qa)); worst = Math.max(worst, ga); if (halve && ga > edgeTol) heavier[i].set(a, Math.min(9, 3 * (heavier[i].get(a) || 1))); } continue; }
+        let split;
+        if (bowOnly) {
+          const um = sd.uv(m), P = surfacePointAndPartials(on, um[0], um[1]), du = (ua[0] + ub[0]) / 2 - um[0], dv = (ua[1] + ub[1]) / 2 - um[1];
+          const off = bsAdd(bsScale(P.su, du), bsScale(P.sv, dv)), along = bsNorm(bsSub(Q(i, b), Q(i, a)));
+          split = bsLen(bsSub(off, bsScale(along, bsDot(off, along)))) > edgeTol / 2;
+        } else {
+          const pa = pointOn(on, ua[0], ua[1]), pm = pointOn(on, (ua[0] + ub[0]) / 2, (ua[1] + ub[1]) / 2), qa = Q(i, a), qb = Q(i, b), qm = Q(i, m);
+          const dm = Math.min(segDist(pm, qa, qm), segDist(pm, qm, qb));
+          const ga = bsLen(bsSub(pa, qa));
+          worst = Math.max(worst, ga, dm);
+          if (halve && ga > edgeTol) heavier[i].set(a, Math.min(9, 3 * (heavier[i].get(a) || 1)));
+          split = dm > edgeTol;
+        }
+        if (halve && split) { next.push(m); halved = true; }
+      }
+      ts[i] = next;
+    });
+    return { worst, halved };
+  };
+  for (let k = 0; k < 10 && sweep(fit.srf, true, true).halved; k++);
+  let seated = fit.srf, trimGap = null;
+  for (let round = 0; round < PATCH_SEAT_ROUNDS; round++) {
+    const want = round ? Math.round(PATCH_SEAT_COUNT * 1.5) : PATCH_SEAT_COUNT;
+    let count = Math.max(fit.uCount, want);
+    // At least two trim vertices to a knot span along a seated side: sparser,
+    // the net bows between them where nothing inside holds it (a T's open side
+    // bowed 0.008 mm between vertices that sat to a micron).
+    const span = 1 / Math.max(1, count - 3);
+    trimSides.forEach((sd, i) => {
+      if (!sd.seat) return;
+      for (let pass = 0; pass < 8; pass++) {
+        const list = ts[i], next = [];
+        let split = false;
+        for (let k = 0; k < list.length; k++) {
+          const a = list[k], b = k + 1 < list.length ? list[k + 1] : 1, ua = sd.uv(a), ub = sd.uv(b);
+          next.push(a);
+          if (Math.hypot(ub[0] - ua[0], ub[1] - ua[1]) > span / 2) { next.push((a + b) / 2); split = true; }
+        }
+        ts[i] = next;
+        if (!split) break;
+      }
+    });
+    const T = targets.slice(), Pm = params.slice(), W = targets.map(() => 1);
+    trimSides.forEach((sd, i) => { for (const t of sd.seat ? ts[i] : [0]) { T.push(Q(i, t)); Pm.push(sd.uv(t)); W.push(PATCH_SEAT_WEIGHT * (heavier[i].get(t) || 1)); } });
+    count = Math.min(count, Math.max(fit.uCount, Math.floor(Math.sqrt(T.length))));
+    const refit = fitPatch(T, { degree: 3, uCount: count, vCount: count, stiffness: opts.stiffness ?? 0.01, params: Pm, weights: W });
+    if (!refit.ok) break;
+    seated = refit.srf;
+    const r = sweep(seated, true, false);
+    trimGap = r.worst;
+    if (trimGap <= edgeTol || !r.halved) break;
+  }
+  // A fill the net cannot seat (its corners are cones the polynomial net cannot
+  // follow: a millimetre off on four half tubes) gives way to the web fitted
+  // over the same edges, when the web seats closer.
+  if (fill && fill.ok && !opts.web && !(trimGap <= edgeTol)) {
+    const viaWeb = patchFromSurfaceEdges(parts, { ...opts, web: true });
+    if (viaWeb.ok && viaWeb.trimGap != null && (trimGap == null || viaWeb.trimGap < trimGap)) return viaWeb;
+  }
+  const trimLoop = trimSides.flatMap((sd, i) => ts[i].map((t) => sd.uv(t)));
   // How well the edges were met: position, and the angle between the patch and
   // each surface along its edge (the fitted normal against the surface's own).
   // The corners are G0 by construction (the fill's own limit), so the angle is
   // also reported along each edge's interior, a tenth in from its ends.
-  let gapMax = 0, angMax = 0, angInner = 0;
+  let gapMax = 0, angMax = 0, angInner = 0, facing = 0;
   for (const e of edgeSamples) {
-    const P = surfacePointAndPartials(fit.srf, e.uv[0], e.uv[1]);
+    const P = surfacePointAndPartials(seated, e.uv[0], e.uv[1]);
     gapMax = Math.max(gapMax, bsLen(bsSub(P.point, e.point)));
     const pn = bsNorm(bsCross(P.su, P.sv));
+    facing += Math.sign(bsDot(pn, blendSrfEdgeNormal(parts[e.kx].srf, parts[e.kx].edge, arc[e.kx](rev[e.kx] ? 1 - e.t : e.t))));
     const sn = bsNorm(bsCross(edgeTan(e.kx, e.t), at(e.kx, e.t).d1));
     const a = Math.acos(Math.min(1, Math.abs(bsDot(pn, sn)))) * 180 / Math.PI;
     angMax = Math.max(angMax, a);
     if (e.t >= 0.1 && e.t <= 0.9) angInner = Math.max(angInner, a);
   }
-  return { ok: true, srf: fit.srf, trimLoop, rails: rails.filter(Boolean), order, edgeGap: gapMax, edgeAngle: angMax, edgeAngleInner: angInner, maxDeviation: fit.maxDeviation, count: fit.uCount, tried: fit.tried };
+  // The patch faces the way its surfaces do along their edges: a patch facing
+  // against them is transposed, its trim with it (run backward, so the loop
+  // keeps its winding).
+  let srf = seated, loop = trimLoop;
+  if (facing < 0) {
+    srf = { ...srf, degU: srf.degV, degV: srf.degU, knotsU: srf.knotsV.slice(), knotsV: srf.knotsU.slice(), ctrlNet: srf.ctrlNet[0].map((_, j) => srf.ctrlNet.map((row) => row[j].slice())) };
+    loop = trimLoop.map(([u, v]) => [v, u]).reverse();
+  }
+  return { ok: true, srf, trimLoop: loop, rails: rails.filter(Boolean), order, edgeGap: gapMax, edgeAngle: angMax, edgeAngleInner: angInner, trimGap, maxDeviation: fit.maxDeviation, count: fit.uCount, tried: fit.tried };
 }

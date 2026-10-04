@@ -1528,6 +1528,51 @@ function relaxedEndDirections(graph, relax) {
   return out;
 }
 
+// Basis weights of a clamped uniform cubic with n points at m - 1 even
+// samples, shared by every strut of one Detail.
+const skinBases = new Map();
+function skinSampleBases(knots, n, m) {
+  const key = n + ':' + m;
+  if (!skinBases.has(key)) {
+    const rows = [];
+    for (let j = 1; j < m; j++) { const w = []; for (let k = 0; k < n; k++) w.push(bsplinePoint(knots, 3, Array.from({ length: n }, (_, q) => [q === k ? 1 : 0, 0, 0]), j / m)[0]); rows.push(w); }
+    skinBases.set(key, rows);
+  }
+  return skinBases.get(key);
+}
+
+// A skin strut's control points sit on the surface, but across a concave
+// edge the curve between two of them cuts the corner through the air (an
+// L-shaped body's inner corner: 2.2 out at a strut length of 21; a slide's
+// tight inner bends: 1.5 at 19). Its samples are read against the nearest
+// surface triangle (out by their distance on the triangle's outward side),
+// two per leg of the control polygon. A strut out by more than 1% of its
+// length over faces turned more than 45 degrees from each other cuts a
+// corner; a smaller sag, or one over a gently curved skin, is a chord on a
+// curved skin. A corner cut is not bent to hug the skin: a strut bent inside
+// its joints' pull-back stops them welding when it is piped (every lattice
+// on the slide refused). It is dropped, as a core strut through the air is.
+function skinStrutCutsCorner(ctrl, knots, body, grid, L) {
+  const n = ctrl.length, P = body.positions, I = body.indices, sign = body.windingSign || 1;
+  const feet = [];
+  let worst = 0;
+  for (const w of skinSampleBases(knots, n, 2 * (n - 1))) {
+    let p = [0, 0, 0]; for (let k = 0; k < n; k++) p = vadd(p, vscale(ctrl[k], w[k]));
+    const c = closestOnBody(body, grid, p, 0.25 * L);
+    if (!c) continue;
+    const t = c.tri, a = 3 * I[3 * t], b = 3 * I[3 * t + 1], d = 3 * I[3 * t + 2];
+    const A = [P[a], P[a + 1], P[a + 2]];
+    const nrm = vscale(vcross(vsub([P[b], P[b + 1], P[b + 2]], A), vsub([P[d], P[d + 1], P[d + 2]], A)), sign);
+    const nl = vlen(nrm);
+    if (!(nl > 0)) continue;
+    feet.push(vscale(nrm, 1 / nl));
+    worst = Math.max(worst, vdot(vsub(p, c.p), nrm) / nl);
+  }
+  if (!(worst > 1e-2 * L)) return false;
+  for (let a = 0; a < feet.length; a++) for (let b = a + 1; b < feet.length; b++) if (vdot(feet[a], feet[b]) < Math.cos(Math.PI / 4)) return true;
+  return false;
+}
+
 // One curve per strut. opts: detail, relax, and body + grid to put a skin
 // strut's inner control points on the surface.
 export function infillCurves(graph, opts = {}) {
@@ -1727,9 +1772,28 @@ export function buildInfill(mesh, opts = {}) {
     const sk = skinNet(graph, body, { source: skinSource, net: opts.net, snapTolerance: opts.snapTolerance, strutLength, grid: clip.grid, mergeLength: (opts.mergeFraction ?? INFILL_DEFAULTS.mergeFraction) * strutLength });
     graph = sk.graph; skinReport = { source: skinSource, ...sk.report };
   }
-  const trial = infillCurves(graph, { detail: opts.detail, relax: opts.relax, body, grid: clip.grid });
-  const angle = enforceArmAngle(graph, opts.minArmAngle ?? INFILL_DEFAULTS.minArmAngle, trial);
-  graph = angle.graph;
+  // Relax pairs each node's struts most-opposite first, so a strut dropped
+  // for its angle re-pairs the ones left: a strut that kept its chord can
+  // meet one that now runs through toward it, 0 degrees apart (diamond in a
+  // cube at Relax 1). The check is run again on the curves the thinner graph
+  // makes until it drops nothing; each round only removes struts. A skin
+  // strut that cuts a concave corner through the air goes in the same pass.
+  const angle = { removed: 0 }, cornerCuts = { removed: 0 };
+  for (let round = 0; round < 16; round++) {
+    const trial = infillCurves(graph, { detail: opts.detail, relax: opts.relax, body, grid: clip.grid });
+    const cut = trial.map((c, i) => graph.struts[i].kind === 'skin' && !graph.struts[i].cvOffsets
+      && skinStrutCutsCorner(c.curve.ctrlPts, c.curve.knots, body, clip.grid, vdist(graph.nodes[c.a].p, graph.nodes[c.b].p)));
+    if (cut.some(Boolean)) {
+      const pruned = pruneDangling({ nodes: graph.nodes, struts: graph.struts.filter((_, i) => !cut[i]) });
+      cornerCuts.removed += cut.filter(Boolean).length;
+      graph = pruned.graph;
+      continue;
+    }
+    const step = enforceArmAngle(graph, opts.minArmAngle ?? INFILL_DEFAULTS.minArmAngle, trial);
+    graph = step.graph;
+    angle.removed += step.removed;
+    if (!step.removed) break;
+  }
   const ov = applyInfillOverrides(graph, opts.overrides || {});
   graph = ov.graph;
   const curves = infillCurves(graph, { detail: opts.detail, relax: opts.relax, body, grid: clip.grid });

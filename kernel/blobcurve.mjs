@@ -109,7 +109,7 @@ function blobOutlineOneCluster(discs, opts = {}) {
   }
   for (const d of discs) {
     if (!Array.isArray(d) || d.length < 3 || !Number.isFinite(d[0]) || !Number.isFinite(d[1]) || !(d[2] > 0)) {
-      return { ok: false, reason: 'bad-disc', why: 'every disc needs a centre and a radius above zero' };
+      return { ok: false, reason: 'bad-disc', why: 'every disc needs a center and a radius above zero' };
     }
   }
   const asked = Math.max(0, opts.blend ?? 0);
@@ -418,7 +418,7 @@ export function blobOutline(discs, opts = {}) {
   }
   for (const d of discs) {
     if (!Array.isArray(d) || d.length < 3 || !Number.isFinite(d[0]) || !Number.isFinite(d[1]) || !(d[2] > 0)) {
-      return { ok: false, reason: 'bad-disc', why: 'every disc needs a centre and a radius above zero' };
+      return { ok: false, reason: 'bad-disc', why: 'every disc needs a center and a radius above zero' };
     }
   }
   const blend = Math.max(0, opts.blend ?? 0);

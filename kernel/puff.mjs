@@ -727,7 +727,7 @@ export function buildAnnularPuff(outerLoop, holeLoops, opts = {}) {
   for (let i = 0; i < N; i++) {
     const th = (2 * Math.PI * i) / N, dx = Math.cos(th), dy = Math.sin(th);
     const ro = annRayRadius(outer, c, dx, dy), ri = annRayRadius(hole, c, dx, dy);
-    if (ro === null || ri === null) return { ok: false, reason: 'not-star', why: 'The outer and the hole must each be star-shaped about the hole\'s centre for a clean ring, and this pair is not. Round the hole.' };
+    if (ro === null || ri === null) return { ok: false, reason: 'not-star', why: 'The outer and the hole must each be star-shaped about the hole\'s center for a clean ring, and this pair is not. Round the hole.' };
     if (ri >= ro) return { ok: false, reason: 'hole-escapes', why: 'The hole reaches outside the outer shape.' };
     outerR.push([c[0] + ro * dx, c[1] + ro * dy]); innerR.push([c[0] + ri * dx, c[1] + ri * dy]);
   }
@@ -792,8 +792,9 @@ export function buildAnnularPuff(outerLoop, holeLoops, opts = {}) {
     const p2 = [positions[i2 * 3], positions[i2 * 3 + 1]], p3 = [positions[i3 * 3], positions[i3 * 3 + 1]];
     if (annQuadIsBowtie(p0, p1, p2, p3)) return { ok: false, reason: 'bowtie-quad', why: 'that annular ring produces self-intersecting quads' };
   }
+  const rim = new Uint8Array(V); rim.fill(1, 0, 2 * N);
   const solved = puffRimLimitSolve({
-    ok: true, reason: null, why: '', positions, quads, tris,
+    ok: true, reason: null, why: '', positions, quads, tris, rim,
     nv: V, N, M: K, K, dmax, centre: c, area: null, spacing: null,
     height: H, requestedHeight: H0, capped: H0 > 2 * dmax,
     profile, family, bottomScale, holes: 1, annular: true,
@@ -838,7 +839,22 @@ function mhMinGap(loops) {
   return { gap: g, a: ga, b: gb, toRim: ga === 0 };
 }
 function mhArclen(L) { const cum = [0]; let s = 0; for (let i = 0; i < L.length; i++) { const a = L[i], b = L[(i + 1) % L.length]; s += Math.hypot(b[0] - a[0], b[1] - a[1]); cum.push(s); } return { cum, perim: s }; }
-function mhArcPos(L, al, pt) { const r = mhProj(L, pt[0], pt[1]); const a = L[r.seg], b = L[(r.seg + 1) % L.length]; return al.cum[r.seg] + r.t * Math.hypot(b[0] - a[0], b[1] - a[1]); }
+function mhArcPos(L, al, pt) { const r = mhProj(L, pt[0], pt[1]); return al.cum[r.seg] + r.t * (al.cum[r.seg + 1] - al.cum[r.seg]); }
+/* Arc length that counts turning as length: each segment weighs its own length plus `bend` times
+   half the turning at each of its ends. Samples even in this measure crowd where the curve bends
+   (a lobe's tip, a notch) and open out along its straights, at the same mean step, so a rim
+   follows a tight turn its even arc-length samples would cut across. */
+function mhBentArclen(L, bend) {
+  const n = L.length, turn = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = L[(i - 1 + n) % n], b = L[i], c = L[(i + 1) % n];
+    const u = Math.atan2(b[1] - a[1], b[0] - a[0]), v = Math.atan2(c[1] - b[1], c[0] - b[0]);
+    let d = v - u; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; turn[i] = Math.abs(d);
+  }
+  const cum = [0]; let s = 0;
+  for (let i = 0; i < n; i++) { const a = L[i], b = L[(i + 1) % n]; s += Math.hypot(b[0] - a[0], b[1] - a[1]) + bend * (turn[i] + turn[(i + 1) % n]) / 2; cum.push(s); }
+  return { cum, perim: s };
+}
 function mhPointAt(L, al, s) { s = ((s % al.perim) + al.perim) % al.perim; let i = 0; while (i < L.length && al.cum[i + 1] < s) i++; const a = L[i % L.length], b = L[(i + 1) % L.length]; const seg = al.cum[i + 1] - al.cum[i] || 1, t = (s - al.cum[i]) / seg; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
 function mhMeshTop(outer, holes, res, back) {
   const loops = [outer, ...holes];
@@ -871,6 +887,9 @@ function mhRelax(V, quads, gbLoops, iters) {
 // (eight holes at the spacing floor), where the rim ring is finest and the near-rim quad governs.
 const MH_COLLAR_FH = [0.5];
 const RAD_COLLAR_FZ = 0.3;
+// How much a rim's turning counts as length when its vertices are spaced (mhBentArclen): a full
+// turn adds this many times 2π rim steps.
+const RAD_BEND = 1.5;
 const MH_COLLAR_FZ = [0.3];
 /* The collar band bridges the staircase boundary ring (at interior height) to the rim ring (on the
    drawn loop, z = 0). Left as a single band its rail edges span the whole vertical rise while its
@@ -1021,7 +1040,8 @@ function buildGridMultiHolePuff(outerLoop, holeLoops, opts = {}) {
       // density and one that builds coarse builds at every density (finer, bounded by RES_CAP).
       let collarExtra = 0; for (const r of rimRings) if (r.mids) collarExtra += r.mids.length * r.ring.length * 2;
       if ((chk.F - collarExtra) * densFine * densFine > faceCap) return { ok: false, reason: 'too-close', why: tooCloseWhy() };
-      built = { P, quads, dmax, H, H0 }; break;
+      const rim = new Uint8Array(P.length); for (const v of rimSet) rim[v] = 1;
+      built = { P, quads, dmax, H, H0, rim }; break;
     }
     cell *= 0.8;
   }
@@ -1034,7 +1054,7 @@ function buildGridMultiHolePuff(outerLoop, holeLoops, opts = {}) {
   return {
     ok: true, reason: null, why: '', positions, quads, tris: new Uint32Array(0),
     nv, dmax: built.dmax, height: built.H, requestedHeight: built.H0, capped: built.H0 > 2 * built.dmax,
-    bottomScale: bs, holes: holes.length, annular: true, multiHole: true, rimProfiles,
+    bottomScale: bs, holes: holes.length, annular: true, multiHole: true, rimProfiles, rim: built.rim,
   };
 }
 
@@ -1052,16 +1072,29 @@ function buildGridMultiHolePuff(outerLoop, holeLoops, opts = {}) {
    where three cells meet (a junction), a vertex is valence 3/5, not 4 — reported, and hidden
    interior under subdivision. Everywhere else the rims stay valence-4 like the single-hole equator.
 
-   A refusal falls back to the grid. A cell that is not star-shaped about its hole centroid
-   (`hole-not-star` / `hole-escapes-cell`), a cut that cannot be clipped, or an invalid junction
-   returns { ok:false }, and buildMultiHolePuff falls through to buildGridMultiHolePuff. */
+   Spokes leave a point that sees both the hole and its cell whole (radCellCenter). A cell no
+   point of its hole sees whole turns and slides the cuts (buildRadialMultiHolePuff). A cell
+   still unmeshed, a cut that cannot be clipped, or an invalid junction returns { ok:false } with
+   the hole it stopped at, and buildMultiHolePuff falls through to buildGridMultiHolePuff. */
 function radAddV(top, x, y, isRim) { top.V.push([x, y]); top.rim.push(!!isRim); return top.V.length - 1; }
 
 // One radial annulus cell. ringIdx = ordered cell-boundary vertex indices (rim arc points + shared
 // cut points). Builds the hole ring (a ray from c along each ring point's own direction, so every
 // spoke is a true radial and no chord can cross the hole) + K interior bands. K adapts to the
 // longest spoke so radial edges stay near the ring-segment length. Returns { ok } or a named refusal.
+// The hole's rim vertices slide toward an even step only as far as the spokes stay untwisted: a
+// ring whose spokes would cross is rebuilt with less of the even step, down to the rays alone.
 function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
+  const n0 = [top.V.length, top.quads.length, top.collar.length];
+  let r = null;
+  for (const even of [0.5, 0.25, 0]) {
+    r = radMeshCellAt(top, ringIdx, holeLoop, c, segLen, even);
+    if (r.ok || (r.reason !== 'bowtie-quad' && r.reason !== 'collar-in-hole')) return r;
+    top.V.length = n0[0]; top.rim.length = n0[0]; top.quads.length = n0[1]; top.collar.length = n0[2];
+  }
+  return r;
+}
+function radMeshCellAt(top, ringIdx, holeLoop, c, segLen, even) {
   const M = ringIdx.length;
   // Angles are unwrapped monotonically so the sweep is continuous; a boundary that does not wind
   // once about c, or turns back, is not a cell this can mesh.
@@ -1074,7 +1107,7 @@ function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
   for (let j = 1; j < M; j++) {
     if ((un[j] - un[j - 1]) * total <= 1e-9) return { ok: false, reason: 'cell-not-star', why: 'a cell boundary is not star-shaped about its hole' };
   }
-  const holeRing = []; let maxSpoke = 0;
+  const hits = [];
   for (let j = 0; j < M; j++) {
     const P = top.V[ringIdx[j]];
     const Lo = Math.hypot(P[0] - c[0], P[1] - c[1]);
@@ -1084,8 +1117,25 @@ function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
     const ri = annRayRadius(holeLoop, c, dx, dy);
     if (ri === null) return { ok: false, reason: 'hole-not-star', why: 'a hole is not star-shaped about its centroid along a spoke' };
     if (ri >= Lo) return { ok: false, reason: 'hole-escapes-cell', why: 'a hole rim reaches past its cell boundary along a spoke' };
-    if (Lo - ri > maxSpoke) maxSpoke = Lo - ri;
-    holeRing.push(radAddV(top, c[0] + ri * dx, c[1] + ri * dy, true));
+    hits.push([c[0] + ri * dx, c[1] + ri * dy]);
+  }
+  /* The hole's rim vertices, halfway between where each spoke's ray meets the hole and an even
+     step along the hole. By ray alone, a cut leaving the hole nearly radially lands several ring
+     vertices at one angle and their rim vertices a hair apart (a 35:1 sliver), and a hole's notch
+     that the rays graze gets none; an even step alone slants the spokes where the ring is
+     uneven. The two are blended in arc length along the hole, in the order the rays give. */
+  const hal = mhArclen(holeLoop), per = hal.perim;
+  const s = hits.map((h) => mhArcPos(holeLoop, hal, h));
+  const dir = Math.sign(((s[1 % M] - s[0]) % per + 1.5 * per) % per - 0.5 * per) || 1;
+  const us = [0]; for (let j = 1; j < M; j++) { let d = ((s[j] - s[j - 1]) * dir % per + per) % per; us.push(us[j - 1] + d); }
+  const tot = us[M - 1] + ((((s[0] - s[M - 1]) * dir) % per + per) % per);
+  const holeRing = []; let maxSpoke = 0;
+  for (let j = 0; j < M; j++) {
+    const u = (1 - even) * us[j] + even * tot * j / M;
+    const B = mhPointAt(holeLoop, hal, s[0] + dir * u);
+    const A = top.V[ringIdx[j]];
+    const L = Math.hypot(A[0] - B[0], A[1] - B[1]); if (L > maxSpoke) maxSpoke = L;
+    holeRing.push(radAddV(top, B[0], B[1], true));
   }
   /* Rows at equal lifted length, not equal distance. The bulge profile has a vertical tangent at
      the rim, so rows spaced evenly across the floor put the whole climb into the first one: at
@@ -1120,7 +1170,7 @@ function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
     if (mhInPoly(holeLoop, mx, my)) return { ok: false, reason: 'collar-in-hole', why: 'collar falls inside hole' };
     const vi = radAddV(top, mx, my, false);
     collar.push(vi);
-    top.collar.push({ vi, ref: inner[j], fz: RAD_COLLAR_FZ });
+    top.collar.push({ vi, ref: inner[j], rim: holeRing[j], fz: RAD_COLLAR_FZ });
   }
   rings.push(collar);
   rings.push(holeRing);
@@ -1138,8 +1188,9 @@ function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
 
 // The partition is the power diagram of the holes, clipped to the outer loop. Each hole's cell
 // is the set of points nearer its disc (centroid, radius of its containing circle) than any other's,
-// inside the outer loop: convex about the disc it contains, so star-shaped about the centroid by
-// construction, and the disc of every other hole lies in its own cell. The piece of a radical line
+// inside the outer loop: convex before the clip, and the disc of every other hole lies in its own
+// cell. A notch of the outline can leave a clipped cell that its hole does not see whole; that is
+// the case the cut search answers. The piece of a radical line
 // between two cells is a cut (the ridge); where three cells meet is a junction. A straight cut for
 // two holes, a wheel for a ring of holes, a chain of cuts for a row, a cell with no rim for a hole
 // among holes — all one construction.
@@ -1147,20 +1198,69 @@ function radMeshCell(top, ringIdx, holeLoop, c, segLen) {
 // foot by its two cells and the outer segment, a cut sample by its two cells and its index. Both
 // neighbors ask for the same name, so the cage welds with no seam. Junctions closer than a quarter
 // segment (four holes on a square meet in one point, up to rounding) are merged once, globally.
-function radPartitionCells(outer, holes, opts, rimProfiles) {
+function radHoleDiscs(holes) {
+  const sites = holes.map(annPolyCentroid);
+  const weights = holes.map((h, i) => h.reduce((m, p) => Math.max(m, (p[0] - sites[i][0]) ** 2 + (p[1] - sites[i][1]) ** 2), 0));
+  return { sites, weights };
+}
+// The radical line of power sites i and j: perpendicular to the site line, crossing it t from si.
+function radPlane(part, i, j) {
+  const { sites, weights } = part;
+  const dx = sites[j][0] - sites[i][0], dy = sites[j][1] - sites[i][1], D = Math.hypot(dx, dy);
+  if (D < 1e-9) return null;
+  const t = (D * D + weights[i] - weights[j]) / (2 * D);
+  return { m: [sites[i][0] + dx * t / D, sites[i][1] + dy * t / D], dx: dx / D, dy: dy / D };
+}
+
+// The kernel of a loop: the points that see all of it, the intersection of the inner half-planes
+// of its edges, each moved in by `inset`. Clipped from `start` (a convex polygon) or a box around
+// the loop. Empty ([]) when no point sees the whole loop.
+function radKernel(P, inset = 0, start = null) {
+  const s = Math.sign(annSignedArea(P)) || 1;
+  let K = start;
+  if (!K) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of P) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    K = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  }
+  for (let e = 0; e < P.length && K.length; e++) {
+    const a = P[e], b = P[(e + 1) % P.length], ex = b[0] - a[0], ey = b[1] - a[1], L = Math.hypot(ex, ey);
+    if (L < 1e-12) continue;
+    const f = (p) => s * (ex * (p[1] - a[1]) - ey * (p[0] - a[0])) / L - inset;
+    const out = [];
+    for (let k = 0; k < K.length; k++) {
+      const u = K[k], v = K[(k + 1) % K.length], fu = f(u), fv = f(v);
+      if (fu >= 0) out.push(u);
+      if ((fu >= 0) !== (fv >= 0)) { const t = fu / (fu - fv); out.push([u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t]); }
+    }
+    K = out;
+  }
+  return K.length >= 3 ? K : [];
+}
+// The spoke center of one cell. Spokes run from it to the cell boundary through the hole rim, so it
+// must see both whole: a point of kernel(hole) ∩ kernel(cell). The hole's centroid when it does;
+// otherwise the kernel point nearest the centroid, drawn a third of the way to the kernel's own
+// centroid so no spoke grazes an edge. null when no point sees both; a hole no point sees whole
+// keeps its centroid, and the spoke checks downstream decide.
+function radCellCenter(cellPoly, hole, cent, rad) {
+  const inset = rad * 0.02;
+  const kh = radKernel(hole, inset);
+  if (!kh.length) return cent;
+  const K = radKernel(cellPoly, inset, kh);
+  if (!K.length) return null;
+  if (mhInPoly(K, cent[0], cent[1])) return cent;
+  const q = mhProj(K, cent[0], cent[1]), kc = annPolyCentroid(K);
+  return [q.px + (kc[0] - q.px) / 3, q.py + (kc[1] - q.py) / 3];
+}
+
+function radPartitionCells(outer, holes, opts, rimProfiles, part = radHoleDiscs(holes), probeOnly = false) {
   const N = holes.length;
   const cents = holes.map(annPolyCentroid);
   const radii = holes.map((h, i) => h.reduce((m, p) => Math.max(m, Math.hypot(p[0] - cents[i][0], p[1] - cents[i][1])), 0));
   const { segLen } = radSpanSeg(outer, opts);
-  const cutStep = segLen * 2.5; // a cut runs nearly radially off a hole; sampled at the arc's step it pins a sliver quad at the seam
-  const al = mhArclen(outer);
-  // The radical line between discs i and j: perpendicular to the centroid line, crossing it t from ci.
-  const plane = (i, j) => {
-    let dx = cents[j][0] - cents[i][0], dy = cents[j][1] - cents[i][1]; const D = Math.hypot(dx, dy);
-    if (D < 1e-9) return null;
-    const t = (D * D + radii[i] * radii[i] - radii[j] * radii[j]) / (2 * D);
-    return { m: [cents[i][0] + dx * t / D, cents[i][1] + dy * t / D], dx: dx / D, dy: dy / D };
-  };
+  const cutStep = segLen * 1.5; // the cells' own row step: a coarser cut leaves one long edge up a rim wall, a groove along the seam
+  const al = mhBentArclen(outer, RAD_BEND * segLen);
+  const plane = (i, j) => radPlane(part, i, j);
   const sideOf = (pl, p) => (p[0] - pl.m[0]) * pl.dx + (p[1] - pl.m[1]) * pl.dy;
   const keyJ = (a, b, c) => 'J' + [a, b, c].sort((x, y) => x - y).join(',');
   // A foot is named by its arc position, not its segment: a cut through an outer vertex lands on
@@ -1186,9 +1286,28 @@ function radPartitionCells(outer, holes, opts, rimProfiles) {
         else if (bin) { const p = cross(); out.push({ p, key: nameFor(a.label, p), rim: a.label.kind === 'outer', label: a.label }); out.push(b); }
       }
       poly = out;
-      if (poly.length < 3) return { ok: false, reason: 'cell-empty' };
+      if (poly.length < 3) return { ok: false, reason: 'cell-empty', hole: i };
     }
     cells.push(poly);
+  }
+  const centers = [];
+  for (let i = 0; i < N; i++) {
+    const c = radCellCenter(cells[i].map((v) => v.p), holes[i], cents[i], radii[i]);
+    if (!c) return { ok: false, reason: 'cell-not-star', hole: i };
+    centers.push(c);
+  }
+  // The screen for a candidate partition: how far each hole stands off its own cuts, as a fraction
+  // of its radius (the least over all holes), with a hole closer than 5% refused.
+  if (probeOnly) {
+    let clear = Infinity;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      if (j === i) continue;
+      const pl = plane(i, j);
+      let near = Infinity; for (const p of holes[i]) near = Math.min(near, -sideOf(pl, p));
+      if (near < radii[i] * 0.05) return { ok: false, reason: 'hole-escapes-cell', hole: i };
+      clear = Math.min(clear, near / radii[i]);
+    }
+    return { ok: true, centers, clear };
   }
   // Junctions that coincide up to rounding become one vertex, for every cell that names either;
   // a junction within a quarter segment of a foot merges into the foot (the foot wins, so the
@@ -1273,14 +1392,130 @@ function radPartitionCells(outer, holes, opts, rimProfiles) {
       ring.push(...samples);
     }
     for (const v of poly) if (v.key[0] === 'F') feet++;
-    const r = radMeshCell(top, ring, holes[i], cents[i], segLen); if (!r.ok) return r;
+    const r = radMeshCell(top, ring, holes[i], centers[i], segLen); if (!r.ok) return { ...r, hole: i };
   }
+  if (part.relax !== false) radRelaxSheet(top, [outer, ...holes], 30);
   const built = radCloseShell(top, [outer, ...holes], opts, rimProfiles); if (!built) return { ok: false, reason: 'no-width' };
   const packed = radPack(built, N, rimProfiles);
   packed.feet = feet / 2; // each foot is named by two cells
   return packed;
 }
 
+/* The cells are meshed one at a time, each with its own rows, and they meet along the cut at an
+   angle: rows of one cell run into the cut where the other's spokes leave it, and between a hole
+   and a near cut every row of a far-reaching cell is squeezed into a short spoke. Subdivided, that
+   seam reads as a line across the form. So the interior of the sheet is relaxed as one surface:
+   each free vertex moves toward the average of its neighbors measured on the lifted surface, with
+   the part of the move along the surface normal dropped, so the rows keep their lifted spacing
+   (crowded at a steep rim wall, open on the crown) while the seam's kinks even out. Rims stay; a
+   collar stays halfway between its row and its rim. A move is taken back, vertex by vertex, where
+   it would fold, twist or bend in a quad (a reflex corner subdivides into a fold), squeeze one to
+   under half its area or any edge to under a quarter of its length (a sliver), or leave the region; the rest of the sweep stands. */
+function radRelaxSheet(top, loops, iters, step = 0.5) {
+  if (!top.heightAt) return;
+  const inDomain = (p) => mhInPoly(loops[0], p[0], p[1]) && !loops.some((L, k) => k > 0 && mhInPoly(L, p[0], p[1]));
+  const nV = top.V.length, nb = Array.from({ length: nV }, () => new Set());
+  const quadsOf = Array.from({ length: nV }, () => []);
+  top.quads.forEach((q, k) => { for (let c = 0; c < 4; c++) { const a = q[c], b = q[(c + 1) % 4]; nb[a].add(b); nb[b].add(a); quadsOf[a].push(k); } });
+  const collarOf = new Map(), refOf = new Map(); for (const c of top.collar) { collarOf.set(c.vi, c); (refOf.get(c.ref) || refOf.set(c.ref, []).get(c.ref)).push(c); }
+  const free = []; for (let i = 0; i < nV; i++) if (!top.rim[i] && !collarOf.has(i) && nb[i].size) free.push(i);
+  if (!free.length) return;
+  let lo = Infinity, hi = -Infinity; for (const p of top.V) { lo = Math.min(lo, p[0], p[1]); hi = Math.max(hi, p[0], p[1]); }
+  const h = (hi - lo) * 1e-4;
+  const area = (q) => { let a = 0; for (let k = 0; k < 4; k++) { const p = top.V[q[k]], r = top.V[q[(k + 1) % 4]]; a += p[0] * r[1] - r[0] * p[1]; } return a; };
+  const sign0 = top.quads.map((q) => Math.sign(area(q)));
+  const convex = (q, sg) => { for (let c = 0; c < 4; c++) { const a = top.V[q[c]], b = top.V[q[(c + 1) % 4]], d = top.V[q[(c + 2) % 4]]; if (sg * ((b[0] - a[0]) * (d[1] - b[1]) - (b[1] - a[1]) * (d[0] - b[0])) <= 0) return false; } return true; };
+  const convex0 = top.quads.map((q, k) => convex(q, sign0[k]));
+  const area0 = top.quads.map((q) => Math.abs(area(q)));
+  const edge = (q, c) => Math.hypot(top.V[q[(c + 1) % 4]][0] - top.V[q[c]][0], top.V[q[(c + 1) % 4]][1] - top.V[q[c]][1]);
+  const edges = (q) => [edge(q, 0), edge(q, 1), edge(q, 2), edge(q, 3)];
+  const edge0 = top.quads.map(edges);
+  const bad = (k) => { const q = top.quads[k]; return Math.sign(area(q)) !== sign0[k] || annQuadIsBowtie(top.V[q[0]], top.V[q[1]], top.V[q[2]], top.V[q[3]]) || (convex0[k] && !convex(q, sign0[k])) || Math.abs(area(q)) < 0.5 * area0[k] || edge(q, 0) < EF * edge0[k][0] || edge(q, 1) < EF * edge0[k][1] || edge(q, 2) < EF * edge0[k][2] || edge(q, 3) < EF * edge0[k][3]; };
+  const EF = 0.25;
+  const Z = new Float64Array(nV);
+  const lift = () => {
+    for (let i = 0; i < nV; i++) Z[i] = top.rim[i] ? 0 : top.heightAt(top.V[i][0], top.V[i][1]);
+    for (const c of top.collar) Z[c.vi] = Z[c.ref] * c.fz;
+  };
+  const placeCollars = () => { for (const c of top.collar) { const A = top.V[c.ref], B = top.V[c.rim]; top.V[c.vi][0] = (A[0] + B[0]) / 2; top.V[c.vi][1] = (A[1] + B[1]) / 2; } };
+  for (let it = 0; it < iters; it++) {
+    lift();
+    const save = top.V.map((p) => p.slice());
+    for (const i of free) {
+      const p = top.V[i]; let mx = 0, my = 0, mz = 0;
+      for (const j of nb[i]) { mx += save[j][0]; my += save[j][1]; mz += Z[j]; }
+      const n = nb[i].size, dx = mx / n - save[i][0], dy = my / n - save[i][1], dz = mz / n - Z[i];
+      const gx = (top.heightAt(p[0] + h, p[1]) - Z[i]) / h, gy = (top.heightAt(p[0], p[1] + h) - Z[i]) / h;
+      const nl = Math.hypot(gx, gy, 1), nx = -gx / nl, ny = -gy / nl, nz = 1 / nl;
+      const dn = dx * nx + dy * ny + dz * nz;
+      p[0] = save[i][0] + step * (dx - dn * nx); p[1] = save[i][1] + step * (dy - dn * ny);
+    }
+    placeCollars();
+    // Take back the moves around any quad that folded, until none does. Every quad is checked
+    // once; after that only the quads beside a vertex just taken back.
+    let check = top.quads.map((_, k) => k);
+    const back0 = new Set();
+    for (const i of free) { const p = top.V[i], m = Math.hypot(p[0] - save[i][0], p[1] - save[i][1]); if (m > 0 && radTableAB(p[0], p[1])[0] < 2 * m + h * 100 && !inDomain(p)) back0.add(i); }
+    for (const c of top.collar) if (!inDomain(top.V[c.vi])) back0.add(c.ref);
+    for (let guard = 0; guard < 50; guard++) {
+      const back = guard === 0 ? back0 : new Set();
+      for (const k of check) if (bad(k)) for (const v of top.quads[k]) if (!top.rim[v]) back.add(v);
+      if (!back.size) break;
+      for (const v of [...back]) { const c = collarOf.get(v); if (c) back.add(c.ref); }
+      const moved = new Set(back);
+      for (const v of back) { top.V[v][0] = save[v][0]; top.V[v][1] = save[v][1]; const c = refOf.get(v); if (c) for (const cc of c) moved.add(cc.vi); }
+      placeCollars();
+      const next = new Set(); for (const v of moved) for (const k of quadsOf[v]) next.add(k);
+      check = [...next];
+      if (guard === 49) for (let i = 0; i < nV; i++) { top.V[i][0] = save[i][0]; top.V[i][1] = save[i][1]; }
+    }
+  }
+}
+/* A distance to a loop with no ridge. The distance to the nearest point of a curve turns over in
+   one step wherever two parts of the curve are equally near (a lobe's spine, the line off a dent),
+   and every such line is a crease in a height built on it. This is the inverse-fourth-power
+   integral of the curve instead, I = ∫ ds / r⁴, read back as the distance from a straight line
+   that would give the same integral, (2I/π)^(−1/3): exact beside a straight rim, equal to the
+   distance at a rim, and smooth everywhere, a two-branch spine coming out 2^(−1/3) of its
+   distance and rounded over a width proportional to it. Each segment's integral is closed form,
+   ∫(h²+s²)⁻² ds = s/(2h²(h²+s²)) + atan(s/h)/(2h³), taken as one difference so that the two
+   terms do not cancel; far along a segment's own line it is ∫ s⁻⁴ ds. */
+function radSmoothDist(L, x, y) {
+  const n = L.length;
+  let dmin = Infinity;
+  for (let i = 0; i < n; i++) { const A = L[i], B = L[(i + 1) % n]; const ex = B[0] - A[0], ey = B[1] - A[1], L2 = ex * ex + ey * ey; let t = L2 > 0 ? ((x - A[0]) * ex + (y - A[1]) * ey) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t; const d = Math.hypot(A[0] + t * ex - x, A[1] + t * ey - y); if (d < dmin) dmin = d; }
+  if (!(dmin > 1e-12)) return 0;
+  let I = 0;
+  for (let i = 0; i < n; i++) {
+    const A = L[i], B = L[(i + 1) % n];
+    const ex = B[0] - A[0], ey = B[1] - A[1], len = Math.hypot(ex, ey);
+    if (len < 1e-12) continue;
+    const mx = (A[0] + B[0]) / 2 - x, my = (A[1] + B[1]) / 2 - y, r2 = mx * mx + my * my;
+    // A segment short beside its distance contributes len/r⁴ to within (len/r)²; only the near
+    // ones are integrated.
+    if (r2 > 64 * dmin * dmin && r2 > 16 * len * len) { I += len / (r2 * r2); continue; }
+    const ux = ex / len, uy = ey / len, ax = A[0] - x, ay = A[1] - y;
+    const s0 = ax * ux + ay * uy, s1 = s0 + len, h = Math.abs(ax * uy - ay * ux);
+    if (h < 1e-4 * Math.min(Math.abs(s0), Math.abs(s1)) && s0 * s1 > 0) { const p = Math.abs(s0), q = Math.abs(s1); I += Math.abs(1 / (p * p * p) - 1 / (q * q * q)) / 3; continue; }
+    if (h < 1e-12) return 0;
+    const h2 = h * h, a0 = h2 + s0 * s0, a1 = h2 + s1 * s1;
+    I += (s1 - s0) * (h2 - s0 * s1) / (a0 * a1 * 2 * h2) + Math.atan2(h * (s1 - s0), h2 + s0 * s1) / (2 * h2 * h);
+  }
+  return I > 0 ? Math.pow(2 * I / Math.PI, -1 / 3) : Infinity;
+}
+// The smooth distances a and b of radDomainHeight on a (G+1)² grid over the outline's box, with
+// the two depths found by climbing, kept for the last drawing: the cut search rebuilds the cage
+// several times over one set of loops.
+let radFieldMemo = null;
+const radSameLoops = (A, B) => A.length === B.length && A.every((L, i) => L === B[i] || (L.length === B[i].length && L.every((p, k) => p[0] === B[i][k][0] && p[1] === B[i][k][1])));
+function radFieldTable(loops, exact, G = 96) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of loops[0]) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  const h = Math.max(x1 - x0, y1 - y0) / G;
+  const tab = { x0, y0, h, G, a: new Float64Array((G + 1) * (G + 1)), b: new Float64Array((G + 1) * (G + 1)), o: new Uint8Array((G + 1) * (G + 1)) };
+  for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) { const [a, b, o] = exact(x0 + i * h, y0 + j * h); const k = i * (G + 1) + j; tab.a[k] = a; tab.b[k] = b; tab.o[k] = o; }
+  return tab;
+}
 // The height field belongs to the domain, not to the cage. Read off the cage's own vertices, the
 // dome's peak dmax (the deepest point from every rim) moves with density — a three-hole fixture
 // stands 79 tall at density 2 and 119 at 3 — and no ring can be placed by the height before the
@@ -1290,28 +1525,84 @@ function radDomainHeight(top, outer, holes, opts, rimProfiles) {
   const loops = [outer, ...holes];
   let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
   for (const p of outer) { lo[0] = Math.min(lo[0], p[0]); lo[1] = Math.min(lo[1], p[1]); hi[0] = Math.max(hi[0], p[0]); hi[1] = Math.max(hi[1], p[1]); }
-  const G = 80; let best = 0, bx = 0, by = 0;
+  const G = 80;
   const inside = (x, y) => mhInPoly(outer, x, y) && !holes.some((h) => mhInPoly(h, x, y));
-  for (let a = 0; a <= G; a++) for (let b = 0; b <= G; b++) {
-    const x = lo[0] + (hi[0] - lo[0]) * a / G, y = lo[1] + (hi[1] - lo[1]) * b / G;
-    if (!inside(x, y)) continue;
-    const d = mhDmin(loops, x, y); if (d > best) { best = d; bx = x; by = y; }
-  }
-  let step = Math.max(hi[0] - lo[0], hi[1] - lo[1]) / G;
-  for (let it = 0; it < 30; it++) {
-    let moved = false;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-      const x = bx + dx * step, y = by + dy * step;
+  const climb = (field) => {
+    let best = 0, bx = 0, by = 0;
+    for (let a = 0; a <= G; a++) for (let b = 0; b <= G; b++) {
+      const x = lo[0] + (hi[0] - lo[0]) * a / G, y = lo[1] + (hi[1] - lo[1]) * b / G;
       if (!inside(x, y)) continue;
-      const d = mhDmin(loops, x, y); if (d > best) { best = d; bx = x; by = y; moved = true; }
+      const d = field(x, y); if (d > best) { best = d; bx = x; by = y; }
     }
-    if (!moved) step /= 2;
-  }
+    let step = Math.max(hi[0] - lo[0], hi[1] - lo[1]) / G;
+    for (let it = 0; it < 30; it++) {
+      let moved = false;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const x = bx + dx * step, y = by + dy * step;
+        if (!inside(x, y)) continue;
+        const d = field(x, y); if (d > best) { best = d; bx = x; by = y; moved = true; }
+      }
+      if (!moved) step /= 2;
+    }
+    return best;
+  };
+  const memo = radFieldMemo && radSameLoops(radFieldMemo.loops, loops) ? radFieldMemo : null;
+  const best = memo ? memo.best : climb((x, y) => mhDmin(loops, x, y));
   if (!(best > 0)) return;
+  /* The height is a round tube across every bridge, scaled to the bridge. Measured from the
+     nearest rim alone (H·f(d/dmax)), a bridge between two close rims rises off both with the
+     profile's vertical wall and meets in a fin as tall as √(gap) and as thin as the gap: a knife
+     ridge, and the cage spans it as a crease. Here the distances to the nearest and second-
+     nearest rims a ≤ b (each a radSmoothDist, so no rim's own spine is a ridge either) set the
+     bridge's half-width R = (a+b)/2, capped at the crown's depth so the open crown keeps its
+     dome; the profile runs across that half-width and the height scales with it,
+     z = H·(R/depth)·f(t), t = a/R. A narrow bridge is then a tube as round as the dome is, at
+     every width.
+     Every min and max is smooth (the polynomial smooth minimum, min − (k−|u−v|)²/4k, of width
+     k = SMOOTH·(u+v)/2): a at the crest where two rims are equally near, b where the second-
+     nearest rim changes, and the cap where a bridge widens into the crown, so none of those lines
+     is a kink for the cage to sample. a is lowered by k/4 at a crest and b raised by as much, so t
+     is normalized by 1 − SMOOTH/4 to keep the crest at t = 1. SMOOTH is the width that left the
+     least bend across the traced two-hole drawings' seams (0.2–0.9 tried). */
+  const SMOOTH = 0.35;
+  const smin = (u, v, k) => { const g = Math.abs(u - v); return Math.min(u, v) - (g < k && k > 0 ? (k - g) * (k - g) / (4 * k) : 0); };
+  const sminR = (u, v) => smin(u, v, SMOOTH * (u + v) / 2);
+  const smaxR = (u, v) => -smin(-u, -v, SMOOTH * (u + v) / 2);
   const thickness = opts.thickness != null ? opts.thickness : 0.35;
   const H0 = thickness * 4 * best, H = Math.min(H0, 2 * best);
   top.dmax = best; top.H = H; top.H0 = H0;
-  top.heightAt = (x, y) => { const o = mhNearest(loops, x, y); const t = Math.min(mhDmin(loops, x, y) / best, 1); const rp = rimProfiles[o] || { family: 'bulge', profile: 1 }; return H * (PROFILES[rp.family] || tangentProfile)(t, rp.profile); };
+  const n = loops.length, d = new Float64Array(n);
+  const exact = (x, y) => {
+    let o = 0;
+    for (let i = 0; i < n; i++) { d[i] = radSmoothDist(loops[i], x, y); if (d[i] < d[o]) o = i; }
+    let a = d[0]; for (let i = 1; i < n; i++) a = sminR(a, d[i]);
+    let b = Infinity; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const m = smaxR(d[i], d[j]); b = b === Infinity ? m : sminR(b, m); }
+    return [Math.max(0, a), b, o];
+  };
+  // a and b are distances, near-linear between the nodes of a fine grid away from the rims, so
+  // they are tabled once per drawing and read bilinearly; the profile is applied to them exactly.
+  const tab = memo ? memo.tab : radFieldTable(loops, exact);
+  const near = (x, y) => {
+    const u = (x - tab.x0) / tab.h, v = (y - tab.y0) / tab.h, i = Math.floor(u), j = Math.floor(v);
+    if (i < 0 || j < 0 || i >= tab.G || j >= tab.G) return exact(x, y);
+    const fu = u - i, fv = v - j, G1 = tab.G + 1, k = i * G1 + j;
+    const w00 = (1 - fu) * (1 - fv), w10 = fu * (1 - fv), w01 = (1 - fu) * fv, w11 = fu * fv;
+    const a = tab.a[k] * w00 + tab.a[k + G1] * w10 + tab.a[k + 1] * w01 + tab.a[k + G1 + 1] * w11;
+    // Within a few cells of a rim the distance turns over at the rim itself (it is unsigned), which
+    // no bilinear read can follow: there it is evaluated.
+    if (a < 1.5 * tab.h) return exact(x, y);
+    const b = tab.b[k] * w00 + tab.b[k + G1] * w10 + tab.b[k + 1] * w01 + tab.b[k + G1 + 1] * w11;
+    return [a, b, tab.o[fu < 0.5 ? (fv < 0.5 ? k : k + 1) : (fv < 0.5 ? k + G1 : k + G1 + 1)]];
+  };
+  const bestE = memo ? memo.bestE : (climb((x, y) => near(x, y)[0]) || best);
+  if (!memo) radFieldMemo = { loops: loops.map((L) => L.map((p) => [p[0], p[1]])), tab, best, bestE };
+  top.heightAt = (x, y) => {
+    const [a, b, o] = near(x, y);
+    const R = Math.max(1e-12, smin(bestE, (a + b) / 2, 0.3 * bestE));
+    const t = Math.min(a / (R * (1 - SMOOTH / 4)), 1);
+    const rp = rimProfiles[o] || { family: 'bulge', profile: 1 };
+    return H * (R / bestE) * (PROFILES[rp.family] || tangentProfile)(t, rp.profile);
+  };
 }
 // The lifted length along a straight run from A to B, sampled; `cum` lets a point be placed at a
 // fraction of that length rather than of the run. A rim endpoint sits at z = 0.
@@ -1359,7 +1650,8 @@ function radCloseShell(top, loops, opts, rimProfiles) {
   for (let i = 0; i < nV; i++) { if (top.rim[i]) { backOf[i] = i; } else { backOf[i] = P.length; const p = top.V[i]; P.push([p[0], p[1], -zBase[i] * bottomFactor]); } }
   const quads = []; for (const f of top.quads) quads.push(f.slice()); for (const f of top.quads) quads.push(f.map((v) => backOf[v]));
   mhOrient(P, quads);
-  return { P, quads, dmax, H, H0, bs };
+  const rim = new Uint8Array(P.length); for (let i = 0; i < nV; i++) if (top.rim[i]) rim[i] = 1;
+  return { P, quads, dmax, H, H0, bs, rim };
 }
 
 function radPack(built, nHoles, rimProfiles) {
@@ -1371,7 +1663,7 @@ function radPack(built, nHoles, rimProfiles) {
   return {
     ok: true, reason: null, why: '', positions, quads, tris: new Uint32Array(0),
     nv, dmax: built.dmax, height: built.H, requestedHeight: built.H0, capped: built.H0 > 2 * built.dmax,
-    bottomScale: built.bs, holes: nHoles, annular: true, multiHole: true, radial: true, rimProfiles,
+    bottomScale: built.bs, holes: nHoles, annular: true, multiHole: true, radial: true, rimProfiles, rim: built.rim,
   };
 }
 
@@ -1384,6 +1676,45 @@ function radSpanSeg(outer, opts) {
 }
 
 
+// The smooth distances [a, b] at a point, read from the last drawing's table ([0, 0] off it).
+function radTableAB(x, y) {
+  const tab = radFieldMemo && radFieldMemo.tab; if (!tab) return [0, 0];
+  const u = (x - tab.x0) / tab.h, v = (y - tab.y0) / tab.h, i = Math.floor(u), j = Math.floor(v);
+  if (i < 0 || j < 0 || i >= tab.G || j >= tab.G) return [0, 0];
+  const fu = u - i, fv = v - j, G1 = tab.G + 1, k = i * G1 + j;
+  const w = [(1 - fu) * (1 - fv), fu * (1 - fv), (1 - fu) * fv, fu * fv], ks = [k, k + G1, k + 1, k + G1 + 1];
+  let a = 0, b = 0; for (let q = 0; q < 4; q++) { a += tab.a[ks[q]] * w[q]; b += tab.b[ks[q]] * w[q]; }
+  return [a, b];
+}
+/* The sharpest bend of a cage's limit across its crown: the twice-subdivided front sheet's
+   largest angle between neighboring faces per unit of distance between their centers, times the
+   half-width of the crown or bridge it is on, over edges up off the rim walls (above a quarter of
+   the peak and a quarter of the depth from every rim). A round crown or tube reads about 1; a
+   seam where two cells' rows meet at an angle reads several times that. */
+function radSeamBend(p) {
+  const V = [], F = [];
+  for (let i = 0; i < p.nv; i++) V.push([p.positions[3 * i], p.positions[3 * i + 1], p.positions[3 * i + 2]]);
+  for (let i = 0; i < p.quads.length; i += 4) F.push([p.quads[i], p.quads[i + 1], p.quads[i + 2], p.quads[i + 3]]);
+  let c = { vertices: V, faces: F };
+  c = ccSubdivide(ccSubdivide(c));
+  const W = c.vertices, Q = c.faces;
+  let zmax = 0; for (const v of W) zmax = Math.max(zmax, v[2]);
+  const dmax = p.dmax || 1;
+  const nrm = Q.map((f) => { const a = W[f[0]], b = W[f[1]], cc = W[f[2]], d = W[f[3]]; const u = [cc[0] - a[0], cc[1] - a[1], cc[2] - a[2]], v = [d[0] - b[0], d[1] - b[1], d[2] - b[2]]; const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(n[0], n[1], n[2]) || 1; return [n[0] / l, n[1] / l, n[2] / l]; });
+  const ctr = Q.map((f) => [0, 1, 2].map((k) => (W[f[0]][k] + W[f[1]][k] + W[f[2]][k] + W[f[3]][k]) / 4));
+  const up = W.map((v) => v[2] > 0.25 * zmax);
+  const deep = new Map();
+  // Each vertex's crown half-width: the bridge it sits on, or the dome; null near a rim.
+  const halfW = (vi) => { if (!deep.has(vi)) { const [a, b] = radTableAB(W[vi][0], W[vi][1]); deep.set(vi, a > 0.25 * dmax ? Math.min(dmax, (a + b) / 2) : null); } return deep.get(vi); };
+  const owner = new Map();
+  let worst = 0;
+  Q.forEach((f, fi) => { for (let k = 0; k < 4; k++) { const a = f[k], b = f[(k + 1) % 4]; const key = a < b ? a * 1e7 + b : b * 1e7 + a; const o = owner.get(key); if (o === undefined) { owner.set(key, fi); continue; }
+    const R = up[a] && up[b] ? Math.min(halfW(a) ?? -1, halfW(b) ?? -1) : -1; if (!(R > 0)) continue;
+    const n0 = nrm[o], n1 = nrm[fi], cs = n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2];
+    const len = Math.hypot(ctr[o][0] - ctr[fi][0], ctr[o][1] - ctr[fi][1], ctr[o][2] - ctr[fi][2]) || 1;
+    worst = Math.max(worst, Math.acos(Math.max(-1, Math.min(1, cs))) / len * R); } });
+  return worst;
+}
 function buildRadialMultiHolePuff(outerLoop, holeLoops, opts = {}) {
   const outer = outerLoop.map((p) => p.slice());
   const holes = holeLoops.map((h) => h.map((p) => p.slice()));
@@ -1396,27 +1727,75 @@ function buildRadialMultiHolePuff(outerLoop, holeLoops, opts = {}) {
   for (const h of holes) for (const p of h) if (!mhInPoly(outer, p[0], p[1])) return { ok: false, reason: 'hole-outside' };
   for (let a = 0; a < holes.length; a++) for (let b = a + 1; b < holes.length; b++) if (holes[a].some((p) => mhInPoly(holes[b], p[0], p[1])) || holes[b].some((p) => mhInPoly(holes[a], p[0], p[1]))) return { ok: false, reason: 'holes-overlap' };
   const rimProfiles = (Array.isArray(opts.rimProfiles) && opts.rimProfiles.length >= loops.length) ? opts.rimProfiles : loops.map(() => ({ family: 'bulge', profile: 1 }));
-  const built = radPartitionCells(outer, holes, opts, rimProfiles);
-  if (!built || !built.ok) return built;
-  const inv = puffInvariants(built);
-  if (!inv.closed || inv.nonManifold || inv.misoriented || inv.euler !== 2 - 2 * holes.length) return { ok: false, reason: 'not-closed', why: 'the radial cage did not close' };
-  const P = built.positions;
-  for (let q = 0; q < built.quads.length; q += 4) {
-    const i0 = built.quads[q], i1 = built.quads[q + 1], i2 = built.quads[q + 2], i3 = built.quads[q + 3];
-    const p0 = [P[i0 * 3], P[i0 * 3 + 1]], p1 = [P[i1 * 3], P[i1 * 3 + 1]];
-    const p2 = [P[i2 * 3], P[i2 * 3 + 1]], p3 = [P[i3 * 3], P[i3 * 3 + 1]];
-    if (annQuadIsBowtie(p0, p1, p2, p3)) return { ok: false, reason: 'bowtie-quad' };
-  }
-  for (let i = 0; i < built.nv; i++) {
-    if (Math.abs(P[i * 3 + 2]) > 1e-4) {
-      const x = P[i * 3], y = P[i * 3 + 1];
-      for (const h of holes) {
-        if (mhInPoly(h, x, y)) return { ok: false, reason: 'vertex-in-hole' };
+  const attempt = (part) => {
+    const built = radPartitionCells(outer, holes, opts, rimProfiles, part);
+    if (!built || !built.ok) return built;
+    const inv = puffInvariants(built);
+    if (!inv.closed || inv.nonManifold || inv.misoriented || inv.euler !== 2 - 2 * holes.length) return { ok: false, reason: 'not-closed', why: 'the radial cage did not close' };
+    const P = built.positions;
+    for (let q = 0; q < built.quads.length; q += 4) {
+      const i0 = built.quads[q], i1 = built.quads[q + 1], i2 = built.quads[q + 2], i3 = built.quads[q + 3];
+      const p0 = [P[i0 * 3], P[i0 * 3 + 1]], p1 = [P[i1 * 3], P[i1 * 3 + 1]];
+      const p2 = [P[i2 * 3], P[i2 * 3 + 1]], p3 = [P[i3 * 3], P[i3 * 3 + 1]];
+      if (annQuadIsBowtie(p0, p1, p2, p3)) return { ok: false, reason: 'bowtie-quad', hole: mhNearest(holes, (p0[0] + p2[0]) / 2, (p0[1] + p2[1]) / 2) };
+    }
+    for (let i = 0; i < built.nv; i++) {
+      if (Math.abs(P[i * 3 + 2]) > 1e-4) {
+        const x = P[i * 3], y = P[i * 3 + 1];
+        for (let h = 0; h < holes.length; h++) if (mhInPoly(holes[h], x, y)) return { ok: false, reason: 'vertex-in-hole', hole: h };
       }
     }
+    return built;
+  };
+  // A build is taken only rim-solved and free of crossings. The relaxed sheet comes first; where
+  // relaxing leaves a fold the rim solve then exposes, the same partition unrelaxed.
+  const solvedOk = (r) => { if (!r || !r.ok) return null; const sv = puffRimLimitSolve({ ...r, positions: new Float32Array(r.positions) }, loops); return puffInvariants(sv).ok ? { ...sv, rimSolved: true } : null; };
+  const base = radHoleDiscs(holes);
+  let first = attempt(base);
+  if (first.ok) {
+    const sv = solvedOk(first) || solvedOk(attempt({ ...base, relax: false }));
+    if (sv) return sv;
+    first = { ok: false, reason: 'cage-crosses', hole: 0, why: 'the radial cage crosses itself' };
   }
-  return built;
+  if (!RAD_SHAPE_REASONS.includes(first.reason) || !(first.hole >= 0)) return first;
+  // The power diagram is one partition of many. When a cell cannot be meshed about its hole —
+  // a notch in the outline whose two walls fall in one cell, seen from opposite sides by every
+  // point of the hole — the cut between that hole and a neighbor is turned and slid until each
+  // cell is seen whole from its hole. Turning a cut is turning one site about the other; sliding
+  // it is that site's weight. Candidates are screened on the clipped cells alone, tried widest
+  // clearance first (a cut that grazes a hole squeezes that hole's spokes into a fold), and the
+  // rim-solved cage free of crossings whose crown bends least (radSeamBend) is the puff.
+  const i = first.hole, si = base.sites[i];
+  const others = holes.map((_, j) => j).filter((j) => j !== i)
+    .sort((a, b) => Math.hypot(base.sites[a][0] - si[0], base.sites[a][1] - si[1]) - Math.hypot(base.sites[b][0] - si[0], base.sites[b][1] - si[1]));
+  const cands = [];
+  for (const j of others) {
+    const m0 = radPlane(base, i, j); if (!m0) continue;
+    const D = Math.hypot(base.sites[j][0] - si[0], base.sites[j][1] - si[1]);
+    for (let deg = -80; deg <= 80; deg += 10) for (const sh of [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45]) {
+      if (deg === 0 && sh === 0) continue;
+      const a = deg * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+      const ux = m0.dx * ca - m0.dy * sa, uy = m0.dx * sa + m0.dy * ca;
+      const sites = base.sites.map((s) => s.slice()), weights = base.weights.slice();
+      sites[j] = [si[0] + ux * D, si[1] + uy * D];
+      const t = (m0.m[0] + ux * sh * D - si[0]) * ux + (m0.m[1] + uy * sh * D - si[1]) * uy;
+      weights[j] = D * D + weights[i] - 2 * D * t;
+      cands.push({ cost: Math.abs(deg) / 10 + Math.abs(sh) / 0.1, part: { sites, weights } });
+    }
+  }
+  const passing = [];
+  for (const c of cands) {
+    const pr = radPartitionCells(outer, holes, opts, rimProfiles, c.part, true);
+    if (pr.ok) passing.push({ ...c, clear: pr.clear });
+  }
+  passing.sort((a, b) => (b.clear - a.clear) || (a.cost - b.cost));
+  let pick = null;
+  for (const c of passing.slice(0, 6)) { const sv = solvedOk(attempt(c.part)); if (!sv) continue; const bend = radSeamBend(sv); if (!pick || bend < pick.bend) pick = { bend, sv }; }
+  if (pick) return pick.sv;
+  for (const c of passing.slice(0, 6)) { const sv = solvedOk(attempt({ ...c.part, relax: false })); if (sv) return sv; }
+  return first;
 }
+const RAD_SHAPE_REASONS = ['cage-crosses', 'hole-not-star', 'cell-not-star', 'cell-not-enclosing', 'collar-in-hole', 'bowtie-quad', 'vertex-in-hole', 'hole-escapes-cell', 'cell-empty', 'centroid-on-ring'];
 
 /**
  * A puff with two or more holes — one closed genus-N SuperB. Radial/medial is the primary mesher
@@ -1442,6 +1821,36 @@ function buildRadialMultiHolePuff(outerLoop, holeLoops, opts = {}) {
  * worst miss by under 0.1% of the span either way. z stays 0, so the rim stays in
  * the drawing plane and the sheets meet there. Topology is untouched.
  */
+/* Which cage vertices are rim. A builder marks its rim vertices (`p.rim`, one byte per vertex); a
+   flat sheet (Underside 0 or -1) puts every vertex of that sheet on the drawing plane beside the
+   rims, so z = 0 cannot tell them apart. Without the marks a vertex on the plane with a valence of
+   three or more is taken as rim, which is right only when neither sheet is flat. */
+function puffRimMask(p) {
+  const nv = p.nv | 0;
+  if (p.rim && p.rim.length === nv) return p.rim;
+  const pos = p.positions, q = p.quads, val = new Uint8Array(nv), m = new Uint8Array(nv);
+  for (let f = 0; f + 3 < q.length; f += 4) for (let k = 0; k < 4; k++) val[q[f + k]] = Math.min(255, val[q[f + k]] + 1);
+  let span = 0;
+  for (let i = 0; i < nv; i++) span = Math.max(span, Math.abs(pos[3 * i]), Math.abs(pos[3 * i + 1]));
+  const tol = Math.max(1e-9, span * 1e-9);
+  for (let i = 0; i < nv; i++) if (Math.abs(pos[3 * i + 2]) <= tol && val[i] >= 3) m[i] = 1;
+  return m;
+}
+/* One Catmull-Clark level with the rim marks carried: a vertex point keeps its vertex's mark, an
+   edge point is rim when its edge runs along a rim (`along(a, b)`), a face point never is. Edge
+   points are found through the subdivided faces, whose corner c of face f is
+   [v_c, e(v_c, v_c+1), face point, e(v_c-1, v_c)]. */
+function puffSubdivideRim(cage, rim, along) {
+  const out = ccSubdivide(cage);
+  const m = new Uint8Array(out.vertices.length);
+  m.set(rim.subarray(0, cage.vertices.length));
+  let nf = 0;
+  for (const f of cage.faces) {
+    const n = f.length;
+    for (let c = 0; c < n; c++, nf++) { const a = f[c], b = f[(c + 1) % n]; if (rim[a] && rim[b] && along(a, b)) m[out.faces[nf][1]] = 1; }
+  }
+  return { cage: out, rim: m };
+}
 function puffRimLimitSolve(p, loops, rounds = 10) {
   const nv = p.nv | 0, pos = p.positions, q = p.quads;
   if (!nv || !q || !q.length) return p;
@@ -1462,18 +1871,16 @@ function puffRimLimitSolve(p, loops, rounds = 10) {
     }
     return [bx, by, bd];
   };
-  // Rim vertices: on the drawing plane. Each belongs to the loop it lies on.
-  const rim = [];
-  let span = 0;
-  for (let i = 0; i < nv; i++) { span = Math.max(span, Math.abs(pos[3 * i]), Math.abs(pos[3 * i + 1])); }
-  const tol = Math.max(1e-9, span * 1e-9);
+  // Rim vertices, each with the loop it lies on.
+  const rim = [], mask = puffRimMask(p), loopOf = new Int32Array(nv).fill(-1);
   for (let i = 0; i < nv; i++) {
-    if (Math.abs(pos[3 * i + 2]) > tol || edges[i].size < 3) continue;
+    if (!mask[i]) continue;
     let best = Infinity, li = 0;
     for (let k = 0; k < polys.length; k++) { const d = nearest(polys[k], pos[3 * i], pos[3 * i + 1])[2]; if (d < best) { best = d; li = k; } }
-    rim.push([i, li]);
+    rim.push([i, li]); loopOf[i] = li;
   }
   if (!rim.length) return p;
+  const pos0 = Float64Array.from(pos);
   const limit = (i) => {
     const n = edges[i].size; let mx = 0, my = 0;
     for (const j of edges[i]) { mx += (pos[3 * i] + pos[3 * j]) / 2; my += (pos[3 * i + 1] + pos[3 * j + 1]) / 2; }
@@ -1498,12 +1905,21 @@ function puffRimLimitSolve(p, loops, rounds = 10) {
      3.0 at density 2, 6.9 → 1.5 at 3, 3.6 → 0.9 at 5; the rest is the bow
      between two solved vertices, which no in-plane move of theirs removes. */
   const faceList = []; for (let f = 0; f + 3 < q.length; f += 4) faceList.push([q[f], q[f + 1], q[f + 2], q[f + 3]]);
+  // A cage edge runs along a rim when both ends are on the same loop; the builders never join two
+  // vertices of one loop across the body. One level down every rim-to-rim edge is half a rim edge.
+  const sameLoop = (a, b) => loopOf[a] >= 0 && loopOf[a] === loopOf[b];
+  let span = 0;
+  for (let i = 0; i < nv; i++) span = Math.max(span, Math.abs(pos[3 * i]), Math.abs(pos[3 * i + 1]));
+  const tol = Math.max(1e-9, span * 1e-9);
   for (let r = 0; r < 4; r++) {
-    let cage = { vertices: Array.from({ length: nv }, (_, i) => [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]]), faces: faceList };
-    cage = ccSubdivide(ccSubdivide(cage));
+    const c0 = { vertices: Array.from({ length: nv }, (_, i) => [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]]), faces: faceList };
+    const l1 = puffSubdivideRim(c0, mask, sameLoop), l2 = puffSubdivideRim(l1.cage, l1.rim, () => true);
+    const cage = l2.cage, onRim = l2.rim;
     const acc = new Map();
-    for (const v of cage.vertices) {
-      if (Math.abs(v[2]) > tol) continue;
+    for (let vi = 0; vi < cage.vertices.length; vi++) {
+      const v = cage.vertices[vi];
+      // A rim sample off the plane belongs to a rim whose two sheets differ; it is not corrected.
+      if (!onRim[vi] || Math.abs(v[2]) > tol) continue;
       let best = Infinity, bi = -1, bl = 0;
       for (const [i, li] of rim) { const d = Math.hypot(pos[3 * i] - v[0], pos[3 * i + 1] - v[1]); if (d < best) { best = d; bi = i; bl = li; } }
       if (bi < 0) continue;
@@ -1512,7 +1928,54 @@ function puffRimLimitSolve(p, loops, rounds = 10) {
     }
     for (const [i, e] of acc) { pos[3 * i] += e[0] / e[2]; pos[3 * i + 1] += e[1] / e[2]; }
   }
+  puffCarryFlatSheet(pos, pos0, mask, loopOf, edges, tol);
   return p;
+}
+
+/* A flat sheet follows its rims. Rows near a rim crowd toward it (they are spaced by lifted
+   length and the profile rises vertically off the rim), and the collar sits halfway into the
+   last row: 0.16 from the rim on an r6 hole whose rim vertex the solve moves 0.6. On a lifted
+   sheet that move only steepens the wall; on a sheet lying in the drawing plane it carries the
+   rim past its own rows and the sheet folds over itself. So every vertex of a flat sheet moves
+   with the rim: by the rim's displacement interpolated along the nearest rim edge, faded
+   linearly to nothing at R from the rim. The map x -> x + phi(x) stays one-to-one while
+   |grad phi| < 1; R = 4 times the largest rim move holds the normal part to a quarter, capped
+   below half the narrowest gap between two loops so no vertex is pulled by a rim across the
+   body. A sheet that is not flat is not touched. */
+function puffCarryFlatSheet(pos, pos0, mask, loopOf, edges, tol) {
+  const nv = mask.length, flat = [];
+  for (let i = 0; i < nv; i++) if (!mask[i] && Math.abs(pos0[3 * i + 2]) <= tol && edges[i].size >= 3) flat.push(i);
+  if (!flat.length) return;
+  const segs = [];
+  let dmax = 0;
+  for (let i = 0; i < nv; i++) {
+    if (!mask[i]) continue;
+    dmax = Math.max(dmax, Math.hypot(pos[3 * i] - pos0[3 * i], pos[3 * i + 1] - pos0[3 * i + 1]));
+    for (const j of edges[i]) if (j > i && mask[j] && loopOf[i] === loopOf[j]) segs.push([i, j]);
+  }
+  if (!(dmax > 0) || !segs.length) return;
+  let gap = Infinity;
+  for (let i = 0; i < nv; i++) if (mask[i]) for (let j = i + 1; j < nv; j++) if (mask[j] && loopOf[j] !== loopOf[i]) gap = Math.min(gap, Math.hypot(pos0[3 * i] - pos0[3 * j], pos0[3 * i + 1] - pos0[3 * j + 1]));
+  const R = Math.min(4 * dmax, 0.45 * gap);
+  if (!(R > 0)) return;
+  const moves = [];
+  for (const v of flat) {
+    const x = pos0[3 * v], y = pos0[3 * v + 1];
+    let bd = Infinity, bx = 0, by = 0;
+    for (const [a, b] of segs) {
+      const ax = pos0[3 * a], ay = pos0[3 * a + 1], ex = pos0[3 * b] - ax, ey = pos0[3 * b + 1] - ay, L2 = ex * ex + ey * ey;
+      let t = L2 > 0 ? ((x - ax) * ex + (y - ay) * ey) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const d = Math.hypot(ax + ex * t - x, ay + ey * t - y);
+      if (d < bd) {
+        bd = d;
+        bx = (pos[3 * a] - ax) * (1 - t) + (pos[3 * b] - pos0[3 * b]) * t;
+        by = (pos[3 * a + 1] - ay) * (1 - t) + (pos[3 * b + 1] - pos0[3 * b + 1]) * t;
+      }
+    }
+    const w = 1 - bd / R;
+    if (w > 0) moves.push([v, bx * w, by * w]);
+  }
+  for (const [v, dx, dy] of moves) { pos[3 * v] = pos0[3 * v] + dx; pos[3 * v + 1] = pos0[3 * v + 1] + dy; }
 }
 
 /**
@@ -1558,9 +2021,7 @@ export function puffLiftRims(p, loops, lifts, opts = {}) {
     const a = q[f], b = q[f + 1], c = q[f + 2], d = q[f + 3];
     edges[a].add(b); edges[a].add(d); edges[b].add(a); edges[b].add(c); edges[c].add(b); edges[c].add(d); edges[d].add(c); edges[d].add(a);
   }
-  let span = 0;
-  for (let i = 0; i < nv; i++) span = Math.max(span, Math.abs(pos[3 * i]), Math.abs(pos[3 * i + 1]));
-  const tol = Math.max(1e-9, span * 1e-9);
+  const mask = puffRimMask(p);
   // A rim vertex's height: its loop, then the height along that loop at its projection.
   const heightOn = (k, x, y) => {
     const L = loops[k], H = lifts[k], m = L.length;
@@ -1576,7 +2037,7 @@ export function puffLiftRims(p, loops, lifts, opts = {}) {
   const lift = new Float64Array(nv), fixed = new Uint8Array(nv);
   let lo = Infinity, hi = -Infinity, rims = 0;
   for (let i = 0; i < nv; i++) {
-    if (Math.abs(pos[3 * i + 2]) > tol || edges[i].size < 3) continue;
+    if (!mask[i]) continue;
     let best = Infinity, bh = 0;
     for (let k = 0; k < loops.length; k++) { const [h, d] = heightOn(k, pos[3 * i], pos[3 * i + 1]); if (d < best) { best = d; bh = h; } }
     lift[i] = bh; fixed[i] = 1; rims++;
@@ -1604,20 +2065,24 @@ export function puffLiftRims(p, loops, lifts, opts = {}) {
 }
 
 /** How far the limit rim of a built cage misses its drawn loops: the worst and mean
- *  distance of the z=0 samples of the cage subdivided `levels` times, as a fraction
+ *  in-plane distance of the rim samples of the cage subdivided `levels` times, as a fraction
  *  of the loops' span. The cage rim itself is solved past the loops so that this
  *  lands on them (puffRimLimitSolve). */
 export function puffLimitRimMiss(p, loops, levels = 2) {
   const faces = []; for (let f = 0; f + 3 < p.quads.length; f += 4) faces.push([p.quads[f], p.quads[f + 1], p.quads[f + 2], p.quads[f + 3]]);
   let cage = { vertices: Array.from({ length: p.nv }, (_, i) => [p.positions[3 * i], p.positions[3 * i + 1], p.positions[3 * i + 2]]), faces };
-  for (let k = 0; k < levels; k++) cage = ccSubdivide(cage);
   let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
   for (const L of loops) for (const q of L) { lo[0] = Math.min(lo[0], q[0]); lo[1] = Math.min(lo[1], q[1]); hi[0] = Math.max(hi[0], q[0]); hi[1] = Math.max(hi[1], q[1]); }
   const span = Math.max(hi[0] - lo[0], hi[1] - lo[1]) || 1;
   const polys = loops.map((L) => L.flat());
+  let rim = puffRimMask(p);
+  const loopOf = new Int32Array(p.nv).fill(-1);
+  for (let i = 0; i < p.nv; i++) if (rim[i]) { let bd = Infinity; for (let k = 0; k < polys.length; k++) { const d = puffNearestOnPoly(polys[k], cage.vertices[i][0], cage.vertices[i][1]); if (d < bd) { bd = d; loopOf[i] = k; } } }
+  for (let k = 0; k < levels; k++) { const s = puffSubdivideRim(cage, rim, k === 0 ? (a, b) => loopOf[a] === loopOf[b] : () => true); cage = s.cage; rim = s.rim; }
   let worst = 0, sum = 0, n = 0;
-  for (const v of cage.vertices) {
-    if (Math.abs(v[2]) > span * 1e-9) continue;
+  for (let vi = 0; vi < cage.vertices.length; vi++) {
+    const v = cage.vertices[vi];
+    if (!rim[vi]) continue;
     let d = Infinity; for (const poly of polys) d = Math.min(d, puffNearestOnPoly(poly, v[0], v[1]));
     worst = Math.max(worst, d); sum += d; n++;
   }
@@ -1630,7 +2095,7 @@ export function buildMultiHolePuff(outerLoop, holeLoops, opts = {}) {
   let radial = null;
   if (n >= 2) {
     radial = buildRadialMultiHolePuff(outerLoop, holeLoops, opts);
-    if (radial && radial.ok) return lift(puffRimLimitSolve(radial, [outerLoop, ...holeLoops]));
+    if (radial && radial.ok) return lift(radial.rimSolved ? radial : puffRimLimitSolve(radial, [outerLoop, ...holeLoops]));
     // radial declined (non-star cell / bad cut or junction) — the grid path may still build it.
   }
   const grid = buildGridMultiHolePuff(outerLoop, holeLoops, opts);
@@ -1638,17 +2103,116 @@ export function buildMultiHolePuff(outerLoop, holeLoops, opts = {}) {
   if (!radial) return grid;
   // Both declined. The grid's message names a gap; when the radial declined for the shape of a
   // cell rather than for spacing, the gap is not what stopped the puff and the copy must not say so.
-  const shape = ['hole-not-star', 'cell-not-star', 'cell-not-enclosing', 'collar-in-hole', 'bowtie-quad', 'vertex-in-hole', 'not-closed', 'junction-invalid', 'cell-empty', 'centroid-on-ring'];
+  // A refusal that knows its hole names it: `hole` is its index in holeLoops, and `tail` is the
+  // sentence after the hole's name, so a caller holding the curves' names can put one in front.
+  const tail = RAD_REFUSAL_TAIL[radial.reason];
+  if (tail && radial.hole >= 0) return { ...grid, reason: radial.reason, hole: radial.hole, tail, why: `hole ${radial.hole + 1} ${tail}` };
+  const shape = ['not-closed', 'junction-invalid'];
   if (shape.includes(radial.reason)) return { ...grid, reason: radial.reason, why: 'the puff could not mesh a cell around one hole — move that hole a little.' };
   return grid;
 }
+// What stopped the ring round one hole, in the words after its name. A cell the hole cannot see
+// whole is a notch or hook of the outline that falls on both sides of it; a hole its own center
+// cannot see whole curls round past its spokes; a hole the cuts cannot part from a neighbor sits
+// too close to it.
+const RAD_REFUSAL_TAIL = {
+  'cell-not-star': 'sits under a notch it cannot ring — move it a little',
+  'cell-not-enclosing': 'sits under a notch it cannot ring — move it a little',
+  'cell-empty': 'sits under a notch it cannot ring — move it a little',
+  'centroid-on-ring': 'sits under a notch it cannot ring — move it a little',
+  'hole-not-star': 'curls too far round to ring — open its notch a little',
+  'collar-in-hole': 'curls too far round to ring — open its notch a little',
+  'vertex-in-hole': 'curls too far round to ring — open its notch a little',
+  'bowtie-quad': 'curls too far round to ring — open its notch a little',
+  'hole-escapes-cell': 'sits too close to another hole — move them apart',
+};
 
 // Self-check — a mesh this file would not hand out
+/* Geometry the topology cannot see. A sheet folded flat over itself, or one pushed through the
+   other, keeps every edge shared twice with opposite directions, so the counts below read clean.
+   Two geometric checks: `crossings` counts triangle pairs (faces fanned, sharing no vertex) where
+   an edge of one passes strictly through the other, ends off its plane by more than 1e-7 of the
+   span. Coplanar overlap is not a crossing, so a sheet folded over itself in one plane needs the
+   second: `reversed` counts level faces (every vertex at one z, as on a flat underside) whose
+   outward normal points into the body, by the parity of a vertical ray from inside the face along
+   the side its normal faces. A folded face of a flat sheet looks up into the other sheet. Faces
+   off the level are left to `crossings`: a sloped cage face can turn past vertical by a sliver
+   where the rim solve moves a rim vertex beyond its first row, and subdivision smooths that out
+   (none at two levels) where a crossing stays. Triangles are bucketed on a grid, so both are near
+   linear in the face count. */
+function puffGeomCheck(pos, faces) {
+  const T = [], owner = [];
+  faces.forEach((f, fi) => { for (let i = 1; i + 1 < f.length; i++) { T.push([f[0], f[i], f[i + 1]]); owner.push(fi); } });
+  const nT = T.length;
+  if (!nT) return { crossings: 0, reversed: 0 };
+  const P = (i, k) => pos[3 * i + k];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const t of T) for (const v of t) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P(v, k)); hi[k] = Math.max(hi[k], P(v, k)); }
+  const span = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1, eps = span * 1e-7;
+  const bmin = new Float64Array(nT * 3), bmax = new Float64Array(nT * 3);
+  for (let t = 0; t < nT; t++) for (let k = 0; k < 3; k++) {
+    const a = P(T[t][0], k), b = P(T[t][1], k), c = P(T[t][2], k);
+    bmin[3 * t + k] = Math.min(a, b, c); bmax[3 * t + k] = Math.max(a, b, c);
+  }
+  const G = Math.max(1, Math.min(64, Math.round(Math.sqrt(nT) / 2))), cell = span / G;
+  const cx = (x) => Math.max(0, Math.min(G - 1, Math.floor((x - lo[0]) / cell))), cy = (y) => Math.max(0, Math.min(G - 1, Math.floor((y - lo[1]) / cell)));
+  const grid = Array.from({ length: G * G }, () => []);
+  for (let t = 0; t < nT; t++) for (let x = cx(bmin[3 * t]); x <= cx(bmax[3 * t]); x++) for (let y = cy(bmin[3 * t + 1]); y <= cy(bmax[3 * t + 1]); y++) grid[x * G + y].push(t);
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], dt = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const V = (i) => [P(i, 0), P(i, 1), P(i, 2)];
+  const segTri = (p, q, A, B, C) => {
+    const n = cr(sub(B, A), sub(C, A)), L = Math.sqrt(dt(n, n)); if (!L) return false;
+    const dp = dt(n, sub(p, A)) / L, dq = dt(n, sub(q, A)) / L;
+    if (dp * dq >= 0 || Math.abs(dp) < eps || Math.abs(dq) < eps) return false;
+    const s = dp / (dp - dq), x = [p[0] + s * (q[0] - p[0]), p[1] + s * (q[1] - p[1]), p[2] + s * (q[2] - p[2])];
+    return dt(cr(sub(B, A), sub(x, A)), n) > 0 && dt(cr(sub(C, B), sub(x, B)), n) > 0 && dt(cr(sub(A, C), sub(x, C)), n) > 0;
+  };
+  let crossings = 0;
+  const seen = new Set();
+  for (const list of grid) for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+    const i = list[x], j = list[y], key = i < j ? i * nT + j : j * nT + i;
+    if (seen.has(key)) continue; seen.add(key);
+    const a = T[i], b = T[j];
+    if (a[0] === b[0] || a[0] === b[1] || a[0] === b[2] || a[1] === b[0] || a[1] === b[1] || a[1] === b[2] || a[2] === b[0] || a[2] === b[1] || a[2] === b[2]) continue;
+    let apart = false; for (let k = 0; k < 3; k++) if (bmin[3 * i + k] > bmax[3 * j + k] || bmin[3 * j + k] > bmax[3 * i + k]) apart = true;
+    if (apart) continue;
+    const A = a.map(V), B = b.map(V);
+    let hit = false;
+    for (let e = 0; e < 3 && !hit; e++) hit = segTri(A[e], A[(e + 1) % 3], B[0], B[1], B[2]) || segTri(B[e], B[(e + 1) % 3], A[0], A[1], A[2]);
+    if (hit) crossings++;
+  }
+  let reversed = 0;
+  faces.forEach((f, fi) => {
+    let nx = 0, ny = 0, nz = 0;
+    for (let k = 0; k < f.length; k++) { const a = f[k], b = f[(k + 1) % f.length]; nx += (P(a, 1) - P(b, 1)) * (P(a, 2) + P(b, 2)); ny += (P(a, 2) - P(b, 2)) * (P(a, 0) + P(b, 0)); nz += (P(a, 0) - P(b, 0)) * (P(a, 1) + P(b, 1)); }
+    let zlo = Infinity, zhi = -Infinity; for (const v of f) { zlo = Math.min(zlo, P(v, 2)); zhi = Math.max(zhi, P(v, 2)); }
+    if (zhi - zlo > eps || !(Math.abs(nz) > 0)) return;
+    const up = nz > 0 ? 1 : -1;
+    // A point inside the face's first triangle, off its centroid by an irrational fraction so the
+    // ray misses the mesh's edges.
+    const t0 = f, w0 = 0.3183098861837907, w1 = 0.3678794411714423, w2 = 1 - w0 - w1;
+    const x = w0 * P(t0[0], 0) + w1 * P(t0[1], 0) + w2 * P(t0[2], 0), y = w0 * P(t0[0], 1) + w1 * P(t0[1], 1) + w2 * P(t0[2], 1), z = w0 * P(t0[0], 2) + w1 * P(t0[1], 2) + w2 * P(t0[2], 2);
+    let hits = 0;
+    for (const t of grid[cx(x) * G + cy(y)]) {
+      if (owner[t] === fi || x < bmin[3 * t] || x > bmax[3 * t] || y < bmin[3 * t + 1] || y > bmax[3 * t + 1]) continue;
+      const [a, b, c] = T[t];
+      const d = (P(b, 1) - P(c, 1)) * (P(a, 0) - P(c, 0)) + (P(c, 0) - P(b, 0)) * (P(a, 1) - P(c, 1)); if (!d) continue;
+      const l0 = ((P(b, 1) - P(c, 1)) * (x - P(c, 0)) + (P(c, 0) - P(b, 0)) * (y - P(c, 1))) / d;
+      const l1 = ((P(c, 1) - P(a, 1)) * (x - P(c, 0)) + (P(a, 0) - P(c, 0)) * (y - P(c, 1))) / d, l2 = 1 - l0 - l1;
+      if (!(l0 > 0 && l1 > 0 && l2 > 0)) continue;
+      const zt = l0 * P(a, 2) + l1 * P(b, 2) + l2 * P(c, 2);
+      if ((zt - z) * up > eps) hits++;
+    }
+    if (hits % 2) reversed++;
+  });
+  return { crossings, reversed };
+}
+
 /**
  * V - E + F = 2 says closed, genus 0 and watertight in a
  * single number, and it is the assertion a shared equator either satisfies or does not. The four
  * cheaper checks are here because Euler alone cannot tell a correct mesh from two different errors
- * that cancel.
+ * that cancel, and the geometric pair (puffGeomCheck) because no count sees a fold.
  */
 export function puffInvariants(p) {
   const faces = [];
@@ -1679,12 +2243,14 @@ export function puffInvariants(p) {
   const used = new Set(); for (const f of faces) for (const v of f) used.add(v);
   let nan = 0; for (let i = 0; i < p.positions.length; i++) if (!Number.isFinite(p.positions[i])) nan++;
   const V = p.nv, E = edge.size, F = faces.length;
+  const { crossings, reversed } = nan ? { crossings: 0, reversed: 0 } : puffGeomCheck(p.positions, faces);
   return {
     V, E, F, euler: V - E + F,
     closed: boundary === 0, boundary, nonManifold, repeated, misoriented,
-    orphans: V - used.size, nan,
+    orphans: V - used.size, nan, crossings, reversed,
     ok: boundary === 0 && nonManifold === 0 && repeated === 0 && (V - used.size) === 0
-        && nan === 0 && (V - E + F) === ((p && typeof p.holes === 'number') ? (2 - 2 * p.holes) : 2) && misoriented === 0,
+        && nan === 0 && (V - E + F) === ((p && typeof p.holes === 'number') ? (2 - 2 * p.holes) : 2) && misoriented === 0
+        && crossings === 0 && reversed === 0,
   };
 }
 

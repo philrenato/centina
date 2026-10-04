@@ -11,8 +11,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert';
-import { makeLine, makeCircle, revolve } from '../kernel/primitives.mjs';
-import { weldTriangulation, flattenLSCM } from '../kernel/flatten.mjs';
+import { makeLine, makeCircle, makeArc, revolve } from '../kernel/primitives.mjs';
+import { weldTriangulation, flattenLSCM, dropDegenerateFaces } from '../kernel/flatten.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 import {
   cutToDisk, cutMeshAlongEdges, describeMeshTopology, boundaryComponents,
@@ -575,4 +575,79 @@ test('cutAndFlattenNurbsSurface refuses a non-surface, and reports its seam and 
   assert.strictEqual(r.tessellation.cutVertexCount - r.tessellation.weldedVertexCount, r.seam.cuts[0].edgeCount + 1);
   assert.match(r.seam.note, /No vertex moved/);
   assert.ok(r.distortion.edge.maxRelErr < 1e-8, `cone edge maxRelErr ${r.distortion.edge.maxRelErr}`);
+});
+
+// Cone points and trimmed regions
+
+// A full revolve that reaches the axis welds into a disk whose apex is an
+// interior vertex carrying the whole angle defect 2*pi*(1 - R/L). No interior
+// flattening of that vertex is isometric, so the apex is cut to the rim.
+const APEX_R = 30, APEX_H = 40;
+const cone360ToApex = () => revolve(makeLine([APEX_R, 0, 0], [0, 0, APEX_H]), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
+
+test('a full cone to its apex is cut from the apex to the rim and unrolls exactly', () => {
+  const m = dropDegenerateFaces(weldedMesh(cone360ToApex(), 12, 6));
+  assert.strictEqual(eulerCharacteristic(m.positions, m.faces), 1, 'a full cone to its apex welds into a disk');
+  const r = cutAndFlattenNurbsSurface(cone360ToApex(), { uRes: 12, vRes: 6 });
+  assert.ok(r.seam.cuts.some((c) => c.kind === 'cone-point'), `expected a cone-point cut, got ${JSON.stringify(r.seam.cuts.map((c) => c.kind))}`);
+  assert.strictEqual(eulerCharacteristic(r.positions, r.faces), 1);
+  assert.strictEqual(r.developable, true);
+  assert.ok(r.distortion.edge.maxRelErr < 1e-8, `cone edge maxRelErr ${r.distortion.edge.maxRelErr}`);
+  // The sector's radius is the slant length: every rim vertex lands at
+  // distance L from the apex.
+  const L = Math.hypot(APEX_R, APEX_H);
+  const apex = r.positions.findIndex((p) => Math.hypot(p[0], p[1]) < 1e-9);
+  for (let i = 0; i < r.positions.length; i++) {
+    if (Math.abs(r.positions[i][2]) > 1e-9) continue;
+    assert.ok(Math.abs(uvDist(r.uv, apex, i) - L) < 1e-6 * L, `rim vertex ${i} at ${uvDist(r.uv, apex, i)} from the apex, slant ${L}`);
+  }
+});
+
+test('a smooth pole is not a cone point — a hemisphere is not cut', () => {
+  const hemi = revolve(makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], 25, 0, Math.PI / 2, 2), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
+  for (const [u, v] of [[8, 8], [16, 12], [24, 24]]) {
+    const m = dropDegenerateFaces(weldedMesh(hemi, u, v));
+    const r = cutToDisk(m.positions, m.faces);
+    assert.strictEqual(r.cuts.length, 0, `hemisphere at ${u}x${v} was cut ${r.cuts.length} time(s)`);
+  }
+});
+
+test('a trimmed patch flattens its trimmed region, not the patch it sits on', () => {
+  // A 187.2 x 107.2 plane trimmed to a 180 x 100 rectangle.
+  const srf = { degU: 1, degV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1],
+    ctrlNet: [[[-3.6, -3.6, 0, 1], [-3.6, 103.6, 0, 1]], [[183.6, -3.6, 0, 1], [183.6, 103.6, 0, 1]]] };
+  const s = (x) => (x + 3.6) / 187.2, t = (y) => (y + 3.6) / 107.2;
+  const trimLoop = [[s(0), t(0)], [s(180), t(0)], [s(180), t(100)], [s(0), t(100)]];
+  const r = cutAndFlattenNurbsSurface(srf, { uRes: 8, vRes: 8, trimLoop });
+  const area = totalArea(r.positions, r.faces);
+  assert.ok(Math.abs(area - 18000) < 1e-6, `trimmed area ${area}, expected 18000`);
+  // The layout's own rotation is free, so its size is read rotation-free:
+  // flat area and boundary perimeter of the 180 x 100 rectangle.
+  const flat = totalArea(r.uv.map(([u, v]) => [u, v, 0]), r.faces);
+  assert.ok(Math.abs(flat - 18000) < 1e-6, `flat area ${flat}, expected 18000`);
+  const count = new Map();
+  for (const [a, b, c] of r.faces) for (const [x, y] of [[a, b], [b, c], [c, a]]) { const k = x < y ? `${x}|${y}` : `${y}|${x}`; count.set(k, (count.get(k) || 0) + 1); }
+  let perim = 0;
+  for (const [k, n] of count) if (n === 1) { const [a, b] = k.split('|').map(Number); perim += uvDist(r.uv, a, b); }
+  assert.ok(Math.abs(perim - 560) < 1e-6, `flat perimeter ${perim}, expected 560`);
+});
+
+test('a trimmed curved patch with a hole is cut to a disk; developable is the surface\'s verdict', () => {
+  const half = revolve(makeLine([20, 0, 0], [20, 0, 30]), [0, 0, 0], [0, 0, 1], 0, Math.PI);
+  const star = [];
+  for (let i = 0; i < 40; i++) { const a = 2 * Math.PI * i / 40, rr = i % 2 ? 0.25 : 0.4; star.push([0.5 + 0.9 * rr * Math.cos(a), 0.5 + rr * Math.sin(a)]); }
+  const hole = [];
+  for (let i = 0; i < 12; i++) { const a = -2 * Math.PI * i / 12; hole.push([0.37 + 0.05 * Math.cos(a), 0.43 + 0.06 * Math.sin(a)]); }
+  const err = [];
+  for (const res of [24, 96]) {
+    const r = cutAndFlattenNurbsSurface(half, { uRes: res, vRes: res, trimLoop: star, holes: [hole] });
+    assert.strictEqual(r.seam.chiBefore, 0, 'a region with one hole is an annulus');
+    assert.deepStrictEqual(r.seam.cuts.map((c) => c.kind), ['boundary-path'], `at ${res}: one boundary cut, no cone point`);
+    // Developable is the surface's verdict; the residual is the clipped
+    // cells' own triangulation and falls as the grid is refined.
+    assert.strictEqual(r.developable, true, `at ${res}`);
+    assert.ok(r.surfaceDefect < 1e-9, `surface defect ${r.surfaceDefect}`);
+    err.push(r.distortion.edge.maxRelErr);
+  }
+  assert.ok(err[1] < err[0] / 8, `edge error does not fall with the grid: ${err}`);
 });

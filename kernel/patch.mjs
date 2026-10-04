@@ -33,7 +33,6 @@
 import { fitPlane } from './refit.mjs';
 import { solveLinearSystem } from './interpolate.mjs';
 import { findSpan, basisFuns } from './basis.mjs';
-import { surfacePoint } from './surface.mjs';
 
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -192,6 +191,9 @@ export function fitPatch(inputs, opts = {}) {
   // Data rows, sparse: a target touches (degree+1)^2 control points, a fairness
   // row three. Rows are (indices, values) pairs, so forming the normal equations
   // costs the entries that exist rather than the square of the net.
+  // `opts.weights`, one positive number per target, scales its row: w counts that
+  // target w^2 times in the normal equations.
+  const weights = Array.isArray(opts.weights) && opts.weights.length === targets.length ? opts.weights : null;
   const rows = [], rhs = [[], [], []];
   for (let k = 0; k < targets.length; k++) {
     const [uu, vv] = params[k];
@@ -203,11 +205,12 @@ export function fitPatch(inputs, opts = {}) {
     for (let a = 0; a <= degree; a++) {
       for (let b = 0; b <= degree; b++) {
         ix.push(idx(uspan - degree + a, vspan - degree + b));
-        vx.push(Nu[a] * Nv[b]);
+        vx.push(Nu[a] * Nv[b] * (weights ? weights[k] : 1));
       }
     }
     rows.push({ ix, vx });
-    rhs[0].push(targets[k][0]); rhs[1].push(targets[k][1]); rhs[2].push(targets[k][2]);
+    const wk = weights ? weights[k] : 1;
+    rhs[0].push(targets[k][0] * wk); rhs[1].push(targets[k][1] * wk); rhs[2].push(targets[k][2] * wk);
   }
 
   /* Fairness rows. A second difference across three consecutive control
@@ -296,12 +299,14 @@ export function fitPatch(inputs, opts = {}) {
      the residual at the fit parameters, not the true point-to-surface
      distance, which would need a projection per point. It is an upper bound
      on that distance — the surface may pass closer somewhere else — so
-     reporting it cannot understate the error. */
+     reporting it cannot understate the error. Evaluated from the target's own
+     row of basis values, which is the surface point there. */
   let worst = 0, sum = 0;
   for (let k = 0; k < targets.length; k++) {
-    const [uu, vv] = params[k];
-    const s = surfacePoint(srf, uu, vv);
-    const d = len3(sub3(s, targets[k]));
+    const { ix, vx } = rows[k], wk = weights ? weights[k] : 1;
+    const s = [0, 0, 0];
+    for (let p = 0; p < ix.length; p++) for (let c = 0; c < 3; c++) s[c] += vx[p] * sol[c][ix[p]];
+    const d = len3(sub3([s[0] / wk, s[1] / wk, s[2] / wk], targets[k]));
     if (d > worst) worst = d;
     sum += d * d;
   }

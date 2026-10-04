@@ -43,6 +43,98 @@ export function rhinoKnotsToOurs(reduced) {
   return [reduced[0], ...reduced, reduced[reduced.length - 1]];
 }
 
+// Unclamped knots
+//
+// A periodic Rhino curve or surface (a torus, a circle drawn periodic, any
+// closed freeform Rhino stores as "periodic") carries a uniform knot vector
+// with no end multiplicity: its first and last control points are not the
+// ends of the curve, the last `degree` points repeat the first `degree`, and
+// a closure test on the end points or end rows reads it as open. Every
+// consumer here assumes the clamped convention of rule 1, so an unclamped
+// direction is clamped on import: the domain's two ends are inserted (Boehm)
+// until each has multiplicity p, the parts outside the domain are dropped,
+// and the result is the identical curve over [U[p], U[n]] with p+1 equal
+// knots at each end. A periodic input comes out closed with a seam: its first
+// and last points coincide.
+
+function knotsClamped(knots, p) {
+  const m = knots.length - 1;
+  const span = Math.abs(knots[m] - knots[0]) || 1;
+  const eps = 1e-12 * span;
+  for (let i = 1; i <= p; i++) {
+    if (Math.abs(knots[i] - knots[0]) > eps) return false;
+    if (Math.abs(knots[m - i] - knots[m]) > eps) return false;
+  }
+  return true;
+}
+
+// One Boehm insertion of `u` into homogeneous points `P` ([wx, wy, wz, w]).
+function insertKnotOnce(p, U, P, u) {
+  const n = P.length - 1;
+  let k = p;
+  while (k + 1 < U.length - 1 && U[k + 1] <= u) k++;
+  let s = 0;
+  for (let i = 0; i < U.length; i++) if (U[i] === u) s++;
+  const Q = [];
+  for (let i = 0; i <= n + 1; i++) {
+    if (i <= k - p) Q.push(P[i].slice());
+    else if (i > k - s) Q.push(P[i - 1].slice());
+    else {
+      const a = (u - U[i]) / (U[i + p] - U[i]);
+      Q.push(P[i].map((c, d) => a * c + (1 - a) * P[i - 1][d]));
+    }
+  }
+  const V = [...U.slice(0, k + 1), u, ...U.slice(k + 1)];
+  return { U: V, P: Q };
+}
+
+function multiplicity(U, u) { let s = 0; for (const x of U) if (x === u) s++; return s; }
+
+// Clamp one direction: `P` homogeneous, returns { U, P } clamped on [U[p], U[n]].
+function clampHomogeneous(p, U, P) {
+  const a = U[p], b = U[P.length];
+  let cur = { U: U.slice(), P: P.map((x) => x.slice()) };
+  while (multiplicity(cur.U, a) < p) cur = insertKnotOnce(p, cur.U, cur.P, a);
+  while (multiplicity(cur.U, b) < p) cur = insertKnotOnce(p, cur.U, cur.P, b);
+  const r = cur.U.indexOf(a);
+  const t = cur.U.indexOf(b);
+  return {
+    U: [a, ...cur.U.slice(r, t + p), b],
+    P: cur.P.slice(r - 1, t),
+  };
+}
+
+const toH = ([x, y, z, w]) => [x * w, y * w, z * w, w];
+const fromH = ([X, Y, Z, W]) => [X / W, Y / W, Z / W, W];
+
+export function clampCurveKnots(crv) {
+  const { degree: p, knots, ctrlPts } = crv;
+  if (knotsClamped(knots, p)) return crv;
+  const c = clampHomogeneous(p, knots, ctrlPts.map(toH));
+  return { degree: p, knots: c.U, ctrlPts: c.P.map(fromH) };
+}
+
+export function clampSurfaceKnots(srf) {
+  let { degU, degV, knotsU, knotsV, ctrlNet } = srf;
+  if (!knotsClamped(knotsV, degV)) {
+    let outV = null;
+    ctrlNet = ctrlNet.map((row) => { const c = clampHomogeneous(degV, knotsV, row.map(toH)); outV = c.U; return c.P.map(fromH); });
+    knotsV = outV;
+  }
+  if (!knotsClamped(knotsU, degU)) {
+    const nv = ctrlNet[0].length;
+    const cols = [];
+    let outU = null;
+    for (let j = 0; j < nv; j++) {
+      const c = clampHomogeneous(degU, knotsU, ctrlNet.map((row) => toH(row[j])));
+      outU = c.U; cols.push(c.P.map(fromH));
+    }
+    ctrlNet = cols[0].map((_, i) => cols.map((col) => col[i]));
+    knotsU = outU;
+  }
+  return { degU, degV, knotsU, knotsV, ctrlNet };
+}
+
 // Curve
 
 // Our curve: { degree, knots, ctrlPts: [[x,y,z,w], ...] }
@@ -84,7 +176,7 @@ export function curveFromRhino(rhinoCrv) {
     const [X, Y, Z, W] = ptList.get(i);
     ctrlPts.push([X / W, Y / W, Z / W, W]);
   }
-  return { degree, knots, ctrlPts };
+  return clampCurveKnots({ degree, knots, ctrlPts });
 }
 
 // Analytic curve kinds
@@ -275,7 +367,7 @@ export function surfaceFromRhino(rhinoSrf) {
     }
     ctrlNet.push(row);
   }
-  return { degU, degV, knotsU, knotsV, ctrlNet };
+  return clampSurfaceKnots({ degU, degV, knotsU, knotsV, ctrlNet });
 }
 
 // Brep trim boundaries

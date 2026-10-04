@@ -102,6 +102,10 @@ export const PIPE_NETWORK_HULL_ROUNDS = 4;
 // pull-back, or a chain kinking beside a joint, is invisible to the per-joint
 // inset, which only sees each arm's own end direction.
 export const PIPE_NETWORK_CLEAR_THIN = 0.85;
+// The most a corner ring is stretched along its bend (1/cos of half the
+// turn): a full miter up to a 120-degree turn, held at twice the radius past
+// it, where the ring would reach out beside the tube toward its neighbors.
+export const PIPE_NETWORK_MITER_LIMIT = 2;
 export const PIPE_NETWORK_CLEAR_ROUNDS = 6;
 
 // Small curve helpers
@@ -328,6 +332,113 @@ function mergeCage(target, cage) {
     target.creases[A < B ? `${A}_${B}` : `${B}_${A}`] = w;
   }
   return offset;
+}
+
+// A rail's corners: interior knots of full multiplicity where the tangent
+// turns. Two rails joined at an arity-2 junction are one rail with a C0 knot
+// at the join; elsewhere the rail is smooth. Each corner is { u, tIn, tOut,
+// theta }, the one-sided unit tangents read a hair either side of the knot.
+function pipeNetRailCorners(c) {
+  const p = c.degree, U = c.knots, [u0, u1] = domainOf(c), h = (u1 - u0) * 1e-7;
+  const out = [];
+  for (let i = p + 1; i < U.length - p - 1; i++) {
+    if (U[i] === U[i - 1]) continue;
+    let m = 1; while (i + m < U.length && U[i + m] === U[i]) m++;
+    if (m < p) continue;
+    const u = U[i];
+    const [, dIn] = rationalCurveDerivs(c, u - h, 1), [, dOut] = rationalCurveDerivs(c, u + h, 1);
+    const lIn = length(dIn), lOut = length(dOut);
+    if (!(lIn > 0 && lOut > 0)) continue;
+    const tIn = scale(dIn, 1 / lIn), tOut = scale(dOut, 1 / lOut);
+    const theta = Math.acos(Math.max(-1, Math.min(1, dot(tIn, tOut))));
+    if (theta > 1e-3) out.push({ u, tIn, tOut, theta });
+  }
+  return out;
+}
+
+// A tube ring at a rail's corner sits in the corner's miter plane. The tube's
+// rings ride parallel-transport frames at arc-length-even stations, and a
+// frame at a C0 knot is square to one leg only: when a station lands on (or
+// within a node's jitter of) the corner, that ring stands across the other
+// leg, and the faces on the inside of the bend pass through each other (a
+// 90-degree corner at two segments: 6 of 12 faces). So an interior station
+// within one radius of a corner (and within half a spacing) is moved onto it
+// and its ring rebuilt square to the bisector of the two legs, stretched
+// 1/cos(theta/2) along the bend so it meets both cylinders (the miter),
+// keeping its own first vertex's direction. A station farther off is square
+// to its own leg already and stays: moving it onto a corner that sits by
+// another junction's hub puts the ring inside that hub. `tube` is
+// subdPipeCage's, rings first, ring-major.
+function pipeNetMiterCornerRings(tube, curve, facets, segments, radius) {
+  const corners = pipeNetRailCorners(curve);
+  if (!corners.length || segments < 2) return;
+  const [u0, u1] = domainOf(curve);
+  const total = buildArcLengthTable(curve, u0, u1).total;
+  if (!(total > 0)) return;
+  const step = total / segments, used = new Set();
+  for (const k of corners) {
+    const sc = buildArcLengthTable(curve, u0, k.u).total;
+    const s = Math.round(sc / step);
+    if (s < 1 || s > segments - 1 || used.has(s) || Math.abs(sc - s * step) > Math.min(step / 2, radius)) continue;
+    used.add(s);
+    const ring = [];
+    for (let i = 0; i < facets; i++) ring.push(s * facets + i);
+    const old = ring.map((vi) => tube.vertices[vi]);
+    const c0 = scale(old.reduce((a, v) => add(a, v), [0, 0, 0]), 1 / facets);
+    const z = normalize(add(k.tIn, k.tOut));
+    const x0 = sub(old[0], c0), xz = sub(x0, scale(z, dot(x0, z)));
+    if (!(length(xz) > 0)) continue;
+    const x = normalize(xz), yz = cross(z, x);
+    // The ring keeps its winding: its second vertex stays on the same side.
+    const y = facets > 2 && dot(sub(old[1], c0), yz) < 0 ? scale(yz, -1) : yz;
+    const bend = normalize(sub(k.tOut, k.tIn));
+    const stretch = Math.min(1 / Math.cos(k.theta / 2), PIPE_NETWORK_MITER_LIMIT);
+    const o = curvePoint(curve, k.u);
+    ring.forEach((vi, i) => {
+      const a = (i / facets) * Math.PI * 2;
+      const d = add(scale(x, radius * Math.cos(a)), scale(y, radius * Math.sin(a)));
+      tube.vertices[vi] = add(o, add(d, scale(bend, (stretch - 1) * dot(d, bend))));
+    });
+  }
+}
+
+// Each ring of a tube clocked to the one before it. The rings ride the rail's
+// transported frames, and across a C0 corner the transport can turn a ring
+// about the rail against its neighbor (half a turn on a voronoi cell border
+// at a 90-degree corner), so the band between them winds round itself and
+// its faces cross. Each ring is compared with the one before carried onto it
+// by the least rotation (about the cross product of the two rings' normals),
+// and its vertices are rotated round the ring by the whole number of steps
+// that brings them nearest. Nearest without the carry is not least twist:
+// two rings more than a right angle apart match closest half a turn round.
+// Positions move within the ring and no index changes, so the faces, the
+// rims a junction reads and the caps keep their meaning; a ring is never
+// reversed, so winding holds.
+function pipeNetClockRings(tube, facets, nRings) {
+  const ringAt = (k) => { const v = []; for (let i = 0; i < facets; i++) v.push(tube.vertices[k * facets + i]); return v; };
+  const frameOf = (v) => {
+    const c = scale(v.reduce((a, q) => add(a, q), [0, 0, 0]), 1 / v.length);
+    let n = [0, 0, 0];
+    for (let i = 0; i < v.length; i++) { const a = v[i], b = v[(i + 1) % v.length]; n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]); }
+    return { c, n: length(n) > 1e-12 ? normalize(n) : null, o: v.map((q) => sub(q, c)) };
+  };
+  // Rodrigues: v turned about unit axis k by the angle whose cosine is ca.
+  const turn = (v, k, ca, sa) => add(add(scale(v, ca), scale(cross(k, v), sa)), scale(k, dot(k, v) * (1 - ca)));
+  let prev = frameOf(ringAt(0));
+  for (let k = 1; k < nRings; k++) {
+    const ring = ringAt(k), cur = frameOf(ring);
+    if (!prev.n || !cur.n) { prev = cur; continue; }
+    const ax = cross(prev.n, cur.n), sa = length(ax), ca = dot(prev.n, cur.n);
+    const carried = sa > 1e-12 ? prev.o.map((o) => turn(o, scale(ax, 1 / sa), ca, sa)) : prev.o.map((o) => (ca < 0 ? scale(o, -1) : o));
+    let best = 0, bestCost = Infinity;
+    for (let sh = 0; sh < facets; sh++) {
+      let cost = 0;
+      for (let i = 0; i < facets; i++) { const d = sub(cur.o[(i + sh) % facets], carried[i]); cost += dot(d, d); }
+      if (sh === 0 || cost < bestCost * (1 - 1e-12)) { bestCost = cost; best = sh; }
+    }
+    if (best) for (let i = 0; i < facets; i++) tube.vertices[k * facets + i] = ring[(i + best) % facets];
+    prev = frameOf(ringAt(k));
+  }
 }
 
 // The plane residual of a set of points about their own mean, as a
@@ -619,8 +730,52 @@ function buildComponent(comp, det, cfg) {
   };
   const endJunctions = work.map(() => []);
   for (const info of junctionInfo) for (const arm of info.arms) endJunctions[arm.rail].push(info);
-  const fitRadii = () => {
+  // A rail's pull-back as its joints stand now: each end's inset read from
+  // the present radii.
+  const railJunctions = endJunctions.map((list) => [...new Set(list)]);
+  const endsNow = (li) => railJunctions[li].map((info) => {
+    if (info.pair) info.armD = armBase(info);
+    const fat = Math.max(...info.arms.map((arm) => r[arm.rail]));
+    let e = 0;
+    info.arms.forEach((arm, a) => { if (arm.rail === li) e += info.pair ? armInset(info, a) : info.factor * fat; });
+    return { info, e };
+  });
+  // What the pair caps leave over. They converge on most networks. Where a
+  // joint's facet coupling holds an end back past every pair, the caps shrink
+  // the pair a step every pass while the coupling keeps the end where it was:
+  // the radii run down toward zero (1e-13 of the asked radius in 100 passes
+  // on a gyroid in a torus), the shared fallback never gets a quiet pass, and
+  // the rail is left longer than its room. Then the caps' radii are dropped
+  // and every rail still over is settled on its own, a whole joint at a time
+  // (the pull-back is linear in a joint's radii, so one step lands it): the
+  // end holding it back more is brought down to what the other end leaves
+  // (never below half the room), and the next pass takes the other end if it
+  // is still over. Thinning both ends alike thins every joint a short rail
+  // touches, and through them the network (an octet in a cube ran to a
+  // fiftieth of the radius).
+  const settleRadii = () => {
     for (let pass = 0; pass < 100; pass++) {
+      let thinned = false;
+      work.forEach((w, li) => {
+        if (!w) return;
+        const ends = endsNow(li).sort((x, y) => y.e - x.e);
+        const need = ends.reduce((t, x) => t + x.e, 0), room = PIPE_NETWORK_FIT_HEADROOM * lengths[li];
+        if (!(need > room * (1 + 1e-9))) return;
+        // One joint per rail per pass, each read fresh: thinning one end's
+        // joint thins this rail too, which can shorten the other end.
+        const x = ends[0], rest = need - x.e;
+        const want = ends.length > 1 ? Math.max(room - rest, room / 2) : room;
+        const q = Math.min(want / x.e, 1);
+        for (const o of new Set(x.info.arms.map((arm) => arm.rail))) r[o] *= q;
+        thinned = true;
+      });
+      if (!thinned) return;
+    }
+  };
+  const fitRadii = () => {
+    const before = r.slice();
+    let settled = false;
+    for (let pass = 0; pass < 100 && !settled; pass++) {
       let thinned = false;
       const ins = insetFor();
       work.forEach((w, li) => {
@@ -653,8 +808,10 @@ function buildComponent(comp, det, cfg) {
           for (const arm of info.arms) if (r[arm.rail] > k * fat) { r[arm.rail] = k * fat; thinned = true; }
         }
       });
-      if (!thinned) return;
+      if (!thinned) settled = true;
     }
+    if (!settled) for (let li = 0; li < r.length; li++) r[li] = before[li];
+    settleRadii();
   };
   // Trim. A rail shorter than the insets its own two junctions demand
   // has no tube left in the middle — refused by name, with the numbers.
@@ -732,6 +889,8 @@ function buildComponent(comp, det, cfg) {
     if (!atJunction[li].start) freeEndCount++;
     if (!atJunction[li].end) freeEndCount++;
     const tube = buildTube(trimmed[li].curve, cs, ce, r[li]);
+    pipeNetMiterCornerRings(tube, trimmed[li].curve, cfg.facets, cfg.segments, r[li]);
+    pipeNetClockRings(tube, cfg.facets, cfg.segments + 1);
     const f0 = cage.faces.length;
     const offset = mergeCage(cage, tube);
     tubeFaces[li] = [f0, cage.faces.length];
@@ -789,7 +948,9 @@ function buildComponent(comp, det, cfg) {
         res = bridgeClosedRimsHub(current, armRims, { creaseWeight: junctionCrease });
       }
     } catch (err) {
-      return { ok: false, reason: `the ${info.arity}-arm junction at (${info.point.map((v) => v.toFixed(2)).join(', ')}) could not be welded: ${err.message}` };
+      // The construction's own message stays in `detail`; the reason is the
+      // one a user can act on.
+      return { ok: false, reason: `a ${info.arity}-arm joint will not weld; lower the radius`, detail: err.message, junctionPoint: info.point };
     }
     current = res.cage;
     hubs.push({ point: info.point, arity: info.arity, inset: info.inset, armAngle: info.armAngle, spatial: !!info.spatial, faceIndices: res.hubFaceIndices, poleIndices: res.poleIndices });
@@ -844,10 +1005,14 @@ export function cageCrossingFacePairs(cage) {
     }
   });
   if (!tris.length) return [];
-  const eps = 1e-10;
+  // An edge lying a hair off a face's plane still pierces it: one arm's rim
+  // vertex sitting on a neighbor's tube face (det 1.4e-12 on a kelvin slide)
+  // is two tubes touching. Only an edge parallel to the face to 1e-12 is not
+  // counted.
+  const eps = 1e-10, flat = 1e-12;
   const pierces = (p0, p1, a, b, c) => {
     const d = sub(p1, p0), e1 = sub(b, a), e2 = sub(c, a), h = cross(d, e2), det = dot(e1, h);
-    if (Math.abs(det) < eps) return false;
+    if (Math.abs(det) < flat) return false;
     const inv = 1 / det, sv = sub(p0, a), u = dot(sv, h) * inv;
     if (u < eps || u > 1 - eps) return false;
     const q = cross(sv, e1), v = dot(d, q) * inv;
@@ -916,7 +1081,7 @@ export function bridgeClosedRimsHull(vertices, rims) {
   rims.forEach((rim, k) => rim.forEach((vi) => rimOf.set(vi, k)));
   // Each peak rises off its rim's own plane (Newell's normal), on the side
   // away from the junction, so it sits over that facet and no other.
-  const peakBase = P.length;
+  const peakBase = P.length, peakDirs = [];
   rims.forEach((rim, k) => {
     let nrm = [0, 0, 0];
     for (let i = 0; i < rim.length; i++) {
@@ -925,24 +1090,47 @@ export function bridgeClosedRimsHull(vertices, rims) {
     }
     if (!(length(nrm) > 0)) nrm = sub(centres[k], junction);
     if (dot(nrm, sub(centres[k], junction)) < 0) nrm = scale(nrm, -1);
-    P.push(add(centres[k], scale(normalize(nrm), extent * 1e-4)));
+    peakDirs.push(normalize(nrm));
+    P.push(add(centres[k], scale(peakDirs[k], extent * 1e-4)));
   });
-  const hull = convexHullFaces(P);
-  const onHull = new Set();
-  let faces = [];
-  for (const f of hull) {
-    const peak = f.find((i) => i >= peakBase);
-    if (peak !== undefined) {
-      const k = peak - peakBase;
-      for (const i of f) if (i < peakBase && rimOf.get(pts[i]) !== k) throw new Error(`bridgeClosedRimsHull: rim ${k + 1} is not a facet of the junction's hull — its arm ends inside the junction the others make`);
-      for (const i of f) if (i < peakBase) onHull.add(pts[i]);
-      continue;
+  // The hull's faces, or the rim that is not a facet of it.
+  const hullOf = (Q) => {
+    const onHull = new Set(), out = [];
+    for (const f of convexHullFaces(Q)) {
+      const peak = f.find((i) => i >= peakBase);
+      if (peak !== undefined) {
+        const k = peak - peakBase;
+        for (const i of f) if (i < peakBase && rimOf.get(pts[i]) !== k) return { bad: k };
+        for (const i of f) if (i < peakBase) onHull.add(pts[i]);
+        continue;
+      }
+      const vs = f.map((i) => pts[i]);
+      vs.forEach((vi) => onHull.add(vi));
+      if (new Set(vs.map((vi) => rimOf.get(vi))).size > 1) out.push(vs);
     }
-    const vs = f.map((i) => pts[i]);
-    vs.forEach((vi) => onHull.add(vi));
-    if (new Set(vs.map((vi) => rimOf.get(vi))).size > 1) faces.push(vs);
+    for (const vi of pts) if (!onHull.has(vi)) return { bad: rimOf.get(vi) };
+    return { faces: out };
+  };
+  // Two ways a rim that is a facet reads as one that is not. Rims of arms
+  // square to a lattice share supporting planes: on a cube's face a joint's
+  // six hull points can lie in one plane, and the incremental hull drops a
+  // point that lands in that plane outside the triangles built so far. And a
+  // rim whose neighbors clear its plane by less than its peak's slope reaches
+  // across (a cube-corner joint of seven arms: 0.0007 under a plane whose
+  // peak stands 0.0004 over a 0.8 rim). Then the hull is taken again with the
+  // peaks a hundredth as high, over the points domed a hair about the
+  // junction (each pushed out by 1e-5 of its distance, less the farther out it
+  // lies), which puts every point of a shared plane in strictly convex
+  // position; the faces are built from the points themselves, unmoved.
+  let built = hullOf(P);
+  if (built.bad !== undefined) {
+    const low = P.map((q, i) => (i < peakBase ? q : add(centres[i - peakBase], scale(peakDirs[i - peakBase], extent * 1e-6))));
+    const domed = low.map((q) => { const d = sub(q, junction), t = dot(d, d) / (extent * extent); return add(junction, scale(d, 1 + 1e-5 * (1 - Math.min(1, t)))); });
+    const again = hullOf(domed);
+    if (again.faces) built = again;
   }
-  for (const vi of pts) if (!onHull.has(vi)) throw new Error(`bridgeClosedRimsHull: rim ${rimOf.get(vi) + 1} is not a facet of the junction's hull — its arm ends inside the junction the others make`);
+  if (built.bad !== undefined) throw new Error(`bridgeClosedRimsHull: rim ${built.bad + 1} is not a facet of the junction's hull — its arm ends inside the junction the others make`);
+  let faces = built.faces;
   // Wind against the tubes: find a hull face on a rim edge and compare.
   const tubeDir = new Set();
   for (const rim of rims) for (let k = 0; k < rim.length; k++) tubeDir.add(`${rim[k]}>${rim[(k + 1) % rim.length]}`);

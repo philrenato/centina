@@ -460,6 +460,86 @@ export function handleCycle(positions, faces, topo) {
   return best;
 }
 
+// Per-vertex angle sum, one-third triangle area and one-ring, the inputs of
+// a discrete Gaussian curvature estimate (defect = 2*pi - angle sum).
+export function vertexAngleDefects(positions, faces) {
+  const n = positions.length;
+  const angleSum = new Float64Array(n), area = new Float64Array(n);
+  const ring = new Map();
+  const link = (a, b) => { if (!ring.has(a)) ring.set(a, new Set()); ring.get(a).add(b); };
+  for (const tri of faces) {
+    const P = [positions[tri[0]], positions[tri[1]], positions[tri[2]]];
+    const e1 = [P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]];
+    const e2 = [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]];
+    const third = 0.5 * Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]) / 3;
+    for (let i = 0; i < 3; i++) {
+      const A = P[i], B = P[(i + 1) % 3], C = P[(i + 2) % 3];
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const cr = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+      angleSum[tri[i]] += Math.atan2(cr, u[0] * v[0] + u[1] * v[1] + u[2] * v[2]);
+      area[tri[i]] += third;
+      link(tri[i], tri[(i + 1) % 3]); link(tri[i], tri[(i + 2) % 3]);
+    }
+  }
+  return { angleSum, area, ring };
+}
+
+// Interior vertices that carry a cone point: an angle defect concentrated at
+// the vertex rather than spread over the surface. A full revolve that reaches
+// its axis (a cone to its apex, a pointed dome) welds into a disk whose apex
+// holds the defect 2*pi*(1 - sin a) for a half-angle a; no layout of an
+// interior vertex with that defect is isometric, so the apex is cut to the
+// rim instead (`cutToDisk`). A smooth pole is told apart by curvature
+// density: defect / vertex area estimates the Gaussian curvature K, which at
+// a smooth pole matches its one-ring (within a factor of about 4 on a
+// revolve grid), while at a cone point the defect stays finite as the
+// vertex area shrinks, so K there exceeds every neighbor's by orders of
+// magnitude. The comparison needs a regular grid: on a trimmed
+// tessellation a clipped cell beside exactly flat grid cells reads as a
+// cone, so a trimmed region takes its cone points from its untrimmed
+// surface (`cutAndFlattenNurbsSurface`). Read on the uncut input, since a
+// cut makes boundary vertices of the neighbors the comparison needs. A
+// vertex with fewer than three interior neighbors, or with most of its ring
+// on the boundary, is never a cone point. `coneMinDefect` (radians) ignores
+// rounding noise on a developable mesh; `coneCurvatureRatio` is the K
+// multiple over the one-ring.
+export function interiorConePoints(positions, faces, topo, opts = {}) {
+  const minDefect = opts.coneMinDefect != null ? opts.coneMinDefect : 1e-3;
+  const ratio = opts.coneCurvatureRatio != null ? opts.coneCurvatureRatio : 25;
+  const { angleSum, area, ring } = vertexAngleDefects(positions, faces);
+  const interior = (v) => ring.has(v) && !topo.boundaryVertices.has(v);
+  const K = (v) => (area[v] > 0 ? Math.abs(2 * Math.PI - angleSum[v]) / area[v] : 0);
+  const out = [];
+  for (const v of ring.keys()) {
+    if (!interior(v)) continue;
+    const defect = 2 * Math.PI - angleSum[v];
+    if (!(Math.abs(defect) > minDefect)) continue;
+    let nk = 0, inner = 0;
+    for (const w of ring.get(v)) if (interior(w)) { inner++; nk = Math.max(nk, K(w)); }
+    if (inner < 3 || 2 * inner < ring.get(v).size) continue;
+    if (K(v) > ratio * nk) out.push({ vertex: v, defect });
+  }
+  out.sort((a, b) => Math.abs(b.defect) - Math.abs(a.defect));
+  return out;
+}
+
+// `opts.conePoints` ([x, y, z] positions) replaces the detection: each is
+// matched to the input vertex at that position (within 1e-9 of the mesh's
+// extent), and a position no vertex sits on is outside the region.
+function conePointsOf(positions, faces, topo, opts) {
+  if (!opts.conePoints) return interiorConePoints(positions, faces, topo, opts);
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of positions) for (let k = 0; k < 3; k++) { if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k]; }
+  const tol = 1e-9 * Math.max(1e-12, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]));
+  const out = [];
+  for (const q of opts.conePoints) {
+    let best = -1, bd = Infinity;
+    for (const v of topo.usedVertices) { const d = dist3(positions[v], q); if (d < bd) { bd = d; best = v; } }
+    if (best >= 0 && bd <= tol && !topo.boundaryVertices.has(best)) out.push({ vertex: best, defect: null });
+  }
+  return out;
+}
+
 // The driver
 
 // Cut a triangulation open until it is a topological disk, ready for
@@ -476,7 +556,8 @@ export function cutToDisk(positions, faces, opts = {}) {
   const info0 = describeMeshTopology(positions, faces);
   const chiBefore = info0.chi;
 
-  if (info0.isDisk) {
+  const cones0 = conePointsOf(positions, faces, info0.topo, opts);
+  if (info0.isDisk && !cones0.length) {
     return {
       positions: positions.map((p) => [p[0], p[1], p[2]]),
       faces: faces.map((t) => [t[0], t[1], t[2]]),
@@ -543,6 +624,22 @@ export function cutToDisk(positions, faces, opts = {}) {
     applyCut(path.edgeKeys, 'boundary-path', path.length);
   }
 
+  // Cone points: a slit from each to the boundary. The slit's end at the
+  // cone point is not duplicated (one fan, see `cutMeshAlongEdges`), its
+  // other end and every vertex between are, so chi and the boundary count
+  // are unchanged and the cone point becomes a boundary vertex whose
+  // defect the layout opens as a wedge. A cone point an earlier slit passed
+  // through is already open and is skipped.
+  for (const cone of cones0) {
+    if (cuts.length >= maxCuts) break;
+    const at = [];
+    for (let i = 0; i < vertexOrigin.length; i++) if (vertexOrigin[i] === cone.vertex) at.push(i);
+    const info = describeMeshTopology(pos, fac);
+    if (at.length !== 1 || info.topo.boundaryVertices.has(at[0])) continue;
+    const path = shortestInteriorPathBetween(pos, fac, info.topo, new Set(at), info.topo.boundaryVertices);
+    applyCut(path.edgeKeys, 'cone-point', path.length);
+  }
+
   // The result is re-derived from scratch and must be a disk, or this throws
   // rather than handing a caller a mesh LSCM would fold over.
   const after = describeMeshTopology(pos, fac);
@@ -562,25 +659,54 @@ export function cutToDisk(positions, faces, opts = {}) {
 // Tessellate a NURBS surface with this kernel's tessellator, weld it, cut it
 // open if it is not already a disk, and flatten it with LSCM.
 //
-// Takes no trim loop. Known limitation: the trimmed output of
-// `tessellateTrimmedSurface` does not in general weld into an edge-manifold
-// mesh (independently clipped neighboring cells leave T-junctions along
-// their shared edge), so a trimmed patch would be refused by
-// `describeMeshTopology` as non-manifold. A weld tolerance would hide the
-// T-junctions rather than remove them.
+// opts.trimLoop / opts.holes restrict it to a trimmed region (UV loops in
+// the surface's own domain, as `tessellateTrimmedSurface` takes them). The
+// trimmed tessellator shares every cell-boundary vertex between neighboring
+// cells (its T-junction repair), so the region welds edge-manifold and is
+// cut like any other mesh: a hole is one more boundary to connect.
+//
+// A trimmed region's clipped cells are triangulated across the surface's
+// rulings, so its own mesh carries an angle defect of order h^2 even on a
+// developable surface. Whether the SURFACE is developable, and where its
+// cone points are, is therefore read from the untrimmed grid at the same
+// resolution (cone points excluded from the defect), and the region's
+// residual distortion is reported as the tessellation's.
 export function cutAndFlattenNurbsSurface(srf, opts = {}) {
   if (!srf || !srf.ctrlNet) throw new Error('cutAndFlattenNurbsSurface: expected a NURBS surface with a control net');
   const uRes = opts.uRes != null ? opts.uRes : 24;
   const vRes = opts.vRes != null ? opts.vRes : 24;
-  const tris = tessellateTrimmedSurface(srf, null, uRes, vRes);
+  const trimmed = !!(opts.trimLoop || (opts.holes && opts.holes.length));
+  let surfaceDefect = null, cutOpts = opts;
+  if (trimmed) {
+    const full = dropDegenerateFaces(weldTriangulation(tessellateTrimmedSurface(srf, null, uRes, vRes), opts.weldTolerance));
+    const fullTopo = describeMeshTopology(full.positions, full.faces).topo;
+    const cones = interiorConePoints(full.positions, full.faces, fullTopo, opts);
+    const coneSet = new Set(cones.map((c) => c.vertex));
+    const { angleSum, ring } = vertexAngleDefects(full.positions, full.faces);
+    surfaceDefect = 0;
+    for (const v of ring.keys()) {
+      if (fullTopo.boundaryVertices.has(v) || coneSet.has(v)) continue;
+      surfaceDefect = Math.max(surfaceDefect, Math.abs(2 * Math.PI - angleSum[v]));
+    }
+    cutOpts = { ...opts, conePoints: cones.map((c) => full.positions[c.vertex]) };
+  }
+  const tris = tessellateTrimmedSurface(srf, opts.trimLoop || null, uRes, vRes, opts.holes || []);
   if (!tris.length) throw new Error('cutAndFlattenNurbsSurface: the surface tessellated to zero triangles — nothing to flatten');
   // dropDegenerateFaces: a pole (a revolve profile touching the axis) welds
   // the whole pole row to one point, so the tessellator's two-triangles-per-
   // cell emission leaves a repeated-vertex face there — zero area, no
   // topology, and refused downstream if kept. See kernel/flatten.mjs.
   const mesh = dropDegenerateFaces(weldTriangulation(tris, opts.weldTolerance));
-  const cut = cutToDisk(mesh.positions, mesh.faces, opts);
+  const cut = cutToDisk(mesh.positions, mesh.faces, cutOpts);
   const result = flattenLSCM({ positions: cut.positions, faces: cut.faces }, opts);
+  if (surfaceDefect != null) {
+    const developableTol = opts.developableTolerance != null ? opts.developableTolerance : 1e-9;
+    result.surfaceDefect = surfaceDefect;
+    if (!result.developable && surfaceDefect <= developableTol) {
+      result.developable = true;
+      result.note = `The surface is DEVELOPABLE (its untrimmed grid has no interior angle defect); the trimmed region's own triangulation carries a defect up to ${result.distortion.intrinsic.maxAbsInteriorAngleDefect.toExponential(3)} rad, which is the residual distortion below.`;
+    }
+  }
   result.seam = {
     cuts: cut.cuts, chiBefore: cut.chiBefore, chiAfter: cut.chiAfter,
     vertexOrigin: cut.vertexOrigin, duplicatedGroups: cut.duplicatedGroups,

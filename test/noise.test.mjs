@@ -232,6 +232,54 @@ test('Exact periodicity (randomWalk): bridgedWalk1D returns exactly the same val
   }
 });
 
+// How fast the scalar field changes per millimeter of control net, along U and
+// along V. `world-x` with a tiny amplitude makes the x displacement the field
+// itself (no clamp, no normal frame).
+function fieldRoughness(srf, params) {
+  const amp = 1e-3;
+  const out = noiseControlNet(srf, { ...params, amplitude: amp, direction: 'world-x' });
+  const base = params.refine ? refineSurface(srf, params.refine) : srf;
+  const a = base.ctrlNet, b = out.ctrlNet;
+  const g = (i, j) => (b[i][j][0] - a[i][j][0]) / amp;
+  const len = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  let dU = 0, lU = 0, dV = 0, lV = 0;
+  for (let i = 1; i < a.length - 2; i++) for (let j = 1; j < a[0].length - 1; j++) { dU += Math.abs(g(i + 1, j) - g(i, j)); lU += len(a[i + 1][j], a[i][j]); }
+  for (let i = 1; i < a.length - 1; i++) for (let j = 1; j < a[0].length - 2; j++) { dV += Math.abs(g(i, j + 1) - g(i, j)); lV += len(a[i][j + 1], a[i][j]); }
+  return { perMmU: dU / lU, perMmV: dV / lV };
+}
+
+test('The field is isotropic in millimeters: a torus whose net is 6x denser around the tube gets round lumps, not ridges', () => {
+  // The Primitive torus's proportions: the tube's control points sit far closer
+  // together than the ring's.
+  const srf = torus(40, 8);
+  const ratios = [];
+  for (const frequency of [0.3, 0.5, 0.8]) for (const seed of [1, 2, 3, 4, 5]) {
+    const r = fieldRoughness(srf, { style: 'value', frequency, seed, refine: 2 });
+    ratios.push(r.perMmV / r.perMmU);
+  }
+  const mean = ratios.reduce((s, x) => s + x, 0) / ratios.length;
+  assert.ok(mean > 0.6 && mean < 1.6, `the field changes about as fast per mm around the tube as around the ring (V/U ${mean.toFixed(2)})`);
+});
+
+test('Past what the sparse rows can carry, the dense direction is band-limited to their step, not left as ridges', () => {
+  const srf = torus(40, 8);
+  const ratios = [];
+  for (const frequency of [2, 3]) for (const seed of [1, 2, 3, 4, 5]) {
+    const r = fieldRoughness(srf, { style: 'value', frequency, seed, refine: 2 });
+    ratios.push(r.perMmV / r.perMmU);
+  }
+  const mean = ratios.reduce((s, x) => s + x, 0) / ratios.length;
+  assert.ok(mean > 0.5, `the tube direction is no more than twice as rough per mm as the ring (V/U ${mean.toFixed(2)})`);
+});
+
+test('A uniform net keeps its old field exactly: arc length over the mean step is the index', () => {
+  const srf = flatNet();
+  const out = noiseControlNet(srf, { amplitude: 1, style: 'value', frequency: 0.7, seed: 4, direction: 'world-z' });
+  for (let i = 1; i < 4; i++) for (let j = 1; j < 4; j++) {
+    assert.equal(out.ctrlNet[i][j][2] - srf.ctrlNet[i][j][2], valueNoise2D(i * 0.7, j * 0.7, 4));
+  }
+});
+
 test('Closed axis: an open surface is unaffected by the seam handling — byte-identical to the unwrapped construction', () => {
   const srf = flatNet();
   const { closedU, closedV } = surfaceClosure(srf);

@@ -5,7 +5,7 @@ import rhino3dmFactory from 'rhino3dm';
 import { makeArc, revolve } from '../kernel/primitives.mjs';
 import { globalCurveInterp } from '../kernel/interpolate.mjs';
 import { curvePoint } from '../kernel/curve.mjs';
-import { surfacePoint } from '../kernel/surface.mjs';
+import { surfacePoint, surfaceClosure, nakedEdgeCount } from '../kernel/surface.mjs';
 import { buildTopology, subdivideCatmullClark } from '../kernel/subd.mjs';
 import {
   ourKnotsToRhino, rhinoKnotsToOurs,
@@ -302,4 +302,37 @@ test('importDocument: the imported SubD cage is a manifold that subdivides', () 
   assert.equal(refined.faces.length, cage.faces.reduce((n, f) => n + f.length, 0));
   for (const f of refined.faces) assert.equal(new Set(f).size, f.length);
   for (const v of refined.vertices) assert.ok(v.every(Number.isFinite));
+});
+
+test('importDocument: a Rhino periodic torus arrives clamped, closed in U and V, no open edges', () => {
+  const bytes = new Uint8Array(readFileSync(new URL('./fixtures/periodic_torus_rhino8.3dm', import.meta.url)));
+  const ns = rhino.File3dm.fromByteArray(bytes).objects().get(0).geometry().faces().get(0).underlyingSurface().toNurbsSurface();
+  assert.ok(ns.isPeriodic(0) && ns.isPeriodic(1), 'the fixture is periodic in both directions');
+  const srf = importDocument(rhino, bytes).objects[0];
+  const { closedU, closedV } = surfaceClosure(srf);
+  assert.ok(closedU && closedV, `closed U ${closedU}, closed V ${closedV}`);
+  assert.equal(nakedEdgeCount(srf), 0);
+  for (const [k, p] of [[srf.knotsU, srf.degU], [srf.knotsV, srf.degV]]) {
+    for (let i = 1; i <= p; i++) { assert.equal(k[i], k[0]); assert.equal(k[k.length - 1 - i], k[k.length - 1]); }
+  }
+  // The same surface over Rhino's own domain.
+  const du = ns.domain(0), dv = ns.domain(1);
+  let worst = 0;
+  for (let i = 0; i <= 24; i++) for (let j = 0; j <= 24; j++) {
+    const u = du[0] + (du[1] - du[0]) * i / 24, v = dv[0] + (dv[1] - dv[0]) * j / 24;
+    const a = surfacePoint(srf, u, v), b = ns.pointAt(u, v);
+    worst = Math.max(worst, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+  }
+  assert.ok(worst < 1e-9, `deviation from Rhino ${worst}`);
+});
+
+test('curveFromRhino: a periodic curve arrives clamped and closed, the same curve', () => {
+  const nc = rhino.NurbsCurve.create(true, 3, [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [-5, 5, 3]]);
+  assert.ok(nc.isPeriodic, 'the source is periodic');
+  const ours = curveFromRhino(nc);
+  const k = ours.knots, p = ours.degree;
+  for (let i = 1; i <= p; i++) { assert.equal(k[i], k[0]); assert.equal(k[k.length - 1 - i], k[k.length - 1]); }
+  const a = ours.ctrlPts[0], b = ours.ctrlPts[ours.ctrlPts.length - 1];
+  assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-9, 'first and last control points coincide');
+  assert.ok(worstCurveDeviation(ours, nc, 60) < 1e-9);
 });

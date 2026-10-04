@@ -106,6 +106,7 @@ export function createDynamicBondSimulation({ cage, frame, pinned, mass = 1, ste
   return {
     solver,
     local,
+    size: dynamicBondSize(local),
     targets: solver.x.slice(),
     lastTargets: solver.x.slice(),
     nextTargets: solver.x.slice(),
@@ -151,16 +152,37 @@ export function advanceDynamicBond(sim, elapsed, frame, options = {}) {
 // this, so a batch settles exactly as a single child does.
 export const DYNAMIC_BOND_SETTLE_SECONDS = 3;
 export const DYNAMIC_BOND_FRAME = 1 / 60;
-export const DYNAMIC_BOND_REST_SPEED = 0.5; // mm/s, the fastest vertex of a cage that counts as still
+// The settle is the same shape at every size. Gravity is read at the
+// body's own length: a cage DYNAMIC_BOND_REFERENCE_SIZE mm across falls at
+// the Gravity value, one k times larger at k times that. With the edge
+// compliance held fixed every solver update is then homogeneous in length
+// (stretch, volume hold, contact margin and the rest speed all scale by k),
+// so a body scaled by k settles to the shape scaled by k in the same time.
+export const DYNAMIC_BOND_REFERENCE_SIZE = 40; // mm, the longest side the defaults are tuned at
+export const DYNAMIC_BOND_REST_SPEED = 0.5; // mm/s at the reference size, the fastest vertex of a cage that counts as still
 export const dynamicBondSettleStep = (pins) => (pins.length >= 3 ? 1 / 120 : undefined);
-export function dynamicBondOptions(params, contact) {
-  return { gravity: [0, 0, -1000 * params.gravity], compliance: params.softness ** 2 * .001, damping: params.damping,
+// The longest side of the rest cage's box in the anchor frame; rigid
+// re-anchoring leaves it unchanged.
+export function dynamicBondSize(local) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of local) for (let k = 0; k < 3; k++) { if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k]; }
+  const size = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  return size > 0 && Number.isFinite(size) ? size : DYNAMIC_BOND_REFERENCE_SIZE;
+}
+const sizeRatio = (sim) => (sim && sim.size > 0 ? sim.size : DYNAMIC_BOND_REFERENCE_SIZE) / DYNAMIC_BOND_REFERENCE_SIZE;
+// The host contact's clearance and search reach, both in proportion to the cage.
+export function dynamicBondContactSpan(sim) {
+  const l = sim.solver.lengthScale > 0 ? sim.solver.lengthScale : sim.size;
+  return { margin: l * 0.01, reach: l };
+}
+export function dynamicBondOptions(params, contact, sim) {
+  return { gravity: [0, 0, -1000 * params.gravity * sizeRatio(sim)], compliance: params.softness ** 2 * .001, damping: params.damping,
     preserveVolume: params.volume, contact: contact ? contact.contact : null };
 }
 export function dynamicBondAtRest(sim) {
   const v = sim.solver.velocity; let m = 0;
   for (let i = 0; i < v.length; i++) m = Math.max(m, Math.abs(v[i]));
-  return m < DYNAMIC_BOND_REST_SPEED;
+  return m < DYNAMIC_BOND_REST_SPEED * sizeRatio(sim);
 }
 // frames, when given, receives the solver positions after every frame.
 export function settleDynamicBond(sim, frame, options, frames = null) {
