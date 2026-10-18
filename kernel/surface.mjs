@@ -174,13 +174,22 @@ export function divideSrfGrid(srf, uCount, vCount) {
 
 // The number of naked (free, unshared) boundary edges of a single
 // untrimmed-face surface — up to 4 parametric sides, minus 2 for each
-// direction that wraps (a seam is internal, not a boundary). A pole
-// (profile point touching the revolve axis) degenerates that boundary to
-// a single point rather than removing it — still counted, as Rhino lists a
-// zero-length singular edge.
+// direction that wraps (a seam is internal, not a boundary). A side whose
+// control row collapses to one point (a pole, as revolve() builds where the
+// profile touches the axis) is a singular edge of zero length: it bounds
+// nothing and is not naked, as in Rhino. Same 1e-6 coincidence test as
+// surfaceStructuralGroup.
 export function nakedEdgeCount(srf) {
   const { closedU, closedV } = surfaceClosure(srf);
-  return (closedU ? 0 : 2) + (closedV ? 0 : 2);
+  const net = srf.ctrlNet;
+  const nu = net.length, nv = net[0].length;
+  const samePos = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= 1e-6;
+  const rowIsPole = (i) => { for (let j = 1; j < nv; j++) if (!samePos(net[i][0], net[i][j])) return false; return true; };
+  const colIsPole = (j) => { for (let i = 1; i < nu; i++) if (!samePos(net[0][j], net[i][j])) return false; return true; };
+  let n = 0;
+  if (!closedU) n += (rowIsPole(0) ? 0 : 1) + (rowIsPole(nu - 1) ? 0 : 1);
+  if (!closedV) n += (colIsPole(0) ? 0 : 1) + (colIsPole(nv - 1) ? 0 : 1);
+  return n;
 }
 
 // Seam/pole structural siblings — given a control-net (row, col) index,

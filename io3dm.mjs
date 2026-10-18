@@ -854,6 +854,46 @@ export function brepRecordToRhino(rhino, record, tolerance) {
 // a name prefix (e.g. "RuledLoft04 panel 1", "...panel 2"). History never
 // travels: every exported object is a plain baked leaf, and there is no
 // HistoryRecord field in this payload shape.
+// A SubD from an authored cage: { vertices: [[x,y,z]], faces: [[i,…]],
+// creases: [[v0, v1, w]] } where w < 0 is a full crease and w > 0 an edge
+// sharpness. Faces of 3 to 64 sides go in as authored. Returns { subd } or
+// { reason } — a cage OpenNURBS will not accept is refused by name.
+export function subdToRhino(rhino, obj) {
+  if (!rhino.SubD || typeof rhino.SubD.prototype.addFace !== 'function') return { reason: 'this rhino3dm build cannot author a SubD' };
+  const subd = new rhino.SubD();
+  const verts = obj.vertices || [];
+  for (const v of verts) {
+    if (subd.addVertex([v[0], v[1], v[2]]) < 0) return { reason: 'a cage vertex was refused' };
+  }
+  for (let i = 0; i < (obj.faces || []).length; i++) {
+    const f = obj.faces[i];
+    if (!Array.isArray(f) || f.length < 3 || f.length > 64 || f.some((x) => !(x >= 0 && x < verts.length))) return { reason: `face ${i} is not a 3- to 64-sided face of this cage` };
+    if (subd.addFace(f.slice()) < 0) return { reason: `face ${i} was refused` };
+  }
+  for (const [a, b, w] of obj.creases || []) {
+    if (w < 0) subd.setEdgeCrease(a, b, true);
+    else subd.setEdgeSharpness(a, b, Math.min(w, 4));
+  }
+  if (typeof subd.updateUnsetTagsAndSectorCoefficients === 'function') subd.updateUnsetTagsAndSectorCoefficients();
+  if (subd.isValid === false) return { reason: 'OpenNURBS reports the cage invalid' };
+  return { subd };
+}
+// A mesh of triangles and quads in world space: { vertices: [[x,y,z]],
+// faces: [[a,b,c] | [a,b,c,d]] }.
+export function meshToRhino(rhino, obj) {
+  const mesh = new rhino.Mesh();
+  const mv = mesh.vertices(), mf = mesh.faces();
+  for (const v of obj.vertices || []) mv.add(v[0], v[1], v[2]);
+  for (const f of obj.faces || []) {
+    if (f.length === 3) mf.addTriFace(f[0], f[1], f[2]);
+    else if (f.length === 4) mf.addQuadFace(f[0], f[1], f[2], f[3]);
+  }
+  if (!mf.count) return { reason: 'no faces' };
+  if (typeof mesh.normals === 'function') { try { mesh.normals().computeNormals(); } catch { /* normals are derived, the mesh stands without them */ } }
+  if (typeof mesh.compact === 'function') mesh.compact();
+  return { mesh };
+}
+
 export function exportDocument(rhino, payload) {
   const doc = new rhino.File3dm();
   doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
@@ -886,9 +926,23 @@ export function exportDocument(rhino, payload) {
   }
 
   const skipped = [];
+  /* Groups by name, made on first use. A Rhino group selects its members as
+     one and Ungroup takes it apart; an object may sit in several. */
+  const groupIndexByName = new Map();
+  const groupIndex = (gname) => {
+    if (groupIndexByName.has(gname)) return groupIndexByName.get(gname);
+    const g = new rhino.Group();
+    g.name = gname;
+    doc.groups().add(g);
+    const idx = doc.groups().count - 1;
+    groupIndexByName.set(gname, idx);
+    return idx;
+  };
   for (const obj of payload.objects || []) {
     const attrs = new rhino.ObjectAttributes();
     if (obj.name) attrs.name = obj.name;
+    for (const gname of obj.groups || []) attrs.addToGroup(groupIndex(String(gname)));
+    for (const [key, value] of Object.entries(obj.userStrings || {})) attrs.setUserString(key, String(value));
     if (obj.layerId != null && layerIdToIndex.has(obj.layerId)) {
       attrs.layerIndex = layerIdToIndex.get(obj.layerId);
     }
@@ -959,6 +1013,14 @@ export function exportDocument(rhino, payload) {
             + (wrote ? ` — written as ${wrote} loose trimmed face(s) instead` : ', and it has no loose faces to fall back on'),
         });
       }
+    } else if (obj.kind === 'subd') {
+      const built = subdToRhino(rhino, obj);
+      if (built.subd) doc.objects().add(built.subd, attrs);
+      else skipped.push({ name: obj.name || null, kind: `SubD (${built.reason})` });
+    } else if (obj.kind === 'mesh') {
+      const built = meshToRhino(rhino, obj);
+      if (built.mesh) doc.objects().addMesh(built.mesh, attrs);
+      else skipped.push({ name: obj.name || null, kind: `mesh (${built.reason})` });
     } else {
       skipped.push({ name: obj.name || null, kind: obj.kind });
     }
@@ -1005,12 +1067,22 @@ export function importDocument(rhino, bytes) {
 
   let brepGroupSeq = 0;
 
+  const groupNames = [];
+  for (let i = 0; i < doc.groups().count; i++) {
+    const g = doc.groups().get(i);
+    groupNames.push((g && g.name) || `Group ${i + 1}`);
+  }
   const objects = [];
   const skipped = [];
   const robjs = doc.objects();
   for (let i = 0; i < robjs.count; i++) {
     const o = robjs.get(i);
     const attrs = o.attributes();
+    // The groups this object belongs to, by name, so a caller can put a
+    // grouped set back together.
+    const groups = (typeof attrs.getGroupList === 'function' ? (attrs.getGroupList() || []) : [])
+      .map((gi) => groupNames[gi]).filter((g) => g != null);
+    const objectsBefore = objects.length;
     // attrs.layerIndex is already a plain index into rlayers, and `layers`
     // above was built in that same index order — so the index is the id, no
     // GUID lookup needed here (layerGuidToId above is only for resolving
@@ -1112,11 +1184,19 @@ export function importDocument(rhino, bytes) {
       } catch (err) {
         skipped.push({ name, objectType: `SubD (${err && err.message ? err.message : 'control net unreadable'})` });
       }
+    } else if (geo.objectType === rhino.ObjectType.Mesh) {
+      const mv = geo.vertices(), mf = geo.faces();
+      const vertices = [], faces = [];
+      for (let k = 0; k < mv.count; k++) { const p = mv.get(k); vertices.push([p[0], p[1], p[2]]); }
+      for (let k = 0; k < mf.count; k++) { const f = mf.get(k); faces.push(f[2] === f[3] ? [f[0], f[1], f[2]] : [f[0], f[1], f[2], f[3]]); }
+      if (vertices.length && faces.length) objects.push({ kind: 'mesh', layerId, name, color: objColor, vertices, faces });
+      else skipped.push({ name, objectType: 'Mesh (empty)' });
     } else {
-      // Anything else — a Mesh, an extrusion that did not convert, other
-      // object types — is skipped by name, never silently dropped.
+      // Anything else — an extrusion that did not convert, other object
+      // types — is skipped by name, never silently dropped.
       skipped.push({ name, objectType: describeRhinoGeometry(geo) });
     }
+    if (groups.length) for (let k = objectsBefore; k < objects.length; k++) objects[k].groups = groups;
   }
 
   /* The units the file claims. A file authored in inches carries raw numbers

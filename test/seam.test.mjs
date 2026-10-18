@@ -108,8 +108,8 @@ function asymmetricAnnulus() {
   return { positions, faces };
 }
 
-// A closed octahedron — a closed genus-0 (sphere-like) surface, for
-// the refusal that says a sphere cannot be cut into one disk at all.
+// A closed octahedron — a closed genus-0 (sphere-like) surface with uneven
+// half-axes, so its farthest pair is not a coincidence of symmetry.
 function octahedron() {
   const positions = [[7, 0, 0], [-5, 0, 0], [0, 9, 0], [0, -6, 0], [0, 0, 11], [0, 0, -4]];
   const faces = [
@@ -519,11 +519,128 @@ test('cutMeshAlongEdges refuses an edge that is not in the mesh at all, and an e
 
 // Refusals, by name
 
-test('refuses a closed genus-0 surface (a sphere) by name — no single cut makes it one disk', () => {
+// Closed genus 0: one open seam
+
+// A capsule: a cylinder of radius CAP_R and length CAP_L between two
+// hemispherical caps, as latitude rings around the z axis with a vertex at
+// each pole. Built by hand so it is a closed genus-0 surface that is not a
+// sphere and carries no revolve grid's weld.
+const CAP_R = 15, CAP_L = 50;
+function capsule(around, capRings, bodyRings) {
+  const prof = [];
+  for (let i = 1; i < capRings; i++) { const a = -Math.PI / 2 + (i / capRings) * (Math.PI / 2); prof.push([CAP_R * Math.cos(a), CAP_R * Math.sin(a)]); }
+  for (let i = 0; i <= bodyRings; i++) prof.push([CAP_R, (i / bodyRings) * CAP_L]);
+  for (let i = 1; i < capRings; i++) { const a = (i / capRings) * (Math.PI / 2); prof.push([CAP_R * Math.cos(a), CAP_L + CAP_R * Math.sin(a)]); }
+  const positions = [[0, 0, -CAP_R]];
+  for (const [r, z] of prof) for (let k = 0; k < around; k++) { const t = (2 * Math.PI * k) / around; positions.push([r * Math.cos(t), r * Math.sin(t), z]); }
+  positions.push([0, 0, CAP_L + CAP_R]);
+  const top = positions.length - 1, ring = (j, k) => 1 + j * around + (k % around);
+  const faces = [];
+  for (let k = 0; k < around; k++) faces.push([0, ring(0, k + 1), ring(0, k)]);
+  for (let j = 0; j + 1 < prof.length; j++) {
+    for (let k = 0; k < around; k++) {
+      faces.push([ring(j, k), ring(j, k + 1), ring(j + 1, k + 1)]);
+      faces.push([ring(j, k), ring(j + 1, k + 1), ring(j + 1, k)]);
+    }
+  }
+  const last = prof.length - 1;
+  for (let k = 0; k < around; k++) faces.push([top, ring(last, k), ring(last, k + 1)]);
+  return { positions, faces };
+}
+
+// A closed box, each face an n x n grid of split squares, vertices shared
+// across the edges and corners.
+function gridBox(n, half) {
+  const positions = [], faces = [], at = new Map();
+  const id = (p) => { const k = p.map((x) => x.toFixed(9)).join(','); if (!at.has(k)) { at.set(k, positions.length); positions.push(p); } return at.get(k); };
+  const sides = [[[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[-1, 0, 0], [0, 0, 1], [0, 1, 0]], [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
+    [[0, -1, 0], [1, 0, 0], [0, 0, 1]], [[0, 0, 1], [1, 0, 0], [0, 1, 0]], [[0, 0, -1], [0, 1, 0], [1, 0, 0]]];
+  for (const [nn, a, b] of sides) {
+    const q = (s, t) => id([0, 1, 2].map((k) => half * (nn[k] + (2 * s / n - 1) * a[k] + (2 * t / n - 1) * b[k])));
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      faces.push([q(i, j), q(i + 1, j), q(i + 1, j + 1)], [q(i, j), q(i + 1, j + 1), q(i, j + 1)]);
+    }
+  }
+  return { positions, faces };
+}
+
+// The cut mesh is one disk: chi 1, one boundary loop, no face lost, the
+// area bit-identical, and LSCM lays it out with no triangle reversed.
+function assertOpensToOneDisk(label, positions, faces) {
+  const before = describeMeshTopology(positions, faces);
+  assert.strictEqual(eulerCharacteristic(positions, faces), 2, `${label}: the fixture must be a closed genus-0 surface`);
+  assert.strictEqual(before.boundaryCount, 0, `${label}: the fixture must be closed`);
+  assert.strictEqual(before.orientable, true, `${label}: the fixture must be consistently wound`);
+  const r = cutToDisk(positions, faces);
+  assert.strictEqual(r.chiBefore, 2);
+  assert.strictEqual(r.chiAfter, 1);
+  assert.strictEqual(r.cuts[0].kind, 'open-seam', `${label}: the first cut is the open seam`);
+  assert.ok(r.cuts[0].edgeCount >= 2, `${label}: an open seam of ${r.cuts[0].edgeCount} edge(s) splits no vertex`);
+  assert.strictEqual(eulerCharacteristic(r.positions, r.faces), 1, `${label}: chi after the cut`);
+  const after = describeMeshTopology(r.positions, r.faces);
+  assert.strictEqual(after.boundaryCount, 1, `${label}: one boundary loop`);
+  assert.strictEqual(r.faces.length, faces.length);
+  assert.strictEqual(totalArea(r.positions, r.faces), totalArea(positions, faces));
+  for (let i = 0; i < r.positions.length; i++) assert.deepStrictEqual(r.positions[i], positions[r.vertexOrigin[i]]);
+  const flat = flattenLSCM({ positions: r.positions, faces: r.faces });
+  assert.strictEqual(flat.uv.length, r.positions.length);
+  for (const [u, v] of flat.uv) assert.ok(Number.isFinite(u) && Number.isFinite(v), `${label}: a non-finite layout coordinate`);
+  assert.strictEqual(flat.distortion.flippedTriangles, 0, `${label}: LSCM reversed ${flat.distortion.flippedTriangles} triangle(s)`);
+  return { r, flat };
+}
+
+test('closed genus 0 — an octahedron opens along one seam to a disk and flattens', () => {
   const oct = octahedron();
-  assert.strictEqual(eulerCharacteristic(oct.positions, oct.faces), 2);
-  assert.throws(() => cutToDisk(oct.positions, oct.faces), /CLOSED GENUS-0 surface \(a sphere/);
-  assert.throws(() => cutToDisk(oct.positions, oct.faces), /SPLIT into pieces/);
+  const { r } = assertOpensToOneDisk('octahedron', oct.positions, oct.faces);
+  assert.strictEqual(r.cuts.length, 1);
+  // The double sweep: the farthest from vertex 0 is 4 (13.04 apart), the
+  // farthest from 4 is 5 (15 apart). The seam's two edges run through one
+  // vertex, the one split.
+  assert.strictEqual(r.cuts[0].edgeCount, 2);
+  assert.strictEqual(r.cuts[0].verticesDuplicated, 1);
+});
+
+test('closed genus 0 — a tetrahedron, whose farthest pair shares an edge, still opens to a disk', () => {
+  const tet = { positions: [[0, 0, 0], [10, 0, 0], [0, 10, 0], [0, 0, 10]], faces: [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]] };
+  const { r } = assertOpensToOneDisk('tetrahedron', tet.positions, tet.faces);
+  assert.strictEqual(r.cuts[0].edgeCount, 2);
+});
+
+test('closed genus 0 — a capsule and a closed grid box open to a disk and flatten', () => {
+  const cap = capsule(16, 6, 5);
+  const { r: rc } = assertOpensToOneDisk('capsule', cap.positions, cap.faces);
+  // The farthest pair of a capsule is its two poles, CAP_L + 2 CAP_R apart,
+  // and the seam between them runs down one side.
+  assert.ok(rc.cuts[0].length >= CAP_L + 2 * CAP_R - 1e-9, `the capsule's seam is ${rc.cuts[0].length}, shorter than pole to pole`);
+  assert.ok(rc.cuts[0].length <= CAP_L + Math.PI * CAP_R + 1e-9, `the capsule's seam is ${rc.cuts[0].length}, longer than a meridian`);
+  const box = gridBox(4, 20);
+  assertOpensToOneDisk('box', box.positions, box.faces);
+});
+
+test('closed genus 0 — a revolved NURBS sphere cuts along a diameter and flattens, reported far from developable', () => {
+  const R = 40;
+  const sphere = revolve(makeArc([0, 0, 0], [1, 0, 0], [0, 0, 1], R, -Math.PI / 2, Math.PI, 2), [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
+  for (const [uRes, vRes] of [[12, 12], [8, 16], [24, 24]]) {
+    const r = cutAndFlattenNurbsSurface(sphere, { uRes, vRes });
+    assert.strictEqual(r.seam.chiBefore, 2, `${uRes}x${vRes}: the welded sphere is closed genus 0`);
+    assert.strictEqual(r.seam.chiAfter, 1);
+    assert.deepStrictEqual(r.seam.cuts.map((c) => c.kind), ['open-seam']);
+    assert.strictEqual(describeMeshTopology(r.positions, r.faces).boundaryCount, 1);
+    assert.strictEqual(boundaryEdgeCount(r.faces), 2 * r.seam.cuts[0].edgeCount, 'the seam is the whole boundary, two sides of it');
+    // The seam's ends are an antipodal pair (every vertex of a sphere is
+    // equally far from its antipode), and it is at most a meridian long.
+    const ends = r.seam.vertexOrigin.length - new Set(r.seam.vertexOrigin).size + 2;
+    assert.strictEqual(ends, r.seam.cuts[0].edgeCount + 1, 'every seam vertex but the two ends is split once');
+    const len = r.seam.cuts[0].length;
+    assert.ok(len >= 2 * R - 1e-9 && len <= Math.PI * R + 1e-9, `${uRes}x${vRes}: seam ${len} for a sphere of radius ${R}`);
+    const rim = [...describeMeshTopology(r.positions, r.faces).topo.boundaryVertices].map((v) => r.positions[v]);
+    let span = 0;
+    for (const p of rim) for (const q of rim) span = Math.max(span, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    assert.ok(span > 2 * R * (1 - 1e-9), `${uRes}x${vRes}: the seam's ends are ${span} apart, not a diameter`);
+    assert.strictEqual(r.distortion.flippedTriangles, 0);
+    assert.strictEqual(r.developable, false);
+    assert.ok(r.distortion.edge.maxRelErr > 0.5, `${uRes}x${vRes}: a whole sphere laid flat stretches some edge by more than half (${r.distortion.edge.maxRelErr})`);
+  }
 });
 
 test('refuses genus 2 by name, and names the general cut-graph it deliberately does not build', () => {

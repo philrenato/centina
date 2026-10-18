@@ -1181,19 +1181,30 @@ export function polychordDrift(cage, chord, opts = {}) {
   return { ok: true, worst: worst / extent, mean: (count ? sum / count : 0) / extent, result: res, targets: beforeLimit };
 }
 
-// Collapsible chords, cheapest first by the drift proxy above.
-export function rankPolychords(cage, opts = {}) {
+// Collapsible chords, cheapest first by the drift proxy above. Yields
+// { done, total } before each chord is weighed; that loop is the cost.
+function *rankPolychordsSteps(cage, opts = {}) {
   const all = polychordsOf(cage, opts);
   if (!all.ok) return all;
   const ranked = [];
-  for (const chord of all.chords) {
-    if (!chord.collapsible) continue;
+  const candidates = all.chords.filter((c) => c.collapsible);
+  for (let i = 0; i < candidates.length; i++) {
+    yield { stage: 'rank', done: i, total: candidates.length };
+    const chord = candidates[i];
     const d = polychordDrift(cage, chord, opts);
     if (!d.ok) continue;
     ranked.push({ chord, worst: d.worst, mean: d.mean });
   }
   ranked.sort((a, b) => a.worst - b.worst || a.chord.length - b.chord.length || a.chord.id - b.chord.id);
   return { ok: true, ranked, chords: all.chords };
+}
+
+function drain(gen) {
+  for (;;) { const r = gen.next(); if (r.done) return r.value; }
+}
+
+export function rankPolychords(cage, opts = {}) {
+  return drain(rankPolychordsSteps(cage, opts));
 }
 
 // The command
@@ -1208,6 +1219,12 @@ export function rankPolychords(cage, opts = {}) {
 //   opts.minFaces         the floor. 6.
 //   opts.refit            refit the limit surface after each collapse. true.
 export function simplifySubD(cage, opts = {}) {
+  return drain(simplifySubDSteps(cage, opts));
+}
+
+// The same work as a generator, for a caller that paints between steps.
+// Each yield is { stage: 'unsubdivide' | 'rank' | 'refit', done, total, step }.
+export function *simplifySubDSteps(cage, opts = {}) {
   const amount = Math.max(1, Math.floor(opts.amount ?? 1));
   const tier = opts.tier ?? 'auto';
   const steps = [];
@@ -1217,6 +1234,7 @@ export function simplifySubD(cage, opts = {}) {
     let levels = 0;
     let firstRefusal = null;
     for (let i = 0; i < amount; i++) {
+      yield { stage: 'unsubdivide', done: 0, total: 1, step: i };
       const r = unsubdivideCage(cur, opts);
       if (!r.ok) { if (i === 0) firstRefusal = r; break; }
       cur = r.cage;
@@ -1240,7 +1258,13 @@ export function simplifySubD(cage, opts = {}) {
   let removed = 0;
   let lastRefusal = null;
   for (let i = 0; i < amount; i++) {
-    const ranked = rankPolychords(cur, opts);
+    const rankGen = rankPolychordsSteps(cur, opts);
+    let ranked;
+    for (;;) {
+      const r = rankGen.next();
+      if (r.done) { ranked = r.value; break; }
+      yield { ...r.value, step: i };
+    }
     if (!ranked.ok) { lastRefusal = ranked; break; }
     if (!ranked.ranked.length) {
       const reasons = new Map();
@@ -1255,6 +1279,7 @@ export function simplifySubD(cage, opts = {}) {
     let next = res.cage;
     let drift = pick.worst;
     if (opts.refit !== false) {
+      yield { stage: 'refit', done: 0, total: 1, step: i };
       const beforeTopo = buildTopology(cur);
       const beforeLimit = cur.vertices.map((_, k) => vertexLimitPosition(cur, k, beforeTopo));
       const targets = res.vertexSources.map((src) => {

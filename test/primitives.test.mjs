@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { curvePoint } from '../kernel/curve.mjs';
 import { surfacePoint, isFiniteNet, surfaceClosure, nakedEdgeCount } from '../kernel/surface.mjs';
-import { makeArc, makeCircle, revolve, extrude } from '../kernel/primitives.mjs';
+import { makeArc, makeCircle, makeEllipsoidProfile, revolve, extrude } from '../kernel/primitives.mjs';
 
 test('makeCircle at an arbitrary center/radius/plane stays exactly on that circle', () => {
   const center = [5, -3, 2];
@@ -202,6 +202,16 @@ test('surfaceClosure/nakedEdgeCount: a full revolve of an open profile is a cyli
   assert.equal(closedU, false, 'the profile itself never wraps — its two ends are the two rims');
   assert.equal(closedV, true, 'a full 2*PI revolve wraps the sweep direction into a seam, not a boundary');
   assert.equal(nakedEdgeCount(srf), 2);
+});
+
+test('nakedEdgeCount: a pole is a singular edge, not a naked one — a full sphere has 0, a half sphere only its 2 meridians', () => {
+  const profile = makeEllipsoidProfile([0, 0, 0], [1, 0, 0], [0, 0, 1], 20, 20);
+  const sphere = revolve(profile, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
+  assert.equal(surfaceClosure(sphere).closedU, false, 'the profile runs pole to pole, so U is open');
+  assert.equal(nakedEdgeCount(sphere), 0);
+  assert.equal(nakedEdgeCount(revolve(profile, [0, 0, 0], [0, 0, 1], 0, Math.PI)), 2);
+  const cone = revolve({ degree: 1, knots: [0, 0, 1, 1], ctrlPts: [[0, 0, 10, 1], [5, 0, 0, 1]] }, [0, 0, 0], [0, 0, 1], 0, 2 * Math.PI);
+  assert.equal(nakedEdgeCount(cone), 1, 'an open cone: the apex is a pole, the base rim is open');
 });
 
 test('surfaceClosure/nakedEdgeCount: a partial revolve (270deg) of an open profile has all 4 sides free', () => {

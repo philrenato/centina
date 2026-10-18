@@ -15,6 +15,7 @@ import {
   flattenLSCM, flattenNurbsSurface, flatteningDistortion, weldTriangulation,
   buildMeshTopology, validateFlattenMesh, triangleLocalFrame,
   solveSparseLeastSquares, isDevelopable, nurbsSurfaceArea, dropDegenerateFaces,
+  principalStrains, grainStrains,
 } from '../kernel/flatten.mjs';
 import { tessellateTrimmedSurface } from '../kernel/trimtess.mjs';
 
@@ -506,4 +507,186 @@ test('flatteningDistortion measures a mesh with more triangles than a call can t
   const d = flatteningDistortion(positions, faces, uv);
   assert.ok(Math.abs(d.area.minRatio - 1) < 1e-12 && Math.abs(d.area.maxRatio - 1) < 1e-12,
     `a mesh laid out as itself has area ratio 1 everywhere (min ${d.area.minRatio}, max ${d.area.maxRatio})`);
+});
+
+// Length strain: principalStrains / grainStrains
+
+// A planar patch with jittered interior vertices, so its triangles differ in
+// shape and orientation (a regular grid would hide a frame-ordering error).
+function jitteredPlane(n = 9, size = 30) {
+  const positions = [], faces = [];
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; };
+  const h = size / n;
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+    const inner = i > 0 && j > 0 && i < n && j < n;
+    positions.push([i * h + (inner ? 0.6 * h * rnd() : 0), j * h + (inner ? 0.6 * h * rnd() : 0), 0]);
+  }
+  const at = (i, j) => j * (n + 1) + i;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    faces.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)], [at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+  }
+  return { positions, faces };
+}
+
+// A sphere cap of polar angle `cap` from a pole fan and rings.
+function sphereCapFan(nr, na, cap) {
+  const positions = [[0, 0, 1]], faces = [];
+  for (let r = 1; r <= nr; r++) {
+    const t = cap * r / nr;
+    for (let a = 0; a < na; a++) { const p = 2 * Math.PI * a / na; positions.push([Math.sin(t) * Math.cos(p), Math.sin(t) * Math.sin(p), Math.cos(t)]); }
+  }
+  const id = (r, a) => 1 + (r - 1) * na + ((a + na) % na);
+  for (let a = 0; a < na; a++) faces.push([0, id(1, a), id(1, a + 1)]);
+  for (let r = 1; r < nr; r++) for (let a = 0; a < na; a++) {
+    faces.push([id(r, a), id(r + 1, a), id(r + 1, a + 1)], [id(r, a), id(r + 1, a + 1), id(r, a + 1)]);
+  }
+  return { positions, faces };
+}
+
+// A sphere cap as a (polar angle, azimuth) grid starting at a small ring, with
+// the azimuth stopping just short of closing, so it is a disk; `grid` holds each
+// vertex's (theta, phi) for the parallel thread direction.
+function sphereCapGrid(cap, nr = 24, na = 64) {
+  const positions = [], faces = [], grid = [];
+  const t0 = cap * 0.04;
+  for (let r = 0; r <= nr; r++) {
+    const t = t0 + (cap - t0) * r / nr;
+    for (let a = 0; a <= na; a++) {
+      const p = 2 * Math.PI * a / na * 0.999;
+      positions.push([Math.sin(t) * Math.cos(p), Math.sin(t) * Math.sin(p), Math.cos(t)]);
+      grid.push([t, p]);
+    }
+  }
+  const id = (r, a) => r * (na + 1) + a;
+  for (let r = 0; r < nr; r++) for (let a = 0; a < na; a++) {
+    faces.push([id(r, a), id(r + 1, a), id(r + 1, a + 1)], [id(r, a), id(r + 1, a + 1), id(r, a + 1)]);
+  }
+  return { positions, faces, grid };
+}
+
+function halfCylinderMesh(nu = 48, nv = 24) {
+  const positions = [], faces = [];
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const p = Math.PI * i / nu; positions.push([Math.cos(p), Math.sin(p), 2 * j / nv]); }
+  const id = (i, j) => j * (nu + 1) + i;
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+    faces.push([id(i, j), id(i + 1, j), id(i + 1, j + 1)], [id(i, j), id(i + 1, j + 1), id(i, j + 1)]);
+  }
+  return { positions, faces };
+}
+
+const everyNear = (arr, v, tol) => { let worst = 0; for (const x of arr) worst = Math.max(worst, Math.abs(x - v)); return { ok: worst <= tol, worst }; };
+
+test('principalStrains — a plane laid out as itself has s1 = s2 = 1 on every triangle', () => {
+  const m = jitteredPlane();
+  const uv = m.positions.map((p) => [p[0], p[1]]);
+  const r = principalStrains(m.positions, m.faces, uv);
+  const a = everyNear(r.s1, 1, 1e-12), b = everyNear(r.s2, 1, 1e-12);
+  assert.ok(a.ok && b.ok, `identity: worst |s1-1| ${a.worst}, |s2-1| ${b.worst}`);
+  assert.strictEqual(r.flippedCount, 0);
+  assert.ok(r.summary.max <= 1e-12 && r.summary.percentAreaOver === 0, `summary ${JSON.stringify(r.summary)}`);
+});
+
+test('principalStrains — a uniform 1.2 stretch along x reads s1 = 1.2, s2 = 1 everywhere', () => {
+  const m = jitteredPlane();
+  const uv = m.positions.map((p) => [1.2 * p[0], p[1]]);
+  const r = principalStrains(m.positions, m.faces, uv);
+  const a = everyNear(r.s1, 1.2, 1e-12), b = everyNear(r.s2, 1, 1e-12);
+  assert.ok(a.ok && b.ok, `stretch: worst |s1-1.2| ${a.worst}, |s2-1| ${b.worst}`);
+  assert.ok(Math.abs(r.summary.maxStretch - 0.2) < 1e-12 && Math.abs(r.summary.maxCompression) < 1e-12);
+  assert.ok(Math.abs(r.summary.mean - 0.2) < 1e-12 && r.summary.percentAreaOver === 100, `summary ${JSON.stringify(r.summary)}`);
+});
+
+test('principalStrains — a rotated layout of a tilted plane has no strain; a mirrored one has the same s with every triangle counted flipped', () => {
+  const m = jitteredPlane();
+  // The 3D patch tilted out of z = 0 (50 deg about x, then 20 deg about z).
+  const ca = Math.cos(50 * DEG), sa = Math.sin(50 * DEG), cb = Math.cos(20 * DEG), sb = Math.sin(20 * DEG);
+  const P = m.positions.map(([x, y]) => { const y1 = y * ca, z1 = y * sa; return [x * cb - y1 * sb, x * sb + y1 * cb, z1]; });
+  const ct = Math.cos(37 * DEG), st = Math.sin(37 * DEG);
+  const uv = m.positions.map(([x, y]) => [x * ct - y * st + 5, x * st + y * ct - 3]);
+  const r = principalStrains(P, m.faces, uv);
+  const a = everyNear(r.s1, 1, 1e-12), b = everyNear(r.s2, 1, 1e-12);
+  assert.ok(a.ok && b.ok, `rotation: worst |s1-1| ${a.worst}, |s2-1| ${b.worst}`);
+  assert.strictEqual(r.flippedCount, 0);
+  const mirrored = principalStrains(m.positions, m.faces, m.positions.map(([x, y]) => [-1.2 * x, y]));
+  const c = everyNear(mirrored.s1, 1.2, 1e-12), d = everyNear(mirrored.s2, 1, 1e-12);
+  assert.ok(c.ok && d.ok, `mirror: worst |s1-1.2| ${c.worst}, |s2-1| ${d.worst}`);
+  assert.strictEqual(mirrored.flippedCount, m.faces.length);
+});
+
+test('principalStrains — a triangle with no 3D area is not measured and does not enter the summary', () => {
+  const m = jitteredPlane(3);
+  const positions = m.positions.concat([[0, 0, 5], [1, 0, 5], [2, 0, 5]]);
+  const k = positions.length;
+  const faces = m.faces.concat([[k - 3, k - 2, k - 1]]);
+  const uv = positions.map((p) => [1.2 * p[0], p[1]]);
+  uv[k - 1] = [9, 9];
+  const r = principalStrains(positions, faces, uv);
+  const last = faces.length - 1;
+  assert.ok(Number.isNaN(r.s1[last]) && Number.isNaN(r.s2[last]) && r.area[last] === 0);
+  assert.ok(Math.abs(r.summary.maxStretch - 0.2) < 1e-12 && r.summary.percentAreaOver === 100, `summary ${JSON.stringify(r.summary)}`);
+});
+
+test('principalStrains — LSCM fixtures: hemisphere 56.2% stretch / 30.7% compression, 30 deg cap 4.11%, half-cylinder none', () => {
+  const hemi = sphereCapFan(24, 64, Math.PI / 2);
+  const h = principalStrains(hemi.positions, hemi.faces, flattenLSCM(hemi).uv).summary;
+  assert.ok(Math.abs(100 * h.maxStretch - 56.2) <= 1, `hemisphere max stretch ${100 * h.maxStretch}%`);
+  assert.ok(Math.abs(100 * h.maxCompression - 30.7) <= 1, `hemisphere max compression ${100 * h.maxCompression}%`);
+  const cap = sphereCapFan(16, 64, Math.PI / 6);
+  const c = principalStrains(cap.positions, cap.faces, flattenLSCM(cap).uv).summary;
+  assert.ok(Math.abs(100 * c.maxStretch - 4.11) <= 0.2, `30 deg cap max stretch ${100 * c.maxStretch}%`);
+  const cyl = halfCylinderMesh();
+  const y = principalStrains(cyl.positions, cyl.faces, flattenLSCM(cyl).uv).summary;
+  assert.ok(y.max <= 1e-6, `half-cylinder max strain ${y.max}`);
+});
+
+test('grainStrains — a stretch and a shear read along the grain, across it, and as the angle between them', () => {
+  const m = jitteredPlane();
+  const st = m.positions.map(([x, y]) => [1.2 * x, y]);
+  const g = grainStrains(m.positions, m.faces, st, [1, 0]);
+  assert.ok(everyNear(g.sGrain, 1.2, 1e-12).ok && everyNear(g.sCross, 1, 1e-12).ok && everyNear(g.shearDeg, 0, 1e-9).ok);
+  const g90 = grainStrains(m.positions, m.faces, st, [0, 1]);
+  assert.ok(everyNear(g90.sGrain, 1, 1e-12).ok && everyNear(g90.sCross, 1.2, 1e-12).ok);
+  // uv = (x + 0.2 y, y): surface threads along x and y open to atan(1/0.2).
+  const sh = m.positions.map(([x, y]) => [x + 0.2 * y, y]);
+  const want = 90 - Math.atan2(1, 0.2) / DEG;
+  const onSurface = grainStrains(m.positions, m.faces, sh, [1, 0, 0]);
+  assert.ok(everyNear(onSurface.sGrain, 1, 1e-12).ok && everyNear(onSurface.sCross, Math.hypot(0.2, 1), 1e-12).ok);
+  const s1 = everyNear(onSurface.shearDeg, want, 1e-9);
+  assert.ok(s1.ok, `surface grain shear worst error ${s1.worst} (want ${want} deg)`);
+  // The same map with the grain drawn in the layout: J^-1 takes (0,1) to (-0.2, 1).
+  const inLayout = grainStrains(m.positions, m.faces, sh, [1, 0]);
+  assert.ok(everyNear(inLayout.sGrain, 1, 1e-12).ok && everyNear(inLayout.sCross, 1 / Math.hypot(0.2, 1), 1e-12).ok);
+  assert.ok(everyNear(inLayout.shearDeg, want, 1e-9).ok);
+  assert.ok(Math.abs(inLayout.summary.shear.max - want) < 1e-9 && inLayout.summary.shear.percentAreaOver === 100);
+});
+
+test('grainStrains — on the LSCM hemisphere the threads keep their angle (shear <= 3 deg) and the strain is stretch', () => {
+  const m = sphereCapGrid(Math.PI / 2);
+  const uv = flattenLSCM(m).uv;
+  // The parallel through each triangle's centroid, as a surface direction.
+  const parallels = m.faces.map(([a, b, c]) => {
+    const p = (m.grid[a][1] + m.grid[b][1] + m.grid[c][1]) / 3;
+    return [-Math.sin(p), Math.cos(p), 0];
+  });
+  const g = grainStrains(m.positions, m.faces, uv, parallels).summary;
+  assert.ok(g.shear.max <= 3, `max warp/weft shear ${g.shear.max} deg`);
+  assert.ok(g.grain.maxStretch > 0.4 && g.cross.maxStretch > 0.4,
+    `the strain shows as stretch along both threads (${g.grain.maxStretch}, ${g.cross.maxStretch})`);
+  // A grain drawn straight on the pattern: per triangle, the angle change of
+  // two perpendicular threads is at most 2 atan(s1/s2) - 90 deg, so on a
+  // conformal layout the shear is bounded by the anisotropy LSCM leaves.
+  const hemi = sphereCapFan(24, 64, Math.PI / 2);
+  const huv = flattenLSCM(hemi).uv;
+  const ps = principalStrains(hemi.positions, hemi.faces, huv);
+  const gl = grainStrains(hemi.positions, hemi.faces, huv, [1, 0]);
+  let worst = -Infinity;
+  for (let f = 0; f < hemi.faces.length; f++) {
+    const bound = 2 * Math.atan(ps.s1[f] / ps.s2[f]) / DEG - 90;
+    worst = Math.max(worst, gl.shearDeg[f] - bound);
+  }
+  assert.ok(worst <= 1e-9, `layout grain shear exceeds the anisotropy bound by ${worst} deg`);
+  // The bound is not met vacuously: a fixed pattern grain does shear where the
+  // pole fan leaves LSCM anisotropic (about 4.6 deg at s1/s2 = 1.087).
+  assert.ok(gl.summary.shear.max > 1, `layout grain max shear ${gl.summary.shear.max} deg`);
 });

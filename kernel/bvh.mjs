@@ -660,3 +660,38 @@ export function bvhClosestPoint(bvh, positions, point, opts = {}) {
     inside,
   };
 }
+
+/**
+ * One-sided deviation of a point set from a triangle mesh: for each point, its
+ * unsigned distance to the nearest point of the mesh.
+ *
+ * `points` is a flat [x,y,z] array of samples (a display mesh's vertices);
+ * `positions` is the target in `buildBVH`'s unindexed layout. `opts.bvh` is a
+ * tree already built over `positions`.
+ *
+ * The measure is one-sided: a part lying inside a larger whole reads 0 from the
+ * part to the whole and the uncovered width from the whole to the part, so a
+ * caller that wants both directions calls it twice with the roles swapped.
+ *
+ * Returns `{ distances, max, rms, mean, count }` with one distance per point,
+ * or null when either side is empty — nothing was measured, which is not zero.
+ */
+export function pointSetDeviation(points, positions, opts = {}) {
+  const n = Math.floor((points ? points.length : 0) / 3);
+  if (!n || !positions || positions.length < 9) return null;
+  const bvh = opts.bvh || buildBVH(positions);
+  if (!bvh.nodeCount) return null;
+  const distances = new Float64Array(n);
+  const p = [0, 0, 0];
+  let max = 0, sum = 0, sum2 = 0;
+  for (let i = 0; i < n; i += 1) {
+    p[0] = points[i * 3]; p[1] = points[i * 3 + 1]; p[2] = points[i * 3 + 2];
+    const hit = bvhClosestPoint(bvh, positions, p);
+    if (!hit) return null;
+    const d = hit.distance;
+    distances[i] = d;
+    if (d > max) max = d;
+    sum += d; sum2 += d * d;
+  }
+  return { distances, max, rms: Math.sqrt(sum2 / n), mean: sum / n, count: n };
+}

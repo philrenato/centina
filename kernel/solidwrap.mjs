@@ -81,6 +81,66 @@ export function fuseBlendRadius(fuse) {
   return Math.max(0, fuse) * 2;
 }
 
+/* The chamfer pair (hg_sdf's fOpUnionChamfer and its intersection twin): the
+   crease is cut by the plane a + b = r, so on a right-angled crease the bevel's
+   feet sit r from the crease on each face — where the Round form's tangent
+   points sit for the same k. Each is a bound on the distance, Lipschitz √2 in
+   its two arguments. At r = 0 each is the exact min / max. */
+const SQRT_HALF = Math.SQRT1_2;
+function chamferMin(a, b, r) {
+  const m = Math.min(a, b);
+  if (!(r > 0)) return m;
+  return Math.min(m, (a + b - r) * SQRT_HALF);
+}
+function chamferMax(a, b, r) {
+  const m = Math.max(a, b);
+  if (!(r > 0)) return m;
+  return Math.max(m, (a + b + r) * SQRT_HALF);
+}
+
+/**
+ * One step of the Fuse fold: what member distance `d` does to the shape `acc`
+ * built from the members before it.
+ *
+ *   op    'add' (union), 'cut' (acc minus the member), 'common' (acc
+ *         intersected with the member). Anything else reads as 'add'.
+ *   edge  'round' (the polynomial smooth min / max of width k), 'chamfer' (a
+ *         bevel whose feet sit where Round's tangent points sit), 'sharp' (the
+ *         exact min / max; k is not read). Anything else reads as 'round'.
+ *
+ * Cut and Common are the Add form mirrored through negation, so their
+ * rounds have the same width as Add's. 'add' / 'round' is `smoothMinPoly(acc,
+ * d, k)` exactly.
+ */
+export function fuseMemberFold(acc, d, op, edge, k) {
+  if (edge === 'sharp') {
+    if (op === 'cut') return Math.max(acc, -d);
+    if (op === 'common') return Math.max(acc, d);
+    return Math.min(acc, d);
+  }
+  if (edge === 'chamfer') {
+    if (op === 'cut') return chamferMax(acc, -d, k);
+    if (op === 'common') return chamferMax(acc, d, k);
+    return chamferMin(acc, d, k);
+  }
+  /* Outside the band |a - b| < k the mirrored forms return the exact max:
+     smoothMinPoly's clamped branch computes b + (a - b), which can land an ulp
+     off a, and a Cut that never comes within k of the shape must leave its
+     field bit-identical. Add keeps smoothMinPoly unchanged. */
+  if (op === 'cut') {
+    if (!(Math.abs(acc + d) < k)) return Math.max(acc, -d);
+    return -smoothMinPoly(-acc, d, k);
+  }
+  if (op === 'common') {
+    if (!(Math.abs(acc - d) < k)) return Math.max(acc, d);
+    return -smoothMinPoly(-acc, -d, k);
+  }
+  return smoothMinPoly(acc, d, k);
+}
+
+const FUSE_OPS = new Set(['add', 'cut', 'common']);
+const FUSE_EDGES = new Set(['round', 'chamfer', 'sharp']);
+
 // The field
 
 function boundsOfPositions(positions) {
@@ -99,8 +159,13 @@ function boundsOfPositions(positions) {
 /**
  * The scalar field N solids present to the wrap.
  *
- * `members` is an array of `{ positions }`, each a flat unindexed triangle
- * array — the shape `buildBVH` and a renderer already have.
+ * `members` is an array of `{ positions, op?, edge?, blend? }`, each
+ * `positions` a flat unindexed triangle array — the shape `buildBVH` and a
+ * renderer already have. The members fold in list order (`fuseMemberFold`):
+ * the first is the base and its op is not read; `op` and `edge` default to
+ * 'add' and 'round'; `blend` (mm, the same unit as opts.fuse) is this member's
+ * own width, and null or absent follows opts.fuse. Every member at the
+ * defaults is the union fold.
  *
  *   opts.fuse   mm. Gaps up to this wide are bridged, and creases between
  *               members round by about this much. 0 is the sharp union.
@@ -170,6 +235,13 @@ export function makeSolidsField(members, opts = {}) {
   const openMembers = [];
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
+  /* How far the field bulges past the Adds' own surfaces: the widest blend
+     among them. */
+  let reach = fuse;
+  /* A bound on the field's Lipschitz constant. Every Round and Sharp step keeps
+     it at 1; a chamfer step L -> (L + 1)/√2 when its bevel plane is the active
+     branch. The occupancy grid's scan-line skip divides by it. */
+  let lipschitz = 1;
 
   members.forEach((m, idx) => {
     if (!m.positions || m.positions.length < 9) { openMembers.push(idx); return; }
@@ -182,11 +254,25 @@ export function makeSolidsField(members, opts = {}) {
     const solid = m.solid === true || (m.solid !== false && soupEnclosesVolume(positions));
     if (!pn.closed && !solid) openMembers.push(idx);
     const b = boundsOfPositions(positions);
-    for (let d = 0; d < 3; d += 1) {
-      if (b.lo[d] < lo[d]) lo[d] = b.lo[d];
-      if (b.hi[d] > hi[d]) hi[d] = b.hi[d];
+    /* The first part is the base whatever it carries. A Cut or Common
+       member only ever removes from the shape before it (each form is >= that
+       shape's own field), so the solid lies inside the base and the Adds: only
+       those set the bounds, the padding and, through `outerParts`, the start
+       box and its frame. */
+    const base = parts.length === 0;
+    const op = base || !FUSE_OPS.has(m.op) ? 'add' : m.op;
+    const edge = FUSE_EDGES.has(m.edge) ? m.edge : 'round';
+    const ownBlend = Number.isFinite(m.blend) ? Math.max(0, m.blend) : null;
+    const blendRadius = edge === 'sharp' ? 0 : (ownBlend === null ? k : fuseBlendRadius(ownBlend));
+    if (op === 'add') {
+      for (let d = 0; d < 3; d += 1) {
+        if (b.lo[d] < lo[d]) lo[d] = b.lo[d];
+        if (b.hi[d] > hi[d]) hi[d] = b.hi[d];
+      }
+      if (!base && ownBlend !== null && edge !== 'sharp' && ownBlend > reach) reach = ownBlend;
     }
-    parts.push({ index: idx, positions, bvh, pn, bounds: b, parity: !pn.closed && solid });
+    if (!base && edge === 'chamfer') lipschitz = Math.max(lipschitz, (lipschitz + 1) * SQRT_HALF);
+    parts.push({ index: idx, positions, bvh, pn, bounds: b, parity: !pn.closed && solid, op, edge, blendRadius });
   });
 
   const finite = parts.length > 0;
@@ -195,7 +281,7 @@ export function makeSolidsField(members, opts = {}) {
   // The field bulges outward by at most the skin plus the blend's own rounding,
   // so anything that has to contain the zero set — the start box, the counting
   // grid — is padded by this and not by the members' own bounds.
-  const padding = Math.max(0, skin) + fuse + (diagonal > 0 ? diagonal * 0.02 : 0);
+  const padding = Math.max(0, skin) + reach + (diagonal > 0 ? diagonal * 0.02 : 0);
   const gradientStep = opts.gradientStep ?? Math.max(diagonal * 5e-4, 1e-9);
 
   /* The sign of a mesh that is not combinatorially closed — the ordinary case.
@@ -248,7 +334,7 @@ export function makeSolidsField(members, opts = {}) {
     let acc = Infinity;
     for (let i = 0; i < parts.length; i += 1) {
       const d = signedFor(parts[i], p);
-      acc = i === 0 ? d : smoothMinPoly(acc, d, k);
+      acc = i === 0 ? d : fuseMemberFold(acc, d, parts[i].op, parts[i].edge, parts[i].blendRadius);
     }
     return acc - skin;
   };
@@ -284,7 +370,10 @@ export function makeSolidsField(members, opts = {}) {
     diagonal,
     padding,
     gradientStep,
+    lipschitz,
     parts,
+    outerParts: parts.filter((part) => part.op === 'add'),
+    shaped: parts.some((part) => part.op !== 'add'),
     distanceAt,
     gradientAt,
     memberSignedDistances,
@@ -337,13 +426,15 @@ function componentsAtResolution(field, opts, resolution) {
   let occupied = 0;
   const p = [0, 0, 0];
   const lipschitz = field.parts.every((part) => !part.parity);
+  const slope = field.lipschitz || 1;
   /* The scan line skips what the distance already decided. This grid is the
      largest single cost in a drag (more than the wrap itself). The field is
      1-Lipschitz (the smooth minimum's two partials sum to 1 and both lie in
      [0,1], and every member's own term is a true distance), so a reading of d
      at one cell fixes the sign for floor(|d|/cell - 0.5) cells either side of
-     it along any line. Skipping those is exact — the occupancy is identical
-     cell for cell to the unskipped loop.
+     it along any line. A chamfer step raises the constant (`field.lipschitz`)
+     and the run is divided by it. Skipping those is exact — the occupancy is
+     identical cell for cell to the unskipped loop.
      Only where every member is properly signed. A member whose solidity is
      imputed is signed by ray parity, which puts a boolean sign on an unsigned
      distance: near a thin feature the sign flips faster than the magnitude
@@ -359,7 +450,7 @@ function componentsAtResolution(field, opts, resolution) {
         p[2] = lo[2] + (l + 0.5) * cell;
         const d = field.distanceAt(p);
         if (!Number.isFinite(d)) { l += 1; continue; }
-        const run = lipschitz ? Math.max(0, Math.floor(Math.abs(d) / cell - 0.5)) : 0;
+        const run = lipschitz ? Math.max(0, Math.floor(Math.abs(d) / (cell * slope) - 0.5)) : 0;
         const end = Math.min(dims[2], l + 1 + run);
         if (d <= 0) for (let k = l; k < end; k += 1) { solid[row + k] = 1; occupied += 1; }
         l = end;
@@ -571,7 +662,16 @@ export function wrapSolidsRefusal(field, opts = {}) {
       reason: SOLID_WRAP_REFUSAL.NO_VOLUME,
       message: eaten
         ? `Skin is eating more than there is to eat — at ${opts.skin}mm nothing is left to wrap. Raise it toward 0.`
-        : 'nothing in this selection encloses space.',
+        : field.shaped
+          ? 'the Cut and Common inputs leave nothing. Set one to Add.'
+          : 'nothing in this selection encloses space.',
+      components: comp,
+    };
+  }
+  if (comp.components > 1 && field.shaped) {
+    return {
+      reason: SOLID_WRAP_REFUSAL.MEMBERS_DO_NOT_FUSE,
+      message: `the inputs fall into ${comp.components} pieces; raise Fuse or move a Cut.`,
       components: comp,
     };
   }
@@ -959,7 +1059,8 @@ export function wrapSolidsToSuperbCage(members, opts = {}) {
   const fit = Math.max(0, Math.min(100, opts.fit ?? 50));
   const fitFrac = fit / 100;
 
-  const frame = principalFrame(field.parts);
+  const outer = field.outerParts || field.parts;
+  const frame = principalFrame(outer);
   const [e0, e1, e2] = frame.axes;
   const toLocal = (p) => {
     const r = sub3(p, frame.origin);
@@ -974,7 +1075,7 @@ export function wrapSolidsToSuperbCage(members, opts = {}) {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   const p = [0, 0, 0];
-  for (const part of field.parts) {
+  for (const part of outer) {
     const pos = part.positions;
     for (let i = 0; i + 2 < pos.length; i += 3) {
       p[0] = pos[i]; p[1] = pos[i + 1]; p[2] = pos[i + 2];

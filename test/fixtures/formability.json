@@ -1,0 +1,140 @@
+{
+ "schema": "formatter-formability/1",
+ "data_version": "0.6.85+02b73118",
+ "site_version": "0.6.85",
+ "order": [
+  "rigid",
+  "low",
+  "moderate",
+  "high",
+  "very_high"
+ ],
+ "bands": {
+  "rigid": {
+   "label": "rigid",
+   "stretch": 0.005
+  },
+  "low": {
+   "label": "low",
+   "stretch": 0.05
+  },
+  "moderate": {
+   "label": "moderate",
+   "stretch": 0.2
+  },
+  "high": {
+   "label": "high",
+   "stretch": 0.5
+  },
+  "very_high": {
+   "label": "very high",
+   "stretch": 1.5
+  }
+ },
+ "marginal_from": 0.8,
+ "entries": [
+  {
+   "id": "mat_aluminum_5052",
+   "name": "Aluminum 5052",
+   "label": "Aluminum 5052",
+   "category": "metal",
+   "permalink": "https://renato.design/formatter-app/materials/metal/mat_aluminum_5052.html",
+   "formability": [
+    {
+     "process_id": "proc_sheet_metal_bending",
+     "stretch": "rigid",
+     "compression": "rigid",
+     "min_bend_radius_t": 1,
+     "nominal_thickness_mm": 1.0,
+     "source": "Press-brake bending keeps the sheet length. A common shop rule for 5052-H32 is an inside bend radius of at least one sheet thickness; judged here at 1.0 mm sheet.",
+     "confidence": "medium"
+    }
+   ]
+  },
+  {
+   "id": "mat_cotton_woven",
+   "name": "Woven Cotton (Plain Weave)",
+   "label": "Woven cotton",
+   "category": "textile",
+   "permalink": "https://renato.design/formatter-app/materials/textile/mat_cotton_woven.html",
+   "formability": [
+    {
+     "process_id": null,
+     "shear": "moderate",
+     "source": "A plain weave keeps the length of its warp and weft threads and follows a curve by shearing the angle between them, until the yarns jam at the locking angle. Plain-weave cotton locks at about 30 to 40 degrees of shear; this entry takes 35.",
+     "confidence": "medium"
+    }
+   ]
+  },
+  {
+   "id": "mat_jersey_knit_cotton",
+   "name": "Cotton Jersey Knit (T-Shirt Fabric)",
+   "label": "Cotton jersey",
+   "category": "textile",
+   "permalink": "https://renato.design/formatter-app/materials/textile/mat_jersey_knit_cotton.html",
+   "formability": [
+    {
+     "process_id": null,
+     "stretch": {
+      "course": "high",
+      "wale": "moderate"
+     },
+     "compression": "rigid",
+     "source": "From this entry's own stretch_course_pct (50) and stretch_wale_pct (20): single jersey stretches about 50% along its courses (crosswise) and 20% along its wales (lengthwise).",
+     "confidence": "medium"
+    }
+   ]
+  },
+  {
+   "id": "mat_neoprene_wetsuit",
+   "name": "Neoprene Wetsuit Fabric (Foam-Cored, Jersey-Laminated)",
+   "label": "Neoprene",
+   "category": "textile",
+   "permalink": "https://renato.design/formatter-app/materials/textile/mat_neoprene_wetsuit.html",
+   "formability": [
+    {
+     "process_id": null,
+     "stretch": "very_high",
+     "compression": "rigid",
+     "source": "From this entry's own stretch_percent (150): jersey-laminated wetsuit neoprene stretches to about two and a half times its length.",
+     "confidence": "medium"
+    }
+   ]
+  },
+  {
+   "id": "mat_paper_cardstock_index",
+   "name": "Cardstock (100 lb Cover / Index)",
+   "label": "Cardstock",
+   "category": "paper",
+   "permalink": "https://renato.design/formatter-app/materials/paper/mat_paper_cardstock_index.html",
+   "formability": [
+    {
+     "process_id": null,
+     "stretch": "rigid",
+     "compression": "rigid",
+     "source": "Paper does not stretch in use: a cover-weight sheet tears or creases before it lengthens by a fraction of a percent, so it covers only a developable shape.",
+     "confidence": "medium"
+    }
+   ]
+  }
+ ],
+ "shear_order": [
+  "low",
+  "moderate",
+  "high"
+ ],
+ "shear_bands": {
+  "low": {
+   "label": "low",
+   "locking_deg": 25
+  },
+  "moderate": {
+   "label": "moderate",
+   "locking_deg": 35
+  },
+  "high": {
+   "label": "high",
+   "locking_deg": 50
+  }
+ }
+}

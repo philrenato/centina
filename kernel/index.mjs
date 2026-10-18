@@ -108,6 +108,9 @@ export * from './blobcurve.mjs';
 export * from './spine.mjs';
 export * from './vec3.mjs';
 export * from './wave.mjs';
+export * from './ecolabel.mjs';
+export * from './holdmeasure.mjs';
+export * from './lattice.mjs';
 
 // The three disambiguations. Import the module directly for the bare name.
 export { mergeFaces as mergeArrangementFaces } from './arrangement.mjs';
@@ -119,3 +122,6 @@ export { smoothstep as smoothstepLightformer } from './lightformer.mjs';
 
 export * from './xpbd.mjs';
 export * from './dynamicbond.mjs';
+// curve.mjs takes a curve, lattice.mjs takes (knots, degree, count).
+export { grevilleAbscissae } from './curve.mjs';
+export { grevilleAbscissae as latticeGrevilleAbscissae } from './lattice.mjs';
