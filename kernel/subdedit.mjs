@@ -17,6 +17,7 @@ import { add, sub, scale, length, cross, dot } from './vec3.mjs';
 import { edgeKey, buildTopology, subdivideCatmullClark } from './subd.mjs';
 import { oppositeEdgeInFace } from './subdselect.mjs';
 import { cubicHermiteSegment } from './interpolate.mjs';
+import { jacobiEigenSym3 } from './refit.mjs';
 // A cycle with subdnetwork.mjs, which imports this module's hub builders; only
 // function declarations cross it, and they are bound before either module runs.
 import { cageCrossingFacePairs } from './subdnetwork.mjs';
@@ -2292,18 +2293,21 @@ function junctionPlaneOrder(mids, centre, who, noun) {
 // Same scale-free contract as subdnetwork.mjs: a one-plane angular ordering
 // holds only while the worst arm center sits within 25% of the arms' mean
 // spread from that plane. Three centers are always coplanar, so this applies
-// only for N >= 4. Kept local so subdnetwork -> subdedit does not become a
-// circular dependency.
+// only for N >= 4. The plane is the least-squares one (normal = the
+// covariance's smallest eigenvector), so the residual is the true distance
+// from the best plane; the most spread pair's cross product is not that plane
+// once the centers leave it. Kept local so subdnetwork -> subdedit does not
+// become a circular dependency.
 const RUN_HUB_PLANARITY_TOLERANCE = 0.25;
 function runHubPlanarityResidual(pts) {
   const centre = scale(pts.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / pts.length);
-  let nrm = [0, 0, 0], best = 0;
-  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
-    const c = cross(sub(pts[i], centre), sub(pts[j], centre)), cl = length(c);
-    if (cl > best) { best = cl; nrm = c; }
+  let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+  for (const p of pts) {
+    const d = sub(p, centre);
+    xx += d[0] * d[0]; xy += d[0] * d[1]; xz += d[0] * d[2];
+    yy += d[1] * d[1]; yz += d[1] * d[2]; zz += d[2] * d[2];
   }
-  if (!(best > 0)) return 0;
-  const n = norm3(nrm);
+  const n = jacobiEigenSym3([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])[0].vector;
   const spread = pts.reduce((acc, p) => acc + length(sub(p, centre)), 0) / pts.length;
   return spread > 0 ? Math.max(...pts.map((p) => Math.abs(dot(sub(p, centre), n)))) / spread : 0;
 }

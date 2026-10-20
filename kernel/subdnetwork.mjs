@@ -64,6 +64,7 @@ import {
 import { extractSubCurve } from './knots.mjs';
 import { pipeSafeTubeRadius } from './sweep.mjs';
 import { subdPipeCage } from './subdpipe.mjs';
+import { jacobiEigenSym3 } from './refit.mjs';
 import { bridgeClosedRimsHub, convexHullFaces } from './subdedit.mjs';
 
 // See the header: half the tube radius is the middle of the band in which
@@ -445,19 +446,18 @@ function pipeNetClockRings(tube, facets, nRings) {
 // fraction of how far they spread. This is the quantity junctionPlaneOrder
 // needs to be small: it fits one plane through the rim centers and orders
 // them by angle in it, which only means anything if they lie in a plane.
-// Three points always do, so this is only asked of N >= 4.
+// Three points always do, so this is only asked of N >= 4. The plane is the
+// least-squares one, its normal the covariance's smallest eigenvector; points
+// on one line give a zero eigenvalue across it and a residual of 0.
 function planarityResidual(pts) {
   const centre = scale(pts.reduce((acc, p) => add(acc, p), [0, 0, 0]), 1 / pts.length);
-  let nrm = [0, 0, 0], best = 0;
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const c = cross(sub(pts[i], centre), sub(pts[j], centre));
-      const cl = length(c);
-      if (cl > best) { best = cl; nrm = c; }
-    }
+  let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+  for (const p of pts) {
+    const d = sub(p, centre);
+    xx += d[0] * d[0]; xy += d[0] * d[1]; xz += d[0] * d[2];
+    yy += d[1] * d[1]; yz += d[1] * d[2]; zz += d[2] * d[2];
   }
-  if (!(best > 0)) return 0; // every point on one line through the center: no plane is picked out, and no arm is out of it
-  const n = normalize(nrm);
+  const n = jacobiEigenSym3([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])[0].vector;
   const spread = pts.reduce((acc, p) => acc + length(sub(p, centre)), 0) / pts.length;
   if (!(spread > 0)) return 0;
   return Math.max(...pts.map((p) => Math.abs(dot(sub(p, centre), n)))) / spread;

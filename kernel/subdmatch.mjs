@@ -192,7 +192,10 @@ export function boundaryRunFromEdges(cage, edgeKeys, ctx = buildTopology(cage)) 
 // one every formula in this file is valid on.
 export function runStations(cage, run, closed, ctx = buildTopology(cage)) {
   const n = run.length;
-  if (n < (closed ? 3 : 3)) return { ok: false, reason: `a match needs at least 3 boundary vertices in the run, and this one has ${n}` };
+  // An open uniform cubic spans its second vertex to its second-from-last, so
+  // three open vertices carry an arc of one point and no segment to evaluate.
+  const least = closed ? 3 : 4;
+  if (n < least) return { ok: false, reason: `a match needs at least ${least} boundary vertices in ${closed ? 'a closed' : 'an open'} run, and this one has ${n}` };
   const runSet = new Set(run);
   const stations = [];
   for (let j = 0; j < n; j++) {

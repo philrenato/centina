@@ -92,6 +92,7 @@ export * from './transform.mjs';
 export * from './trim.mjs';
 export * from './trimfit.mjs';
 export * from './trimtess.mjs';
+export * from './undoring.mjs';
 export * from './varradius.mjs';
 export * from './bvh.mjs';
 export * from './rendrepack.mjs';
