@@ -506,7 +506,7 @@ test('cutMeshAlongEdges leaves an interior endpoint alone — a slit that dead-e
 test('cutMeshAlongEdges refuses to "cut" an edge that is already on the boundary', () => {
   const positions = [[0, 0, 0], [10, 0, 0], [5, 8, 0]];
   const faces = [[0, 1, 2]];
-  assert.throws(() => cutMeshAlongEdges(positions, faces, ['0|1']), /genuinely INTERIOR edge/);
+  assert.throws(() => cutMeshAlongEdges(positions, faces, ['0|1']), /INTERIOR edge/);
   assert.throws(() => cutMeshAlongEdges(positions, faces, ['0|2']), /shared by 1 face/);
 });
 

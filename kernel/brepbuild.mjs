@@ -210,7 +210,7 @@ function shellSignedVolume(loops, faceIdx, points) {
   return v;
 }
 
-// Deliberately irrational-ish directions, so a ray is unlikely to run
+// Irrational-ish directions, so a ray is unlikely to run
 // along an edge or through a vertex of an axis-aligned shell — the one
 // configuration a crossing count cannot resolve. Several are tried, and
 // a near-degenerate hit disqualifies that direction's answer entirely

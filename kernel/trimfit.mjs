@@ -13,7 +13,7 @@
 // supposed to have: a corner of a face boundary is a vertex, and the stretches
 // between vertices are its edges.
 //
-// A smooth join is not a corner, and this deliberately does not split at one.
+// A smooth join is not a corner, and this does not split at one.
 // A stadium — two straight sides closed by two semicircular ends — is a single
 // tangent-continuous loop, and it comes back as one run: there is no
 // vertex there for a B-rep to have. It costs control points (35 for a 50-point
@@ -39,7 +39,7 @@ import { curvePoint } from './curve.mjs';
 // question — parameter space has no units, so no distance bound could serve.
 //
 // The value is a discriminator, not a tuned constant. It has to sit above
-// the turn a smooth loop's own sampling shows and below the shallowest genuine
+// the turn a smooth loop's own sampling shows and below the shallowest real
 // corner. A closed loop of N samples turns 360/N degrees per step, so 25
 // degrees admits any smooth loop sampled at 15 points or more, while the
 // shallowest corner it can miss is a 155-degree one. Sampling far coarser than

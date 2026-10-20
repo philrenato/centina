@@ -216,7 +216,7 @@ export function detectPipeJunctions(rails, opts = {}) {
         if (near.ambiguous) {
           return {
             ok: false,
-            reason: `rail ${bi}'s ${which} lands on rail ${hi} in two genuinely different places at once (that rail loops back near itself there), so there is no single point to split it at`,
+            reason: `rail ${bi}'s ${which} lands on rail ${hi} in two different places at once (that rail loops back near itself there), so there is no single point to split it at`,
           };
         }
         splitParams[hi].push(near.u);
@@ -480,6 +480,9 @@ function planarityResidual(pts) {
 //     default: a soft junction is the purpose of the SuperB expression.
 //   clampRadiusToBend — reuse Pipe's own self-intersection clamp so a rail
 //     tighter than the tube cannot silently swallow itself. On by default.
+//   sectionRing(radius) — a section that is not round: the [x, y] ring of
+//     `facets` points for a tube of that radius (pipeSectionRing), with
+//     `frameOpts` for its frames. Every tube's rim keeps `facets` vertices.
 //
 // Returns { ok: true, cages, junctions, junctionCounts, ... } or
 // { ok: false, reason } for a refusal the user can act on.
@@ -526,7 +529,8 @@ export function subdPipeNetwork(rails, opts = {}) {
     }
   }
 
-  const buildTube = (curve, cs, ce, rr = radius) => subdPipeCage(curve, { radius: rr, facets, segments, capStart: cs, capEnd: ce, crease });
+  const sectionOpts = (rr) => (typeof opts.sectionRing === 'function' ? { ring: opts.sectionRing(rr), frameOpts: opts.frameOpts || {} } : {});
+  const buildTube = (curve, cs, ce, rr = radius) => subdPipeCage(curve, { radius: rr, facets, segments, capStart: cs, capEnd: ce, crease, ...sectionOpts(rr) });
 
   // D3, welding off. N independent tubes, from the caller's own rails,
   // with no detection, no splitting and no insetting at all.
@@ -665,7 +669,7 @@ function buildComponent(comp, det, cfg) {
       else if (residual > PIPE_NETWORK_PLANARITY_TOLERANCE) {
         return {
           ok: false,
-          reason: `the ${N}-arm junction at (${J.point.map((v) => v.toFixed(2)).join(', ')}) is genuinely three-dimensional (its arms sit ${(residual * 100).toFixed(0)}% of their own spread out of any one plane) — this hub orders its arms around ONE plane, and two arms on opposite sides of it can project to the same angle and be joined to the wrong neighbor. A truly 3D junction needs a different construction, not a bigger version of this one`,
+          reason: `the ${N}-arm junction at (${J.point.map((v) => v.toFixed(2)).join(', ')}) is three-dimensional (its arms sit ${(residual * 100).toFixed(0)}% of their own spread out of any one plane) — this hub orders its arms around ONE plane, and two arms on opposite sides of it can project to the same angle and be joined to the wrong neighbor. A truly 3D junction needs a different construction, not a bigger version of this one`,
           junctionPoint: J.point,
           planarityResidual: residual,
         };

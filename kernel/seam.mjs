@@ -245,7 +245,7 @@ export function cutMeshAlongEdges(positions, faces, cutEdgeKeys) {
     const fs = edgeFaces.get(key);
     if (!fs) throw new Error(`cutMeshAlongEdges: edge ${key} is not an edge of this mesh`);
     if (fs.length !== 2) {
-      throw new Error(`cutMeshAlongEdges: refusing to cut edge ${key} — it is shared by ${fs.length} face(s), and only a genuinely INTERIOR edge (exactly 2) can be opened`);
+      throw new Error(`cutMeshAlongEdges: refusing to cut edge ${key} — it is shared by ${fs.length} face(s), and only an INTERIOR edge (exactly 2) can be opened`);
     }
   }
 
@@ -613,16 +613,16 @@ export function cutToDisk(positions, faces, opts = {}) {
 
   // Refuse everything out of scope before touching the mesh.
   if (!info0.orientable) {
-    throw new Error('cutToDisk: refusing to cut — the mesh is not consistently oriented. Either it is genuinely NON-ORIENTABLE (a Mobius strip or Klein bottle, which this stage does not support), or it is an orientable mesh whose triangles were handed over wound inconsistently; either way the handle/seam analysis below would be meaningless on it.');
+    throw new Error('cutToDisk: refusing to cut — the mesh is not consistently oriented. Either it is NON-ORIENTABLE (a Mobius strip or Klein bottle, which this stage does not support), or it is an orientable mesh whose triangles were handed over wound inconsistently; either way the handle/seam analysis below would be meaningless on it.');
   }
   if (info0.genus === null || info0.genus < 0) {
     throw new Error(`cutToDisk: refusing to cut — could not read a consistent genus from this mesh (V-E+F = ${info0.chi}, ${info0.boundaryCount} boundary component(s)).`);
   }
   if (info0.genus > 1) {
-    throw new Error(`cutToDisk: refusing to cut — this surface has GENUS ${info0.genus} (${info0.genus} handles, V-E+F = ${info0.chi}). Only genus 0 (any number of boundaries) and genus 1 with no boundary (a torus) are supported. Cutting arbitrary genus needs a general cut-graph (Sheffer & Hart's Seamster, 2002), which this stage deliberately does not implement.`);
+    throw new Error(`cutToDisk: refusing to cut — this surface has GENUS ${info0.genus} (${info0.genus} handles, V-E+F = ${info0.chi}). Only genus 0 (any number of boundaries) and genus 1 with no boundary (a torus) are supported. Cutting arbitrary genus needs a general cut-graph (Sheffer & Hart's Seamster, 2002), which this stage does not implement.`);
   }
   if (info0.genus === 1 && !info0.closed) {
-    throw new Error(`cutToDisk: refusing to cut — this surface has a HANDLE AND a boundary (genus 1 with ${info0.boundaryCount} boundary component(s)). Only a closed torus is supported at genus 1; a handled surface that is also open needs a general cut-graph, which this stage deliberately does not implement.`);
+    throw new Error(`cutToDisk: refusing to cut — this surface has a HANDLE AND a boundary (genus 1 with ${info0.boundaryCount} boundary component(s)). Only a closed torus is supported at genus 1; a handled surface that is also open needs a general cut-graph, which this stage does not implement.`);
   }
 
   let pos = positions, fac = faces;

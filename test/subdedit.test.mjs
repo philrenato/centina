@@ -875,7 +875,7 @@ test('stitchEdgeRuns: refuses an invalid position keyword', () => {
 
 test('stitchEdgeRuns: refuses two runs that already share a vertex', () => {
   const cage = { vertices: [[0, 0, 0], [1, 0, 0], [2, 0, 0]], faces: [], creases: {} };
-  assert.throws(() => stitchEdgeRuns(cage, [0, 1], [1, 2]), /genuinely separate/);
+  assert.throws(() => stitchEdgeRuns(cage, [0, 1], [1, 2]), /must be separate/);
 });
 
 // computeFaceNormal / computeAverageNormal

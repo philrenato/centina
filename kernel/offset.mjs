@@ -705,7 +705,7 @@ export function shellSolid(panels, removedIndices, distance) {
     const bows = dec.curved.map((i) => dec.curvature.get(i)).filter((v) => v != null);
     const flattest = bows.length ? Math.min(...bows) : null;
     const bowNote = flattest != null
-      ? ` The flattest of them bows at most ${flattest.toFixed(3)}mm off its own plane; a face that is genuinely near-flat can be rebuilt as a plane and shelled.`
+      ? ` The flattest of them bows at most ${flattest.toFixed(3)}mm off its own plane; a face that is near-flat can be rebuilt as a plane and shelled.`
       : '';
     throw new Error(`shellSolid: ${dec.curved.length} of ${sourceCount} face${sourceCount === 1 ? '' : 's'} ${dec.curved.length === 1 ? 'is' : 'are'} CURVED (face${dec.curved.length === 1 ? '' : 's'} ${dec.curved.join(', ')}). An exact shell offsets each face's own PLANE and meets its neighbors at the intersection; a curved wall meeting a flat cap needs a real junction blend this kernel does not have yet. Refused rather than shipping a shell that is not a valid solid.${bowNote}`);
   }

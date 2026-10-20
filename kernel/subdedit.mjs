@@ -1587,7 +1587,7 @@ function bridgeRims(sourceCage, workCage, vertexRemap, loopA0, loopB0raw, segmen
   candidates.sort((x, y) => x.dist - y.dist);
   const validCandidate = candidates.find((c) => !wouldDuplicateExistingEdge(c.candidate));
   if (!validCandidate) {
-    throw new Error(`${label}: every possible correspondence between the two rims would duplicate an edge the cage already has elsewhere (the two openings are already directly connected by existing geometry) — pick two openings with a genuine gap of empty space between them`);
+    throw new Error(`${label}: every possible correspondence between the two rims would duplicate an edge the cage already has elsewhere (the two openings are already directly connected by existing geometry) — pick two openings with a gap of empty space between them`);
   }
   let alignedLoopB0 = validCandidate.candidate;
   if (spin) {
@@ -1905,7 +1905,7 @@ export function stitchEdgeRuns(cage, runA, runB, position = 'average') {
   if (!['first', 'second', 'average'].includes(position)) throw new Error(`stitchEdgeRuns: position must be "first", "second", or "average" (got "${position}")`);
   const n = runA.length;
   const setA = new Set(runA);
-  for (const vi of runB) if (setA.has(vi)) throw new Error(`stitchEdgeRuns: vertex ${vi} appears in both runs — the two runs must be genuinely separate before stitching`);
+  for (const vi of runB) if (setA.has(vi)) throw new Error(`stitchEdgeRuns: vertex ${vi} appears in both runs — the two runs must be separate before stitching`);
 
   const topology = buildTopology(cage);
   checkOpenRunChain(cage, topology, runA, 'runA', 'stitchEdgeRuns', STITCH_OPEN_RUN_WORDING);
@@ -2650,7 +2650,7 @@ export function bridgeClosedRimsHub(cage, rims, opts = {}) {
   const faces = [...cage.faces.map((f) => [...f]), ...added];
   const reuseBefore = directedEdgeReuseCount(cage.faces);
   if (directedEdgeReuseCount(faces) !== reuseBefore) {
-    throw new Error('bridgeClosedRimsHub: the assembled junction is not consistently wound — the rims may not all bound genuinely separate openings of one consistently-oriented cage');
+    throw new Error('bridgeClosedRimsHub: the assembled junction is not consistently wound — the rims may not all bound separate openings of one consistently-oriented cage');
   }
 
   const outCreases = { ...(cage.creases || {}) };

@@ -1,5 +1,5 @@
 // .3dm interchange — conversion between this kernel's own P&T-standard NURBS
-// representation and rhino3dm/OpenNURBS's representation. Deliberately lives
+// representation and rhino3dm/OpenNURBS's representation. It lives
 // OUTSIDE kernel/: everything under kernel/ is implemented from the
 // published literature — Piegl & Tiller above all, and alongside it Catmull
 // & Clark, Stam, Loop & Schaefer, Halstead/Kass/DeRose, Sederberg & Parry,

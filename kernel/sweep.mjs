@@ -70,7 +70,23 @@ export function localizeSectionToFrame(sectionCrv, frame) {
 // Returned as `frames` (one per rail control point, in order) with a plain
 // `.extra` array attached (one frame per `extraParams` entry, same order);
 // `frames[i]` and `frames.length` are unaffected by it.
-export function buildParallelTransportFrames(rail, extraParams = []) {
+//
+// `opts.transport`: 'project' (the default) carries the normal by projecting
+// it into each station's normal plane. That is first-order in the step: on a
+// 25-point two-turn helix it drifts 36 degrees from a rotation-minimizing
+// frame, at 400 dense stations still 1.4 degrees.
+// A round section cannot show it. 'rmf' carries the normal along the curve
+// itself by double reflection (Wang, Juttler, Zheng, Liu 2008), integrated at
+// RMF_SUBSTEPS_PER_SPAN steps per knot span between stations, so the drift is
+// that of the integrator (under 0.1 degree on the same helix). The corner
+// miter and the seam weld apply to the station frame only; the carried normal
+// continues on the curve's own tangent. On a closed rail the loop's holonomy
+// (the angle the carried normal comes back turned by) is spread over the
+// stations in proportion to arc length, so the seam takes one span's share
+// of the twist instead of all of it. `opts.up`: see holdTowardUp.
+export const RMF_SUBSTEPS_PER_SPAN = 16;
+export function buildParallelTransportFrames(rail, extraParams = [], opts = {}) {
+  const rmf = opts && opts.transport === 'rmf';
   const gParams = grevilleAbscissae(rail);
   const domainSpan = Math.max(1e-12, Math.abs(rail.knots[rail.knots.length - 1] - rail.knots[0]));
   const DEDUPE_TOL = domainSpan * 1e-9;
@@ -99,9 +115,34 @@ export function buildParallelTransportFrames(rail, extraParams = []) {
   const frames = [];
   let prevNormal = null;
   let prevRawTangent = null; // the previous step's un-mitered tangent: an interior corner's incoming edge direction
+  // 'rmf': the normal carried on the curve, its point and tangent, and the
+  // arc length walked, read before each station's miter.
+  let carried = null;
+  const spanCount = Math.max(1, rail.knots.length - 2 * rail.degree - 1);
+  const subStepU = domainSpan / (spanCount * RMF_SUBSTEPS_PER_SPAN);
   for (let k = 0; k < steps.length; k++) {
     const step = steps[k];
     const { tangent: rawTangent } = curvePointAndTangent(rail, step.u);
+    if (rmf) {
+      const here = curvePointAndTangent(rail, step.u);
+      const t1 = normalize(here.tangent);
+      if (!carried) {
+        carried = { u: step.u, p: here.point, t: t1, r: anyPerpendicular(t1), s: 0 };
+      } else {
+        const n = Math.max(1, Math.ceil((step.u - carried.u) / subStepU));
+        for (let i = 1; i <= n; i++) {
+          const u = i === n ? step.u : carried.u + ((step.u - carried.u) * i) / n;
+          const q = i === n ? here : curvePointAndTangent(rail, u);
+          const tq = i === n ? t1 : normalize(q.tangent);
+          const r = transportByDoubleReflection(carried.p, carried.t, carried.r, q.point, tq);
+          carried.s += length(sub(q.point, carried.p));
+          carried.p = q.point; carried.t = tq; carried.r = r;
+        }
+        carried.u = step.u;
+      }
+      step.arc = carried.s;
+      step.carriedNormal = carried.r;
+    }
     let tangent = rawTangent;
 
     // Interior-corner miter. `curvePointAndTangent` at a control point's
@@ -156,7 +197,9 @@ export function buildParallelTransportFrames(rail, extraParams = []) {
     // tangent. The interior-corner miter cannot cover it, because an extra
     // station is not a control point.
     let normal;
-    if (prevNormal) {
+    if (rmf) {
+      normal = rotateMinimally(step.carriedNormal, normalize(rawTangent), tangent);
+    } else if (prevNormal) {
       const raw = sub(prevNormal, scale(tangent, dot(prevNormal, tangent)));
       normal = length(raw) > 1e-9 ? normalize(raw) : anyPerpendicular(tangent);
     } else {
@@ -206,6 +249,22 @@ export function buildParallelTransportFrames(rail, extraParams = []) {
   // `denseRailFrames`/`sweep1RigidResampled` (the only path a 'rounded'
   // cornerStyle Pipe on a closed rail reaches) read `.extra` exclusively;
   // sweep1Rigid's free (by-index) path never reads it.
+  if (rmf && frames.length >= 2 && isCurveClosed(rail) && steps.length >= 2) {
+    const firstStep = steps[0], lastStep = steps[steps.length - 1];
+    const total = lastStep.arc;
+    const back = rotateMinimally(firstStep.frame.xAxis, firstStep.frame.zAxis, lastStep.frame.zAxis);
+    const holonomy = Math.atan2(dot(back, lastStep.frame.yAxis), dot(back, lastStep.frame.xAxis));
+    if (total > 0 && Math.abs(holonomy) > 1e-12) {
+      for (const st of steps) {
+        if (!st.frame || st === firstStep) continue;
+        const a = holonomy * (st.arc / total), c = Math.cos(a), sn = Math.sin(a);
+        const x = add(scale(st.frame.xAxis, c), scale(st.frame.yAxis, sn));
+        st.frame.xAxis = x;
+        st.frame.yAxis = cross(st.frame.zAxis, x);
+      }
+    }
+  }
+  if (rmf && opts.up) holdTowardUp(steps.map((st) => st.frame).filter(Boolean), opts.up);
   if (frames.length >= 2 && isCurveClosed(rail)) {
     const first = frames[0];
     const last = frames[frames.length - 1];
@@ -232,6 +291,67 @@ export function buildParallelTransportFrames(rail, extraParams = []) {
   frames.extra = extraStep.map((s) => s.frame);
 
   return frames;
+}
+
+// `opts.up` (with 'rmf'): each frame is turned about its tangent so its xAxis
+// points along `up` projected into its normal plane. Where the tangent runs
+// within UP_HOLD_CONE_DEG of up that projection vanishes. The turn is an angle
+// off the rotation-minimizing frame: inside the cone it holds the angle it had
+// on the way in, and across the cone's band it eases between that held angle
+// and the projected up (each angle unwrapped against the held one), so a rail
+// that passes through vertical keeps a continuous frame and the result does not
+// depend on how densely the rail is sampled.
+export const UP_HOLD_CONE_DEG = [10, 25];
+function holdTowardUp(frames, up) {
+  const lo = Math.sin((UP_HOLD_CONE_DEG[0] * Math.PI) / 180), hi = Math.sin((UP_HOLD_CONE_DEG[1] * Math.PI) / 180);
+  let held = 0;
+  for (const frame of frames) {
+    const z = frame.zAxis;
+    const target = sub(up, scale(z, dot(up, z)));
+    const e = Math.min(1, Math.max(0, (length(target) - lo) / (hi - lo)));
+    const w = e * e * (3 - 2 * e);
+    let phi = w > 0 ? Math.atan2(dot(target, frame.yAxis), dot(target, frame.xAxis)) : held;
+    while (phi - held > Math.PI) phi -= 2 * Math.PI;
+    while (phi - held < -Math.PI) phi += 2 * Math.PI;
+    const turn = held + w * (phi - held);
+    if (w >= 1) held = phi;
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    const x = add(scale(frame.xAxis, c), scale(frame.yAxis, sn));
+    frame.xAxis = x;
+    frame.yAxis = cross(z, x);
+  }
+}
+
+// One double-reflection step of a rotation-minimizing frame (Wang, Juttler,
+// Zheng, Liu 2008, "Computation of rotation minimizing frames", Algorithm 1):
+// the normal r0 at (p0, t0) carried to (p1, t1). Coincident points skip the
+// first reflection, which leaves the minimal rotation from t0 to t1.
+export function transportByDoubleReflection(p0, t0, r0, p1, t1) {
+  const v1 = sub(p1, p0);
+  const c1 = dot(v1, v1);
+  if (c1 < 1e-24) return rotateMinimally(r0, t0, t1);
+  const rL = sub(r0, scale(v1, (2 / c1) * dot(v1, r0)));
+  const tL = sub(t0, scale(v1, (2 / c1) * dot(v1, t0)));
+  const v2 = sub(t1, tL);
+  const c2 = dot(v2, v2);
+  const r1 = c2 < 1e-24 ? rL : sub(rL, scale(v2, (2 / c2) * dot(v2, rL)));
+  const raw = sub(r1, scale(t1, dot(r1, t1)));
+  return length(raw) > 1e-12 ? normalize(raw) : anyPerpendicular(t1);
+}
+
+// r turned by the rotation that takes unit a to unit b about a x b (Rodrigues),
+// then made exactly perpendicular to b. a = b, or a fold-back (a = -b, no
+// unique axis), leaves r as it is.
+export function rotateMinimally(r, a, b) {
+  const k = cross(a, b);
+  const s2 = dot(k, k), c = dot(a, b);
+  let out = r;
+  if (s2 > 1e-24) {
+    const kr = cross(k, r);
+    out = add(add(scale(r, c), kr), scale(k, (dot(k, r) * (1 - c)) / s2));
+  }
+  const raw = sub(out, scale(b, dot(out, b)));
+  return length(raw) > 1e-12 ? normalize(raw) : anyPerpendicular(b);
 }
 
 // Whether any control-point weight differs from 1. A Circle/Arc from makeArc
@@ -414,7 +534,7 @@ function railHardBreakParams(rail) {
   }
   return breaks.sort((a, b) => a - b);
 }
-function denseRailFrames(rail, samplesPerSpan = null) {
+function denseRailFrames(rail, samplesPerSpan = null, frameOpts = {}) {
   const uMin = rail.knots[0], uMax = rail.knots[rail.knots.length - 1];
   const knotSet = new Set([uMin, uMax]);
   for (const k of rail.knots) if (k > uMin && k < uMax) knotSet.add(k);
@@ -441,7 +561,7 @@ function denseRailFrames(rail, samplesPerSpan = null) {
     }
   }
   const vDense = uDense.map((u) => arcLengthAtParam(railTable, u) / railLen);
-  const denseFrames = buildParallelTransportFrames(rail, uDense).extra;
+  const denseFrames = buildParallelTransportFrames(rail, uDense, frameOpts).extra;
   return { denseFrames, vDense, hardBreakIdx };
 }
 
@@ -603,8 +723,8 @@ function cappedDenseIndices(n) {
   for (let i = 0; i < MAX_DENSE_INTERP_POINTS; i++) idx.push(i === MAX_DENSE_INTERP_POINTS - 1 ? n - 1 : Math.round(i * step));
   return idx;
 }
-function sweep1RigidResampled(rail, section, radiusOpts = null) {
-  const { denseFrames, vDense, hardBreakIdx } = denseRailFrames(rail);
+function sweep1RigidResampled(rail, section, radiusOpts = null, frameOpts = {}) {
+  const { denseFrames, vDense, hardBreakIdx } = denseRailFrames(rail, null, frameOpts);
   const scaler = variableRadiusScaler(rail, radiusOpts);
   const numSpans = hardBreakIdx.length - 1;
   const capIdx = numSpans <= 1 ? cappedDenseIndices(vDense.length) : null;
@@ -821,10 +941,10 @@ function applyTrueMiterStretch(rail, frames, ctrlNet) {
 // this dispatches to sweep1RigidResampled (see its header for why the reuse
 // is not valid there; a 'rounded' cornerStyle rail is already degree>=2 via
 // `pipeRailForSweep` and has no corners for the miter to touch).
-export function sweep1Rigid(rail, section, radiusOpts = null) {
-  if (!railFrameOriginsExact(rail)) return sweep1RigidResampled(rail, section, radiusOpts);
+export function sweep1Rigid(rail, section, radiusOpts = null, frameOpts = {}) {
+  if (!railFrameOriginsExact(rail)) return sweep1RigidResampled(rail, section, radiusOpts, frameOpts);
   const effectiveRail = applyMiterLimitFallback(rail);
-  const frames = buildParallelTransportFrames(effectiveRail);
+  const frames = buildParallelTransportFrames(effectiveRail, [], frameOpts);
   const scaler = variableRadiusScaler(effectiveRail, radiusOpts);
   const ctrlNet = section.ctrlPts.map(([sx, sy, sz, sw]) => frames.map((f) => {
     let x = sx, y = sy, z = sz;
@@ -916,6 +1036,14 @@ export function pipeRoundCapSurface(frame, radius, axisDir) {
 // runs straight to the rim point), e.g. a rolled lip on the outer edge only.
 // Both radii 0 give a single straight line from B to C, a flat annular disk.
 export function pipeBlendCapSurface(frame, outerRadius, innerRadius, axisDir, outerFilletRadius, innerFilletRadius) {
+  const { profile, appliedOuterFilletRadius, appliedInnerFilletRadius } = pipeBlendCapProfile(frame, outerRadius, innerRadius, axisDir, outerFilletRadius, innerFilletRadius);
+  const srf = revolve(profile, frame.origin, axisDir, 0, 2 * Math.PI);
+  return { srf, appliedOuterFilletRadius, appliedInnerFilletRadius };
+}
+
+// The blend cap's profile in the plane of frame.xAxis and axisDir, before it is
+// revolved: from the outer wall's rim B to the inner wall's rim C.
+export function pipeBlendCapProfile(frame, outerRadius, innerRadius, axisDir, outerFilletRadius, innerFilletRadius) {
   const wall = Math.max(0, outerRadius - innerRadius);
   let rOut = Math.max(0, outerFilletRadius || 0);
   let rIn = Math.max(0, innerFilletRadius || 0);
@@ -952,8 +1080,7 @@ export function pipeBlendCapSurface(frame, outerRadius, innerRadius, axisDir, ou
   if (innerArc) segments.push({ type: 'arc', p0: innerArc.p0, apex: innerArc.apex, p2: innerArc.p2, weight: innerArc.weight });
   if (!segments.length) segments.push({ type: 'line', a: B, b: C }); // both radii ~0: a flat annular disk
   const profile = filletSegmentsToCurve(segments);
-  const srf = revolve(profile, frame.origin, axisDir, 0, 2 * Math.PI);
-  return { srf, appliedOuterFilletRadius: rOut, appliedInnerFilletRadius: rIn };
+  return { profile, appliedOuterFilletRadius: rOut, appliedInnerFilletRadius: rIn };
 }
 
 // Sweep1 with N profiles (N>=2): a rail plus several cross-section curves,
@@ -1036,7 +1163,7 @@ const SWEEP_N_INTERIOR_SAMPLES_PER_SPAN = 8; // extra rail-frame samples between
 function frameToWorld(frame, [sx, sy, sz]) {
   return add(frame.origin, add(add(scale(frame.xAxis, sx), scale(frame.yAxis, sy)), scale(frame.zAxis, sz)));
 }
-export function sweepNProfiles(rail, profiles, uSampleCount = 24, degU = 3, degVmax = 3, interiorSamplesPerSpan = SWEEP_N_INTERIOR_SAMPLES_PER_SPAN) {
+export function sweepNProfiles(rail, profiles, uSampleCount = 24, degU = 3, degVmax = 3, interiorSamplesPerSpan = SWEEP_N_INTERIOR_SAMPLES_PER_SPAN, frameOpts = {}) {
   const n = profiles.length;
   if (n < 2) throw new Error('sweepNProfiles needs at least 2 profile curves (use sweep1Rigid for a single profile)');
   const uMin = rail.knots[0], uMax = rail.knots[rail.knots.length - 1];
@@ -1046,7 +1173,7 @@ export function sweepNProfiles(rail, profiles, uSampleCount = 24, degU = 3, degV
     const centroid = sum.map((s) => s / crv.ctrlPts.length);
     const hit = closestPointOnCurve(rail, centroid);
     if (hit.ambiguous) {
-      throw new Error(`sweepNProfiles: profile ${idx + 1}'s closest point on the rail is AMBIGUOUS (nearly equidistant from rail parameters ${hit.u.toFixed(6)} and ${hit.ambiguousWith.toFixed(6)}) — the rail passes near itself more than once, so there is no single honest station for this profile; reposition it further from the rail's other pass, or use a rail that doesn't loop back near itself`);
+      throw new Error(`sweepNProfiles: profile ${idx + 1}'s closest point on the rail is AMBIGUOUS (nearly equidistant from rail parameters ${hit.u.toFixed(6)} and ${hit.ambiguousWith.toFixed(6)}) — the rail passes near itself more than once, so there is no single station for this profile; reposition it further from the rail's other pass, or use a rail that doesn't loop back near itself`);
     }
     return { crv, idx, u: hit.u };
   });
@@ -1102,7 +1229,7 @@ export function sweepNProfiles(rail, profiles, uSampleCount = 24, degU = 3, degV
   // One merged frame call for the station frames (used for localization and
   // for reproducing each profile exactly) and the dense in-between frames
   // (used for curvature), so all of them lie on one parallel-transport chain.
-  const framesAll = buildParallelTransportFrames(rail, uForDense);
+  const framesAll = buildParallelTransportFrames(rail, uForDense, frameOpts);
   const denseFrames = framesAll.extra; // one per vDense entry, same order
   const stationFrames = stationDenseIndex.map((idx) => denseFrames[idx]);
   const localizedProfiles = stationed.map((s, i) => localizeSectionToFrame(s.crv, stationFrames[i]));
@@ -1265,7 +1392,7 @@ export function sweep2(rail1, rail2, profile, opts = {}) {
     const widthVec = sub(p2, p1);
     const width = length(widthVec);
     if (width < SWEEP2_MIN_WIDTH) {
-      throw new Error(`sweep2: rail 1 and rail 2 coincide (or cross) at rail-fraction v=${v.toFixed(6)} (station ${k + 1}/${vStations.length}) — the width axis between them is undefined there; the two rails must stay genuinely separated along their full shared length`);
+      throw new Error(`sweep2: rail 1 and rail 2 coincide (or cross) at rail-fraction v=${v.toFixed(6)} (station ${k + 1}/${vStations.length}) — the width axis between them is undefined there; the two rails must stay separated along their full shared length`);
     }
     return { v, p1, p2, width, xAxis: normalize(widthVec) };
   });

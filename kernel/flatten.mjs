@@ -1524,7 +1524,7 @@ export function flattenLSCM(mesh, opts = {}) {
   const developable = defect <= developableTol;
   const note = developable
     ? 'Input is DEVELOPABLE to within tolerance (its discrete Gaussian curvature is zero everywhere), so an essentially exact unrolling exists; the residual distortion below is numerical noise.'
-    : `Input is genuinely DOUBLY CURVED (max interior angle defect ${defect.toExponential(3)} rad). By Gauss's Theorema Egregium NO flattening of it can be distortion-free; the numbers below are the real, measured cost. LSCM minimized ANGLE distortion, not stretch — read the area and edge figures before cutting material.`;
+    : `Input is DOUBLY CURVED (max interior angle defect ${defect.toExponential(3)} rad). By Gauss's Theorema Egregium NO flattening of it can be distortion-free; the numbers below are the real, measured cost. LSCM minimized ANGLE distortion, not stretch — read the area and edge figures before cutting material.`;
 
   return {
     uv,

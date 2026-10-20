@@ -357,7 +357,7 @@ export function gordonNetworkSurface(rails, profiles, opts = {}) {
     const uStationsRaw = profiles.map((profile, idx) => {
       const hit = closestPointOnCurve(r0, curveCentroid(profile));
       if (hit.ambiguous) {
-        throw new Error(`gordonNetworkSurface: profile ${idx + 1}'s closest point on rail 1 is AMBIGUOUS (nearly equidistant from rail parameters ${hit.u.toFixed(6)} and ${hit.ambiguousWith.toFixed(6)}) — rail 1 passes near itself more than once, so there is no single honest station for this profile`);
+        throw new Error(`gordonNetworkSurface: profile ${idx + 1}'s closest point on rail 1 is AMBIGUOUS (nearly equidistant from rail parameters ${hit.u.toFixed(6)} and ${hit.ambiguousWith.toFixed(6)}) — rail 1 passes near itself more than once, so there is no single station for this profile`);
       }
       return { idx, frac: Math.max(0, Math.min(1, (hit.u - r0u0) / (r0u1 - r0u0))) };
     });

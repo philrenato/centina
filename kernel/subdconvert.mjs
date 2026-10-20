@@ -96,7 +96,7 @@ export function nurbsSurfaceToSuperBCage(srf, opts = {}) {
     const isFullRect = trimLoop.length === rect.length
       && trimLoop.every((p, i) => Math.hypot(p[0] - rect[i][0], p[1] - rect[i][1]) < 1e-9);
     if (!isFullRect) {
-      return { ok: false, reason: 'this surface is trimmed (a real trim loop cuts away part of its untrimmed domain) — TOSUBD v1 only converts an UNTRIMMED surface; a trimmed piece has no honest, well-formed U/V quad grid to build a cage from' };
+      return { ok: false, reason: 'this surface is trimmed (a real trim loop cuts away part of its untrimmed domain) — TOSUBD v1 only converts an UNTRIMMED surface; a trimmed piece has no well-formed U/V quad grid to build a cage from' };
     }
   }
 
@@ -145,7 +145,7 @@ export function nurbsSurfaceToSuperBCage(srf, opts = {}) {
   if (nv > 1) { for (let i = 0; i < nu && !hasPole; i++) if (mutuallyCoincident(rowAt(i))) hasPole = true; }
   if (!hasPole && nu > 1) { for (let j = 0; j < nv && !hasPole; j++) if (mutuallyCoincident(colAt(j))) hasPole = true; }
   if (hasPole) {
-    return { ok: false, reason: 'this surface\'s profile touches its own sweep/revolve axis (a genuine POLE, at the boundary or an interior control point) — the U/V grid degenerates to triangles there, not quads; TOSUBD v1 refuses rather than attempt a triangle-fan pole collapse' };
+    return { ok: false, reason: 'this surface\'s profile touches its own sweep/revolve axis (a real POLE, at the boundary or an interior control point) — the U/V grid degenerates to triangles there, not quads; TOSUBD v1 refuses rather than attempt a triangle-fan pole collapse' };
   }
 
   // Weld + build — the rounded-key vertex welder kernel/subdprimitives.mjs's

@@ -298,9 +298,9 @@ function computeAdjacency(faces, halfEdges) {
 // `polylines`: array of arrays of [x,y] pairs — each one an already-
 // flattened, not-necessarily-closed 2D curve sample chain (the caller's
 // own job to flatten real NURBS curves into this shape via
-// sampleCurveAdaptive or equivalent — this module is deliberately
+// sampleCurveAdaptive or equivalent — this module is
 // curve-type-agnostic). `opts.weldTolerance` — the "gap tolerance /
-// near-miss closure" knob, deliberately left open; defaults to a
+// near-miss closure" knob, left open; defaults to a
 // small but non-zero value so ordinary snapped-endpoint T-junctions
 // (floating-point-adjacent, not far apart) always weld.
 // `opts.sources` (optional) is a tag per input polyline. Supplying it adds a

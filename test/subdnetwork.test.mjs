@@ -484,7 +484,7 @@ test('detectPipeJunctions: a branch landing on a rail in two places at once is r
   const branch = makeLine([20, 2, 0], [20, 2, 60]);
   const det = detectPipeJunctions([host, branch], { radius: R, tolerance: 8 });
   assert.equal(det.ok, false);
-  assert.match(det.reason, /two genuinely different places/);
+  assert.match(det.reason, /two different places/);
 });
 
 // The bend-radius clamp, reused rather than rebuilt.

@@ -35,7 +35,7 @@ function shortestDelta(a, b, min, max, closed) {
 }
 
 // Turn stations into a continuous path by accumulating shortest steps. The
-// result is deliberately allowed to leave the domain; wrapping happens once,
+// result is allowed to leave the domain; wrapping happens once,
 // at evaluation, so the interpolation in between never sees a discontinuity.
 export function unwrapStations(srf, uvPoints, opts = {}) {
   const closure = opts.closure || surfaceClosure(srf);

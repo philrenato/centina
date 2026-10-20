@@ -101,7 +101,7 @@ export function matPack(f, o, m) {
   f[o + 44] = m.filmIor != null ? m.filmIor : 1.4; f[o + 45] = m.thicknessNm || 0;
   f[o + 46] = m.isolate || 0;
   /* A distance in world units, not a strength — this is how far the surface is
-     carved down. Deliberately not derived from `bump`, which is a dimensionless
+     carved down. Not derived from `bump`, which is a dimensionless
      shading amount: deriving one from the other would silently carve every
      bumped material in the library. */
   f[o + 48] = m.relief || 0;

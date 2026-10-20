@@ -72,7 +72,10 @@ function stationParams(rail, segments) {
 // "what open rim does this end have," not a missing value.
 export function subdPipeCage(rail, opts = {}) {
   const radius = opts.radius ?? 5;
-  const facets = Math.max(3, Math.round(opts.facets ?? 8));
+  // `ring`: a section as [x, y] points in each frame's plane (pipeSectionRing);
+  // absent, the ring is a circle of `radius`. `frameOpts` go to the frames.
+  const section = Array.isArray(opts.ring) && opts.ring.length >= 3 ? opts.ring : null;
+  const facets = section ? section.length : Math.max(3, Math.round(opts.facets ?? 8));
   const segments = Math.max(1, Math.round(opts.segments ?? 4));
   const capStart = opts.capStart ?? 'none';
   const capEnd = opts.capEnd ?? 'none';
@@ -81,7 +84,7 @@ export function subdPipeCage(rail, opts = {}) {
   if (!(radius > 0)) throw new Error(`subdPipeCage: radius must be positive (got ${radius})`);
 
   const params = stationParams(rail, segments);
-  const frames = buildParallelTransportFrames(rail, params).extra;
+  const frames = buildParallelTransportFrames(rail, params, opts.frameOpts || {}).extra;
   if (!frames || frames.length !== params.length) throw new Error('subdPipeCage: frame count does not match the requested stations');
 
   const vertices = [];
@@ -90,7 +93,8 @@ export function subdPipeCage(rail, opts = {}) {
     const ring = [];
     for (let i = 0; i < facets; i++) {
       const a = (i / facets) * Math.PI * 2;
-      const p = add(f.origin, add(scale(f.xAxis, radius * Math.cos(a)), scale(f.yAxis, radius * Math.sin(a))));
+      const lx = section ? section[i][0] : radius * Math.cos(a), ly = section ? section[i][1] : radius * Math.sin(a);
+      const p = add(f.origin, add(scale(f.xAxis, lx), scale(f.yAxis, ly)));
       if (!p.every(Number.isFinite)) throw new Error('subdPipeCage: the rail produced a degenerate frame — a zero-length or self-reversing segment');
       ring.push(vertices.push(p) - 1);
     }

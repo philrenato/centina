@@ -149,7 +149,7 @@ const RENDRE_ENV_RECIPES_BY_SLUG = {
 /* Display names, from RENDRE_ENV_INDEX. Only the 29 slugs
    that have a recipe appear here; the 5 CC0-photographic studios (ballroom,
    photo-studio-sienna, empty-cell, snow-wood, disused-warehouse) and 'blank' are
-   deliberately absent — a photo has no lights to recover. */
+   absent — a photo has no lights to recover. */
 const RENDRE_ENV_NAMES = {
   'studio': 'Rendre Studio', 'rendre-studio': 'Rendre Studio',
   'annulus-low-contrast': 'Annulus, Low Contrast', 'backwash-cinnabar': 'Backwash, Cinnabar',
