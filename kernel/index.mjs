@@ -79,6 +79,8 @@ export * from './subdnetwork.mjs';
 export * from './subdpipe.mjs';
 export * from './pipesection.mjs';
 export * from './veins.mjs';
+export * from './railrevolve.mjs';
+export * from './selfcollision.mjs';
 export * from './curvemerge.mjs';
 export * from './subdprimitives.mjs';
 export * from './subdradial.mjs';
