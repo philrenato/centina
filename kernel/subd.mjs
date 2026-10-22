@@ -118,7 +118,7 @@ export function creaseWeight(cage, v0, v1) {
 // fraction).
 function edgeSharpness(cage, edge) {
   if (edge.faces.length !== 2) return 1;
-  return clamp01(creaseWeight(cage, edge.v0, edge.v1));
+  return clamp01(edge.w !== undefined ? edge.w : creaseWeight(cage, edge.v0, edge.v1));
 }
 
 // Centroid of a face's own vertices — works for any n-gon (n>=3), quad or
@@ -161,6 +161,48 @@ export function buildTopology(cage) {
   }
 
   return { edgeMap, vertexFaces, vertexEdges, faceCentroids };
+}
+
+// The topology one subdivideCatmullClark pass walks: buildTopology's edges in
+// the same first-seen order, keyed by lo * nV + hi instead of a string, each
+// carrying its stored crease weight (`w`) and, once placed, its edge point's
+// index (`pt`). A string key is built only for an edge the cage creases.
+function buildPassTopology(cage) {
+  const nV = cage.vertices.length;
+  const creases = cage.creases;
+  let anyCrease = false;
+  if (creases) for (const k in creases) { anyCrease = true; break; }
+  const edgeIdx = new Map();
+  const edges = [];
+  const vertexFacesRaw = cage.vertices.map(() => []);
+  const faceCentroids = cage.faces.map((_, fi) => computeFacePoint(cage, fi));
+  const faces = cage.faces;
+  for (let faceIdx = 0; faceIdx < faces.length; faceIdx++) {
+    const face = faces[faceIdx];
+    const n = face.length;
+    for (let c = 0; c < n; c++) {
+      const vi = face[c];
+      vertexFacesRaw[vi].push(faceIdx);
+      const vNext = face[(c + 1) % n];
+      const k = vi < vNext ? vi * nV + vNext : vNext * nV + vi;
+      let e = edgeIdx.get(k);
+      if (!e) {
+        let w = 0;
+        if (anyCrease) { const sw = creases[edgeKey(vi, vNext)]; if (typeof sw === 'number') w = sw; }
+        e = { v0: vi, v1: vNext, faces: [], w, pt: -1 };
+        edgeIdx.set(k, e);
+        edges.push(e);
+      }
+      e.faces.push(faceIdx);
+    }
+  }
+  const vertexFaces = vertexFacesRaw.map((list) => [...new Set(list)]);
+  const vertexEdges = cage.vertices.map(() => []);
+  for (const e of edges) {
+    vertexEdges[e.v0].push(e);
+    vertexEdges[e.v1].push(e);
+  }
+  return { nV, anyCrease, edgeIdx, edges, vertexFaces, vertexEdges, faceCentroids };
 }
 
 // Edge point — smooth interior rule (v0+v1+f0+f1)/4, generalized to
@@ -291,17 +333,18 @@ export function computeVertexPoint(cage, ctx, vIdx) {
 // edgeMap iteration order), then face points last.
 export function subdivideCatmullClark(cage) {
   validateCage(cage);
-  const ctx = buildTopology(cage);
+  const ctx = buildPassTopology(cage);
   const nVerts = cage.vertices.length;
 
   const newVertices = new Array(nVerts);
   for (let i = 0; i < nVerts; i++) newVertices[i] = computeVertexPoint(cage, ctx, i);
 
-  const edgePointIdx = new Map();
-  for (const [key, edge] of ctx.edgeMap) {
-    edgePointIdx.set(key, newVertices.length);
+  for (const edge of ctx.edges) {
+    edge.pt = newVertices.length;
     newVertices.push(computeEdgePoint(cage, ctx, edge));
   }
+  const { nV, edgeIdx } = ctx;
+  const edgePoint = (a, b) => edgeIdx.get(a < b ? a * nV + b : b * nV + a).pt;
 
   const facePointIdx = new Array(cage.faces.length);
   cage.faces.forEach((_, fi) => {
@@ -316,8 +359,8 @@ export function subdivideCatmullClark(cage) {
       const vCurr = face[c];
       const vNext = face[(c + 1) % n];
       const vPrev = face[(c - 1 + n) % n];
-      const eNext = edgePointIdx.get(edgeKey(vCurr, vNext));
-      const ePrev = edgePointIdx.get(edgeKey(vPrev, vCurr));
+      const eNext = edgePoint(vCurr, vNext);
+      const ePrev = edgePoint(vPrev, vCurr);
       newFaces.push([vCurr, eNext, facePointIdx[fi], ePrev]);
     }
   });
@@ -331,12 +374,12 @@ export function subdivideCatmullClark(cage) {
   // smooth: Catmull-Clark refinement never originates a crease, only
   // carries an existing one along the subdivided original edge.
   const newCreases = {};
-  for (const [key, edge] of ctx.edgeMap) {
-    const w = creaseWeight(cage, edge.v0, edge.v1);
+  for (const edge of ctx.anyCrease ? ctx.edges : []) {
+    const w = edge.w;
     if (w <= 0) continue;
     const nw = Math.max(0, w - 1);
     if (nw <= 0) continue;
-    const ePt = edgePointIdx.get(key);
+    const ePt = edge.pt;
     newCreases[edgeKey(edge.v0, ePt)] = nw;
     newCreases[edgeKey(edge.v1, ePt)] = nw;
   }
